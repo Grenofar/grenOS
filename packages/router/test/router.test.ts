@@ -156,3 +156,24 @@ test("failures are recorded so the dashboard can show them", async () => {
 test("a missing key fails loudly at construction", () => {
   assert.throws(() => new Router({ geminiApiKey: "", usage }), /GEMINI_API_KEY/);
 });
+
+test("a refused project stops the cascade instead of repeating the 403", async () => {
+  const calls = stubFetch(
+    () =>
+      new Response(
+        JSON.stringify({
+          error: { code: 403, message: "Your project has been denied access." },
+        }),
+        { status: 403 },
+      ),
+  );
+  const router = new Router({ geminiApiKey: "k", usage });
+
+  await assert.rejects(
+    () => router.complete({ role: "coder", system: "s", messages: [] }),
+    // The message must name the real cause, not "no model available": every
+    // model shares one key and one project, so this is not a quota problem.
+    /refuse la clé ou son projet/,
+  );
+  assert.equal(calls.length, 1, "un seul appel — inutile de répéter le même refus");
+});

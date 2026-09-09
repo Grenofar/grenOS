@@ -1,5 +1,6 @@
 import { CASCADES, MODELS, specFor, type ModelRole } from "./models.ts";
 import {
+  AccessDeniedError,
   callGemini,
   ProviderError,
   RateLimitedError,
@@ -137,6 +138,29 @@ export class Router {
         };
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
+
+        // Every model here shares one key and one Google Cloud project, so a
+        // refusal is not a reason to try the next one — it is the same refusal
+        // three times over, ending in a "no model available" message that
+        // hides the real cause.
+        if (err instanceof AccessDeniedError) {
+          this.note(attempts, req.role, modelId, "error", detail);
+          await this.usage.record({
+            provider: spec.provider,
+            model: modelId,
+            tokensIn: 0,
+            tokensOut: 0,
+            error: detail.slice(0, 300),
+          });
+          throw new Error(
+            "Gemini refuse la clé ou son projet Google (HTTP 403/401). " +
+              "Ce n'est pas un problème de quota : tous les modèles partagent " +
+              "le même projet, donc la cascade n'y changera rien. Vérifie la " +
+              "clé sur https://aistudio.google.com/apikey, ou crée-en une dans " +
+              "un nouveau projet. Détail : " +
+              detail.slice(0, 300),
+          );
+        }
 
         if (err instanceof RateLimitedError) {
           // Believe the server over our own accounting.

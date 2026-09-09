@@ -107,8 +107,14 @@ if (service && roleOf(service) === "anon") {
   problems.push("SUPABASE_SERVICE_ROLE_KEY contient en fait la clé anon (inversion).");
 }
 
-if (read("GEMINI_API_KEY") && !read("GEMINI_API_KEY").startsWith("AIza")) {
-  notes.push("GEMINI_API_KEY ne commence pas par 'AIza' — vérifie que c'est bien une clé AI Studio");
+// Google émet au moins deux formats de clé : l'historique "AIza..." et le
+// plus récent "AQ....". Les deux sont valides — vérifié en appelant l'API.
+// N'avertir que sur ce qui ne ressemble à aucun des deux.
+{
+  const gem = read("GEMINI_API_KEY");
+  if (gem && !gem.startsWith("AIza") && !gem.startsWith("AQ.")) {
+    notes.push("GEMINI_API_KEY a un format inhabituel — attendu 'AIza...' ou 'AQ....'");
+  }
 }
 
 // --- Rapport ---------------------------------------------------------------

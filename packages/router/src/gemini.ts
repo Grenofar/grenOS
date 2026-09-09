@@ -46,6 +46,21 @@ export class ProviderError extends Error {
 }
 
 /**
+ * The key or its Google Cloud project is refused outright.
+ *
+ * Distinct from ProviderError because every model in the cascade shares one
+ * key and one project: if the project is denied, trying the next model is
+ * three identical 403s and a misleading "no model available" at the end. This
+ * stops the cascade at the first refusal and says what actually happened.
+ */
+export class AccessDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AccessDeniedError";
+  }
+}
+
+/**
  * One call to one Gemini model. No retries here on purpose: retry policy is the
  * router's business, because "retry" for us usually means "different model",
  * not "same model again".
@@ -96,6 +111,9 @@ export async function callGemini(
 
   if (res.status === 429) {
     throw new RateLimitedError(parseRetryAfter(res), await briefly(res));
+  }
+  if (res.status === 403 || res.status === 401) {
+    throw new AccessDeniedError(await briefly(res));
   }
   if (!res.ok) {
     // 5xx and 503 "model overloaded" are transient; the cascade handles them
