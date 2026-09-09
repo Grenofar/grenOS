@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
 
 /**
  * Environment loading, without dotenv.
@@ -10,7 +11,17 @@ import { join } from "node:path";
  * the panel rather than from disk.
  */
 
-export const ROOT = process.env.GRENOS_ROOT ?? join(process.cwd());
+/**
+ * Repository root, derived from this file's own location.
+ *
+ * Not `process.cwd()`: `npm run worker` executes inside the workspace, so the
+ * working directory is `worker/`, where neither `.env.local` nor `agents/`
+ * exists. That produced a startup failure claiming SUPABASE_URL was missing —
+ * a message that sends you looking at your keys instead of at the path.
+ */
+export const ROOT =
+  process.env.GRENOS_ROOT ??
+  resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function loadEnvFile(path: string): void {
   if (!existsSync(path)) return;

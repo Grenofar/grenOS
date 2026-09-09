@@ -319,19 +319,26 @@ async function failTask(
   detail: string,
   consumesAttempt: boolean,
 ): Promise<void> {
-  const nextAttempt = task.attempt + 1;
-  const canRetry = consumesAttempt && nextAttempt <= task.max_attempts;
+  const canRetry = consumesAttempt && task.attempt < task.max_attempts;
 
-  await db
-    .from("tasks")
-    .update({
-      status: canRetry ? "ready" : consumesAttempt ? "failed" : "ready",
-      ...(consumesAttempt ? { attempt: nextAttempt } : {}),
-      failure,
-      failure_detail: detail.slice(0, 4000),
-      ...(consumesAttempt && !canRetry ? { finished_at: new Date().toISOString() } : {}),
-    })
-    .eq("id", task.id);
+  // `attempt` is only incremented when there is actually another attempt to
+  // make. Writing attempt = max_attempts + 1 on the final failure violates the
+  // tasks_attempt_within_limit CHECK, the UPDATE is rejected, and the task
+  // stays in_progress forever — visibly stuck, with nothing explaining why.
+  const patch: Record<string, unknown> = {
+    status: canRetry ? "ready" : consumesAttempt ? "failed" : "ready",
+    failure,
+    failure_detail: detail.slice(0, 4000),
+  };
+  if (canRetry) patch["attempt"] = task.attempt + 1;
+  if (consumesAttempt && !canRetry) patch["finished_at"] = new Date().toISOString();
+
+  const { error } = await db.from("tasks").update(patch).eq("id", task.id);
+  if (error) {
+    // If we cannot even record the failure, say so loudly: silence here means
+    // a task that no one will ever pick up again.
+    log.warn(`impossible de marquer la tâche ${task.id.slice(0, 8)}: ${error.message}`);
+  }
 
   await db.rpc("release_leases", { p_task_id: task.id });
 

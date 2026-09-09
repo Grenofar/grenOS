@@ -186,12 +186,13 @@ export async function runMasterCycle(
     }
   }
 
-  // Mark the proposals we just judged, so the next cycle does not re-read them
-  // and propose the same work again.
+  // Mark what we just judged, so the next cycle does not re-read it and
+  // propose the same work again. Stamping `seen_at` rather than rewriting
+  // `kind` keeps the message's own meaning intact in the journal.
   if (state.pending.length > 0) {
     await db
       .from("messages")
-      .update({ kind: "proposal_seen" })
+      .update({ seen_at: new Date().toISOString() })
       .in("id", state.pending.map((p) => p.id));
   }
 
@@ -256,6 +257,7 @@ async function gatherState(mission: Mission): Promise<State> {
       .select("id,from_agent,content")
       .eq("mission_id", mission.id)
       .in("kind", ["proposal", "result"])
+      .is("seen_at", null)
       .order("created_at", { ascending: false })
       .limit(10),
     db

@@ -128,16 +128,19 @@ async function dispatchWorkers(
   if (slots <= 0) return;
 
   const inFlightPaths: string[][] = [];
-  const running: Promise<void>[] = [];
+  const inFlight: Promise<void>[] = [];
 
   while (slots > 0) {
     const { data: task, error } = await db.rpc("claim_next_task", {
       p_agent_ids: workerIds,
     });
     if (error) throw new Error(`claim_next_task: ${error.message}`);
-    if (!task) break;
 
-    const row = task as TaskRow;
+    // A plpgsql function returning a composite type can hand back a row of all
+    // nulls rather than null itself when nothing matched, so an id check is
+    // the reliable "queue is empty" signal.
+    const row = task as TaskRow | null;
+    if (!row?.id) break;
     const agent = agents.get(row.assigned_to);
     if (!agent) {
       await db
@@ -157,7 +160,7 @@ async function dispatchWorkers(
     }
 
     inFlightPaths.push(paths);
-    running.push(
+    inFlight.push(
       executeTask(row, agent, router, gh).catch(async (err) => {
         log.warn(`tâche ${row.id.slice(0, 8)} a levé:`, err instanceof Error ? err.message : err);
         await db
@@ -174,7 +177,7 @@ async function dispatchWorkers(
     slots -= 1;
   }
 
-  if (running.length > 0) await Promise.all(running);
+  if (inFlight.length > 0) await Promise.all(inFlight);
 }
 
 /** Realtime is the primary wake-up; the interval is the fallback. */

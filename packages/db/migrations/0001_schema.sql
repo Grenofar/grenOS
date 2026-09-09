@@ -10,19 +10,32 @@ create extension if not exists "pgcrypto";
 -- -----------------------------------------------------------------------------
 -- Énumérations
 -- -----------------------------------------------------------------------------
-do $$ begin
-  create type agent_status  as enum ('active', 'dormant', 'disabled');
-  create type role_class    as enum ('orchestrator', 'planner', 'worker', 'verifier');
-  create type mission_status as enum ('draft', 'planning', 'running', 'blocked', 'done', 'aborted');
-  -- awaiting_verification : le Codeur a rendu, la CI n'a pas encore tranché.
-  -- C'est l'état qui matérialise D-009 : personne ne valide son propre travail.
-  create type task_status   as enum ('pending', 'ready', 'in_progress',
-                                     'awaiting_verification', 'done',
-                                     'failed', 'blocked', 'cancelled');
-  create type run_status    as enum ('queued', 'running', 'passed', 'failed', 'error', 'timeout');
-  create type failure_class as enum ('compile_error', 'test_failure', 'spec_gap',
-                                     'capability_gap', 'provider_error', 'policy_violation');
-  create type event_level   as enum ('debug', 'info', 'warn', 'error');
+-- Un bloc par type, volontairement. Regroupés dans un seul DO, le premier type
+-- déjà existant déclenche l'exception et fait sauter la création de tous les
+-- suivants : une base à moitié migrée, sans le moindre message d'erreur.
+do $$ begin create type agent_status as enum ('active','dormant','disabled');
+exception when duplicate_object then null; end $$;
+
+do $$ begin create type role_class as enum ('orchestrator','planner','worker','verifier');
+exception when duplicate_object then null; end $$;
+
+do $$ begin create type mission_status as enum ('draft','planning','running','blocked','done','aborted');
+exception when duplicate_object then null; end $$;
+
+-- awaiting_verification : le Codeur a rendu, la CI n'a pas encore tranché.
+-- C'est l'état qui matérialise D-009 : personne ne valide son propre travail.
+do $$ begin create type task_status as enum ('pending','ready','in_progress',
+  'awaiting_verification','done','failed','blocked','cancelled');
+exception when duplicate_object then null; end $$;
+
+do $$ begin create type run_status as enum ('queued','running','passed','failed','error','timeout');
+exception when duplicate_object then null; end $$;
+
+do $$ begin create type failure_class as enum ('compile_error','test_failure','spec_gap',
+  'capability_gap','provider_error','policy_violation');
+exception when duplicate_object then null; end $$;
+
+do $$ begin create type event_level as enum ('debug','info','warn','error');
 exception when duplicate_object then null; end $$;
 
 
@@ -127,11 +140,17 @@ create table if not exists messages (
   tokens_in   integer     not null default 0,
   tokens_out  integer     not null default 0,
   latency_ms  integer,
+  -- Marqué quand le Maître a statué dessus. Une colonne dédiée plutôt qu'un
+  -- changement de `kind` : écraser le type d'un message pour dire « déjà lu »
+  -- détruit l'information qu'il portait, et le journal doit rester fidèle.
+  seen_at     timestamptz,
   created_at  timestamptz not null default now()
 );
 
 create index if not exists messages_task_idx    on messages (task_id, created_at);
 create index if not exists messages_mission_idx on messages (mission_id, created_at desc);
+create index if not exists messages_unseen_idx  on messages (mission_id, created_at desc)
+  where seen_at is null;
 
 
 -- -----------------------------------------------------------------------------
