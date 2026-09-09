@@ -19,7 +19,7 @@ import type { AgentDefinition } from "./prompts.ts";
  * faster than anyone can spend the quota on it (D-008).
  */
 
-interface Mission {
+export interface Mission {
   id: string;
   title: string;
   description: string;
@@ -29,6 +29,20 @@ interface Mission {
 }
 
 const ACTIVE_TASK_STATES = ["ready", "in_progress", "awaiting_verification"];
+
+/**
+ * Signature of what the Master last reasoned about, per mission.
+ *
+ * The loop wakes on every Realtime event and every poll — several times a
+ * minute. Thinking on each wake-up would spend the entire daily quota in
+ * minutes: the free tier allows about 20 requests per model per day, not the
+ * 1500 the published figures claimed. So the Master only reasons when the
+ * situation has actually changed, and an unchanged situation costs nothing.
+ *
+ * In-memory on purpose. A restart re-thinks once per mission, which is the
+ * safe direction to be wrong in.
+ */
+const lastSeen = new Map<string, string>();
 
 export async function runMasterCycle(
   mission: Mission,
@@ -54,15 +68,22 @@ export async function runMasterCycle(
 
   const state = await gatherState(mission);
 
-  // Nothing to decide: no work in flight, nothing new returned, and a plan
-  // already exists. Idling is correct behaviour and costs no quota.
-  if (
-    state.tasks.length > 0 &&
-    state.pending.length === 0 &&
-    state.activeCount > 0
-  ) {
+  // Nothing has moved since the last decision: same tasks in the same states,
+  // no new result, no new verdict. Re-reading the same board would produce the
+  // same answer at the price of a request we cannot spare.
+  const signature = signatureOf(mission, state);
+  if (lastSeen.get(mission.id) === signature) return;
+
+  // Work is in flight and nothing new has come back. Waiting is the correct
+  // move, and it is free.
+  if (state.tasks.length > 0 && state.pending.length === 0 && state.activeCount > 0) {
+    lastSeen.set(mission.id, signature);
     return;
   }
+
+  // Record before calling, not after: if the model call throws, we must not
+  // retry the identical board on the next tick and burn the quota twice.
+  lastSeen.set(mission.id, signature);
 
   const result = await router.complete({
     role: "master",
@@ -223,7 +244,7 @@ export async function runMasterCycle(
   log.info(`master · ${mission.title.slice(0, 40)} · +${created} tâche(s)`);
 }
 
-interface State {
+export interface State {
   tasks: Array<{
     id: string;
     assigned_to: string;
@@ -275,6 +296,21 @@ async function gatherState(mission: Mission): Promise<State> {
     pending: pending ?? [],
     runs: runs ?? [],
   };
+}
+
+/**
+ * A compact fingerprint of everything the Master's decision depends on. Two
+ * identical signatures mean an identical decision, so the second call can be
+ * skipped entirely.
+ */
+export function signatureOf(mission: Mission, state: State): string {
+  const tasks = state.tasks
+    .map((t) => `${t.id.slice(0, 8)}:${t.status}:${t.attempt}`)
+    .sort()
+    .join(",");
+  const pending = state.pending.map((p) => p.id).sort().join(",");
+  const runs = state.runs.map((r) => `${r.branch}:${r.status}`).join(",");
+  return `${mission.status}|${tasks}|${pending}|${runs}`;
 }
 
 function renderState(mission: Mission, state: State): string {

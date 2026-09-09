@@ -4,6 +4,7 @@ import {
   callGemini,
   ProviderError,
   RateLimitedError,
+  TruncatedError,
 } from "./gemini.ts";
 import {
   RouterExhaustedError,
@@ -55,6 +56,16 @@ export class Router {
   private readonly recentCalls = new Map<string, number[]>();
   /** model id -> epoch ms before which we should not retry it. */
   private readonly cooldownUntil = new Map<string, number>();
+  /**
+   * model id -> the day (YYYY-MM-DD) its daily quota ran out.
+   *
+   * Discovered from Google's own 429, never guessed. The published free-tier
+   * numbers turned out to be off by two orders of magnitude — the catalogue
+   * said 1500 requests/day and the API replied "limit: 20" — so the server is
+   * the only trustworthy source, and one wasted call per model per day is a
+   * small price for never being wrong about it.
+   */
+  private readonly exhaustedOn = new Map<string, string>();
 
   constructor(opts: RouterOptions) {
     if (!opts.geminiApiKey) {
@@ -82,14 +93,14 @@ export class Router {
         continue;
       }
 
-      const spent = await this.usage.requestsToday(modelId);
-      if (spent >= spec.dailyRequests * this.margin) {
+      if (this.exhaustedOn.get(modelId) === today()) {
+        const spent = await this.usage.requestsToday(modelId);
         this.note(
           attempts,
           req.role,
           modelId,
           "quota_exhausted",
-          `${spent}/${spec.dailyRequests} today`,
+          `quota journalier atteint (${spent} appels aujourd'hui)`,
         );
         continue;
       }
@@ -108,16 +119,39 @@ export class Router {
       const started = Date.now();
       try {
         this.markCall(modelId);
-        const out = await callGemini({
-          apiKey: this.key,
-          model: spec.id,
-          system: req.system,
-          messages: req.messages,
-          maxOutputTokens: req.maxOutputTokens ?? 8192,
-          temperature: req.temperature ?? 0.2,
-          json: req.json ?? false,
-          timeoutMs,
-        });
+
+        let budget = req.maxOutputTokens ?? DEFAULT_OUTPUT_TOKENS;
+        let out;
+        try {
+          out = await callGemini({
+            apiKey: this.key,
+            model: spec.id,
+            system: req.system,
+            messages: req.messages,
+            maxOutputTokens: budget,
+            temperature: req.temperature ?? 0.2,
+            json: req.json ?? false,
+            timeoutMs,
+          });
+        } catch (err) {
+          // The model thought its way through the whole budget without
+          // answering. Switching models would hit the same wall, so give this
+          // one more room instead — once.
+          if (!(err instanceof TruncatedError)) throw err;
+          budget = Math.min(budget * 3, MAX_OUTPUT_TOKENS);
+          this.note(attempts, req.role, modelId, "error", `${err.message} — nouvel essai à ${budget} tokens`);
+          this.markCall(modelId);
+          out = await callGemini({
+            apiKey: this.key,
+            model: spec.id,
+            system: req.system,
+            messages: req.messages,
+            maxOutputTokens: budget,
+            temperature: req.temperature ?? 0.2,
+            json: req.json ?? false,
+            timeoutMs,
+          });
+        }
 
         await this.usage.record({
           provider: spec.provider,
@@ -164,11 +198,18 @@ export class Router {
 
         if (err instanceof RateLimitedError) {
           // Believe the server over our own accounting.
-          this.cooldownUntil.set(
-            modelId,
-            Date.now() + (err.retryAfterMs ?? 60_000),
-          );
-          this.note(attempts, req.role, modelId, "rate_limited", detail);
+          if (err.isDaily) {
+            // Done until tomorrow. Every further call today is a round trip
+            // that can only return the same 429.
+            this.exhaustedOn.set(modelId, today());
+            this.note(attempts, req.role, modelId, "quota_exhausted", detail);
+          } else {
+            this.cooldownUntil.set(
+              modelId,
+              Date.now() + (err.retryAfterMs ?? 60_000),
+            );
+            this.note(attempts, req.role, modelId, "rate_limited", detail);
+          }
         } else {
           this.note(attempts, req.role, modelId, "error", detail);
         }
@@ -256,3 +297,14 @@ export class InMemoryUsageStore implements UsageStore {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const today = (): string => new Date().toISOString().slice(0, 10);
+
+/**
+ * Gemini 3.x reasons before answering, and those tokens come out of the same
+ * allowance as the reply. A budget sized only for the answer produces
+ * finishReason MAX_TOKENS and an empty body, so the default is deliberately
+ * generous.
+ */
+const DEFAULT_OUTPUT_TOKENS = 16_384;
+const MAX_OUTPUT_TOKENS = 48_000;

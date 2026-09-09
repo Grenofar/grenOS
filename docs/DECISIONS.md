@@ -200,3 +200,53 @@ Réversible sans douleur : `packages/router/src/models.ts` contient tout le
 catalogue et toutes les cascades. Aucun prompt d'agent ne nomme un modèle — ils
 déclarent un `model_role`, qui est une clé dans `CASCADES`. Ajouter Mistral ou
 MiniMax plus tard = un adaptateur + des lignes dans ce fichier.
+
+---
+
+### D-016 — Le quota gratuit réel est ~20 requêtes/jour, pas 1500
+**2026-09-09 · actif · corrige un chiffre faux de D-015**
+
+Mesuré contre l'API, pas lu sur un blog. Message de Google :
+
+```
+Quota exceeded for metric: generate_content_free_tier_requests, limit: 20
+```
+
+Les chiffres publiés (1500 req/jour) sont faux d'un facteur 75 pour les modèles
+3.x. Le vrai budget est **~20 requêtes/jour et par modèle**, soit **~60/jour**
+sur les trois modèles de la cascade.
+
+**Ce que ça change concrètement** : une tâche de codeur coûte 1 à 3 requêtes.
+On est donc à une vingtaine de tâches par jour, tous agents confondus. C'est
+assez pour faire tourner la fabrique et prouver la mission n°1. Ce n'est pas
+assez pour construire un OS.
+
+**Trois conséquences appliquées immédiatement :**
+
+1. **Le routeur ne devine plus aucun quota.** `dailyRequests` est devenu un
+   simple repère d'affichage ; la seule autorité est le 429 de Google. Un
+   429 « journalier » met le modèle au repos jusqu'au lendemain, un 429
+   « par minute » ne fait qu'un cooldown. Un appel gaspillé par modèle et par
+   jour, contre le risque d'avoir tort avec assurance.
+
+2. **Le Maître ne réfléchit plus que si l'état a changé.** Il était appelé à
+   chaque réveil de la boucle, soit plusieurs fois par minute : à 20 requêtes
+   par jour, une mission au repos aurait vidé le quota en cinq minutes. Une
+   signature de l'état (tâches, statuts, tentatives, messages non lus, verdicts)
+   est comparée avant chaque cycle, et une situation inchangée ne coûte rien.
+
+3. **Les tokens de raisonnement sont comptés.** Les modèles 3.x réfléchissent
+   avant de répondre et ces tokens sortent du même budget. Les ignorer faisait
+   paraître chaque mission bien moins chère qu'elle ne l'est, et le Maître
+   aurait avorté beaucoup trop tard.
+
+**À décider ensuite** (aucune option n'est urgente, la mission n°1 passe
+sans) :
+- élargir la cascade aux autres modèles gratuits (`gemini-3.5-flash`,
+  `gemini-3.1-flash-lite`, `gemini-3-flash-preview`…), chacun ayant son propre
+  quota de 20 — la cascade est déjà conçue pour ça, c'est quelques lignes dans
+  `models.ts` ;
+- activer la facturation Gemini : à ce volume le coût réel est de quelques
+  euros par mois ;
+- revenir sur MiniMax (D-014), toujours le meilleur rapport qualité/prix en
+  agentique.

@@ -127,7 +127,7 @@ function QuotaPanel({ usage }: { usage: ModelUsage[] }) {
   const { t } = useLang();
 
   // Free-tier Flash quota, per model. Three models means three of these.
-  const DAILY_LIMIT = 1500;
+  const DAILY_LIMIT = 20;
 
   if (usage.length === 0) {
     return (

@@ -26,11 +26,38 @@ export interface GeminiCallResult {
 /** Provider said "slow down" or "you are out of quota" — try the next model. */
 export class RateLimitedError extends Error {
   readonly retryAfterMs: number | null;
+  /**
+   * True when the message names a *daily* quota rather than a per-minute one.
+   * The two need opposite responses: waiting 30 seconds clears a per-minute
+   * limit, while a daily limit means this model is done until tomorrow and
+   * every further call is a wasted round trip.
+   */
+  readonly isDaily: boolean;
 
-  constructor(retryAfterMs: number | null, message: string) {
+  constructor(retryAfterMs: number | null, message: string, isDaily = false) {
     super(message);
     this.name = "RateLimitedError";
     this.retryAfterMs = retryAfterMs;
+    this.isDaily = isDaily;
+  }
+}
+
+/**
+ * The model spent its output budget before producing an answer.
+ *
+ * Gemini 3.x models think before they write, and those reasoning tokens come
+ * out of the same `maxOutputTokens` allowance. Ask for 50 tokens and you get
+ * finishReason MAX_TOKENS with an empty body — the model reasoned and never
+ * got to speak. Separate from ProviderError because the fix is to give the
+ * same model more room, not to switch models.
+ */
+export class TruncatedError extends Error {
+  readonly thoughtTokens: number;
+
+  constructor(message: string, thoughtTokens: number) {
+    super(message);
+    this.name = "TruncatedError";
+    this.thoughtTokens = thoughtTokens;
   }
 }
 
@@ -110,7 +137,8 @@ export async function callGemini(
   }
 
   if (res.status === 429) {
-    throw new RateLimitedError(parseRetryAfter(res), await briefly(res));
+    const body = await briefly(res);
+    throw new RateLimitedError(parseRetryAfter(res), body, mentionsDailyQuota(body));
   }
   if (res.status === 403 || res.status === 401) {
     throw new AccessDeniedError(await briefly(res));
@@ -129,8 +157,14 @@ export async function callGemini(
     throw new ProviderError(`Empty response: ${reason}`);
   }
 
-  // MAX_TOKENS means the JSON envelope is very likely truncated, so treat it
-  // as a failure rather than handing the caller a half-object to parse.
+  const thoughts = data.usageMetadata?.thoughtsTokenCount ?? 0;
+
+  if (candidate.finishReason === "MAX_TOKENS") {
+    throw new TruncatedError(
+      `Budget de sortie épuisé (${thoughts} tokens de raisonnement consommés avant la réponse)`,
+      thoughts,
+    );
+  }
   if (candidate.finishReason && candidate.finishReason !== "STOP") {
     throw new ProviderError(`Generation stopped: ${candidate.finishReason}`);
   }
@@ -145,8 +179,27 @@ export async function callGemini(
   return {
     text,
     tokensIn: data.usageMetadata?.promptTokenCount ?? 0,
-    tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0,
+    // Reasoning tokens are billed and count against the budget, so they belong
+    // in the output total. Leaving them out makes every mission look cheaper
+    // than it is, and the Master would abort far too late.
+    tokensOut: (data.usageMetadata?.candidatesTokenCount ?? 0) + thoughts,
   };
+}
+
+/**
+ * Distinguish a daily quota from a per-minute one. Google phrases it in the
+ * metric name, e.g. "generate_content_free_tier_requests" with a per-day
+ * limit, versus "...per_minute".
+ */
+function mentionsDailyQuota(body: string): boolean {
+  const t = body.toLowerCase();
+  if (t.includes("per_minute") || t.includes("perminute")) return false;
+  return (
+    t.includes("free_tier_requests") ||
+    t.includes("per_day") ||
+    t.includes("perday") ||
+    t.includes("requests per day")
+  );
 }
 
 function parseRetryAfter(res: Response): number | null {
@@ -176,5 +229,7 @@ interface GeminiResponse {
   usageMetadata?: {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
+    /** Reasoning tokens on models that think before answering. */
+    thoughtsTokenCount?: number;
   };
 }
