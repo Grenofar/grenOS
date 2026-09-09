@@ -22,10 +22,17 @@ create table if not exists operators (
 
 alter table operators enable row level security;
 
--- Remplace par tes adresses. Un compte Supabase Auth dont l'email n'est pas
--- ici est authentifié mais ne voit rien.
+-- Les deux seuls comptes autorisés (D-006). Un compte Supabase Auth dont
+-- l'email n'est pas ici s'authentifie normalement — via Google ou par lien —
+-- et ne voit strictement rien : toutes les policies passent par is_operator().
+--
+-- C'est voulu : l'écran de connexion n'est pas la sécurité, la RLS l'est. Un
+-- inconnu qui se connecte avec Google obtient une session valide et une
+-- interface vide, pas un message d'erreur qui lui confirmerait l'existence
+-- d'un système derrière.
 insert into operators (email, label) values
-  ('belgacemmaroua@gmail.com', 'Grenofar')
+  ('belgacemmaroua@gmail.com', 'Grenofar'),
+  ('rayanbelgacem747@gmail.com', 'Rayan')
 on conflict (email) do nothing;
 
 
