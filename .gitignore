@@ -1,0 +1,52 @@
+# === SECRETS — le repo est public, rien de tout ceci ne doit partir ===
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# Contexte projet gardé en local, non publié (D-013)
+CLAUDE.md
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.pnpm-store/
+
+# Rust / kernel
+target/
+Cargo.lock
+*.iso
+*.img
+*.bin
+!kernel/assets/*.bin
+
+# Outils
+.vercel/
+.supabase/
+.turbo/
+coverage/
+
+# Logs et temporaires
+*.log
+npm-debug.log*
+qemu.log
+serial.log
+tmp/
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Éditeurs
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp

@@ -1,0 +1,113 @@
+import { readFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
+
+/**
+ * Environment loading, without dotenv.
+ *
+ * A dependency to split strings on "=" is not worth 40 packages when the whole
+ * worker has a 512 MB disk budget (D-002). Real environment variables win over
+ * the file, so the same code runs on bot-hosting.net where secrets come from
+ * the panel rather than from disk.
+ */
+
+/**
+ * Repository root, derived from this file's own location.
+ *
+ * Not `process.cwd()`: `npm run worker` executes inside the workspace, so the
+ * working directory is `worker/`, where neither `.env.local` nor `agents/`
+ * exists. That produced a startup failure claiming SUPABASE_URL was missing —
+ * a message that sends you looking at your keys instead of at the path.
+ */
+export const ROOT =
+  process.env.GRENOS_ROOT ??
+  resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+function loadEnvFile(path: string): void {
+  if (!existsSync(path)) return;
+  for (const raw of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+
+loadEnvFile(join(ROOT, ".env.local"));
+
+function required(key: string): string {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(
+      `${key} manquant. Remplis .env.local puis relance (npm run env pour vérifier).`,
+    );
+  }
+  return value;
+}
+
+function num(key: string, fallback: number): number {
+  const raw = process.env[key];
+  const parsed = raw ? Number(raw) : NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export const config = {
+  supabaseUrl: required("SUPABASE_URL"),
+  // service_role : contourne RLS. Ne doit jamais quitter ce process.
+  supabaseServiceKey: required("SUPABASE_SERVICE_ROLE_KEY"),
+  geminiApiKey: required("GEMINI_API_KEY"),
+  githubToken: required("GITHUB_TOKEN"),
+  githubRepo: process.env.GITHUB_REPO ?? "Grenofar/grenOS",
+
+  maxConcurrentTasks: num("MAX_CONCURRENT_TASKS", 3),
+
+  // Volontairement absents d'ici :
+  //   - le nombre de tentatives par tâche vient du frontmatter de chaque agent
+  //     (agents/**/*.md), parce qu'un relecteur et un codeur n'ont pas les
+  //     mêmes besoins ;
+  //   - le budget d'une mission est porté par la mission elle-même en base.
+  // Les dupliquer en variables d'environnement créerait deux sources de vérité
+  // dont une serait silencieusement ignorée.
+
+  logLevel: (process.env.LOG_LEVEL ?? "info") as "debug" | "info" | "warn",
+
+  /**
+   * Local kill switch, independent of the database.
+   *
+   * The UI button writes to `settings.agents_paused`, which is the normal way
+   * to stop the team. This one exists for when that path is unavailable —
+   * Supabase unreachable, the site broken, or a worker misbehaving faster than
+   * you can open a browser. Set it and restart: nothing is dispatched.
+   */
+  pausedLocally: (process.env.AGENTS_PAUSED ?? "false").toLowerCase() === "true",
+
+  /** Idle poll interval. Realtime is the primary wake-up; this is the safety net. */
+  pollIntervalMs: num("POLL_INTERVAL_MS", 15_000),
+  /** Lease lifetime, refreshed while a task runs. */
+  leaseTtlMs: num("LEASE_TTL_MS", 30 * 60 * 1000),
+} as const;
+
+const LEVELS = { debug: 0, info: 1, warn: 2 } as const;
+
+export const log = {
+  debug: (...a: unknown[]) => emit("debug", a),
+  info: (...a: unknown[]) => emit("info", a),
+  warn: (...a: unknown[]) => emit("warn", a),
+};
+
+function emit(level: keyof typeof LEVELS, args: unknown[]): void {
+  if (LEVELS[level] < LEVELS[config.logLevel]) return;
+  const stamp = new Date().toISOString().slice(11, 19);
+  const line = `${stamp} ${level.padEnd(5)}`;
+  if (level === "warn") console.warn(line, ...args);
+  else console.log(line, ...args);
+}
