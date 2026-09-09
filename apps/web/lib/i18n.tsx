@@ -68,6 +68,8 @@ const STRINGS: Dict = {
   },
 
   "auth.title": { fr: "Connexion", en: "Sign in" },
+  "auth.google": { fr: "Continuer avec Google", en: "Continue with Google" },
+  "auth.useEmail": { fr: "Utiliser un lien par email", en: "Use an email link" },
   "auth.email": { fr: "Adresse email", en: "Email address" },
   "auth.send": { fr: "Recevoir un lien", en: "Send me a link" },
   "auth.sent": {
