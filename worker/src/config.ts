@@ -69,10 +69,26 @@ export const config = {
   githubRepo: process.env.GITHUB_REPO ?? "Grenofar/grenOS",
 
   maxConcurrentTasks: num("MAX_CONCURRENT_TASKS", 3),
-  maxAttemptsPerTask: num("MAX_ATTEMPTS_PER_TASK", 3),
-  missionTokenBudget: num("MISSION_TOKEN_BUDGET", 2_000_000),
+
+  // Volontairement absents d'ici :
+  //   - le nombre de tentatives par tâche vient du frontmatter de chaque agent
+  //     (agents/**/*.md), parce qu'un relecteur et un codeur n'ont pas les
+  //     mêmes besoins ;
+  //   - le budget d'une mission est porté par la mission elle-même en base.
+  // Les dupliquer en variables d'environnement créerait deux sources de vérité
+  // dont une serait silencieusement ignorée.
 
   logLevel: (process.env.LOG_LEVEL ?? "info") as "debug" | "info" | "warn",
+
+  /**
+   * Local kill switch, independent of the database.
+   *
+   * The UI button writes to `settings.agents_paused`, which is the normal way
+   * to stop the team. This one exists for when that path is unavailable —
+   * Supabase unreachable, the site broken, or a worker misbehaving faster than
+   * you can open a browser. Set it and restart: nothing is dispatched.
+   */
+  pausedLocally: (process.env.AGENTS_PAUSED ?? "false").toLowerCase() === "true",
 
   /** Idle poll interval. Realtime is the primary wake-up; this is the safety net. */
   pollIntervalMs: num("POLL_INTERVAL_MS", 15_000),

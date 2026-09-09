@@ -81,8 +81,14 @@ async function tick(
   if (ticking) return;
   ticking = true;
   try {
+    // Deux crans indépendants : AGENTS_PAUSED est local et survit à une base
+    // injoignable ; settings.agents_paused est le bouton de l'interface.
+    if (config.pausedLocally) {
+      log.debug("agents en pause (AGENTS_PAUSED=true dans .env.local)");
+      return;
+    }
     if (await agentsPaused()) {
-      log.debug("agents en pause (coupe-circuit)");
+      log.debug("agents en pause (coupe-circuit de l'interface)");
       return;
     }
 
