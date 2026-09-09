@@ -13,6 +13,7 @@
   },
   "scripts": {
     "env": "node scripts/sync-env.mjs",
+    "vercel": "node scripts/vercel-env.mjs",
     "predev": "node scripts/sync-env.mjs",
     "dev": "npm run dev --workspace=@grenos/web",
     "build": "npm run build --workspace=@grenos/web",
