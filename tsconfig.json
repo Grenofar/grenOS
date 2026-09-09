@@ -1,28 +1,34 @@
 {
+  // Code Node : worker + packages. Le site a sa propre config
+  // (apps/web/tsconfig.json), gérée par Next.js — d'où l'exclusion plus bas.
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // DOM pour fetch / Response / AbortController, que le routeur utilise.
+    "lib": ["ES2022", "DOM"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+
+    // Indispensable : le worker et le routeur importent "./config.ts" avec
+    // l'extension réelle, parce que Node exécute ce TypeScript sans étape de
+    // build (mode strip-only) et exige le vrai nom de fichier. Sans cette
+    // option, TypeScript refuse chaque import du projet.
+    "allowImportingTsExtensions": true,
+
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "exactOptionalPropertyTypes": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "preserve",
+
     "baseUrl": ".",
     "paths": {
-      "@grenos/router": ["packages/router/src/index.ts"],
-      "@grenos/router/*": ["packages/router/src/*"],
-      "@grenos/shared": ["packages/shared/src/index.ts"],
-      "@grenos/shared/*": ["packages/shared/src/*"]
+      "@grenos/router": ["packages/router/src/index.ts"]
     }
   },
-  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "worker/**/*.ts"],
-  "exclude": ["node_modules", "**/.next", "**/dist"]
+  "include": ["packages/**/*.ts", "worker/**/*.ts"],
+  "exclude": ["node_modules", "**/dist", "**/.next", "apps"]
 }

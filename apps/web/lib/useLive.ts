@@ -1,8 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PostgrestBuilder } from "@supabase/postgrest-js";
 import { supabase } from "./supabase";
+
+/**
+ * What a Supabase query builder looks like once awaited.
+ *
+ * Described structurally rather than imported from postgrest-js: that internal
+ * type has changed shape across releases (it now takes 2-3 generic parameters),
+ * and pinning to it means a routine dependency bump breaks the build. All this
+ * hook needs is something awaitable that yields data and an error.
+ */
+type Query<T> = PromiseLike<{
+  data: T[] | null;
+  error: { message: string } | null;
+}>;
 
 /**
  * Subscribe to a table and keep a query's result fresh.
@@ -19,7 +31,7 @@ import { supabase } from "./supabase";
  */
 export function useLive<T>(
   table: string,
-  buildQuery: () => PostgrestBuilder<T[]>,
+  buildQuery: () => Query<T>,
   deps: unknown[] = [],
 ): { rows: T[]; loading: boolean; error: string | null; refresh: () => void } {
   const [rows, setRows] = useState<T[]>([]);
