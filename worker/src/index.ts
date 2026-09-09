@@ -1,0 +1,219 @@
+import { Router } from "@grenos/router";
+import { config, log } from "./config.ts";
+import { agentsPaused, db, emit, syncAgents, SupabaseUsageStore } from "./db.ts";
+import { executeTask, type TaskRow } from "./executor.ts";
+import { GitHub } from "./github.ts";
+import { runMasterCycle } from "./master.ts";
+import { loadAgents, type AgentDefinition } from "./prompts.ts";
+import { pathsOverlap } from "./sandbox.ts";
+
+/**
+ * The brain.
+ *
+ * One process, one loop, no framework. Every piece of durable state lives in
+ * Supabase, so this process owns nothing: kill it mid-task and the worst that
+ * happens is a lease expires and the task is picked up again. That property is
+ * what makes it safe to run on a 256 MB free tier that can restart at any time
+ * (D-002).
+ *
+ * Realtime wakes the loop when something changes; the poll interval is only a
+ * safety net for a dropped subscription.
+ */
+
+const MISSION_STATES = ["draft", "planning", "running"];
+
+let running = true;
+let ticking = false;
+let wakeUp: (() => void) | null = null;
+
+async function main(): Promise<void> {
+  log.info("grenOS worker — démarrage");
+
+  const definitions = loadAgents();
+  await syncAgents(definitions);
+
+  const agents = new Map(definitions.map((a) => [a.id, a]));
+  const master = agents.get("master");
+  if (!master) throw new Error("Agent 'master' introuvable dans agents/");
+
+  const usage = new SupabaseUsageStore();
+  const router = new Router({
+    geminiApiKey: config.geminiApiKey,
+    usage,
+    onEvent: (e) => {
+      if (e.outcome !== "ok") {
+        log.debug(`router: ${e.model} → ${e.outcome}${e.detail ? ` (${e.detail})` : ""}`);
+      }
+    },
+  });
+
+  const gh = new GitHub();
+  log.info(`dépôt ${gh.repo} · ${definitions.filter((a) => a.status === "active").length} agents actifs`);
+
+  subscribe();
+  installShutdown();
+
+  while (running) {
+    try {
+      await tick(agents, master, router, gh);
+    } catch (err) {
+      // The loop must survive anything. A crash here on a free tier means the
+      // process may not come back for a long time.
+      log.warn("tick a échoué:", err instanceof Error ? err.message : err);
+      await emit({
+        level: "error",
+        type: "worker_error",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+    await waitForWork();
+  }
+
+  log.info("worker arrêté");
+}
+
+async function tick(
+  agents: Map<string, AgentDefinition>,
+  master: AgentDefinition,
+  router: Router,
+  gh: GitHub,
+): Promise<void> {
+  if (ticking) return;
+  ticking = true;
+  try {
+    if (await agentsPaused()) {
+      log.debug("agents en pause (coupe-circuit)");
+      return;
+    }
+
+    const { data: missions } = await db
+      .from("missions")
+      .select("id,title,description,status,token_budget,tokens_used")
+      .in("status", MISSION_STATES)
+      .order("created_at");
+
+    for (const mission of missions ?? []) {
+      await runMasterCycle(mission, master, agents, router, gh);
+    }
+
+    await dispatchWorkers(agents, router, gh);
+  } finally {
+    ticking = false;
+  }
+}
+
+/**
+ * Claim and run ready tasks, up to the concurrency limit.
+ *
+ * Two tasks whose paths can overlap are never started together. The lease table
+ * would reject the second one anyway, but a rejected lease costs a full model
+ * call — the tokens are spent before the write is attempted. Checking here
+ * makes that waste avoidable rather than merely survivable.
+ */
+async function dispatchWorkers(
+  agents: Map<string, AgentDefinition>,
+  router: Router,
+  gh: GitHub,
+): Promise<void> {
+  const workerIds = [...agents.values()]
+    .filter((a) => a.status === "active" && a.id !== "master")
+    .map((a) => a.id);
+
+  const { count } = await db
+    .from("tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "in_progress");
+
+  let slots = config.maxConcurrentTasks - (count ?? 0);
+  if (slots <= 0) return;
+
+  const inFlightPaths: string[][] = [];
+  const running: Promise<void>[] = [];
+
+  while (slots > 0) {
+    const { data: task, error } = await db.rpc("claim_next_task", {
+      p_agent_ids: workerIds,
+    });
+    if (error) throw new Error(`claim_next_task: ${error.message}`);
+    if (!task) break;
+
+    const row = task as TaskRow;
+    const agent = agents.get(row.assigned_to);
+    if (!agent) {
+      await db
+        .from("tasks")
+        .update({ status: "failed", failure: "capability_gap", failure_detail: "Agent inconnu" })
+        .eq("id", row.id);
+      continue;
+    }
+
+    const paths = row.allowed_paths.length > 0 ? row.allowed_paths : agent.allowedPaths;
+
+    if (inFlightPaths.some((other) => pathsOverlap(other, paths))) {
+      // Put it back untouched; a later tick will take it once the conflicting
+      // task is done. No attempt consumed, no tokens spent.
+      await db.from("tasks").update({ status: "ready", started_at: null }).eq("id", row.id);
+      break;
+    }
+
+    inFlightPaths.push(paths);
+    running.push(
+      executeTask(row, agent, router, gh).catch(async (err) => {
+        log.warn(`tâche ${row.id.slice(0, 8)} a levé:`, err instanceof Error ? err.message : err);
+        await db
+          .from("tasks")
+          .update({
+            status: "failed",
+            failure: "provider_error",
+            failure_detail: err instanceof Error ? err.message : String(err),
+          })
+          .eq("id", row.id);
+        await db.rpc("release_leases", { p_task_id: row.id });
+      }),
+    );
+    slots -= 1;
+  }
+
+  if (running.length > 0) await Promise.all(running);
+}
+
+/** Realtime is the primary wake-up; the interval is the fallback. */
+function subscribe(): void {
+  db.channel("worker")
+    .on("postgres_changes", { event: "*", schema: "public", table: "missions" }, nudge)
+    .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, nudge)
+    .on("postgres_changes", { event: "*", schema: "public", table: "runs" }, nudge)
+    .subscribe((status) => log.debug(`realtime: ${status}`));
+}
+
+function nudge(): void {
+  wakeUp?.();
+}
+
+function waitForWork(): Promise<void> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      wakeUp = null;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, config.pollIntervalMs);
+    wakeUp = finish;
+  });
+}
+
+function installShutdown(): void {
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      if (!running) process.exit(1); // second signal: give up waiting
+      log.info(`${signal} reçu — arrêt après la tâche en cours`);
+      running = false;
+      wakeUp?.();
+    });
+  }
+}
+
+await main();

@@ -1,0 +1,185 @@
+# Les « mains » de grenOS : la seule chose autorisée à dire « ça marche ».
+#
+# Les agents poussent sur agent/**. Ce workflow compile, boote dans QEMU, puis
+# écrit son verdict directement dans Supabase — il ne renvoie rien au worker.
+# Le worker apprend le résultat par Realtime, ce qui lui évite de sonder GitHub
+# en boucle avec 256 Mo de RAM (D-002, D-005).
+#
+# Le repo est public, donc les minutes sont illimitées : le Testeur peut
+# reboucler autant que nécessaire (D-006).
+
+name: verify
+
+on:
+  push:
+    branches: ["agent/**"]
+  workflow_dispatch:
+
+# Un seul run par branche : quand un agent pousse deux fois de suite, seul le
+# dernier état compte et laisser tourner le précédent ne ferait qu'ajouter un
+# verdict périmé dans la base.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Y a-t-il un kernel à vérifier ?
+        id: probe
+        run: |
+          if [ -f kernel/Cargo.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pas encore de kernel/Cargo.toml — rien à compiler."
+          fi
+
+      - name: Toolchain Rust
+        if: steps.probe.outputs.present == 'true'
+        run: |
+          rustup toolchain install nightly --profile minimal \
+            --component rust-src,clippy,llvm-tools
+          rustup default nightly
+
+      - name: Cache cargo
+        if: steps.probe.outputs.present == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            kernel/target
+          key: cargo-${{ hashFiles('kernel/Cargo.toml', 'kernel/Cargo.lock') }}
+          restore-keys: cargo-
+
+      - name: QEMU et outils image
+        if: steps.probe.outputs.present == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 xorriso mtools
+
+      # ---- Étape 1 : compilation ------------------------------------------
+      - name: cargo build
+        id: build
+        if: steps.probe.outputs.present == 'true'
+        working-directory: kernel
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cargo build --release 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      # ---- Étape 2 : lint ---------------------------------------------------
+      - name: cargo clippy
+        id: clippy
+        if: steps.probe.outputs.present == 'true' && steps.build.outcome == 'success'
+        working-directory: kernel
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cargo clippy --release -- -D warnings 2>&1 | tee "$RUNNER_TEMP/clippy.log"
+
+      # ---- Étape 3 : boot réel dans QEMU -----------------------------------
+      # Le timeout est le point important : un kernel qui pend doit ÉCHOUER,
+      # pas attendre. Un run non concluant apprend au Testeur à ignorer le rouge.
+      - name: boot QEMU
+        id: qemu
+        if: steps.probe.outputs.present == 'true' && steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          if [ -x kernel/scripts/make-iso.sh ]; then
+            kernel/scripts/make-iso.sh
+          fi
+
+          IMAGE=$(find kernel -name '*.iso' -o -name '*.img' | head -n1)
+          if [ -z "$IMAGE" ]; then
+            echo "Aucune image bootable produite" | tee "$RUNNER_TEMP/qemu.log"
+            exit 1
+          fi
+
+          timeout 90 qemu-system-x86_64 \
+            -cdrom "$IMAGE" \
+            -serial stdio \
+            -display none \
+            -no-reboot -no-shutdown \
+            -m 256M \
+            2>&1 | tee "$RUNNER_TEMP/qemu.log" || true
+
+          # Un exit code propre ne prouve rien : on juge sur la sortie série.
+          if grep -qiE 'panic|triple fault|double fault' "$RUNNER_TEMP/qemu.log"; then
+            echo "::error::Le kernel a paniqué au boot"
+            exit 1
+          fi
+          if ! grep -q 'grenOS' "$RUNNER_TEMP/qemu.log"; then
+            echo "::error::Marqueur 'grenOS' absent de la sortie série"
+            exit 1
+          fi
+
+      # ---- Étape 4 : verdict vers Supabase ---------------------------------
+      # Toujours exécutée : un run qui ne rapporte rien laisse une tâche
+      # bloquée en awaiting_verification jusqu'à intervention humaine.
+      - name: Rapporter le verdict
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "::warning::Secrets Supabase absents — verdict non transmis."
+            exit 0
+          fi
+
+          if [ "${{ steps.probe.outputs.present }}" != "true" ]; then
+            STATUS="error";   FAILURE="spec_gap"
+          elif [ "${{ steps.build.outcome }}" != "success" ]; then
+            STATUS="failed";  FAILURE="compile_error"
+          elif [ "${{ steps.clippy.outcome }}" != "success" ]; then
+            STATUS="failed";  FAILURE="compile_error"
+          elif [ "${{ steps.qemu.outcome }}" != "success" ]; then
+            STATUS="failed";  FAILURE="test_failure"
+          else
+            STATUS="passed";  FAILURE=""
+          fi
+
+          # On garde la fin des logs : l'erreur qui compte est presque toujours
+          # la dernière, et un dump complet noie le Codeur au retour.
+          LOG=$(tail -c 6000 "$RUNNER_TEMP/build.log" "$RUNNER_TEMP/clippy.log" \
+                "$RUNNER_TEMP/qemu.log" 2>/dev/null | tail -c 6000 || echo "pas de log")
+
+          jq -n \
+            --arg branch  "${GITHUB_REF_NAME}" \
+            --arg sha     "${GITHUB_SHA}" \
+            --arg status  "$STATUS" \
+            --arg failure "$FAILURE" \
+            --arg log     "$LOG" \
+            --arg url     "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{branch:$branch, commit_sha:$sha, status:$status,
+              failure:(if $failure == "" then null else $failure end),
+              log_excerpt:$log, log_url:$url,
+              workflow_run_id:'"${GITHUB_RUN_ID}"',
+              finished_at:"'"$(date -u +%FT%TZ)"'"}' > payload.json
+
+          curl -sS -X POST "${SUPABASE_URL}/rest/v1/runs" \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            --data @payload.json
+
+          echo "Verdict transmis : $STATUS"
+
+      - name: Échouer si la vérification a échoué
+        if: always() && steps.probe.outputs.present == 'true'
+        run: |
+          [ "${{ steps.build.outcome }}"  = "success" ] || exit 1
+          [ "${{ steps.clippy.outcome }}" = "success" ] || exit 1
+          [ "${{ steps.qemu.outcome }}"   = "success" ] || exit 1

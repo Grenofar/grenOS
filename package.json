@@ -1,0 +1,28 @@
+{
+  "name": "grenos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An OS built by a supervised team of AI agents",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "worker"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "env": "node scripts/sync-env.mjs",
+    "predev": "node scripts/sync-env.mjs",
+    "dev": "npm run dev --workspace=@grenos/web",
+    "build": "npm run build --workspace=@grenos/web",
+    "preworker": "node scripts/sync-env.mjs",
+    "worker": "npm run start --workspace=@grenos/worker",
+    "test": "node --test \"worker/test/*.test.ts\" \"packages/router/test/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/node": "^20.16.11"
+  }
+}

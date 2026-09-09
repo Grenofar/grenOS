@@ -1,0 +1,14 @@
+{
+  "name": "@grenos/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "comment": "Doit tenir dans 256 Mo RAM / 512 Mo disque (D-002). Une seule dépendance runtime.",
+  "scripts": {
+    "start": "node --max-old-space-size=192 --experimental-strip-types src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4"
+  }
+}
