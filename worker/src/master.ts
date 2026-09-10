@@ -254,17 +254,32 @@ export async function runMasterCycle(
       .in("id", state.pending.map((p) => p.id));
   }
 
+  // A task parked on spec_gap waits for exactly this: the Master's answer
+  // (executor.ts, specGapPatch). New work in the same decision is that answer,
+  // so the parked task is closed rather than left blocked for ever, where
+  // nothing would pick it up and the mission could never complete.
+  const parked = created > 0 ? parkedSpecGaps(state) : [];
+  if (parked.length > 0) {
+    await db
+      .from("tasks")
+      .update({ status: "cancelled", finished_at: new Date().toISOString() })
+      .in("id", parked)
+      .eq("status", "blocked");
+    await emit({
+      missionId: mission.id,
+      agentId: "master",
+      level: "info",
+      type: "task_superseded",
+      message: `${parked.length} tâche(s) en spec_gap remplacée(s) par la nouvelle décision du Maître.`,
+      payload: { tasks: parked },
+    });
+  }
+
   if (!escalated && created > 0 && mission.status !== "running") {
     await db.from("missions").update({ status: "running" }).eq("id", mission.id);
   }
 
-  if (
-    !escalated &&
-    created === 0 &&
-    state.activeCount === 0 &&
-    state.tasks.length > 0 &&
-    state.tasks.every((t) => t.status === "done")
-  ) {
+  if (!escalated && created === 0 && isMissionComplete(state)) {
     await db
       .from("missions")
       .update({ status: "done", finished_at: new Date().toISOString() })
@@ -359,6 +374,31 @@ export function signatureOf(mission: Mission, state: State): string {
   const pending = state.pending.map((p) => p.id).sort().join(",");
   const runs = state.runs.map((r) => `${r.branch}:${r.status}`).join(",");
   return `${mission.status}|${tasks}|${pending}|${runs}`;
+}
+
+/**
+ * Tasks parked on spec_gap, waiting for the Master to answer them.
+ *
+ * Only those. A task blocked on a question is resumed by its answer, so
+ * discarding it would throw away the work that asked.
+ */
+export function parkedSpecGaps(state: State): string[] {
+  return state.tasks
+    .filter((t) => t.status === "blocked" && t.failure === "spec_gap")
+    .map((t) => t.id);
+}
+
+/**
+ * Every task that still counts is done. Cancelled tasks were superseded and do
+ * not count: mission 1 carries four, and requiring those to be done too meant
+ * it could never close on its own. A failed or blocked task still holds the
+ * mission open — that one needs a decision, not a shrug.
+ */
+export function isMissionComplete(state: State): boolean {
+  const counted = state.tasks.filter((t) => t.status !== "cancelled");
+  return (
+    state.activeCount === 0 && counted.length > 0 && counted.every((t) => t.status === "done")
+  );
 }
 
 function renderState(mission: Mission, state: State): string {

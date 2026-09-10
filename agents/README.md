@@ -83,7 +83,7 @@ envelope and return a result for it.
   "context_refs": ["artifact:a_123", "file:kernel/src/main.rs"],
   "acceptance_criteria": [                                  // objective, testable
     "kernel/src/serial.rs exposes a Serial::write_str function",
-    "cargo build --target x86_64-grenos.json succeeds",
+    "cargo build --release succeeds in kernel/",
     "QEMU boot prints grenOS on the serial console"
   ],
   "allowed_paths": ["kernel/src/**"],
@@ -161,6 +161,45 @@ Master reads the verdict and decides: accept, retry, or escalate
 Self-reported success is the main failure mode of AI coding teams: the model is
 confident, the code does not compile, and nobody notices for ten commits. The
 only source of truth in grenOS is a **green CI run**.
+
+### What CI actually runs
+
+`.github/workflows/verify.yml` is the one definition of "it builds" and "it
+boots". Design, specify and write for exactly these steps: a plan that needs a
+build command of its own is a plan nobody can verify. If a design document
+disagrees with this section, this section wins — the document is out of date,
+and you say so in your `summary` so the Master can have it corrected.
+
+1. **Toolchain.** `kernel/rust-toolchain.toml` when it exists, installed exactly
+   as written: channel, components, targets. Without it, that day's nightly
+   with `rust-src`, `clippy` and `llvm-tools`, and no extra target.
+2. **`cargo build --release`**, run inside `kernel/`, with **no `--target`
+   flag**. The target must therefore come from `kernel/.cargo/config.toml`
+   (`[build] target = "..."`).
+3. **`cargo clippy --release -- -D warnings`**, inside `kernel/`. One warning
+   turns the run red.
+4. **`bash kernel/scripts/make-iso.sh`**, when that file exists. CI calls it
+   through `bash` because files committed by agents are never executable. The
+   runner has `xorriso` and `mtools` and nothing from Limine: the script
+   fetches the Limine binaries itself.
+5. **Boot.** The first `*.iso` or `*.img` found under `kernel/` runs as
+   `qemu-system-x86_64 -cdrom <image> -serial stdio -display none -no-reboot -m 256M`
+   and is killed after 90 seconds.
+6. **Green** only when the serial output contains `grenOS` and contains none of
+   `panic`, `triple fault`, `double fault`, in any case.
+
+Consequences that have already cost real attempts:
+
+- **Target the built-in `x86_64-unknown-none`**, listed under `targets` in
+  `rust-toolchain.toml`: its `core` ships precompiled. A custom target JSON is
+  refused unless unstable flags and `build-std` are configured — mission 1
+  lost an attempt to exactly that error.
+- **Acceptance criteria name these commands**, e.g. "cargo build --release
+  succeeds in kernel/", never a command CI does not run.
+- **Use the exact file names**: `Cargo.toml`, `.cargo/config.toml`,
+  `rust-toolchain.toml`. Cargo ignores a `Cargo.tompl`; the build then runs on
+  the old manifest and the attempt is spent. Check every path before you
+  return.
 
 ---
 

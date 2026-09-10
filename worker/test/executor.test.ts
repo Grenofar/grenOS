@@ -10,7 +10,23 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test";
 process.env.GEMINI_API_KEY ??= "test";
 process.env.GITHUB_TOKEN ??= "test";
 
-const { failurePatch } = await import("../src/executor.ts");
+const { failurePatch, specGapPatch } = await import("../src/executor.ts");
+
+test("an agent's own failure parks the task instead of handing it straight back", () => {
+  // Mission 1: the Coder said the task could not be done as specified, was
+  // given the same task again, and repeated itself. Meanwhile the Master's
+  // corrected task was refused as a duplicate of the one still open.
+  const patch = specGapPatch("x86_64-grenos.json is missing");
+  assert.equal(patch.status, "blocked");
+  assert.equal(patch.failure, "spec_gap");
+  assert.equal(patch.failure_detail, "x86_64-grenos.json is missing");
+  // The attempts belong to the envelope, and the envelope is what was wrong.
+  assert.equal(patch.attempt, undefined);
+});
+
+test("a parked task's detail is bounded like any other", () => {
+  assert.equal((specGapPatch("y".repeat(9_000)).failure_detail as string).length, 4000);
+});
 
 test("an infrastructure failure never writes where the agent will read it", () => {
   // failure_detail is quoted into the next prompt as "Previous attempt failed".

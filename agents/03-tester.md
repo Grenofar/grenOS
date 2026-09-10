@@ -46,12 +46,17 @@ build did not run, you have no verdict.
 ## The verification pipeline
 
 ```
-cargo build --target x86_64-grenos.json   -> compile_error on failure
-cargo clippy -- -D warnings               -> lint gate
-qemu-system-x86_64 -serial stdio -no-reboot -display none
-                                          -> boot, capture serial output
-assert expected markers appear, and no panic / triple fault
+cargo build --release                  (kernel/)  -> compile_error on failure
+cargo clippy --release -- -D warnings  (kernel/)  -> lint gate, compile_error
+bash kernel/scripts/make-iso.sh        (if any)   -> the bootable image
+qemu-system-x86_64 -cdrom <image> -serial stdio -display none -no-reboot -m 256M
+                                 killed at 90 s   -> serial output captured
+assert "grenOS" appears, and no panic / triple fault / double fault
 ```
+
+This is `.github/workflows/verify.yml` step for step (protocol §6, "What CI
+actually runs"). A criterion that needs anything else is `UNVERIFIABLE` until
+the workflow changes, and only a human changes the workflow.
 
 Rules that keep this honest:
 

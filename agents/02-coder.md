@@ -69,11 +69,12 @@ Limine. You also implement the TypeScript control plane when tasked.
 
 ## Toolchain and dependencies
 
-- **CI builds with `kernel/rust-toolchain.toml` when it exists, and otherwise
-  with whatever nightly is current that day.** The first task that creates the
-  project must pin the toolchain — a dated nightly, with the `rust-src`,
-  `llvm-tools` and `clippy` components — or a build that passed yesterday can
-  fail tomorrow with no change of yours.
+- **CI runs exactly the steps in the protocol (§6, "What CI actually runs").**
+  The first task that creates the project pins the toolchain in
+  `kernel/rust-toolchain.toml` — a dated nightly, components `rust-src`,
+  `llvm-tools` and `clippy`, `targets = ["x86_64-unknown-none"]` — and sets that
+  target in `kernel/.cargo/config.toml`. Without the pin, a build that passed
+  yesterday can fail tomorrow with no change of yours.
 - **Prefer no dependency for low-level I/O.** Port I/O is two lines of
   `core::arch::asm!`. Crates such as `x86_64` implement unstable nightly traits
   and break when the compiler moves: mission 1 lost attempts to `x86_64 0.14`

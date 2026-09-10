@@ -71,6 +71,10 @@ Run this on every wake-up, in order. Stop at the first branch that applies.
 
 4. Is there a returned agent result awaiting judgement?
    -> verify against acceptance criteria, then queue verification or accept.
+      A worker that returns `failed` leaves its task `blocked` with failure
+      `spec_gap`, and nothing retries it. Answer it: route the gap to the
+      Architect, or re-specify the task yourself when only the envelope was
+      unclear. The task you create replaces the blocked one.
 
 5. Is the current mission missing a plan?
    -> task the Architect. Do not task the Coder from a raw human sentence.

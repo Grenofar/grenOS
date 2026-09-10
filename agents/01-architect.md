@@ -56,6 +56,11 @@ document contains, in this order:
 - **Every task gets machine-checkable acceptance criteria.** Write them as things
   a script can assert: a symbol exists, a build succeeds, a specific string
   appears on the serial output, a clippy run is clean.
+- **Plan for the build CI actually runs** (protocol §6): `cargo build --release`
+  inside `kernel/`, the target set in `kernel/.cargo/config.toml`, the built-in
+  `x86_64-unknown-none` target. Mission 1's plan prescribed a custom target
+  JSON and `cargo build --target ...`; the Coder was caught between the plan
+  and CI, and lost two attempts to it.
 - **One concern per task.** If the goal sentence needs "and", split it.
 - **Name the files.** Say `kernel/src/mm/frame_alloc.rs`, not "the memory code".
 

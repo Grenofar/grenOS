@@ -229,14 +229,16 @@ export async function executeTask(
   const escalation = envelope.actions.find((a) => a.type === "escalate");
   const help = envelope.actions.find((a) => a.type === "request_help");
 
-  // An agent reporting failure is being honest, and honesty must not be
-  // terminal while attempts remain. Marking it failed outright meant one
-  // confused reply killed a task that still had retries — which is exactly
-  // what happened when the model had been fed a provider error as its own.
-  // Routed as spec_gap, per the Coder protocol: "cannot be done as specified".
+  // An agent reporting failure is saying the task cannot be done as specified
+  // (the Coder protocol's spec_gap). The answer is a better specification,
+  // which only the Master routes (agents/README.md §8): the same envelope sent
+  // back to the same agent gets the same answer. Mission 1 did exactly that —
+  // the Coder spent an attempt repeating itself, while the Master's corrected
+  // task was refused as a duplicate because the old one still counted as open.
+  // So the task is parked instead; see specGapPatch.
   if (envelope.status === "failed") {
     const detail = [envelope.summary, envelope.reasoning_brief].filter(Boolean).join("\n\n");
-    await failTask(task, "spec_gap", detail, true);
+    await recordFailure(task, "spec_gap", detail, specGapPatch(detail));
     return;
   }
 
@@ -363,8 +365,15 @@ async function failTask(
   detail: string,
   consumesAttempt: boolean,
 ): Promise<void> {
-  const patch = failurePatch(task, failure, detail, consumesAttempt);
+  await recordFailure(task, failure, detail, failurePatch(task, failure, detail, consumesAttempt));
+}
 
+async function recordFailure(
+  task: TaskRow,
+  failure: string,
+  detail: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
   const { error } = await db.from("tasks").update(patch).eq("id", task.id);
   if (error) {
     // If we cannot even record the failure, say so loudly: silence here means
@@ -426,4 +435,16 @@ export function failurePatch(
   if (canRetry) patch["attempt"] = task.attempt + 1;
   else patch["finished_at"] = now.toISOString();
   return patch;
+}
+
+/**
+ * What an agent's own `failed` writes to its task: parked, not retried.
+ *
+ * `blocked` is outside the states the Master's duplicate guard counts as open,
+ * so the task that replaces this one goes through, and the Master then closes
+ * this one (master.ts, parkedSpecGaps). No attempt is consumed: the attempts
+ * belong to this envelope, and the envelope is what was wrong.
+ */
+export function specGapPatch(detail: string): Record<string, unknown> {
+  return { status: "blocked", failure: "spec_gap", failure_detail: detail.slice(0, 4000) };
 }
