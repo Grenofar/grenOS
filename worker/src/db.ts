@@ -65,12 +65,18 @@ export class SupabaseUsageStore {
 
 /** Mirror agents/**\/*.md into the `agents` table so the dashboard matches disk. */
 export async function syncAgents(agents: AgentDefinition[]): Promise<void> {
+  // A reports_to naming an agent that does not exist would fail on the foreign
+  // key, and the message ("violates constraint agents_reports_to_fkey") points
+  // at the database rather than at the typo in the .md that caused it. Drop the
+  // dangling reference and say so instead.
+  const known = new Set(agents.map((a) => a.id));
+
   const rows = agents.map((a) => ({
     id: a.id,
     name: a.name,
     status: a.status,
     role_class: a.roleClass,
-    reports_to: a.reportsTo,
+    reports_to: a.reportsTo && known.has(a.reportsTo) ? a.reportsTo : null,
     model_role: a.modelRole,
     max_tokens_per_task: a.maxTokensPerTask,
     max_attempts: a.maxAttempts,
@@ -90,6 +96,11 @@ export async function syncAgents(agents: AgentDefinition[]): Promise<void> {
   for (const row of ordered) {
     const { error } = await db.from("agents").upsert(row);
     if (error) throw new Error(`sync agent ${row.id}: ${error.message}`);
+  }
+  for (const a of agents) {
+    if (a.reportsTo && !known.has(a.reportsTo)) {
+      log.warn(`${a.id}: reports_to "${a.reportsTo}" ne correspond à aucun agent — ignoré`);
+    }
   }
   log.info(`${rows.length} agents synchronisés depuis agents/`);
 }

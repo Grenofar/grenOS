@@ -67,3 +67,14 @@ test("structural safeguards survive the parse", () => {
     );
   }
 });
+
+test("reports_to: human becomes null, not a dangling foreign key", () => {
+  const master = loadAgents().find((a) => a.id === "master")!;
+  // The .md says "human" because that is who the Master answers to. The
+  // agents table has a foreign key on this column, so anything that is not
+  // another agent must be null — this failed on the first worker start.
+  assert.equal(master.reportsTo, null);
+
+  const coder = loadAgents().find((a) => a.id === "coder")!;
+  assert.equal(coder.reportsTo, "master", "une vraie référence reste intacte");
+});

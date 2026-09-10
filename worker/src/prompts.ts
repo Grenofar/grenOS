@@ -85,7 +85,10 @@ function parseAgent(file: string, protocol: string): AgentDefinition {
     id,
     name: str(meta, "name", file),
     status: str(meta, "status", file) as AgentDefinition["status"],
-    reportsTo: (meta["reports_to"] as string | undefined) ?? null,
+    // "human" is a statement about accountability, not a row in `agents`.
+    // Passing it through produced a foreign-key violation on the very first
+    // worker start — the Master reports to a person, so the column is null.
+    reportsTo: normaliseReportsTo(meta["reports_to"]),
     roleClass: str(meta, "role_class", file) as AgentDefinition["roleClass"],
     modelRole: str(meta, "model_role", file) as AgentDefinition["modelRole"],
     maxTokensPerTask: Number(meta["max_tokens_per_task"] ?? 60000),
@@ -156,6 +159,12 @@ function parseFrontmatter(text: string): Record<string, unknown> {
   }
   if (currentKey && currentList) out[currentKey] = currentList;
   return out;
+}
+
+function normaliseReportsTo(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim().toLowerCase();
+  return v === "" || v === "human" || v === "none" || v === "null" ? null : value.trim();
 }
 
 const unquote = (s: string): string => s.replace(/^["'](.*)["']$/, "$1");
