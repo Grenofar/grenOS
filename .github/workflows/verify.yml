@@ -194,10 +194,17 @@ jobs:
             echo "::error::payload.json est vide, la generation du corps a echoue."
             exit 1
           fi
+          # Le corps ne contient aucun secret : branche, sha, statut, extrait de
+          # log, URL publique. L'afficher est ce qui manquait pour diagnostiquer
+          # un refus que PostgREST decrit comme "Empty or invalid json" sans
+          # jamais dire quel caractere le gene.
+          echo "--- corps envoye ---"
+          cat payload.json
+          echo "--- fin du corps ---"
 
           # --fail-with-body : sans ca curl sort en 0 meme sur un 401, le
           # verdict n'arrive jamais et la tache reste bloquee sans signal.
-          if ! curl -sS --fail-with-body -X POST "${SUPABASE_URL}/rest/v1/runs" -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" -H "Content-Type: application/json" -H "Prefer: return=minimal" --data @payload.json; then
+          if ! curl -sS --fail-with-body -X POST "${SUPABASE_URL}/rest/v1/runs" -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" -H "Content-Type: application/json" -H "Prefer: return=minimal" --data-binary @payload.json; then
             echo "::error::Supabase a refuse le verdict (voir la reponse ci-dessus)."
             exit 1
           fi
