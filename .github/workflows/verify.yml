@@ -139,6 +139,15 @@ jobs:
             echo "::error::https://github.com/Grenofar/grenOS/settings/secrets/actions/new"
             exit 1
           fi
+          # La longueur et le nombre de points, jamais la valeur. Un secret
+          # colle avec un retour a la ligne ou tronque casse le cadrage HTTP :
+          # le serveur lit le corps comme un en-tete et repond "Empty or
+          # invalid json", en accusant le corps qui n'y est pour rien.
+          echo "cle : ${#SUPABASE_SERVICE_ROLE_KEY} caracteres, $(printf %s "$SUPABASE_SERVICE_ROLE_KEY" | tr -cd . | wc -c) points"
+          case "$SUPABASE_SERVICE_ROLE_KEY" in
+            *[[:space:]]*) echo "::error::Le secret contient une espace ou un retour a la ligne. Recolle-le sans saut de ligne." ;;
+          esac
+
           if [ "$HAS_VAR_KEY" = "true" ]; then
             echo "::warning::Une variable SUPABASE_SERVICE_ROLE_KEY existe. Les variables sont lisibles en clair dans les logs : supprime-la."
           fi
