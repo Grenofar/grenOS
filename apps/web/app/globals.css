@@ -181,6 +181,53 @@ a.card-link b { color: var(--text); }
 .feed-row.warn .feed-msg { color: var(--warn); }
 .feed-row.error .feed-msg { color: var(--err); }
 
+/* ---------- Feuille de route ---------- */
+
+.timeline { display: flex; flex-direction: column; }
+
+.step { display: grid; grid-template-columns: 26px 1fr; gap: 14px; }
+.step.future { opacity: 0.55; }
+
+/* Le rail relie les étapes : l'ordre n'est pas décoratif, chacune est
+   l'instrument de mesure de la suivante. */
+.step-rail { display: flex; flex-direction: column; align-items: center; padding-top: 18px; }
+.step-rail::after {
+  content: "";
+  flex: 1;
+  width: 1px;
+  background: var(--border);
+  margin-top: 8px;
+}
+.step:last-child .step-rail::after { display: none; }
+
+.step-card { margin-bottom: 14px; flex: 1; }
+
+.step-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.step details summary {
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+}
+.step details summary::-webkit-details-marker { display: none; }
+.step details summary::before { content: "▸ "; }
+.step details[open] summary::before { content: "▾ "; }
+
+ul.criteria {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+ul.criteria li { margin-bottom: 3px; }
+
 /* ---------- Chat de cadrage ---------- */
 
 .chat {

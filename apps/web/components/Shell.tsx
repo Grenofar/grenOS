@@ -12,6 +12,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const links = [
     { href: "/", key: "nav.dashboard" },
+    { href: "/roadmap", key: "nav.roadmap" },
     { href: "/missions", key: "nav.missions" },
     { href: "/runs", key: "nav.runs" },
     { href: "/agents", key: "nav.agents" },

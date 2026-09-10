@@ -24,6 +24,24 @@ const STRINGS: Dict = {
   "nav.missions": { fr: "Missions", en: "Missions" },
   "nav.runs": { fr: "Vérifications", en: "Runs" },
   "nav.agents": { fr: "Agents", en: "Agents" },
+  "nav.roadmap": { fr: "Feuille de route", en: "Roadmap" },
+
+  "roadmap.intro": {
+    fr: "Aucune case ne se coche ici : une étape passe à « terminée » parce que sa mission l'est, et une mission ne se termine que sur un verdict de CI. L'ordre est imposé par la matière — sans port série on ne sait pas pourquoi le kernel a redémarré.",
+    en: "Nothing is ticked by hand: a step turns done because its mission did, and a mission only ends on a CI verdict. The order is imposed by the material — without serial output you cannot know why the kernel reset.",
+  },
+  "roadmap.empty": {
+    fr: "Feuille de route absente. Passe la migration 0008.",
+    en: "No roadmap. Run migration 0008.",
+  },
+  "roadmap.doneWhen": { fr: "Terminée quand", en: "Done when" },
+  "roadmap.seeMission": { fr: "Voir la mission", en: "See the mission" },
+  "roadmap.todo": { fr: "à venir", en: "upcoming" },
+  "roadmap.scoping": { fr: "cadrage", en: "scoping" },
+  "roadmap.active": { fr: "en cours", en: "in progress" },
+  "roadmap.done": { fr: "terminée", en: "done" },
+  "roadmap.blocked": { fr: "bloquée", en: "blocked" },
+  "roadmap.aborted": { fr: "abandonnée", en: "aborted" },
 
   "agents.title": { fr: "L'équipe", en: "The team" },
   "agents.active": { fr: "actif", en: "active" },
