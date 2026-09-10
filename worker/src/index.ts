@@ -3,6 +3,7 @@ import { config, log } from "./config.ts";
 import { agentsPaused, db, emit, syncAgents, SupabaseUsageStore } from "./db.ts";
 import { executeTask, type TaskRow } from "./executor.ts";
 import { GitHub } from "./github.ts";
+import { runIntake } from "./intake.ts";
 import { runMasterCycle } from "./master.ts";
 import { loadAgents, type AgentDefinition } from "./prompts.ts";
 import { pathsOverlap } from "./sandbox.ts";
@@ -20,7 +21,11 @@ import { pathsOverlap } from "./sandbox.ts";
  * safety net for a dropped subscription.
  */
 
-const MISSION_STATES = ["draft", "planning", "running"];
+// `draft` est volontairement absent : une mission en brouillon est encore en
+// train d'être cadrée par conversation (intake.ts). La planifier pendant que
+// l'humain écrit encore reviendrait à faire travailler l'équipe sur un énoncé
+// qui n'est pas fini.
+const MISSION_STATES = ["planning", "running"];
 
 let running = true;
 let ticking = false;
@@ -35,6 +40,8 @@ async function main(): Promise<void> {
   const agents = new Map(definitions.map((a) => [a.id, a]));
   const master = agents.get("master");
   if (!master) throw new Error("Agent 'master' introuvable dans agents/");
+  const intake = agents.get("intake");
+  if (!intake) throw new Error("Agent 'intake' introuvable dans agents/");
 
   const usage = new SupabaseUsageStore();
   const router = new Router({
@@ -61,7 +68,7 @@ async function main(): Promise<void> {
 
   while (running) {
     try {
-      await tick(agents, master, router, gh);
+      await tick(agents, master, intake, router, gh);
     } catch (err) {
       // The loop must survive anything. A crash here on a free tier means the
       // process may not come back for a long time.
@@ -81,6 +88,7 @@ async function main(): Promise<void> {
 async function tick(
   agents: Map<string, AgentDefinition>,
   master: AgentDefinition,
+  intake: AgentDefinition,
   router: Router,
   gh: GitHub,
 ): Promise<void> {
@@ -97,6 +105,10 @@ async function tick(
       log.debug("agents en pause (coupe-circuit de l'interface)");
       return;
     }
+
+    // Le cadrage d'abord : une mission lancée par la conversation doit être
+    // planifiée dans le même tick, pas au suivant. L'humain vient d'appuyer.
+    await runIntake(intake, router);
 
     const { data: missions } = await db
       .from("missions")
@@ -129,7 +141,7 @@ async function dispatchWorkers(
   gh: GitHub,
 ): Promise<void> {
   const workerIds = [...agents.values()]
-    .filter((a) => a.status === "active" && a.id !== "master")
+    .filter((a) => a.status === "active" && a.id !== "master" && a.id !== "intake")
     .map((a) => a.id);
 
   const { count } = await db

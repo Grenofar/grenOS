@@ -29,7 +29,20 @@ export type AgentAction =
       acceptance_criteria: string[];
       allowed_paths?: string[];
     }
-  | { type: "escalate"; reason: string; options?: string[] };
+  | { type: "escalate"; reason: string; options?: string[] }
+  /**
+   * Ends a mission-intake conversation and launches the mission.
+   *
+   * Only the intake agent emits this, and emitting it locks the chat: the
+   * human cannot add anything afterwards. That is why the criteria carried
+   * here have to be checkable without asking anyone.
+   */
+  | {
+      type: "finalize_mission";
+      title: string;
+      description: string;
+      acceptance_criteria: string[];
+    };
 
 export interface AgentEnvelope {
   task_id?: string;
@@ -167,6 +180,21 @@ function validateAction(value: unknown, index: number, raw: string): AgentAction
         reason: text("reason"),
         ...(Array.isArray(value["options"]) ? { options: value["options"].map(String) } : {}),
       };
+
+    case "finalize_mission": {
+      const criteria = value["acceptance_criteria"];
+      if (!Array.isArray(criteria) || criteria.length === 0) {
+        // Launching a mission nobody can grade is the exact failure this whole
+        // conversation exists to prevent.
+        throw new EnvelopeError(`${at} : acceptance_criteria vide`, raw);
+      }
+      return {
+        type,
+        title: text("title"),
+        description: text("description"),
+        acceptance_criteria: criteria.map(String),
+      };
+    }
 
     default:
       throw new EnvelopeError(`${at} : type d'action inconnu`, raw);

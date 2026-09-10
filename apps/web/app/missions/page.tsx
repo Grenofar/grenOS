@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useLive } from "@/lib/useLive";
 import { useLang } from "@/lib/i18n";
@@ -9,7 +8,7 @@ import type { MissionOverview } from "@/lib/types";
 
 export default function MissionsPage() {
   const { t } = useLang();
-  const { rows: missions, refresh } = useLive<MissionOverview>("missions", () =>
+  const { rows: missions } = useLive<MissionOverview>("missions", () =>
     supabase()
       .from("mission_overview")
       .select("*")
@@ -25,7 +24,15 @@ export default function MissionsPage() {
       <div className="grid cols-2">
         <section>
           <h2>{t("missions.new")}</h2>
-          <NewMission onCreated={refresh} />
+          <Link href="/missions/new" className="card card-link">
+            <div className="row" style={{ marginBottom: 8 }}>
+              <span className="dot live" />
+              <b>{t("intake.title")}</b>
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              {t("intake.hint")}
+            </p>
+          </Link>
         </section>
 
         <section>
@@ -42,89 +49,6 @@ export default function MissionsPage() {
         </section>
       </div>
     </>
-  );
-}
-
-function NewMission({ onCreated }: { onCreated: () => void }) {
-  const { t } = useLang();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [budget, setBudget] = useState(2_000_000);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <form
-      className="card"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        setError(null);
-
-        const { data: auth } = await supabase().auth.getUser();
-        const { error } = await supabase().from("missions").insert({
-          title,
-          description,
-          token_budget: budget,
-          // RLS requires created_by = auth.uid(); the browser cannot post a
-          // mission on someone else's behalf.
-          created_by: auth.user?.id,
-          status: "draft",
-        });
-
-        if (error) setError(error.message);
-        else {
-          setTitle("");
-          setDescription("");
-          onCreated();
-        }
-        setBusy(false);
-      }}
-    >
-      <div className="field">
-        <label htmlFor="title">{t("missions.name")}</label>
-        <input
-          id="title"
-          required
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Boot a hello-world kernel in QEMU"
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="desc">{t("missions.goal")}</label>
-        <textarea
-          id="desc"
-          required
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Décris le résultat attendu, pas la manière de l'obtenir. L'Architecte s'occupe du comment."
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="budget">{t("missions.budget")}</label>
-        <input
-          id="budget"
-          type="number"
-          min={100000}
-          step={100000}
-          value={budget}
-          onChange={(e) => setBudget(Number(e.target.value))}
-        />
-      </div>
-
-      <button type="submit" disabled={busy}>
-        {t("missions.create")}
-      </button>
-
-      {error && (
-        <p className="faint" style={{ color: "var(--err)", marginTop: 10 }}>
-          {error}
-        </p>
-      )}
-    </form>
   );
 }
 
