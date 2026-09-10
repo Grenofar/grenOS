@@ -80,3 +80,60 @@ test("guards that mirror database constraints", () => {
     EnvelopeError,
   );
 });
+
+test("finalize_mission carries the criteria that will grade the work", () => {
+  const env = parseEnvelope(
+    JSON.stringify({
+      status: "done",
+      summary: "C'est parti, je lance la mission.",
+      actions: [
+        {
+          type: "finalize_mission",
+          title: "Boot minimal en QEMU",
+          description: "Full brief for the Architect.",
+          acceptance_criteria: ["cargo build --release succeeds", "serial prints grenOS"],
+        },
+      ],
+    }),
+  );
+
+  const action = env.actions[0]!;
+  assert.equal(action.type, "finalize_mission");
+  assert.ok(action.type === "finalize_mission" && action.acceptance_criteria.length === 2);
+});
+
+test("a mission cannot be launched without checkable criteria", () => {
+  // Launching a mission nobody can grade is precisely what the intake
+  // conversation exists to prevent, so the envelope refuses it outright.
+  assert.throws(
+    () =>
+      parseEnvelope(
+        JSON.stringify({
+          status: "done",
+          summary: "lancée",
+          actions: [
+            {
+              type: "finalize_mission",
+              title: "T",
+              description: "D",
+              acceptance_criteria: [],
+            },
+          ],
+        }),
+      ),
+    EnvelopeError,
+  );
+
+  assert.throws(
+    () =>
+      parseEnvelope(
+        JSON.stringify({
+          status: "done",
+          summary: "lancée",
+          actions: [{ type: "finalize_mission", title: "T", description: "D" }],
+        }),
+      ),
+    EnvelopeError,
+    "acceptance_criteria absent",
+  );
+});

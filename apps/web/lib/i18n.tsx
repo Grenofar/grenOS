@@ -83,6 +83,35 @@ const STRINGS: Dict = {
   },
   "auth.signout": { fr: "Se déconnecter", en: "Sign out" },
 
+  "intake.title": { fr: "Cadrer une mission", en: "Scope a mission" },
+  "intake.untitled": { fr: "Mission en cours de cadrage", en: "Mission being scoped" },
+  "intake.master": { fr: "Maître", en: "Master" },
+  "intake.you": { fr: "Toi", en: "You" },
+  "intake.thinking": { fr: "réfléchit…", en: "thinking…" },
+  "intake.send": { fr: "Envoyer", en: "Send" },
+  "intake.enterHint": {
+    fr: "Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne",
+    en: "Enter to send · Shift+Enter for a new line",
+  },
+  "intake.placeholder": {
+    fr: "Décris ce que tu veux obtenir. Le Maître te posera des questions.",
+    en: "Describe what you want. The Master will ask you questions.",
+  },
+  "intake.intro": {
+    fr: "Dis au Maître ce que tu veux construire.",
+    en: "Tell the Master what you want to build.",
+  },
+  "intake.hint": {
+    fr: "Il va t'interroger jusqu'à pouvoir écrire des critères qu'une machine peut vérifier — c'est ce que la CI contrôlera. Puis il nommera et lancera la mission.",
+    en: "It will question you until it can write criteria a machine can check — that is what CI will verify. Then it names and launches the mission.",
+  },
+  "intake.launchedTitle": { fr: "Mission lancée", en: "Mission launched" },
+  "intake.launchedBody": {
+    fr: "Le Maître a tout ce qu'il lui faut. L'équipe travaille, la conversation est close.",
+    en: "The Master has what it needs. The team is working; this conversation is closed.",
+  },
+  "intake.backToApp": { fr: "Suivre la mission", en: "Follow the mission" },
+
   "mission.escalation": { fr: "Décision requise", en: "Decision needed" },
   "mission.tasks": { fr: "Tâches", en: "Tasks" },
   "mission.noTasks": {
