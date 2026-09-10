@@ -22,6 +22,7 @@
     "preworker": "node scripts/sync-env.mjs",
     "worker": "npm run start --workspace=@grenos/worker",
     "test": "node --test \"worker/test/*.test.ts\" \"packages/router/test/*.test.ts\"",
+    "test:ci": "python scripts/test-ci-payload.py",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json",
     "check": "npm run typecheck && npm test"
   },
