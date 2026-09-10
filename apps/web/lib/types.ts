@@ -74,6 +74,8 @@ export interface AppEvent {
   level: EventLevel;
   type: string;
   message: string;
+  /** For an escalation, the options the Master offers the human. */
+  payload?: { options?: string[]; [key: string]: unknown } | null;
   created_at: string;
 }
 

@@ -206,3 +206,19 @@ test("a key pasted into the chat never reaches the public repository", () => {
   assert.equal(text, "voici [secret masqué] et [secret masqué], merci");
   assert.equal(redactSecrets("rien de secret ici"), "rien de secret ici");
 });
+
+test("new work closes the tasks it answers, so they are not escalated again", async () => {
+  const { supersededByNewWork } = await import("../src/master.ts");
+  // Mission 1: two Coder tasks failed their last attempt, and the Master
+  // escalated the same one again on every cycle, answer or not.
+  const board = state({
+    tasks: [
+      task({ id: "failed", status: "failed", attempt: 3 }),
+      task({ id: "parked", status: "blocked", failure: "spec_gap" }),
+      task({ id: "asking", status: "blocked", failure: null }),
+      task({ id: "done", status: "done" }),
+      task({ id: "open", status: "ready" }),
+    ],
+  });
+  assert.deepEqual(supersededByNewWork(board as never).sort(), ["failed", "parked"]);
+});

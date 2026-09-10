@@ -151,6 +151,7 @@ const STRINGS: Dict = {
     fr: "Mission terminée : la conversation est close.",
     en: "Mission over: the conversation is closed.",
   },
+  "mission.answerWith": { fr: "Répondre :", en: "Answer:" },
   "mission.tasks": { fr: "Tâches", en: "Tasks" },
   "mission.noTasks": {
     fr: "Le Maître n'a pas encore décomposé la mission.",

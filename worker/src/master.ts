@@ -351,24 +351,25 @@ export async function runMasterCycle(
       .in("id", state.pending.map((p) => p.id));
   }
 
-  // A task parked on spec_gap waits for exactly this: the Master's answer
-  // (executor.ts, specGapPatch). New work in the same decision is that answer,
-  // so the parked task is closed rather than left blocked for ever, where
-  // nothing would pick it up and the mission could never complete.
-  const parked = created > 0 ? parkedSpecGaps(state) : [];
-  if (parked.length > 0) {
+  // Tasks waiting for exactly this decision: parked on spec_gap (executor.ts,
+  // specGapPatch), or failed after their last attempt. New work in the same
+  // decision is the answer to them, so they are closed rather than left open
+  // for ever — a failed task still on the board has attempts_left 0, and the
+  // Master escalated it again on every cycle, even after the human answered.
+  const superseded = created > 0 ? supersededByNewWork(state) : [];
+  if (superseded.length > 0) {
     await db
       .from("tasks")
       .update({ status: "cancelled", finished_at: new Date().toISOString() })
-      .in("id", parked)
-      .eq("status", "blocked");
+      .in("id", superseded)
+      .in("status", ["blocked", "failed"]);
     await emit({
       missionId: mission.id,
       agentId: "master",
       level: "info",
       type: "task_superseded",
-      message: `${parked.length} tâche(s) en spec_gap remplacée(s) par la nouvelle décision du Maître.`,
-      payload: { tasks: parked },
+      message: `${superseded.length} tâche(s) remplacée(s) par la nouvelle décision du Maître (spec_gap ou tentatives épuisées).`,
+      payload: { tasks: superseded },
     });
   }
 
@@ -523,6 +524,17 @@ export function parkedSpecGaps(state: State): string[] {
   return state.tasks
     .filter((t) => t.status === "blocked" && t.failure === "spec_gap")
     .map((t) => t.id);
+}
+
+/**
+ * Everything new work answers: tasks parked on spec_gap, and tasks that
+ * failed their last attempt. A task blocked on a question is not among them.
+ */
+export function supersededByNewWork(state: State): string[] {
+  return [
+    ...parkedSpecGaps(state),
+    ...state.tasks.filter((t) => t.status === "failed").map((t) => t.id),
+  ];
 }
 
 /**

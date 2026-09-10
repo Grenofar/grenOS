@@ -115,6 +115,27 @@ export default function MissionPage() {
                 <span className="faint mono">{clock(e.created_at)}</span>
               </div>
               <div className="muted">{e.message}</div>
+              {/* The Master's options are answers the human can give in one
+                  click. They go through the chat like any message — same
+                  table, same RLS — and the Master reads them first. */}
+              {(e.payload?.options ?? []).length > 0 && (
+                <div className="grid" style={{ marginTop: 10, gap: 6 }}>
+                  {(e.payload?.options ?? []).map((option) => (
+                    <button
+                      key={option}
+                      style={{ textAlign: "left", whiteSpace: "normal" }}
+                      onClick={() => {
+                        void supabase()
+                          .from("draft_messages")
+                          .insert({ mission_id: id, role: "user", content: option })
+                          .then(() => undefined);
+                      }}
+                    >
+                      {t("mission.answerWith")} {option}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </section>
