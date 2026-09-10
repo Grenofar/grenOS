@@ -4,6 +4,7 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace=@grenos/web",
   "outputDirectory": "apps/web/.next",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)docs' ':(exclude)agents' ':(exclude)kernel' ':(exclude)worker'",
   "regions": ["cdg1"],
   "headers": [
     {

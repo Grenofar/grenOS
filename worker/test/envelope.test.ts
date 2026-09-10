@@ -137,3 +137,18 @@ test("a mission cannot be launched without checkable criteria", () => {
     "acceptance_criteria absent",
   );
 });
+
+test("finalize_mission names the roadmap step it implements, when there is one", () => {
+  const base = { type: "finalize_mission", title: "T", description: "D", acceptance_criteria: ["c"] };
+  const parse = (action: object) =>
+    parseEnvelope(JSON.stringify({ status: "done", summary: "s", actions: [action] })).actions[0]!;
+
+  const linked = parse({ ...base, roadmap_key: " gdt-idt " });
+  assert.ok(linked.type === "finalize_mission" && linked.roadmap_key === "gdt-idt");
+
+  // A mission outside the roadmap is legitimate: no key, no link.
+  const free = parse(base);
+  assert.ok(free.type === "finalize_mission" && free.roadmap_key === undefined);
+  const blank = parse({ ...base, roadmap_key: "  " });
+  assert.ok(blank.type === "finalize_mission" && blank.roadmap_key === undefined);
+});

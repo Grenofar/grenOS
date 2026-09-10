@@ -24,6 +24,17 @@ interface DraftMessage {
   created_at: string;
 }
 
+/** One step of docs/ROADMAP.md, as the roadmap_progress view reports it. */
+export interface RoadmapStep {
+  position: number;
+  key: string;
+  title: string;
+  goal: string;
+  state: string;
+  done_when: unknown;
+  mission_id: string | null;
+}
+
 /** How much of the conversation the model is shown. */
 const HISTORY_LIMIT = 40;
 
@@ -31,10 +42,13 @@ export async function runIntake(
   intake: AgentDefinition,
   router: Router,
 ): Promise<void> {
-  // Only drafts where the human spoke last and is still waiting.
+  // Only drafts where the human spoke last and is still waiting. Messages on a
+  // launched mission belong to the Master's cycle (master.ts): filtering them
+  // out here keeps a backlog of those from starving a new conversation.
   const { data: pending, error } = await db
     .from("draft_messages")
-    .select("id,mission_id")
+    .select("id,mission_id,missions!inner(status)")
+    .eq("missions.status", "draft")
     .eq("role", "user")
     .is("answered_at", null)
     .order("created_at")
@@ -84,12 +98,18 @@ async function answerOne(
 
   if (messages.length === 0) return;
 
+  // The Master scopes against the roadmap, not in a vacuum: it proposes the
+  // next step, starts from that step's done_when, and links the mission to it
+  // so the map on the site follows what CI has actually validated. Mission 1
+  // predates this and sat on the map as "todo" while it was running.
+  const steps = await readRoadmap();
+
   let envelope;
   let model = "";
   try {
     const result = await router.complete({
       role: intake.modelRole,
-      system: intake.systemPrompt,
+      system: [intake.systemPrompt, renderRoadmap(steps)].filter(Boolean).join("\n\n---\n\n"),
       messages,
       maxOutputTokens: 4000,
     });
@@ -151,16 +171,89 @@ async function answerOne(
     return;
   }
 
+  if (finalize.roadmap_key) await claimStep(missionId, steps, finalize.roadmap_key);
+
   await emit({
     missionId,
     agentId: "master",
     level: "info",
     type: "mission_launched",
     message: `Mission cadrée et lancée : ${finalize.title}`,
-    payload: { criteria: finalize.acceptance_criteria, model },
+    payload: {
+      criteria: finalize.acceptance_criteria,
+      roadmap_key: finalize.roadmap_key ?? null,
+      model,
+    },
   });
 
   log.info(`intake ${missionId.slice(0, 8)} · mission lancée : ${finalize.title}`);
+}
+
+async function readRoadmap(): Promise<RoadmapStep[]> {
+  const { data, error } = await db
+    .from("roadmap_progress")
+    .select("position,key,title,goal,state,done_when,mission_id")
+    .order("position");
+
+  // Scoping without the roadmap still works; it only cannot link the mission.
+  // Worth a warning, not worth breaking the conversation the human is in.
+  if (error) {
+    log.warn(`intake : feuille de route illisible — ${error.message}`);
+    return [];
+  }
+  return (data ?? []) as RoadmapStep[];
+}
+
+async function claimStep(missionId: string, steps: RoadmapStep[], key: string): Promise<void> {
+  const claim = canClaimStep(steps, key);
+  const failure = claim.ok
+    ? (await db.from("roadmap").update({ mission_id: missionId }).eq("key", key)).error?.message
+    : claim.reason;
+  if (!failure) return;
+
+  // The mission is launched either way. A map that lags is a display problem;
+  // refusing the mission over it would be a real one.
+  await emit({
+    missionId,
+    agentId: "master",
+    level: "warn",
+    type: "roadmap_link_refused",
+    message: `Mission lancée mais non reliée à la feuille de route : ${failure}`,
+  });
+}
+
+/**
+ * Whether a launched mission may claim a roadmap step.
+ *
+ * A step belongs to one mission at a time: taking over a step whose mission
+ * is still alive, or already done, would hide that mission from the map. An
+ * aborted mission frees its step for the next attempt. A key that does not
+ * exist is refused, never created — the roadmap is not the model's to extend.
+ */
+export function canClaimStep(
+  steps: RoadmapStep[],
+  key: string,
+): { ok: true } | { ok: false; reason: string } {
+  const step = steps.find((s) => s.key === key);
+  if (!step) return { ok: false, reason: `étape inconnue « ${key} »` };
+  if (step.mission_id && step.state !== "aborted") {
+    return { ok: false, reason: `l'étape « ${key} » appartient déjà à une mission (${step.state})` };
+  }
+  return { ok: true };
+}
+
+/** The roadmap as the intake Master reads it: order, state, and what CI must see. */
+export function renderRoadmap(steps: RoadmapStep[]): string {
+  if (steps.length === 0) return "";
+  return [
+    "# Roadmap — live state",
+    "",
+    ...steps.map(
+      (s) =>
+        `${s.position}. \`${s.key}\` [${s.state}] ${s.title} — ${s.goal}\n` +
+        `   done when: ${JSON.stringify(s.done_when)}`,
+    ),
+  ].join("\n");
 }
 
 async function markAnswered(missionId: string): Promise<void> {

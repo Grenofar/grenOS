@@ -438,3 +438,63 @@ incompatible avec la nightly du jour. La CI respecte désormais
 `kernel/rust-toolchain.toml` quand il existe, et le prompt du Codeur demande
 d'épingler la toolchain et d'éviter les crates pour de simples entrées/sorties
 de port.
+
+### D-022 — Parler au Maître pendant une mission, et son carnet
+**2026-09-10 · actif · demandé par l'humain**
+
+Jusqu'ici l'humain ne parlait au Maître qu'au cadrage : une fois la mission
+lancée, le chat se verrouillait, et la seule voie pour infléchir le travail
+était d'attendre une escalade.
+→ La page d'une mission porte un **chat avec le Maître**, sur la même table
+que le cadrage (`draft_messages`, l'humain n'insère que `role = 'user'`). Le
+cycle du Maître lit ces messages **avant tout le reste**, répond dans le chat,
+et reprend une mission qu'il avait escaladée si la réponse de l'humain la
+débloque.
+→ Ce que l'humain demande est tenu dans **`docs/MASTER.md`**, le carnet du
+Maître : consignes en vigueur réécrites par le Maître, puis un journal de
+chaque échange **ajouté par le code**, pour qu'aucun échange ne dépende de la
+bonne volonté du modèle. Le carnet est relu à chaque décision et montré à tous
+les agents. Toute chaîne ayant la forme d'une clé est masquée avant le commit :
+le dépôt est public.
+
+**Pourquoi un carnet plutôt que `agents/00-master.md`** : D-007 tient toujours.
+Le prompt fixe le format de sortie et la procédure de décision ; une seule
+réécriture ratée par le modèle casse toute l'équipe, en silence. Le carnet
+porte ce que l'humain dit, pas les règles du jeu.
+
+### D-023 — Le Maître sans quota : l'équipe continue et lui écrit
+**2026-09-10 · actif · demandé par l'humain**
+
+Quand la cascade du Maître est épuisée, le travail ne s'arrêtait pas (les
+tâches prêtes étaient prises, une CI rouge renvoyait la tâche à son auteur)
+mais plus rien ne l'analysait. Pire : le Maître enregistrait sa signature
+avant l'appel, et un appel raté laissait la mission attendre un changement
+sans rapport pour être jugée à nouveau.
+→ Sans modèle disponible, le cycle du Maître est **sauté sans rien
+enregistrer**. Le premier tick où le quota revient lit tout ce qui s'est
+accumulé : résultats, verdicts, messages de l'humain (30 messages, contenus de
+fichiers résumés).
+→ Pendant ce temps, pour chaque verdict de CI qu'il n'a pas vu sur du code,
+le **Testeur** rend un verdict critère par critère et la **Review** analyse le
+code (`worker/src/autopilot.ts`). Tous deux sont en lecture seule et écrivent
+au Maître. Déterministe : aucun modèle ne choisit ce qui est relu, puisque
+celui qui choisirait est précisément celui qui n'a plus de quota.
+→ L'humain qui écrit pendant ce temps reçoit une fois « plus de quota, ton
+message est gardé » ; la vraie réponse vient au retour du Maître.
+
+### D-024 — Un seul contrat CI, et un spec_gap qui remonte au Maître
+**2026-09-10 · actif · complète D-009**
+
+L'exemple de critère du protocole disait `cargo build --target
+x86_64-grenos.json`, la CI lance `cargo build --release` sans cible.
+L'Architecte a recopié l'exemple, le Codeur s'est retrouvé coincé entre le plan
+et la CI. En parallèle, un agent qui répondait « impossible tel que spécifié »
+recevait la même tâche, et la tâche corrigée du Maître était refusée comme
+doublon.
+→ Ce que la CI exécute est écrit **une seule fois**, `agents/README.md` §6,
+injecté dans tous les prompts, et il l'emporte sur tout document de conception.
+→ Un `failed` d'agent **gare** la tâche (`blocked`, `spec_gap`, sans consommer
+de tentative) ; la décision suivante du Maître la remplace et l'annule.
+→ Les tâches annulées ne comptent plus pour clore une mission, et le Maître lit
+des tentatives **consommées** : il avait escaladé une tâche « 3/3 » dont la
+troisième tentative n'avait pas encore tourné.

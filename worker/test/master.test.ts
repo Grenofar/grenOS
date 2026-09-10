@@ -7,7 +7,16 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test";
 process.env.GEMINI_API_KEY ??= "test";
 process.env.GITHUB_TOKEN ??= "test";
 
-const { signatureOf, parkedSpecGaps, isMissionComplete } = await import("../src/master.ts");
+const {
+  signatureOf,
+  parkedSpecGaps,
+  isMissionComplete,
+  attemptsUsed,
+  digestOfMessage,
+  withJournal,
+  journalEntry,
+  redactSecrets,
+} = await import("../src/master.ts");
 
 const mission = {
   id: "m1",
@@ -35,6 +44,8 @@ const state = (over: Record<string, unknown> = {}) => ({
   activeCount: 1,
   pending: [],
   runs: [],
+  human: [],
+  conversation: [],
   ...over,
 });
 
@@ -68,6 +79,17 @@ test("a CI verdict changes the signature", () => {
   const after = signatureOf(
     mission,
     state({ runs: [{ branch: "agent/aaaaaaaa", status: "failed", failure: null, verdicts: [], log_excerpt: null }] }) as never,
+  );
+  assert.notEqual(before, after);
+});
+
+test("a message from the human changes the signature", () => {
+  // Otherwise a human writing while work is in flight would wait for the next
+  // CI verdict to be read.
+  const before = signatureOf(mission, state() as never);
+  const after = signatureOf(
+    mission,
+    state({ human: [{ id: "h1", content: "stop", created_at: "2026-09-10T20:00:00Z" }] }) as never,
   );
   assert.notEqual(before, after);
 });
@@ -108,4 +130,68 @@ test("a mission is not complete while work is open, failed or absent", () => {
   assert.equal(isMissionComplete(failed as never), false);
   assert.equal(isMissionComplete(parked as never), false);
   assert.equal(isMissionComplete(onlyCancelled as never), false);
+});
+
+test("attempts are counted as spent, not as numbered", () => {
+  // Mission 1: the Master read "attempt 3 of 3, ready" as exhausted and
+  // escalated a task whose last attempt had not run yet.
+  assert.equal(attemptsUsed({ status: "ready", attempt: 3 }), 2);
+  assert.equal(attemptsUsed({ status: "in_progress", attempt: 3 }), 3);
+  assert.equal(attemptsUsed({ status: "failed", attempt: 3 }), 3);
+});
+
+test("the Master reads what an agent did, not every byte it wrote", () => {
+  const digest = digestOfMessage({
+    status: "done",
+    actions: [
+      { type: "write_file", path: "kernel/src/main.rs", content: "x".repeat(5000) },
+      { type: "request_build" },
+    ],
+  }) as { actions: Array<Record<string, unknown>> };
+  assert.equal(digest.actions[0]!.path, "kernel/src/main.rs");
+  assert.ok((digest.actions[0]!.content as string).length < 300);
+  assert.deepEqual(digest.actions[1], { type: "request_build" });
+  // Anything that is not an envelope passes through untouched.
+  assert.equal(digestOfMessage("text"), "text");
+});
+
+test("every exchange lands in the notebook journal, whatever the model rewrote", () => {
+  const first = withJournal("", "", "- a");
+  assert.match(first, /# Carnet du Maître/);
+  assert.match(first, /## Journal des échanges\n\n- a\n$/);
+
+  // The Master rewrites its instructions and forgets the journal: kept anyway.
+  const second = withJournal("# Carnet du Maître\n\n## Consignes en vigueur\n\n- pas de crate x86_64", first, "- b");
+  assert.match(second, /- pas de crate x86_64/);
+  assert.match(second, /- a\n- b\n$/);
+
+  // The Master does not write this time: its instructions stay as they were.
+  const third = withJournal(second, second, "- c");
+  assert.match(third, /- pas de crate x86_64/);
+  assert.match(third, /- a\n- b\n- c\n$/);
+});
+
+test("the journal keeps the most recent exchanges only", () => {
+  let text = "";
+  for (let i = 0; i < 50; i++) text = withJournal(text, text, `- e${i}`, 40);
+  assert.doesNotMatch(text, /- e9\n/);
+  assert.match(text, /- e10\n/);
+  assert.match(text, /- e49\n$/);
+});
+
+test("a journal entry is one bounded line", () => {
+  const entry = journalEntry([{ content: "ligne 1\nligne 2", created_at: "2026-09-10T21:40:12Z" }], "ok\nnoté");
+  assert.equal(entry, "- 2026-09-10 21:40 UTC · Humain : « ligne 1 ligne 2 » → Maître : « ok noté »");
+  const long = journalEntry([{ content: "y".repeat(5000), created_at: "2026-09-10T21:40:12Z" }], "z".repeat(5000));
+  assert.ok(long.length < 1200);
+  assert.equal(long.split("\n").length, 1);
+});
+
+test("a key pasted into the chat never reaches the public repository", () => {
+  // Built at runtime so that no credential-shaped literal sits in the source.
+  const nvidia = "nvapi-" + "a".repeat(30);
+  const google = "AIza" + "S".repeat(35);
+  const text = redactSecrets(`voici ${nvidia} et ${google}, merci`);
+  assert.equal(text, "voici [secret masqué] et [secret masqué], merci");
+  assert.equal(redactSecrets("rien de secret ici"), "rien de secret ici");
 });

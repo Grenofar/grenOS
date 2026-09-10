@@ -1,6 +1,7 @@
 import { Router } from "@grenos/router";
 import { config, log } from "./config.ts";
 import { agentsPaused, db, emit, syncAgents, SupabaseUsageStore } from "./db.ts";
+import { runAutopilot } from "./autopilot.ts";
 import { executeTask, type TaskRow } from "./executor.ts";
 import { GitHub } from "./github.ts";
 import { acquireLock, releaseLock, startHeartbeat } from "./lock.ts";
@@ -26,7 +27,11 @@ import { pathsOverlap } from "./sandbox.ts";
 // train d'être cadrée par conversation (intake.ts). La planifier pendant que
 // l'humain écrit encore reviendrait à faire travailler l'équipe sur un énoncé
 // qui n'est pas fini.
-const MISSION_STATES = ["planning", "running"];
+//
+// `blocked` est présent : une mission escaladée attend l'humain, et c'est son
+// message dans le chat de mission qui la rouvre. runMasterCycle n'y dépense
+// rien tant qu'aucun message n'est arrivé.
+const MISSION_STATES = ["planning", "running", "blocked"];
 
 let running = true;
 let ticking = false;
@@ -130,6 +135,11 @@ async function tick(
     for (const mission of missions ?? []) {
       await runMasterCycle(mission, master, agents, router, gh);
     }
+
+    // Le Maître sans quota : le travail continue sans lui (les tâches prêtes
+    // sont prises, une CI rouge renvoie la tâche à son auteur), et le Testeur
+    // et la Review produisent pour lui ce qu'il aurait demandé (autopilot.ts).
+    if (!router.available("master")) await runAutopilot(agents);
 
     await warnAboutStuckVerifications();
     await dispatchWorkers(agents, router, gh);
@@ -288,6 +298,9 @@ function subscribe(): void {
     .on("postgres_changes", { event: "*", schema: "public", table: "missions" }, nudge)
     .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, nudge)
     .on("postgres_changes", { event: "*", schema: "public", table: "runs" }, nudge)
+    // The human is waiting in front of the chat: answer on the next tick,
+    // not on the next poll.
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "draft_messages" }, nudge)
     .subscribe((status) => log.debug(`realtime: ${status}`));
 }
 

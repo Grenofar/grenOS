@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useLive } from "@/lib/useLive";
 import { useLang } from "@/lib/i18n";
+import MissionChat from "@/components/MissionChat";
 import type { AppEvent, Mission, Run, Task } from "@/lib/types";
 
 /**
@@ -16,6 +17,9 @@ import type { AppEvent, Mission, Run, Task } from "@/lib/types";
  * escalations and failures rather than burying them under a progress bar: a
  * blocked mission waiting on a human decision is the single most expensive
  * state this system can be in, and it must be impossible to miss.
+ *
+ * The chat with the Master sits right under the escalations: that is where
+ * the human answers them.
  */
 export default function MissionPage() {
   const { t } = useLang();
@@ -65,9 +69,16 @@ export default function MissionPage() {
 
   if (!mission) return null;
 
-  const escalations = events.filter((e) => e.type === "escalation");
-  const done = tasks.filter((x) => x.status === "done").length;
-  const pct = tasks.length ? (done / tasks.length) * 100 : 0;
+  // Only the latest escalation is still a question; the older ones were
+  // answered, and the mission moved on.
+  const escalations = mission.status === "blocked"
+    ? events.filter((e) => e.type === "escalation").slice(0, 1)
+    : [];
+  // A cancelled task was replaced: counting it made progress look worse
+  // than it was.
+  const counted = tasks.filter((x) => x.status !== "cancelled");
+  const done = counted.filter((x) => x.status === "done").length;
+  const pct = counted.length ? (done / counted.length) * 100 : 0;
 
   return (
     <>
@@ -109,6 +120,8 @@ export default function MissionPage() {
         </section>
       )}
 
+      <MissionChat missionId={id} status={mission.status} />
+
       <section>
         <div className="card">
           <div className="between" style={{ marginBottom: 10 }}>
@@ -119,7 +132,7 @@ export default function MissionPage() {
           </div>
           <div className="between faint">
             <span>
-              {done}/{tasks.length} {t("missions.tasks")}
+              {done}/{counted.length} {t("missions.tasks")}
             </span>
             <span className="mono">
               {fmt(mission.tokens_used)} / {fmt(mission.token_budget)} tokens

@@ -97,6 +97,12 @@ Rules:
   "Code should be clean" is not a criterion. "cargo clippy reports 0 warnings" is.
 - A task with no acceptance criteria is malformed. The Master must reject it.
 - Task `allowed_paths` narrows, never widens, the agent's own `allowed_paths`.
+- `context_refs` may also name `run:<id>` (a CI run: status, verdicts, log) or
+  `task:<id>` (another task: goal, criteria, branch). Both are rendered into
+  your prompt as the evidence you are asked to judge.
+- `docs/MASTER.md` holds the human's standing instructions, kept by the Master
+  from what the human says in the mission chat. It binds every agent. When a
+  task contradicts it, say so in your `summary` rather than silently choosing.
 
 ---
 

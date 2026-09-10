@@ -4,6 +4,7 @@ import { db, emit } from "./db.ts";
 import { parseEnvelope, EnvelopeError, type AgentAction } from "./envelope.ts";
 import { authorize } from "./sandbox.ts";
 import { repoContext } from "./context.ts";
+import { renderEvidence } from "./evidence.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
@@ -221,10 +222,15 @@ export async function executeTask(
   const touchesVerifiableCode = changes.some((c) =>
     VERIFIED_PREFIXES.some((prefix) => c.path.startsWith(prefix)),
   );
+  // A verifier that wrote nothing has produced a report, not code. There is no
+  // commit for CI to judge, so waiting for a verdict would strand the task in
+  // awaiting_verification for ever — the fate of every Tester and Review task
+  // autopilot.ts creates, since both are told to write no file.
+  const reportOnly = agent.roleClass === "verifier" && changes.length === 0;
   const wantsVerification =
-    envelope.actions.some(
-      (a) => a.type === "request_build" || a.type === "request_test",
-    ) || touchesVerifiableCode;
+    !reportOnly &&
+    (envelope.actions.some((a) => a.type === "request_build" || a.type === "request_test") ||
+      touchesVerifiableCode);
 
   const escalation = envelope.actions.find((a) => a.type === "escalate");
   const help = envelope.actions.find((a) => a.type === "request_help");
@@ -333,6 +339,9 @@ async function buildPrompt(
   // The repository as it stands on the agent's branch, plus the design
   // documents (context.ts). Before this, agents never saw a single file.
   parts.push(await repoContext(gh, agent, allowedPaths, readRef));
+
+  // Evidence the task is about: a CI run to judge, another task to review.
+  parts.push(...(await renderEvidence(task.context_refs)));
 
   // Files the Master named explicitly, beyond what the view above shows.
   const files = task.context_refs

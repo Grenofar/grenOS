@@ -42,6 +42,8 @@ export type AgentAction =
       title: string;
       description: string;
       acceptance_criteria: string[];
+      /** The docs/ROADMAP.md step this mission implements, when it is one. */
+      roadmap_key?: string;
     };
 
 export interface AgentEnvelope {
@@ -188,11 +190,14 @@ function validateAction(value: unknown, index: number, raw: string): AgentAction
         // conversation exists to prevent.
         throw new EnvelopeError(`${at} : acceptance_criteria vide`, raw);
       }
+      const rawKey = value["roadmap_key"];
+      const roadmapKey = typeof rawKey === "string" ? rawKey.trim() : "";
       return {
         type,
         title: text("title"),
         description: text("description"),
         acceptance_criteria: criteria.map(String),
+        ...(roadmapKey ? { roadmap_key: roadmapKey } : {}),
       };
     }
 

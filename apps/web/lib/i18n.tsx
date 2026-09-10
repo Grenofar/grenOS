@@ -134,6 +134,23 @@ const STRINGS: Dict = {
   "intake.backToApp": { fr: "Suivre la mission", en: "Follow the mission" },
 
   "mission.escalation": { fr: "Décision requise", en: "Decision needed" },
+  "mission.chat": { fr: "Parler au Maître", en: "Talk to the Master" },
+  "mission.chatIntro": {
+    fr: "Le Maître lit tes messages avant tout le reste à son prochain cycle, et note tes consignes dans son carnet (docs/MASTER.md).",
+    en: "The Master reads your messages before anything else on its next cycle, and writes your instructions into its notebook (docs/MASTER.md).",
+  },
+  "mission.chatPlaceholder": {
+    fr: "Une consigne, une question, une réponse à une escalade…",
+    en: "An instruction, a question, an answer to an escalation…",
+  },
+  "mission.chatWaiting": {
+    fr: "lira ton message à son prochain cycle…",
+    en: "will read your message on its next cycle…",
+  },
+  "mission.chatClosed": {
+    fr: "Mission terminée : la conversation est close.",
+    en: "Mission over: the conversation is closed.",
+  },
   "mission.tasks": { fr: "Tâches", en: "Tasks" },
   "mission.noTasks": {
     fr: "Le Maître n'a pas encore décomposé la mission.",

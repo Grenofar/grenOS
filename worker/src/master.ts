@@ -1,7 +1,7 @@
 import { Router } from "@grenos/router";
 import { log } from "./config.ts";
 import { db, emit } from "./db.ts";
-import { parseEnvelope } from "./envelope.ts";
+import { parseEnvelope, EnvelopeError, type AgentEnvelope } from "./envelope.ts";
 import { authorize } from "./sandbox.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
@@ -17,6 +17,11 @@ import type { AgentDefinition } from "./prompts.ts";
  * `propose_task`; those sit as messages until the Master decides they are worth
  * doing. That is what keeps nine agents from generating work for each other
  * faster than anyone can spend the quota on it (D-008).
+ *
+ * And it is where the human talks to the Master while a mission runs. Their
+ * messages come before everything else, the reply goes back to the mission
+ * chat, and what they ask for is kept in the Master's notebook,
+ * docs/MASTER.md, which it re-reads on every decision (D-022).
  */
 
 export interface Mission {
@@ -29,6 +34,23 @@ export interface Mission {
 }
 
 const ACTIVE_TASK_STATES = ["ready", "in_progress", "awaiting_verification"];
+
+/** The Master's notebook: the human's standing instructions, kept by the Master. */
+export const NOTEBOOK = "docs/MASTER.md";
+
+const JOURNAL = "## Journal des échanges";
+
+const NOTEBOOK_HEADER = [
+  "# Carnet du Maître",
+  "",
+  "> Tenu par l'agent Maître à partir de ce que l'humain lui dit dans le chat de",
+  "> mission. Relu à chaque décision et montré à tous les agents : ce qui est",
+  "> écrit ici fait foi pour toute l'équipe.",
+  "",
+  "## Consignes en vigueur",
+  "",
+  "(aucune pour l'instant)",
+].join("\n");
 
 /**
  * Signature of what the Master last reasoned about, per mission.
@@ -66,40 +88,88 @@ export async function runMasterCycle(
     return;
   }
 
+  // No model can answer for the Master right now. Skip without recording a
+  // signature: whatever happens meanwhile — results, CI verdicts, the
+  // Tester's and Review's reports (autopilot.ts), the human's messages — waits
+  // unseen, and the first tick after the quota returns reads all of it.
+  // Recording the board here would make the Master believe it had decided.
+  if (!router.available("master")) {
+    await acknowledgeWhileAway(mission.id);
+    return;
+  }
+
   const state = await gatherState(mission);
 
+  // A blocked mission is waiting for the human. Only their message reopens it.
+  if (mission.status === "blocked" && state.human.length === 0) return;
+
   // Nothing has moved since the last decision: same tasks in the same states,
-  // no new result, no new verdict. Re-reading the same board would produce the
-  // same answer at the price of a request we cannot spare.
+  // no new result, no new verdict, no new message. Re-reading the same board
+  // would produce the same answer at the price of a request we cannot spare.
   const signature = signatureOf(mission, state);
   if (lastSeen.get(mission.id) === signature) return;
 
   // Work is in flight and nothing new has come back. Waiting is the correct
   // move, and it is free.
-  if (state.tasks.length > 0 && state.pending.length === 0 && state.activeCount > 0) {
+  if (
+    state.tasks.length > 0 &&
+    state.pending.length === 0 &&
+    state.human.length === 0 &&
+    state.activeCount > 0
+  ) {
     lastSeen.set(mission.id, signature);
     return;
   }
 
-  // Record before calling, not after: if the model call throws, we must not
+  // Record before calling, not after: if the model answers badly, we must not
   // retry the identical board on the next tick and burn the quota twice.
   lastSeen.set(mission.id, signature);
 
-  const result = await router.complete({
-    role: "master",
-    system: master.systemPrompt,
-    messages: [{ role: "user", content: renderState(mission, state) }],
-    maxOutputTokens: 8192,
-    json: true,
-  });
+  const notebook = await readNotebook(gh);
 
-  await db.rpc("add_mission_tokens", {
-    p_mission_id: mission.id,
-    p_task_id: null,
-    p_tokens: result.tokensIn + result.tokensOut,
-  });
+  let envelope: AgentEnvelope;
+  let model = "";
+  let tokensIn = 0;
+  let tokensOut = 0;
+  try {
+    const result = await router.complete({
+      role: "master",
+      system: master.systemPrompt,
+      messages: [{ role: "user", content: renderState(mission, state, notebook) }],
+      maxOutputTokens: 8192,
+      json: true,
+    });
+    model = result.model;
+    tokensIn = result.tokensIn;
+    tokensOut = result.tokensOut;
 
-  const envelope = parseEnvelope(result.text);
+    await db.rpc("add_mission_tokens", {
+      p_mission_id: mission.id,
+      p_task_id: null,
+      p_tokens: tokensIn + tokensOut,
+    });
+
+    envelope = parseEnvelope(result.text);
+  } catch (err) {
+    if (!(err instanceof EnvelopeError)) {
+      // No model answered after all: a quota learned mid-call, an outage.
+      // Forget the board, so the next tick with a model available decides on
+      // it — otherwise the mission would wait for an unrelated change.
+      lastSeen.delete(mission.id);
+    } else if (state.human.length > 0) {
+      // The Master answered, but not in the protocol. The human must not be
+      // left in front of "thinking…" for a reply that will never come.
+      await replyToHuman(
+        mission.id,
+        state.human,
+        "Je n'ai pas réussi à formuler ma décision. Renvoie ton message, ou reformule-le, et je reprends.",
+        model,
+        tokensIn,
+        tokensOut,
+      );
+    }
+    throw err;
+  }
 
   await db.from("messages").insert({
     mission_id: mission.id,
@@ -107,9 +177,9 @@ export async function runMasterCycle(
     to_agent: "human",
     kind: "decision",
     content: envelope as unknown as Record<string, unknown>,
-    model: result.model,
-    tokens_in: result.tokensIn,
-    tokens_out: result.tokensOut,
+    model,
+    tokens_in: tokensIn,
+    tokens_out: tokensOut,
   });
 
   let created = 0;
@@ -130,6 +200,10 @@ export async function runMasterCycle(
     .eq("mission_id", mission.id)
     .in("status", OPEN);
   const busy = new Set((openTasks ?? []).map((t) => t.assigned_to));
+
+  // Documents the Master writes in this decision, committed together at the
+  // end: one commit per decision, not one per file.
+  const docs = new Map<string, string>();
 
   for (const action of envelope.actions) {
     switch (action.type) {
@@ -211,9 +285,9 @@ export async function runMasterCycle(
       }
 
       case "write_file": {
-        // The Master keeps docs/STATE.md truthful. Its sandbox allows nothing
-        // else, and this goes straight to the default branch: it is a journal,
-        // not code, so there is nothing for CI to verify.
+        // The Master keeps docs/STATE.md truthful and docs/MASTER.md current.
+        // Its sandbox allows nothing else, and these go straight to the default
+        // branch: they are a journal, not code, so CI has nothing to verify.
         const verdict = authorize(action.path, {
           allowedPaths: master.allowedPaths,
           forbiddenPaths: master.forbiddenPaths,
@@ -229,11 +303,7 @@ export async function runMasterCycle(
           });
           break;
         }
-        await gh.commit({
-          branch: await gh.defaultBranch(),
-          message: `master: update ${verdict.path}`,
-          changes: [{ path: verdict.path, content: action.content }],
-        });
+        docs.set(verdict.path, action.content);
         break;
       }
 
@@ -242,6 +312,27 @@ export async function runMasterCycle(
         // perform. It routes work; it does not do it.
         break;
     }
+  }
+
+  // The human spoke: answer them in the chat, and write the exchange into the
+  // notebook. The journal is appended here, by code, so no exchange can be
+  // lost to a model that forgot to write it down; the Master curates the
+  // standing instructions above it.
+  if (state.human.length > 0) {
+    await replyToHuman(mission.id, state.human, envelope.summary, model, tokensIn, tokensOut);
+    const previous = notebook ?? "";
+    const next = docs.get(NOTEBOOK) ?? previous;
+    docs.set(NOTEBOOK, withJournal(next, previous, journalEntry(state.human, envelope.summary)));
+  }
+
+  if (docs.size > 0) {
+    await gh.commit({
+      branch: await gh.defaultBranch(),
+      message: `master: update ${[...docs.keys()].join(", ")}`,
+      // The repository is public and the notebook quotes the human: a key
+      // pasted into the chat would otherwise be published within the minute.
+      changes: [...docs].map(([path, content]) => ({ path, content: redactSecrets(content) })),
+    });
   }
 
   // Mark what we just judged, so the next cycle does not re-read it and
@@ -275,7 +366,18 @@ export async function runMasterCycle(
     });
   }
 
-  if (!escalated && created > 0 && mission.status !== "running") {
+  if (!escalated && mission.status === "blocked" && state.human.length > 0) {
+    // An escalation is a question to the human. They answered, and the Master
+    // did not escalate again: that answer was what the mission waited for.
+    await db.from("missions").update({ status: "running" }).eq("id", mission.id);
+    await emit({
+      missionId: mission.id,
+      agentId: "master",
+      level: "info",
+      type: "mission_resumed",
+      message: "Mission reprise après la réponse de l'humain.",
+    });
+  } else if (!escalated && created > 0 && mission.status !== "running") {
     await db.from("missions").update({ status: "running" }).eq("id", mission.id);
   }
 
@@ -293,7 +395,10 @@ export async function runMasterCycle(
     });
   }
 
-  log.info(`master · ${mission.title.slice(0, 40)} · +${created} tâche(s)`);
+  log.info(
+    `master · ${mission.title.slice(0, 40)} · +${created} tâche(s)` +
+      (state.human.length > 0 ? " · a répondu à l'humain" : ""),
+  );
 }
 
 export interface State {
@@ -316,30 +421,50 @@ export interface State {
     verdicts: unknown;
     log_excerpt: string | null;
   }>;
+  /** The human's messages the Master has not answered yet. */
+  human: Array<{ id: string; content: string; created_at: string }>;
+  /** The last few exchanges, oldest first, for context. */
+  conversation: Array<{ role: string; content: string; created_at: string }>;
 }
 
 async function gatherState(mission: Mission): Promise<State> {
-  const [{ data: tasks }, pendingRes, { data: runs }] = await Promise.all([
-    db
-      .from("tasks")
-      .select("id,assigned_to,goal,status,attempt,max_attempts,failure,failure_detail")
-      .eq("mission_id", mission.id)
-      .order("created_at"),
-    db
-      .from("messages")
-      .select("id,from_agent,content")
-      .eq("mission_id", mission.id)
-      .in("kind", ["proposal", "result"])
-      .is("seen_at", null)
-      .order("created_at", { ascending: false })
-      .limit(10),
-    db
-      .from("runs")
-      .select("branch,status,failure,verdicts,log_excerpt")
-      .eq("mission_id", mission.id)
-      .order("started_at", { ascending: false })
-      .limit(5),
-  ]);
+  const [{ data: tasks }, pendingRes, { data: runs }, humanRes, { data: recent }] =
+    await Promise.all([
+      db
+        .from("tasks")
+        .select("id,assigned_to,goal,status,attempt,max_attempts,failure,failure_detail")
+        .eq("mission_id", mission.id)
+        .order("created_at"),
+      // Up to 30: when the Master comes back from a quota outage, the Tester's
+      // and Review's reports have piled up, and it should read them together.
+      db
+        .from("messages")
+        .select("id,from_agent,content")
+        .eq("mission_id", mission.id)
+        .in("kind", ["proposal", "result"])
+        .is("seen_at", null)
+        .order("created_at", { ascending: false })
+        .limit(30),
+      db
+        .from("runs")
+        .select("branch,status,failure,verdicts,log_excerpt")
+        .eq("mission_id", mission.id)
+        .order("started_at", { ascending: false })
+        .limit(8),
+      db
+        .from("draft_messages")
+        .select("id,content,created_at")
+        .eq("mission_id", mission.id)
+        .eq("role", "user")
+        .is("answered_at", null)
+        .order("created_at"),
+      db
+        .from("draft_messages")
+        .select("role,content,created_at")
+        .eq("mission_id", mission.id)
+        .order("created_at", { ascending: false })
+        .limit(12),
+    ]);
 
   // A failure here used to degrade to an empty list, which looks exactly like
   // "nothing new happened" — so the Master would keep planning while never
@@ -351,6 +476,9 @@ async function gatherState(mission: Mission): Promise<State> {
         `Si la colonne seen_at manque, passe packages/db/migrations/0006_repair.sql.`,
     );
   }
+  if (humanRes.error) {
+    throw new Error(`Impossible de lire les messages de l'humain : ${humanRes.error.message}`);
+  }
 
   const rows = tasks ?? [];
   return {
@@ -358,6 +486,8 @@ async function gatherState(mission: Mission): Promise<State> {
     activeCount: rows.filter((t) => ACTIVE_TASK_STATES.includes(t.status)).length,
     pending: pendingRes.data ?? [],
     runs: runs ?? [],
+    human: humanRes.data ?? [],
+    conversation: (recent ?? []).reverse(),
   };
 }
 
@@ -373,7 +503,8 @@ export function signatureOf(mission: Mission, state: State): string {
     .join(",");
   const pending = state.pending.map((p) => p.id).sort().join(",");
   const runs = state.runs.map((r) => `${r.branch}:${r.status}`).join(",");
-  return `${mission.status}|${tasks}|${pending}|${runs}`;
+  const human = state.human.map((h) => h.id).sort().join(",");
+  return `${mission.status}|${tasks}|${pending}|${runs}|${human}`;
 }
 
 /**
@@ -401,8 +532,102 @@ export function isMissionComplete(state: State): boolean {
   );
 }
 
-function renderState(mission: Mission, state: State): string {
+/**
+ * How many attempts a task has actually spent. `attempt` is the number of the
+ * attempt queued or running, not a count: at 3 of 3 and `ready`, the third
+ * attempt has not run yet. The Master read "3/3" as exhausted and escalated a
+ * task whose last try was still ahead of it.
+ */
+export function attemptsUsed(t: { status: string; attempt: number }): number {
+  return t.status === "ready" || t.status === "pending" ? t.attempt - 1 : t.attempt;
+}
+
+/**
+ * What the Master needs from a worker's envelope: what it did, not every byte
+ * it wrote. A single kernel file quoted in full crowded out the decision
+ * itself, and after a quota outage there can be thirty of them waiting.
+ */
+export function digestOfMessage(content: unknown): unknown {
+  if (!isRecord(content) || !Array.isArray(content["actions"])) return content;
+  return {
+    ...content,
+    actions: content["actions"].map((a: unknown) => {
+      if (!isRecord(a)) return a;
+      const out: Record<string, unknown> = { ...a };
+      for (const key of ["content", "old_str", "new_str"]) {
+        const v = out[key];
+        if (typeof v === "string" && v.length > 400) {
+          out[key] = `${v.slice(0, 200)}… (${v.length} characters)`;
+        }
+      }
+      return out;
+    }),
+  };
+}
+
+/**
+ * The notebook after an exchange: the standing instructions from the Master's
+ * latest version (or the previous one, when it did not rewrite them), then the
+ * journal — kept by code, so an exchange is never lost to a model that
+ * rewrote the file and dropped the history.
+ */
+export function withJournal(next: string, previous: string, entry: string, keep = 40): string {
+  const body = (splitNotebook(next).body || splitNotebook(previous).body || NOTEBOOK_HEADER).trimEnd();
+  const entries = [...splitNotebook(previous).entries, entry].slice(-keep);
+  return `${body}\n\n${JOURNAL}\n\n${entries.join("\n")}\n`;
+}
+
+function splitNotebook(text: string): { body: string; entries: string[] } {
+  const at = text.indexOf(JOURNAL);
+  if (at === -1) return { body: text.trim(), entries: [] };
+  return {
+    body: text.slice(0, at).trim(),
+    entries: text
+      .slice(at + JOURNAL.length)
+      .split("\n")
+      .filter((line) => line.startsWith("- ")),
+  };
+}
+
+/** One exchange, as one line of the journal. */
+export function journalEntry(
+  human: Array<{ content: string; created_at: string }>,
+  reply: string,
+): string {
+  const flat = (s: string, max: number) => {
+    const one = s.replace(/\s+/g, " ").trim();
+    return one.length > max ? `${one.slice(0, max - 1)}…` : one;
+  };
+  const at = (human[human.length - 1]?.created_at ?? new Date().toISOString())
+    .slice(0, 16)
+    .replace("T", " ");
+  const said = human.map((h) => flat(h.content, 400)).join(" / ");
+  return `- ${at} UTC · Humain : « ${flat(said, 600)} » → Maître : « ${flat(reply, 400)} »`;
+}
+
+// Supabase JWTs and secret keys, Google, NVIDIA, GitHub and OpenAI-style keys.
+const SECRET =
+  /(eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}|sb_secret_[\w-]{16,}|AIza[\w-]{30,}|nvapi-[\w-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{30,}|sk-[\w-]{20,})/g;
+
+/** Masks anything shaped like a credential before it reaches the public repo. */
+export function redactSecrets(text: string): string {
+  return text.replace(SECRET, "[secret masqué]");
+}
+
+function renderState(mission: Mission, state: State, notebook: string | null): string {
   const parts: string[] = [];
+
+  // The human first: their message preempts everything (decision step 1).
+  if (state.human.length > 0) {
+    parts.push("# The human is waiting for your answer\n");
+    for (const h of state.human) parts.push(`> ${h.content.replace(/\n/g, "\n> ")}\n`);
+    parts.push(
+      "Handle this before anything else. Your `summary` is your reply, shown " +
+        "verbatim in the mission chat: write it in the human's language. If they " +
+        "gave an instruction, a preference or a decision that should last, rewrite " +
+        "docs/MASTER.md with write_file — the journal is appended for you.\n",
+    );
+  }
 
   parts.push("# Mission\n");
   parts.push(
@@ -419,11 +644,29 @@ function renderState(mission: Mission, state: State): string {
     ),
   );
 
+  parts.push("\n# Your notebook (docs/MASTER.md) — the human's standing instructions\n");
+  parts.push(renderNotebook(notebook));
+
+  if (state.conversation.length > 0) {
+    parts.push("\n# Recent conversation with the human (oldest first)\n");
+    for (const m of state.conversation) {
+      parts.push(`- ${m.role === "user" ? "human" : "you"}: ${m.content.replace(/\s+/g, " ").slice(0, 600)}`);
+    }
+  }
+
   parts.push("\n# Tasks\n");
   parts.push(
     state.tasks.length === 0
       ? "(none yet — this mission has no plan)"
-      : JSON.stringify(state.tasks, null, 2),
+      : JSON.stringify(
+          state.tasks.map((t) => ({
+            ...t,
+            attempts_used: attemptsUsed(t),
+            attempts_left: t.max_attempts - attemptsUsed(t),
+          })),
+          null,
+          2,
+        ),
   );
 
   if (state.runs.length > 0) {
@@ -433,7 +676,13 @@ function renderState(mission: Mission, state: State): string {
 
   if (state.pending.length > 0) {
     parts.push("\n# Awaiting your judgement\n");
-    parts.push(JSON.stringify(state.pending, null, 2));
+    parts.push(
+      JSON.stringify(
+        state.pending.map((p) => ({ ...p, content: digestOfMessage(p.content) })),
+        null,
+        2,
+      ),
+    );
   }
 
   parts.push(
@@ -444,3 +693,79 @@ function renderState(mission: Mission, state: State): string {
 
   return parts.join("\n");
 }
+
+/** The standing instructions in full, the journal only in its latest lines. */
+function renderNotebook(notebook: string | null): string {
+  if (!notebook?.trim()) {
+    return "(empty — create it as soon as the human gives you an instruction)";
+  }
+  const { body, entries } = splitNotebook(notebook);
+  return entries.length === 0
+    ? body
+    : `${body}\n\n${JOURNAL} (latest)\n\n${entries.slice(-10).join("\n")}`;
+}
+
+async function readNotebook(gh: GitHub): Promise<string | null> {
+  try {
+    return await gh.readFile(NOTEBOOK, await gh.defaultBranch());
+  } catch (err) {
+    // Deciding without the notebook is worse than deciding with it, but far
+    // better than not deciding: the human is waiting either way.
+    log.warn(`carnet du Maître illisible : ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
+}
+
+async function replyToHuman(
+  missionId: string,
+  human: State["human"],
+  text: string,
+  model: string,
+  tokensIn: number,
+  tokensOut: number,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db.from("draft_messages").insert({
+    mission_id: missionId,
+    role: "master",
+    content: text,
+    model: model || null,
+    tokens_in: tokensIn,
+    tokens_out: tokensOut,
+    answered_at: now,
+  });
+  await db
+    .from("draft_messages")
+    .update({ answered_at: now })
+    .in("id", human.map((h) => h.id));
+}
+
+/**
+ * The human wrote while the Master has no quota. Say so once, rather than
+ * leave them in front of "thinking…" for hours. Their message stays
+ * unanswered on purpose: the Master still reads it, and replies, when it can.
+ */
+async function acknowledgeWhileAway(missionId: string): Promise<void> {
+  const { data: last } = await db
+    .from("draft_messages")
+    .select("role,answered_at")
+    .eq("mission_id", missionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!last || last.role !== "user" || last.answered_at) return;
+
+  await db.from("draft_messages").insert({
+    mission_id: missionId,
+    role: "master",
+    content:
+      "Je n'ai plus de quota pour l'instant. Ton message est gardé : je le lis et je te " +
+      "réponds dès que j'en retrouve. En attendant, le Codeur continue, et le Testeur et " +
+      "la Review enregistrent pour moi ce qu'ils trouvent.",
+    model: "system",
+    answered_at: new Date().toISOString(),
+  });
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
