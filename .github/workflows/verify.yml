@@ -186,12 +186,14 @@ jobs:
           # insère des en-têtes "==> fichier <==" et échoue sur un absent.
           : > combined.log
           for f in build clippy qemu; do
-            [ -f "$RUNNER_TEMP/$f.log" ] && {
-              echo "--- $f ---" >> combined.log
+            if [ -f "$RUNNER_TEMP/$f.log" ]; then
+              printf -- '--- %s ---
+' "$f" >> combined.log
               cat "$RUNNER_TEMP/$f.log" >> combined.log
-            }
+            fi
           done
-          LOG=$(tail -c 6000 combined.log 2>/dev/null || echo "pas de log")
+          LOG=$(tail -c 6000 combined.log || true)
+          [ -n "$LOG" ] || LOG="(aucun log — étapes non exécutées)"
 
           # Tout passe par --arg / --argjson : interpoler des variables shell
           # dans le programme jq casse dès qu'un log contient une apostrophe.
@@ -214,6 +216,16 @@ jobs:
                workflow_run_id: $runid,
                finished_at:     $ended
              }' > payload.json
+
+          # Un payload vide est refusé par PostgREST avec « Empty or invalid
+          # json » — un message qui fait chercher du côté de l'''authentification
+          # alors que le problème est en amont, dans la génération du corps.
+          echo "payload.json : $(wc -c < payload.json) octets"
+          if [ ! -s payload.json ]; then
+            echo "::error::payload.json est vide — jq n'''a rien produit."
+            exit 1
+          fi
+          head -c 400 payload.json; echo
 
           # --fail-with-body : sans ça, curl sort en 0 même sur un 401, le
           # verdict n'arrive jamais et la tâche reste bloquée en
