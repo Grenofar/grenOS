@@ -67,16 +67,27 @@ Contrat que la CI applique déjà :
 - **Outils** — `npm run doctor`, `npm run env`, `npm run vercel`
 - **34 tests** verts
 
+## En ligne
+
+**https://grenos-dev.vercel.app** — HTTP 200, en-têtes de sécurité appliqués.
+
+Il aura fallu quatre causes distinctes pour y arriver, et aucune n'était
+visible depuis le code :
+1. `main` ne contenait que `.gitattributes` — Vercel déployait une branche vide
+2. Vercel ne détectait pas Next.js : `next` doit figurer dans le `package.json`
+   de la racine du déploiement, pas seulement dans `apps/web`
+3. `package-lock.json` n'était pas versionné
+4. Les clés `"//"` que j'utilisais comme commentaires dans `vercel.json` sont
+   refusées par son schéma — c'est ce qui bloquait à la fin
+
 ## Reste à faire
 
-1. **Premier lancement réel** : `npm run worker`. C'est là que ça cassera —
-   rien n'a jamais tourné de bout en bout.
-2. **Secrets GitHub Actions** : `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY`
-   dans Settings → Secrets → Actions. Sans eux la CI compile mais ne rapporte
-   aucun verdict, et les tâches restent bloquées en `awaiting_verification`.
-3. **Vercel** : Root Directory `apps/web`, les deux `NEXT_PUBLIC_*`, et l'URL
-   du site dans Supabase → Authentication → Redirect URLs.
-4. Mission n°1.
+1. **Premier lancement réel** : `npm run worker` avec une mission en base.
+   Le worker démarre et boucle proprement, mais aucune mission n'a jamais été
+   traitée de bout en bout.
+2. **NVIDIA NIM** — clé demandée. 40 requêtes/minute contre 20/jour chez
+   Gemini : c'est ce qui débloque le volume (D-016).
+3. Mission n°1.
 
 ## Bloqué
 
