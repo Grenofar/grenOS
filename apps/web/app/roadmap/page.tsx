@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { MindMap } from "@/components/MindMap";
 import { supabase } from "@/lib/supabase";
 import { useLive } from "@/lib/useLive";
 import { useLang } from "@/lib/i18n";
@@ -36,14 +38,32 @@ export default function RoadmapPage() {
 
   const done = steps.filter((s) => s.state === "done").length;
   const pct = steps.length ? (done / steps.length) * 100 : 0;
+  // La carte par défaut : c'est la vue d'ensemble. La chronologie reste là
+  // pour lire les critères de chaque étape dans l'ordre.
+  const [view, setView] = useState<"map" | "timeline">("map");
 
   return (
     <>
       <div className="page-head">
         <h1>{t("nav.roadmap")}</h1>
-        <span className="faint mono">
-          {done}/{steps.length}
-        </span>
+        <div className="row">
+          <div className="view-toggle" role="tablist">
+            {(["map", "timeline"] as const).map((v) => (
+              <button
+                key={v}
+                role="tab"
+                aria-selected={view === v}
+                className={view === v ? "on" : ""}
+                onClick={() => setView(v)}
+              >
+                {t(v === "map" ? "roadmap.viewMap" : "roadmap.viewTimeline")}
+              </button>
+            ))}
+          </div>
+          <span className="faint mono">
+            {done}/{steps.length}
+          </span>
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: 24 }}>
@@ -55,14 +75,17 @@ export default function RoadmapPage() {
         </p>
       </div>
 
-      <div className="timeline">
-        {steps.map((step) => (
-          <StepRow key={step.key} step={step} />
-        ))}
-        {steps.length === 0 && (
-          <div className="empty">{t("roadmap.empty")}</div>
-        )}
-      </div>
+      {steps.length === 0 ? (
+        <div className="empty">{t("roadmap.empty")}</div>
+      ) : view === "map" ? (
+        <MindMap steps={steps} />
+      ) : (
+        <div className="timeline">
+          {steps.map((step) => (
+            <StepRow key={step.key} step={step} />
+          ))}
+        </div>
+      )}
     </>
   );
 }

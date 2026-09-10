@@ -78,21 +78,19 @@ export class GitHub {
     return repo.default_branch;
   }
 
-  /** Create `branch` off `from` if it does not already exist. */
-  async ensureBranch(branch: string, from?: string): Promise<string> {
-    const existing = await this.branchSha(branch);
-    if (existing) return existing;
-
-    const base = from ?? (await this.defaultBranch());
-    const baseSha = await this.branchSha(base);
-    if (!baseSha) throw new Error(`Branche de base introuvable : ${base}`);
-
-    await this.call(`/repos/${this.repo}/git/refs`, {
-      method: "POST",
-      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
-    });
-    log.info(`branche créée ${branch} depuis ${base}`);
-    return baseSha;
+  /**
+   * The ref an agent reads from: its own branch if it exists, the default
+   * branch otherwise.
+   *
+   * Deliberately creates nothing. Creating the branch up front — which this
+   * used to do — is a push of the default branch's content, and every push to
+   * agent/** runs CI. That produced a verdict on a branch holding none of the
+   * agent's work, charged to the task as a failed attempt before it had
+   * written a line. The branch now comes into existence with its first commit
+   * (see commit()), so the first CI run it triggers judges real work.
+   */
+  async resolveRef(branch: string): Promise<string> {
+    return (await this.branchSha(branch)) ? branch : this.defaultBranch();
   }
 
   /** File content at a ref, or null when the file does not exist. */
@@ -131,8 +129,12 @@ export class GitHub {
   }): Promise<{ sha: string } | null> {
     if (opts.changes.length === 0) return null;
 
-    const headSha = await this.branchSha(opts.branch);
-    if (!headSha) throw new Error(`Branche inconnue : ${opts.branch}`);
+    // A missing branch is not an error: this commit creates it, so it is born
+    // with the agent's content rather than as a copy of the default branch.
+    const existing = await this.branchSha(opts.branch);
+    const base = existing ? null : await this.defaultBranch();
+    const headSha = existing ?? (await this.branchSha(base!));
+    if (!headSha) throw new Error(`Branche de base introuvable : ${base}`);
 
     const head = await this.call<{ tree: { sha: string } }>(
       `/repos/${this.repo}/git/commits/${headSha}`,
@@ -169,10 +171,18 @@ export class GitHub {
       }),
     });
 
-    await this.call(
-      `/repos/${this.repo}/git/refs/heads/${encodeURIComponent(opts.branch)}`,
-      { method: "PATCH", body: JSON.stringify({ sha: commit.sha, force: false }) },
-    );
+    if (existing) {
+      await this.call(
+        `/repos/${this.repo}/git/refs/heads/${encodeURIComponent(opts.branch)}`,
+        { method: "PATCH", body: JSON.stringify({ sha: commit.sha, force: false }) },
+      );
+    } else {
+      await this.call(`/repos/${this.repo}/git/refs`, {
+        method: "POST",
+        body: JSON.stringify({ ref: `refs/heads/${opts.branch}`, sha: commit.sha }),
+      });
+      log.info(`branche ${opts.branch} créée depuis ${base}, avec son premier commit`);
+    }
 
     this.blobCache.clear();
     log.info(`commit ${commit.sha.slice(0, 7)} sur ${opts.branch} (${tree.length} fichiers)`);

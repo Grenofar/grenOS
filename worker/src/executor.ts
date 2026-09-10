@@ -43,7 +43,12 @@ export async function executeTask(
   log.info(`▶ ${agent.id} · ${task.goal.slice(0, 70)}`);
 
   const branch = task.branch ?? `agent/${task.id.slice(0, 8)}`;
-  const baseSha = await gh.ensureBranch(branch);
+  // Read from the agent's branch if it exists, otherwise from the default
+  // branch. The branch itself is created by the first commit (github.ts),
+  // never up front: creating it early is a push of main's content, which ran
+  // CI on a branch holding none of the agent's work and produced a verdict
+  // that burned an attempt before a single line had been written.
+  const readRef = await gh.resolveRef(branch);
 
   // Task paths narrow the agent's own permissions; they never widen them
   // (agents/README.md §3).
@@ -56,7 +61,7 @@ export async function executeTask(
     const result = await router.complete({
       role: agent.modelRole,
       system: agent.systemPrompt,
-      messages: [{ role: "user", content: await buildPrompt(task, allowedPaths, gh, branch) }],
+      messages: [{ role: "user", content: await buildPrompt(task, allowedPaths, gh, readRef) }],
       maxOutputTokens: 8192,
       json: true,
     });
@@ -123,7 +128,7 @@ export async function executeTask(
     } else if (action.type === "delete_file") {
       changes.push({ path: verdict.path, content: null });
     } else {
-      const current = await gh.readFile(verdict.path, branch);
+      const current = await gh.readFile(verdict.path, readRef);
       if (current === null) {
         await failTask(
           task,
@@ -212,9 +217,19 @@ export async function executeTask(
   const escalation = envelope.actions.find((a) => a.type === "escalate");
   const help = envelope.actions.find((a) => a.type === "request_help");
 
+  // An agent reporting failure is being honest, and honesty must not be
+  // terminal while attempts remain. Marking it failed outright meant one
+  // confused reply killed a task that still had retries — which is exactly
+  // what happened when the model had been fed a provider error as its own.
+  // Routed as spec_gap, per the Coder protocol: "cannot be done as specified".
+  if (envelope.status === "failed") {
+    const detail = [envelope.summary, envelope.reasoning_brief].filter(Boolean).join("\n\n");
+    await failTask(task, "spec_gap", detail, true);
+    return;
+  }
+
   let status: string;
-  if (envelope.status === "failed") status = "failed";
-  else if (escalation || help) status = "blocked";
+  if (escalation || help) status = "blocked";
   else if (wantsVerification) status = "awaiting_verification";
   else status = "done";
 
@@ -257,7 +272,7 @@ export async function executeTask(
       model: modelUsed,
       files: changes.length,
       commit: commitSha,
-      baseSha,
+      readRef,
       ...(escalation && escalation.type === "escalate"
         ? { escalation: escalation.reason }
         : {}),
@@ -330,19 +345,7 @@ async function failTask(
   detail: string,
   consumesAttempt: boolean,
 ): Promise<void> {
-  const canRetry = consumesAttempt && task.attempt < task.max_attempts;
-
-  // `attempt` is only incremented when there is actually another attempt to
-  // make. Writing attempt = max_attempts + 1 on the final failure violates the
-  // tasks_attempt_within_limit CHECK, the UPDATE is rejected, and the task
-  // stays in_progress forever — visibly stuck, with nothing explaining why.
-  const patch: Record<string, unknown> = {
-    status: canRetry ? "ready" : consumesAttempt ? "failed" : "ready",
-    failure,
-    failure_detail: detail.slice(0, 4000),
-  };
-  if (canRetry) patch["attempt"] = task.attempt + 1;
-  if (consumesAttempt && !canRetry) patch["finished_at"] = new Date().toISOString();
+  const patch = failurePatch(task, failure, detail, consumesAttempt);
 
   const { error } = await db.from("tasks").update(patch).eq("id", task.id);
   if (error) {
@@ -371,3 +374,38 @@ const isWrite = (
   a.type === "write_file" || a.type === "patch_file" || a.type === "delete_file";
 
 const firstLine = (s: string): string => s.split("\n")[0]!.slice(0, 60);
+
+/**
+ * What a failure writes to the task row. Pure, so the rule that matters most
+ * here is tested without a database.
+ *
+ * An attempt-neutral failure (no model answered, or anything else outside the
+ * agent's control) writes the status and nothing else. failure_detail is
+ * quoted verbatim into the next attempt's prompt as "Previous attempt failed":
+ * overwriting the real CI log with "No model available" made the model
+ * conclude it could not work, report failed, and take a healthy task down;
+ * the Master then escalated a provider outage as a broken Coder.
+ *
+ * `attempt` only advances when another attempt follows. Writing
+ * max_attempts + 1 on the final failure violates tasks_attempt_within_limit,
+ * the UPDATE is rejected, and the task stays in_progress forever.
+ */
+export function failurePatch(
+  task: Pick<TaskRow, "attempt" | "max_attempts">,
+  failure: string,
+  detail: string,
+  consumesAttempt: boolean,
+  now: Date = new Date(),
+): Record<string, unknown> {
+  if (!consumesAttempt) return { status: "ready" };
+
+  const canRetry = task.attempt < task.max_attempts;
+  const patch: Record<string, unknown> = {
+    status: canRetry ? "ready" : "failed",
+    failure,
+    failure_detail: detail.slice(0, 4000),
+  };
+  if (canRetry) patch["attempt"] = task.attempt + 1;
+  else patch["finished_at"] = now.toISOString();
+  return patch;
+}

@@ -294,3 +294,29 @@ test("failures are recorded so the dashboard can show them", async () => {
 test("a missing Gemini key fails loudly at construction", () => {
   assert.throws(() => new Router({ geminiApiKey: "", usage }), /GEMINI_API_KEY/);
 });
+
+test("an overloaded provider is cooled down, not hammered on the next call", async () => {
+  const calls = stubFetch((m) => (m === NV ? new Response("overloaded", { status: 503 }) : anyOk(m)));
+  const router = new Router(both());
+
+  await router.complete({ role: "coder", system: "s", messages: [] });
+  calls.length = 0;
+  await router.complete({ role: "coder", system: "s", messages: [] });
+
+  // Retrying a 503 every tick turns one outage into a stream of failures.
+  assert.ok(!calls.includes(NV), "503 : le modèle doit être en pause");
+});
+
+test("available() answers no once every model of the role is cooling down", async () => {
+  stubFetch(() => new Response("overloaded", { status: 503 }));
+  const router = new Router(both());
+
+  assert.equal(router.available("coder"), true);
+  await assert.rejects(
+    () => router.complete({ role: "coder", system: "s", messages: [] }),
+    RouterExhaustedError,
+  );
+  // The dispatcher asks this before claiming a task, so an outage the router
+  // already knows about costs no model call and no provider_error event.
+  assert.equal(router.available("coder"), false);
+});

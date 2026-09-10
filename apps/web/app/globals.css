@@ -228,6 +228,86 @@ ul.criteria {
 }
 ul.criteria li { margin-bottom: 3px; }
 
+/* ---------- Carte mentale ---------- */
+
+.view-toggle { display: flex; gap: 3px; margin-right: 12px; }
+.view-toggle button {
+  background: transparent;
+  color: var(--text-faint);
+  border: 1px solid transparent;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+}
+.view-toggle button:hover { color: var(--text); filter: none; }
+.view-toggle button.on { color: var(--text); border-color: var(--border-bright); background: var(--surface-2); }
+
+.mm-wrap { padding: 8px 8px 14px; }
+.mm-svg { width: 100%; height: auto; display: block; }
+.mm-svg text { font-family: var(--sans); }
+
+.mm-edge { fill: none; stroke: var(--border-bright); stroke-width: 1.5; }
+.mm-edge.todo { stroke-dasharray: 4 5; }
+.mm-edge.done { stroke: color-mix(in srgb, var(--ok) 55%, transparent); }
+.mm-edge.active, .mm-edge.scoping { stroke: color-mix(in srgb, var(--accent) 60%, transparent); }
+.mm-edge.blocked, .mm-edge.aborted { stroke: color-mix(in srgb, var(--err) 55%, transparent); }
+
+.mm-ring-bg { fill: var(--surface-2); stroke: var(--border); stroke-width: 6; }
+.mm-ring { fill: none; stroke: var(--ok); stroke-width: 6; stroke-linecap: round; }
+.mm-center-title { font-family: var(--mono); font-size: 18px; font-weight: 600; text-anchor: middle; fill: var(--text); }
+.mm-center-sub { font-family: var(--mono); font-size: 12px; text-anchor: middle; fill: var(--text-faint); }
+
+.mm-phase rect { fill: var(--surface-2); stroke: var(--border-bright); }
+.mm-phase.live rect { stroke: var(--accent); }
+.mm-phase text { font-size: 13px; font-weight: 600; text-anchor: middle; fill: var(--text); }
+.mm-phase text.mm-phase-count { font-size: 11px; font-weight: 400; font-family: var(--mono); fill: var(--text-faint); }
+
+.mm-dot { fill: var(--idle); stroke: var(--bg); stroke-width: 2; }
+.mm-step.done .mm-dot { fill: var(--ok); }
+.mm-step.active .mm-dot, .mm-step.scoping .mm-dot { fill: var(--accent); }
+.mm-step.blocked .mm-dot, .mm-step.aborted .mm-dot { fill: var(--err); }
+
+.mm-num { font-family: var(--mono); font-size: 10px; font-weight: 600; text-anchor: middle; fill: #06080b; }
+.mm-step.todo .mm-num { fill: var(--text); }
+.mm-label { font-size: 13px; fill: var(--text); }
+.mm-step.todo .mm-label { fill: var(--text-dim); }
+.mm-state { font-size: 11px; font-family: var(--mono); fill: var(--text-faint); }
+
+.mm-step.clickable { cursor: pointer; }
+.mm-step.clickable:hover .mm-label { fill: var(--accent); }
+.mm-step:focus { outline: none; }
+.mm-step:focus-visible .mm-dot { stroke: var(--accent); stroke-width: 3; }
+
+.mm-pulse {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mm-pulse 1.8s ease-out infinite;
+}
+@keyframes mm-pulse {
+  from { transform: scale(0.7); opacity: 0.8; }
+  to { transform: scale(1.5); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .mm-pulse { animation: none; opacity: 0.5; } }
+
+.mm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+.mm-key { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--idle); }
+.mm-key.done { background: var(--ok); }
+.mm-key.active { background: var(--accent); }
+.mm-key.scoping { background: color-mix(in srgb, var(--accent) 55%, var(--idle)); }
+.mm-key.blocked { background: var(--err); }
+
 /* ---------- Chat de cadrage ---------- */
 
 .chat {

@@ -337,3 +337,43 @@ Maître — c'est-à-dire au hasard.
 crédits NVIDIA sont finis. Le prompt du Maître le dit explicitement — ne pas
 tout faire passer par Review et Security. Neuf agents qui commentent chaque
 diff, c'est une équipe qui n'avance plus, et chaque avis se paie.
+
+---
+
+### D-019 — Le système ne ment plus à ses agents
+**2026-09-10 · actif**
+
+La mission 1 s'est bloquée sans qu'aucun agent ne se soit trompé. Reconstitution
+d'après les événements et les messages en base :
+
+1. Le vrai verdict CI (erreur `Cargo.toml`) renvoie le Codeur en tentative 2.
+2. Les trois fournisseurs tombent en même temps (503, timeout). `failTask`
+   écrit « No model available for role coder » dans `failure_detail` —
+   **par-dessus l'erreur Cargo**.
+3. Nemotron répond enfin. Son prompt contient « *Previous attempt failed: No
+   model available* ». Il conclut logiquement qu'il ne peut pas travailler et
+   rend `failed`, ce qui tuait la tâche sur-le-champ.
+4. Le Maître lit « modèle indisponible » et escalade trois fois : mission
+   `blocked`.
+5. La nouvelle branche est créée depuis `main` avant tout commit : la CI juge
+   une branche sans kernel, rend `spec_gap`, et le trigger l'impute à la
+   tâche — pendant qu'elle s'exécute. Elle repart en `ready`, un second worker
+   la prend : deux exécutions concurrentes.
+
+**Ce qui change, chaque point appliqué en code :**
+
+| Règle | Où |
+|---|---|
+| Une panne d'infrastructure ne touche jamais `failure_detail` — elle remet la tâche en file, rien d'autre | `failurePatch`, testé |
+| Un agent qui rend `failed` consomme une tentative (classe `spec_gap`) au lieu de tuer la tâche | `executor.ts` |
+| Une branche naît avec le premier commit de l'agent | `github.ts`, testé |
+| La CI ne rend aucun verdict sur une branche identique à `main` | `verify.yml` |
+| Un verdict ne s'applique qu'à une tâche en `awaiting_verification` | migration 0009 |
+| Une erreur hors modèle (GitHub, base) bloque la tâche et l'annonce, sans boucler | `index.ts` |
+| 5xx et timeouts mettent le modèle en pause 90 s ; timeout porté à 240 s | routeur, testé |
+| Le dispatcher ne prend pas de tâche si aucun modèle du rôle ne peut répondre | `router.available` |
+| Une seule escalade par décision du Maître | `master.ts` |
+
+Le principe : **un agent ne doit lire que ce qu'il a lui-même produit ou ce que
+la CI a constaté.** Tout le reste — pannes, quotas, erreurs réseau — relève de
+l'infrastructure et reste dans les événements, où seuls les humains le lisent.

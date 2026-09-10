@@ -134,6 +134,16 @@ jobs:
           CLIPPY: ${{ steps.clippy.outcome }}
           QEMU: ${{ steps.qemu.outcome }}
         run: |
+          # Une branche identique a main ne porte aucun travail d'agent. Juger
+          # ce commit, c'est rendre un verdict sur rien, et ce verdict etait
+          # impute a la tache comme une tentative ratee avant meme qu'elle ait
+          # ecrit une ligne. Pas de travail, pas de verdict.
+          git fetch -q --depth=1 origin main
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" ]; then
+            echo "::notice::Branche identique a main : aucun travail a juger, pas de verdict."
+            exit 0
+          fi
+
           if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
             echo "::error::Verdict non transmis : le secret SUPABASE_SERVICE_ROLE_KEY est absent."
             echo "::error::https://github.com/Grenofar/grenOS/settings/secrets/actions/new"

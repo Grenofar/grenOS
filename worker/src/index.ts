@@ -140,9 +140,15 @@ async function dispatchWorkers(
   router: Router,
   gh: GitHub,
 ): Promise<void> {
+  // Only claim work some model can actually answer. When a role's whole
+  // cascade is cooling down, claiming its tasks would fail them instantly,
+  // requeue them and repeat every tick — noise about an outage the router
+  // already knows about, and churn on rows the dashboard is watching.
   const workerIds = [...agents.values()]
     .filter((a) => a.status === "active" && a.id !== "master" && a.id !== "intake")
+    .filter((a) => router.available(a.modelRole))
     .map((a) => a.id);
+  if (workerIds.length === 0) return;
 
   const { count } = await db
     .from("tasks")
@@ -187,16 +193,23 @@ async function dispatchWorkers(
     inFlightPaths.push(paths);
     inFlight.push(
       executeTask(row, agent, router, gh).catch(async (err) => {
-        log.warn(`tâche ${row.id.slice(0, 8)} a levé:`, err instanceof Error ? err.message : err);
-        await db
-          .from("tasks")
-          .update({
-            status: "failed",
-            failure: "provider_error",
-            failure_detail: err instanceof Error ? err.message : String(err),
-          })
-          .eq("id", row.id);
+        const detail = err instanceof Error ? err.message : String(err);
+        log.warn(`tâche ${row.id.slice(0, 8)} a levé:`, detail);
+        // Something outside the model broke — GitHub, a lease RPC, the
+        // database. Not the agent's failure, so failure_detail (which the
+        // agent reads on its next attempt) is left untouched. Not retried
+        // blindly either: a deterministic error would loop, paying a model
+        // call each time. Blocked and reported; the Master decides.
+        await db.from("tasks").update({ status: "blocked" }).eq("id", row.id);
         await db.rpc("release_leases", { p_task_id: row.id });
+        await emit({
+          missionId: row.mission_id,
+          taskId: row.id,
+          agentId: row.assigned_to,
+          level: "error",
+          type: "infrastructure_error",
+          message: detail.slice(0, 500),
+        });
       }),
     );
     slots -= 1;

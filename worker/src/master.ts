@@ -193,6 +193,10 @@ export async function runMasterCycle(
       }
 
       case "escalate": {
+        // One escalation per decision. A reply stating the same blocker three
+        // ways produced three identical alerts; the human needs to read one,
+        // with its options, not a burst.
+        if (escalated) break;
         escalated = true;
         await db.from("missions").update({ status: "blocked" }).eq("id", mission.id);
         await emit({

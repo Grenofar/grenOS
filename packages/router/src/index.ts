@@ -87,7 +87,11 @@ export class Router {
   async complete(req: CompletionRequest): Promise<CompletionResult> {
     const cascade = CASCADES[req.role];
     const attempts: AttemptRecord[] = [];
-    const timeoutMs = req.timeoutMs ?? 120_000;
+    // 240 s, not 120: DeepSeek V4 Pro took ~49 s on a real 4k-token prompt,
+    // and a cold NIM instance plus a long reasoning pass pushed a coder call
+    // past two minutes. A timeout that fires on a healthy model reads as an
+    // outage, and outages were being charged to the agents.
+    const timeoutMs = req.timeoutMs ?? 240_000;
 
     for (const modelId of cascade) {
       const spec = specFor(modelId);
@@ -220,11 +224,41 @@ export class Router {
         // Free-tier catalogues change without notice; the next model runs.
         if (err instanceof ProviderError && err.status === 404) {
           this.cooldownUntil.set(modelId, Date.now() + 6 * 60 * 60 * 1000);
+        } else if (
+          err instanceof ProviderError &&
+          (err.status === undefined
+            ? /timed out|network failure/i.test(err.message)
+            : err.status >= 500)
+        ) {
+          // Overloaded (503), gateway (502/504) or timed out: the provider is
+          // struggling. Retrying on the next tick — every 15 s — hammers it
+          // while it recovers and turns one outage into a stream of failed
+          // attempts. 90 s of cooldown lets the cascade route around it.
+          this.cooldownUntil.set(modelId, Date.now() + 90_000);
         }
       }
     }
 
     throw new RouterExhaustedError(req.role, attempts);
+  }
+
+  /**
+   * Can anything in this role's cascade answer right now, without trying?
+   *
+   * The dispatcher asks before claiming a task. When every model is cooling
+   * down, claiming would run the cascade to exhaustion without a single
+   * network call, requeue the task, and repeat next tick — a stream of
+   * provider_error events about an outage the router already knows about.
+   */
+  available(role: ModelRole): boolean {
+    const now = Date.now();
+    return CASCADES[role].some((modelId) => {
+      const spec = MODELS[modelId];
+      if (!spec) return false;
+      if (spec.provider === "nvidia" && !this.nvidiaKey) return false;
+      if ((this.cooldownUntil.get(modelId) ?? 0) > now) return false;
+      return this.exhaustedOn.get(modelId) !== today();
+    });
   }
 
   /**
