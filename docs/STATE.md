@@ -1,99 +1,26 @@
-# État vivant du projet
+# grenOS Agent System State
 
-> Maintenu par l'Agent Maître une fois le système en ligne.
-> Écrit pour quelqu'un qui revient après un jour d'absence et ne se souvient de
-> rien. Actuellement tenu à la main.
->
-> Dernière mise à jour : 2026-09-10
+## Mission
+- Title: Boot a hello-world kernel in QEMU
+- Status: running
+- Tokens used: 50992 / 3000000
 
-## Situation
+## Completed Work
+- Architect: Created technical plan (docs/PLAN.md)
 
-**La fabrique est complète et branchée.** Les cinq clés ont été vérifiées
-contre les vrais services, les cinq migrations sont passées, le site compile.
-Rien n'a encore tourné en conditions réelles : le worker n'a jamais fait un
-tour de boucle complet.
+## In Progress
+- Coder: Implementing minimal kernel that boots via Limine and prints 'grenOS' to serial port (task b6dcd08c-5196-4ac2-b840-7fc60d775b5d)
+    - Status: awaiting verification (CI verdict pending)
+    - Actions taken: wrote kernel/Cargo.toml, kernel/src/main.rs, kernel/linker.ld, kernel/limine.h, kernel/limine.c, kernel/scripts/make-iso.sh, kernel/scripts/run-qemu.sh, kernel/limine.cfg
+    - Requested build and test
 
-`kernel/` est vide, volontairement. L'écrire est la mission n°1 — si la
-fabrique ne sait pas produire un hello-world, mieux vaut le découvrir tout de
-suite.
+## Blocked
+- None
 
-## Vérifié contre les vrais services
+## Next Steps
+- Await CI verdict for the kernel build and QEMU boot test.
+- Upon green CI, accept the task and mark mission as done.
+- Upon red CI, route the failure to the appropriate agent (likely the Coder for fixes).
 
-```
-npm run doctor
-  supabase  ✓ 11 tables · fonctions SQL (0004) · 9 agents (4 actifs)
-            ✓ opérateurs : belgacemmaroua@gmail.com, rayanbelgacem747@gmail.com
-  gemini    ✓ clé valide, les 3 modèles du catalogue existent
-  github    ✓ dépôt accessible en écriture · lecture des runs Actions
-```
-
-## La contrainte qui gouverne tout : le quota
-
-**~20 requêtes/jour et par modèle**, mesuré, pas lu (D-016). Trois modèles
-dans la cascade, donc **~60 requêtes/jour au total**. Une tâche de codeur en
-coûte 1 à 3.
-
-Concrètement : une vingtaine de tâches par jour, tous agents confondus. Assez
-pour prouver la mission n°1, pas pour construire un OS. Les options pour
-élargir sont dans D-016, aucune n'est urgente.
-
-## Mission n°1
-
-**Faire booter un kernel hello-world dans QEMU**, par la chaîne Maître →
-Architecte → Codeur → Testeur, sans intervention humaine sur le code.
-
-Contrat que la CI applique déjà :
-- `kernel/Cargo.toml` existe
-- `cargo build --release` passe
-- `cargo clippy -- -D warnings` passe
-- une image `.iso` ou `.img` est produite
-- au boot QEMU, `grenOS` apparaît sur le port série
-- aucun `panic`, `double fault` ni `triple fault`
-- le tout en moins de 90 secondes
-
-## Fait
-
-- Architecture et décisions D-001 à D-016
-- Protocole de coordination, **les 9 agents actifs**
-- **Base** — 5 migrations : schéma, RLS, seed, fonctions atomiques, raccord CI
-- **Routeur** — cascade Gemini, quotas appris du serveur, modèles à
-  raisonnement, 403 non répété
-- **Worker** — chargeur de prompts, sandbox de chemins, enveloppe JSON, client
-  GitHub sans clone, exécuteur, cycle du Maître conditionné au changement d'état
-- **CI** — build + clippy + boot QEMU, verdict écrit dans Supabase, triggers SQL
-  qui font avancer la tâche
-- **Site** — connexion Google (repli par lien email), dashboard live, missions,
-  détail de mission, runs, agents, coupe-circuit, FR/EN
-- **Outils** — `npm run doctor`, `npm run env`, `npm run vercel`
-- **34 tests** verts
-
-## En ligne
-
-**https://grenos-dev.vercel.app** — HTTP 200, en-têtes de sécurité appliqués.
-
-Il aura fallu quatre causes distinctes pour y arriver, et aucune n'était
-visible depuis le code :
-1. `main` ne contenait que `.gitattributes` — Vercel déployait une branche vide
-2. Vercel ne détectait pas Next.js : `next` doit figurer dans le `package.json`
-   de la racine du déploiement, pas seulement dans `apps/web`
-3. `package-lock.json` n'était pas versionné
-4. Les clés `"//"` que j'utilisais comme commentaires dans `vercel.json` sont
-   refusées par son schéma — c'est ce qui bloquait à la fin
-
-## Reste à faire
-
-1. **Premier lancement réel** : `npm run worker` avec une mission en base.
-   Le worker démarre et boucle proprement, mais aucune mission n'a jamais été
-   traitée de bout en bout.
-2. **NVIDIA NIM** — clé demandée. 40 requêtes/minute contre 20/jour chez
-   Gemini : c'est ce qui débloque le volume (D-016).
-3. Mission n°1.
-
-## Bloqué
-
-Rien.
-
-## Budget consommé
-
-Une poignée d'appels Gemini pour les tests de bout en bout. Aucune mission
-lancée.
+## Notes
+- No other work is currently scheduled.
