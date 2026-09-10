@@ -283,7 +283,27 @@ async function checkGitHub() {
       );
     }
   } else {
-    warn("github", "secrets Actions non vérifiables", "Le PAT n'a pas la permission Secrets: Read. Vérifie-les à la main.");
+    // Le PAT ne peut pas lire les secrets. On le déduit alors du seul effet
+    // observable : des tâches parties en vérification, et aucun run en base.
+    // C'est indirect mais décisif — et c'est exactement le symptôme qu'on ne
+    // remarque pas, puisque la CI passe au vert de son côté.
+    const key = env.SUPABASE_SERVICE_ROLE_KEY;
+    if (env.SUPABASE_URL && key) {
+      const h = { apikey: key, authorization: `Bearer ${key}` };
+      const [waiting, runsSeen] = await Promise.all([
+        fetch(`${env.SUPABASE_URL}/rest/v1/tasks?select=id&status=eq.awaiting_verification&limit=1`, { headers: h }).then((r) => r.json()).catch(() => []),
+        fetch(`${env.SUPABASE_URL}/rest/v1/runs?select=id&limit=1`, { headers: h }).then((r) => r.json()).catch(() => []),
+      ]);
+      if (Array.isArray(waiting) && waiting.length && Array.isArray(runsSeen) && !runsSeen.length) {
+        bad(
+          "github",
+          "des tâches attendent un verdict et aucun run n'est jamais arrivé",
+          "Les secrets Actions manquent presque certainement. Settings → Secrets → Actions : SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY. Sans eux la CI teste correctement puis jette son propre verdict.",
+        );
+      } else {
+        warn("github", "secrets Actions non vérifiables directement", "Le PAT n'a pas Secrets: Read — aucun symptôme détecté par ailleurs.");
+      }
+    }
   }
 }
 
