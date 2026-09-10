@@ -136,12 +136,19 @@ jobs:
       - name: Rapporter le verdict
         if: always()
         env:
-          # `secrets` d'abord, `vars` en repli : l'écran GitHub a deux onglets
-          # côte à côte, Secrets et Variables, et une valeur rangée dans le
-          # mauvais reste invisible à `secrets.X` sans aucun message. La CI
-          # passait alors au vert en jetant son propre verdict.
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+          # L'URL du projet n'est pas un secret : elle part déjà en clair dans
+          # le JavaScript du site à chaque visite. En exiger une configuration
+          # ajoutait une étape — et une occasion de se tromper — pour aucun
+          # gain. Elle est donc en dur, tout en restant surchargeable.
+          #
+          # `secrets` puis `vars` : l'écran GitHub met les deux onglets côte à
+          # côte, et une valeur rangée dans le mauvais est invisible à
+          # `secrets.X` sans le moindre message.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          # Celle-ci, en revanche, contourne toute la RLS. Elle n'existe qu'en
+          # secret, jamais en variable — les variables sont lisibles en clair
+          # dans les logs d'un dépôt public.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # Uniquement pour dire d'où vient la valeur, jamais la valeur.
           HAS_SECRET_URL: ${{ secrets.SUPABASE_URL != '' }}
           HAS_SECRET_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
@@ -151,14 +158,14 @@ jobs:
           echo "SUPABASE_URL               → secret:$HAS_SECRET_URL  variable:$HAS_VAR_URL"
           echo "SUPABASE_SERVICE_ROLE_KEY  → secret:$HAS_SECRET_KEY  variable:$HAS_VAR_KEY"
 
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "::error::Verdict non transmis : SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY est vide côté Actions."
-            echo "::error::Settings → Secrets and variables → Actions → onglet *Secrets* (pas Variables) → New repository secret."
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Verdict non transmis : le secret SUPABASE_SERVICE_ROLE_KEY est absent."
+            echo "::error::https://github.com/Grenofar/grenOS/settings/secrets/actions/new — Name: SUPABASE_SERVICE_ROLE_KEY"
             exit 1
           fi
 
           if [ "$HAS_VAR_KEY" = "true" ]; then
-            echo "::warning::La service_role est rangée dans *Variables*, où elle est lisible en clair par quiconque peut voir les logs. Déplace-la dans *Secrets*."
+            echo "::warning::Une variable SUPABASE_SERVICE_ROLE_KEY existe. Les variables sont lisibles en clair dans les logs d'''un dépôt public : supprime-la, seul le secret est utilisé."
           fi
 
           if [ "${{ steps.probe.outputs.present }}" != "true" ]; then
