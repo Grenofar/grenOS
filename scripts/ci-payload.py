@@ -16,9 +16,34 @@ hors CI.
 import datetime
 import json
 import os
+import re
 import sys
 
 REQUIRED = ["BRANCH", "SHA", "ST", "RUNID", "URL"]
+
+# Séquences de couleur ANSI : cargo en produit à chaque ligne d'erreur.
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+# Tout caractère de contrôle sauf tabulation et saut de ligne.
+CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def clean(text: str) -> str:
+    """Rend un log de build sûr à insérer dans une colonne texte Postgres.
+
+    Trois pièges, tous rencontrés en production :
+
+    - Les octets non-UTF-8 d'un log arrivent dans os.environ en surrogates
+      (surrogateescape). json.dumps les encode volontiers en \\udcXX, que
+      PostgreSQL refuse — et PostgREST rapporte « Empty or invalid json »,
+      un message qui accuse le corps entier plutôt que le caractère fautif.
+    - \\u0000 est du JSON parfaitement valide et une valeur impossible dans
+      une colonne texte Postgres.
+    - Les couleurs ANSI de cargo n'apportent rien au Codeur et gonflent
+      l'extrait qu'on lui renvoie.
+    """
+    text = text.encode("utf-8", "replace").decode("utf-8", "replace")
+    text = ANSI.sub("", text)
+    return CONTROL.sub("", text)
 
 
 def main() -> int:
@@ -34,14 +59,14 @@ def main() -> int:
         return 1
 
     payload = {
-        "branch": os.environ["BRANCH"],
-        "commit_sha": os.environ["SHA"],
+        "branch": clean(os.environ["BRANCH"]),
+        "commit_sha": clean(os.environ["SHA"]),
         "status": os.environ["ST"],
         # Chaîne vide et absence de panne sont la même chose côté base : la
         # colonne est nullable et un failure vide fausserait le routage du
         # Maître, qui décide de la suite d'après cette valeur.
         "failure": os.environ.get("FL") or None,
-        "log_excerpt": os.environ.get("LOGTXT", ""),
+        "log_excerpt": clean(os.environ.get("LOGTXT", "")),
         "log_url": os.environ["URL"],
         "workflow_run_id": run_id,
         "finished_at": datetime.datetime.now(datetime.timezone.utc).strftime(
