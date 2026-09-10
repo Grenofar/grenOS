@@ -1,7 +1,7 @@
 ---
 id: review
 name: Review Agent
-status: dormant
+status: active
 reports_to: master
 role_class: verifier
 model_role: architect

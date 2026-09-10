@@ -302,3 +302,38 @@ depuis `agents/02-coder.md`) → DeepSeek V4 Pro → enveloppe JSON valide → s
 de chemins → code Rust `no_std` portant un commentaire `// SAFETY:` sur son bloc
 `unsafe`, exactement comme le protocole l'exige. Les prompts pilotent
 réellement le comportement.
+
+---
+
+### D-018 — Les 9 agents sont actifs, et la priorité des spécialistes est appliquée par le sandbox
+**2026-09-10 · actif · lève la mise en sommeil décidée en D-007**
+
+Les cinq sous-agents passent de `dormant` à `active` : kernel, filesystem,
+drivers, security, review.
+
+**Le problème que ça posait** : le Codeur détient `kernel/**`, et le spécialiste
+kernel détient `kernel/src/arch/**`. Les périmètres se chevauchent. Une règle
+écrite seulement dans un prompt aurait laissé le choix à l'appréciation du
+Maître — c'est-à-dire au hasard.
+
+**Ce qui a été fait** :
+
+1. Le Maître a une table de propriété explicite (`agents/00-master.md`), et la
+   règle est nette : **un spécialiste gagne toujours à l'intérieur de ses
+   chemins**. Handover de boot, pagination, tables d'interruption, formats
+   sur disque et MMIO sont des domaines où une supposition plausible produit
+   un reset silencieux plutôt qu'une erreur.
+2. Les chemins des spécialistes sont ajoutés aux `forbidden_paths` du Codeur,
+   dans le `.md` **et** dans le seed SQL. La priorité est donc appliquée par le
+   runtime avant toute écriture, pas demandée poliment dans un prompt. C'est la
+   même logique que partout ailleurs : un prompt est une demande, le sandbox
+   est la loi.
+3. Review et Security sont des vérificateurs, jamais des rédacteurs. Review
+   passe **avant** le Testeur sur les gros diffs ; Security tourne **en
+   parallèle** et uniquement sur ce qui touche `unsafe`, les transitions de
+   privilège, l'entrée syscall, le parsing d'entrées non fiables ou la RLS.
+
+**Le risque assumé** : neuf agents coûtent plus de requêtes que quatre, et les
+crédits NVIDIA sont finis. Le prompt du Maître le dit explicitement — ne pas
+tout faire passer par Review et Security. Neuf agents qui commentent chaque
+diff, c'est une équipe qui n'avance plus, et chaque avis se paie.

@@ -1,7 +1,7 @@
 ---
 id: kernel
 name: Kernel Specialist
-status: dormant
+status: active
 reports_to: master
 role_class: worker
 model_role: coder

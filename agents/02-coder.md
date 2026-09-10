@@ -17,6 +17,18 @@ forbidden_paths:
   - ".github/workflows/**"
   - "docs/DECISIONS.md"
   - "**/.env*"
+  # Domaines des spécialistes. Interdits ici pour que la priorité soit
+  # appliquée par le runtime et non seulement demandée dans un prompt : un
+  # mauvais registre MMIO ou une entrée d'IDT erronée produit un reset
+  # silencieux, pas un message d'erreur.
+  - "kernel/src/arch/**"
+  - "kernel/src/mm/**"
+  - "kernel/src/interrupts/**"
+  - "kernel/src/task/**"
+  - "kernel/src/fs/**"
+  - "kernel/src/block/**"
+  - "kernel/src/drivers/**"
+  - "kernel/src/pci/**"
 ---
 
 # Coder

@@ -29,18 +29,68 @@ test("every agent file parses", () => {
   }
 });
 
-test("the four core agents are active and correctly wired", () => {
+test("the whole team is active and correctly wired", () => {
   const byId = new Map(loadAgents().map((a) => [a.id, a]));
 
-  for (const id of ["master", "architect", "coder", "tester"]) {
+  for (const id of [
+    "master", "architect", "coder", "tester",
+    "kernel", "filesystem", "drivers", "security", "review",
+  ]) {
     assert.equal(byId.get(id)?.status, "active", `${id} devrait être actif`);
-  }
-  for (const id of ["kernel", "filesystem", "drivers", "security", "review"]) {
-    assert.equal(byId.get(id)?.status, "dormant", `${id} devrait être dormant`);
   }
 
   assert.equal(byId.get("master")!.roleClass, "orchestrator");
   assert.equal(byId.get("coder")!.reportsTo, "master");
+});
+
+test("specialist paths are closed to the Coder by the sandbox, not by a prompt", async () => {
+  const { authorize } = await import("../src/sandbox.ts");
+  const byId = new Map(loadAgents().map((a) => [a.id, a]));
+  const coder = byId.get("coder")!;
+  const rules = {
+    allowedPaths: coder.allowedPaths,
+    forbiddenPaths: coder.forbiddenPaths,
+    canWrite: coder.canWrite,
+  };
+
+  // The Coder holds kernel/** so these overlap on purpose. A wrong MMIO
+  // register or a bad IDT entry produces a silent reset, not an error, so the
+  // precedence has to be enforced rather than requested.
+  for (const path of [
+    "kernel/src/arch/gdt.rs",
+    "kernel/src/mm/frame_alloc.rs",
+    "kernel/src/interrupts/idt.rs",
+    "kernel/src/drivers/serial.rs",
+    "kernel/src/fs/vfs.rs",
+    "kernel/src/pci/enumerate.rs",
+  ]) {
+    assert.equal(authorize(path, rules).ok, false, `le Codeur ne doit pas écrire ${path}`);
+  }
+
+  // Everything else under kernel/ stays his.
+  assert.equal(authorize("kernel/src/main.rs", rules).ok, true);
+  assert.equal(authorize("kernel/Cargo.toml", rules).ok, true);
+});
+
+test("each specialist can write its own domain", async () => {
+  const { authorize } = await import("../src/sandbox.ts");
+  const byId = new Map(loadAgents().map((a) => [a.id, a]));
+
+  const cases: Array<[string, string]> = [
+    ["kernel", "kernel/src/mm/frame_alloc.rs"],
+    ["filesystem", "kernel/src/fs/vfs.rs"],
+    ["drivers", "kernel/src/drivers/serial.rs"],
+  ];
+
+  for (const [id, path] of cases) {
+    const a = byId.get(id)!;
+    const verdict = authorize(path, {
+      allowedPaths: a.allowedPaths,
+      forbiddenPaths: a.forbiddenPaths,
+      canWrite: a.canWrite,
+    });
+    assert.equal(verdict.ok, true, `${id} devrait pouvoir écrire ${path}`);
+  }
 });
 
 test("structural safeguards survive the parse", () => {

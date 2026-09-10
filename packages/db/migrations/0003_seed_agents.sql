@@ -21,10 +21,15 @@ insert into agents (
    array['docs/**'],
    array['agents/**', '.github/workflows/**', 'kernel/**', 'apps/**', 'packages/**', '**/.env*']),
 
+  -- Les domaines des spécialistes sont interdits au Codeur : la priorité est
+  -- appliquée par le runtime, pas seulement demandée dans un prompt.
   ('coder', 'Coder', 'active', 'worker', 'master', 'coder',
    60000, 3, true,
    array['kernel/**', 'packages/**', 'apps/**'],
-   array['agents/**', '.github/workflows/**', 'docs/DECISIONS.md', '**/.env*']),
+   array['agents/**', '.github/workflows/**', 'docs/DECISIONS.md', '**/.env*',
+         'kernel/src/arch/**', 'kernel/src/mm/**', 'kernel/src/interrupts/**',
+         'kernel/src/task/**', 'kernel/src/fs/**', 'kernel/src/block/**',
+         'kernel/src/drivers/**', 'kernel/src/pci/**']),
 
   -- Interdit d'écrire dans kernel/src : un vérificateur qui peut modifier
   -- l'implémentation finit par faire passer le test en changeant le code (D-009).
@@ -33,30 +38,30 @@ insert into agents (
    array['kernel/tests/**', 'tests/**'],
    array['agents/**', '.github/workflows/**', 'kernel/src/**', '**/.env*']),
 
-  -- Sous-agents : spécifiés, pas encore routés. Restent dormants tant que le
-  -- Maître ne sait pas quand les appeler (agents/README.md §10).
-  ('kernel', 'Kernel Specialist', 'dormant', 'worker', 'master', 'coder',
+  -- Sous-agents actifs : le Maître a désormais des règles de routage
+  -- explicites pour chacun (agents/00-master.md).
+  ('kernel', 'Kernel Specialist', 'active', 'worker', 'master', 'coder',
    80000, 3, true,
    array['kernel/src/arch/**', 'kernel/src/mm/**', 'kernel/src/interrupts/**', 'kernel/src/task/**'],
    array['agents/**', '.github/workflows/**', '**/.env*']),
 
-  ('filesystem', 'Filesystem Agent', 'dormant', 'worker', 'master', 'coder',
+  ('filesystem', 'Filesystem Agent', 'active', 'worker', 'master', 'coder',
    70000, 3, true,
    array['kernel/src/fs/**', 'kernel/src/block/**'],
    array['agents/**', '.github/workflows/**', '**/.env*']),
 
-  ('drivers', 'Drivers Agent', 'dormant', 'worker', 'master', 'coder',
+  ('drivers', 'Drivers Agent', 'active', 'worker', 'master', 'coder',
    70000, 3, true,
    array['kernel/src/drivers/**', 'kernel/src/pci/**'],
    array['agents/**', '.github/workflows/**', '**/.env*']),
 
-  ('security', 'Security Agent', 'dormant', 'verifier', 'master', 'architect',
+  ('security', 'Security Agent', 'active', 'verifier', 'master', 'architect',
    60000, 2, true,
    array['docs/security/**'],
    array['agents/**', '.github/workflows/**', 'kernel/**', 'packages/**', 'apps/**', '**/.env*']),
 
   -- Aucun chemin autorisé : le relecteur ne peut rien écrire, par construction.
-  ('review', 'Review Agent', 'dormant', 'verifier', 'master', 'architect',
+  ('review', 'Review Agent', 'active', 'verifier', 'master', 'architect',
    50000, 2, false,
    array[]::text[],
    array['**'])

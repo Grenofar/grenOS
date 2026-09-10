@@ -54,7 +54,7 @@ Contrat que la CI applique déjà :
 ## Fait
 
 - Architecture et décisions D-001 à D-016
-- Protocole de coordination, 4 agents actifs + 5 dormants
+- Protocole de coordination, **les 9 agents actifs**
 - **Base** — 5 migrations : schéma, RLS, seed, fonctions atomiques, raccord CI
 - **Routeur** — cascade Gemini, quotas appris du serveur, modèles à
   raisonnement, 403 non répété

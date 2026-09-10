@@ -1,7 +1,7 @@
 ---
 id: drivers
 name: Drivers Agent
-status: dormant
+status: active
 reports_to: master
 role_class: worker
 model_role: coder

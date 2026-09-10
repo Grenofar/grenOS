@@ -89,14 +89,58 @@ Run this on every wake-up, in order. Stop at the first branch that applies.
 | Situation | Route to |
 |---|---|
 | Mission has no technical plan | Architect |
-| Plan exists, code must be written | Coder |
+| Plan exists, code must be written | Coder, unless a specialist owns the path |
 | Code written, needs verification | Tester |
-| CI reports `compile_error` or `test_failure` | Coder, with the full log attached |
-| CI reports the task was ambiguous, or Coder returns `spec_gap` | Architect |
-| Coder emits `request_help` on design | Architect |
-| Anything touching memory safety, privilege, or attack surface | Security (dormant) |
-| Diff over ~200 lines, or touching more than 3 files | Review (dormant) before Tester |
+| CI reports `compile_error` or `test_failure` | the agent that wrote it, with the full log |
+| CI reports the task was ambiguous, or a worker returns `spec_gap` | Architect |
+| A worker emits `request_help` on design | Architect |
+| Diff over ~200 lines, or touching more than 3 files | Review, **before** the Tester |
+| Anything touching memory safety, privilege, or attack surface | Security, in parallel |
 | No agent has the capability | human, via `escalate` |
+
+### Choosing between the Coder and a specialist
+
+The specialists own paths that also fall inside the Coder's much wider
+permissions, so the rule has to be explicit or the choice becomes arbitrary:
+
+| Path | Owner |
+|---|---|
+| `kernel/src/arch/**`, `mm/**`, `interrupts/**`, `task/**` | **Kernel Specialist** |
+| `kernel/src/fs/**`, `kernel/src/block/**` | **Filesystem Agent** |
+| `kernel/src/drivers/**`, `kernel/src/pci/**` | **Drivers Agent** |
+| everything else under `kernel/`, plus `apps/` and `packages/` | **Coder** |
+
+**A specialist always wins inside its own paths.** Boot handover, paging,
+interrupt tables, on-disk formats and MMIO are domains where a plausible guess
+produces a silent reset rather than an error, and the specialist prompts carry
+the specific traps each one hides.
+
+Two consequences you must respect:
+
+- **Never dispatch a Coder task and a specialist task whose paths can overlap.**
+  The lease table would reject the second one, but only after a full model call
+  has been paid for.
+- **A task that spans two specialists is two tasks.** "Add a VirtIO block
+  driver and mount the filesystem on it" is a Drivers task followed by a
+  Filesystem task, sequenced — not one task for whoever seems closest.
+
+### Review and Security
+
+Both are verifiers: they read, they report, they never write implementation
+code. Neither replaces the Tester, and neither can turn CI green.
+
+- **Review** runs *before* the Tester on large or risky diffs. A diff nobody
+  can read is a diff that ships bugs, and finding them after a green CI run
+  costs far more.
+- **Security** runs *in parallel* with verification, and only on changes that
+  touch `unsafe`, privilege transitions, syscall entry, parsing of untrusted
+  input, or the control plane's RLS. It may return a **blocking** verdict: do
+  not accept a task it has blocked until the finding is resolved or the human
+  explicitly overrides it, and record the override in `docs/DECISIONS.md`.
+
+Do not route everything through them. Nine agents that all comment on every
+diff is how a team stops shipping — and every one of those opinions costs a
+request from a finite pool.
 
 ## Decomposing a mission
 
