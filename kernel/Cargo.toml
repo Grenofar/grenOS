@@ -4,15 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+lazy_static = "1.4.0"
+spin = "0.5.2"
+x86_64 = "0.14.2"
 
 [[bin]]
 name = "kernel"
 path = "src/main.rs"
-x86_64 = "0.14.2"
-lazy_static = "1.4.0"
-spin = "0.9.4"
-
-[profile.release]
-opt-level = "z"
-lto = true
-strip = "symbols"
