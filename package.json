@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "An OS built by a supervised team of AI agents",
+  "_comment_devDeps": "next/react/react-dom sont ici en plus de apps/web : Vercel detecte le framework en lisant le package.json de la racine du deploiement. Sans eux il refuse avec 'No Next.js version detected', ce qui a fait echouer TOUS les deploiements depuis le premier. npm workspaces les mutualise, ils ne sont pas installes deux fois.",
   "workspaces": [
     "apps/*",
     "packages/*",
@@ -25,7 +26,10 @@
     "check": "npm run typecheck && npm test"
   },
   "devDependencies": {
+    "@types/node": "^20.16.11",
     "typescript": "^5.6.3",
-    "@types/node": "^20.16.11"
+    "next": "^14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   }
 }
