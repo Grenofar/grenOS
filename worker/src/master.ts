@@ -115,9 +115,39 @@ export async function runMasterCycle(
   let created = 0;
   let escalated = false;
 
+  // Which agents already have work in flight for this mission.
+  //
+  // The Master is asked to decide again on every state change, and its
+  // in-memory "already decided this" marker does not survive a restart. Both
+  // of those are fine on their own; together they let it dispatch the same
+  // task two or three times, each on its own branch, each burning a full
+  // model call and a CI run. Whether it is a prompt lapse or a restart, the
+  // outcome must be impossible rather than unlikely.
+  const OPEN = ["pending", "ready", "in_progress", "awaiting_verification"];
+  const { data: openTasks } = await db
+    .from("tasks")
+    .select("assigned_to")
+    .eq("mission_id", mission.id)
+    .in("status", OPEN);
+  const busy = new Set((openTasks ?? []).map((t) => t.assigned_to));
+
   for (const action of envelope.actions) {
     switch (action.type) {
       case "propose_task": {
+        if (busy.has(action.assigned_to)) {
+          await emit({
+            missionId: mission.id,
+            agentId: "master",
+            level: "warn",
+            type: "duplicate_task_refused",
+            message:
+              `Tâche refusée : ${action.assigned_to} a déjà une tâche ouverte sur cette mission. ` +
+              `Attends son résultat plutôt que d'en ouvrir une seconde.`,
+            payload: { goal: action.goal },
+          });
+          break;
+        }
+
         const assignee = agents.get(action.assigned_to);
         if (!assignee || assignee.status !== "active") {
           await emit({
@@ -155,6 +185,9 @@ export async function runMasterCycle(
           });
         } else {
           created += 1;
+          // Guard the rest of this same envelope too: a single reply can
+          // legitimately propose two tasks for the same agent.
+          busy.add(assignee.id);
         }
         break;
       }
