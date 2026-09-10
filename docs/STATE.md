@@ -1,26 +1,20 @@
-# grenOS Agent System State
+# État actuel de la mission
 
-## Mission
-- Title: Boot a hello-world kernel in QEMU
-- Status: running
-- Tokens used: 50992 / 3000000
+## Mission : Boot a hello-world kernel en QEMU
 
-## Completed Work
-- Architect: Created technical plan (docs/PLAN.md)
+## Ce qui est fait
+- Aucune image bootable produite encore.
+- Les tentatives précédentes ont échoué en raison d'erreurs de manifeste ou de clippy.
 
-## In Progress
-- Coder: Implementing minimal kernel that boots via Limine and prints 'grenOS' to serial port (task b6dcd08c-5196-4ac2-b840-7fc60d775b5d)
-    - Status: awaiting verification (CI verdict pending)
-    - Actions taken: wrote kernel/Cargo.toml, kernel/src/main.rs, kernel/linker.ld, kernel/limine.h, kernel/limine.c, kernel/scripts/make-iso.sh, kernel/scripts/run-qemu.sh, kernel/limine.cfg
-    - Requested build and test
+## Ce qui est en cours
+- Rien en cours (la dernière tentative du Coder a échoué en raison d'une violation de politique : tentative d'écriture dans kernel/Cargo.tompl au lieu de kernel/Cargo.toml).
 
-## Blocked
-- None
+## Ce qui est bloqué
+- La tâche du Coder (ID: 4ed99f62-2354-4508-b356-d108226cd04b) est bloquée en raison de la violation de politique. Il reste une tentative.
 
-## Next Steps
-- Await CI verdict for the kernel build and QEMU boot test.
-- Upon green CI, accept the task and mark mission as done.
-- Upon red CI, route the failure to the appropriate agent (likely the Coder for fixes).
+## Budget
+- Tokens utilisés : 328471 / 3000000
+- Tentatives restantes pour la tâche actuelle : 1
 
-## Notes
-- No other work is currently scheduled.
+## Prochaine étape
+- Corriger le nom du fichier manifeste en kernel/Cargo.toml et relancer la tâche du Coder.
