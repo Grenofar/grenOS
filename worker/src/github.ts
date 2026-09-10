@@ -93,6 +93,16 @@ export class GitHub {
     return (await this.branchSha(branch)) ? branch : this.defaultBranch();
   }
 
+  /** Every file at `ref`, with its size. One request, no clone. */
+  async listTree(ref: string): Promise<Array<{ path: string; size: number }>> {
+    const tree = await this.call<{
+      tree: Array<{ path: string; type: string; size?: number }>;
+    }>(`/repos/${this.repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
+    return tree.tree
+      .filter((e) => e.type === "blob")
+      .map((e) => ({ path: e.path, size: e.size ?? 0 }));
+  }
+
   /** File content at a ref, or null when the file does not exist. */
   async readFile(path: string, ref: string): Promise<string | null> {
     const key = `${ref}:${path}`;

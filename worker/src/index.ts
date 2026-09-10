@@ -3,6 +3,7 @@ import { config, log } from "./config.ts";
 import { agentsPaused, db, emit, syncAgents, SupabaseUsageStore } from "./db.ts";
 import { executeTask, type TaskRow } from "./executor.ts";
 import { GitHub } from "./github.ts";
+import { acquireLock, releaseLock, startHeartbeat } from "./lock.ts";
 import { runIntake } from "./intake.ts";
 import { runMasterCycle } from "./master.ts";
 import { loadAgents, type AgentDefinition } from "./prompts.ts";
@@ -33,6 +34,14 @@ let wakeUp: (() => void) | null = null;
 
 async function main(): Promise<void> {
   log.info("grenOS worker — démarrage");
+
+  // Before touching anything: a second brain must refuse to start rather
+  // than plan, dispatch and commit alongside the first (lock.ts).
+  await acquireLock();
+  const stopHeartbeat = startHeartbeat(() => {
+    log.warn("verrou perdu : un autre worker a pris la main — arrêt immédiat");
+    process.exit(1);
+  });
 
   const definitions = loadAgents();
   await syncAgents(definitions);
@@ -82,6 +91,8 @@ async function main(): Promise<void> {
     await waitForWork();
   }
 
+  stopHeartbeat();
+  await releaseLock();
   log.info("worker arrêté");
 }
 

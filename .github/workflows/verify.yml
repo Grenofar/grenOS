@@ -40,11 +40,22 @@ jobs:
             echo "::notice::Pas encore de kernel/Cargo.toml, rien a compiler."
           fi
 
+      # Un kernel/rust-toolchain.toml fixe le compilateur et fait foi. Sans lui
+      # "nightly" change chaque jour : une dependance qui compilait la veille
+      # casse le lendemain sans que l'agent ait rien change. Mission 1 s'est
+      # heurtee a x86_64 0.14 face a un trait core::iter::Step modifie.
       - name: Toolchain Rust
         if: steps.probe.outputs.present == 'true'
+        working-directory: kernel
         run: |
-          rustup toolchain install nightly --profile minimal --component rust-src,clippy,llvm-tools
-          rustup default nightly
+          if [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; then
+            rustup toolchain install || true
+            rustup show
+          else
+            echo "::warning::Pas de kernel/rust-toolchain.toml : nightly du jour, build non reproductible."
+            rustup toolchain install nightly --profile minimal --component rust-src,clippy,llvm-tools
+            rustup default nightly
+          fi
 
       - name: Cache cargo
         if: steps.probe.outputs.present == 'true'

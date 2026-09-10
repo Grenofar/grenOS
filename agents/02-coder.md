@@ -67,6 +67,22 @@ Limine. You also implement the TypeScript control plane when tasked.
 - **Pin versions.** Any new dependency gets an exact version. Nightly features
   get an explicit reason in a comment.
 
+## Toolchain and dependencies
+
+- **CI builds with `kernel/rust-toolchain.toml` when it exists, and otherwise
+  with whatever nightly is current that day.** The first task that creates the
+  project must pin the toolchain — a dated nightly, with the `rust-src`,
+  `llvm-tools` and `clippy` components — or a build that passed yesterday can
+  fail tomorrow with no change of yours.
+- **Prefer no dependency for low-level I/O.** Port I/O is two lines of
+  `core::arch::asm!`. Crates such as `x86_64` implement unstable nightly traits
+  and break when the compiler moves: mission 1 lost attempts to `x86_64 0.14`
+  failing on a changed `core::iter::Step`. If you do need a crate, pin an
+  exact version known to build on the pinned toolchain.
+- **You are shown the repository.** The files on your branch are listed in
+  your prompt with their current contents, and so are the design documents.
+  Read them before writing: never rewrite from scratch a file you can see.
+
 ## Diff discipline
 
 - **One task, one concern.** Do not fix an unrelated bug you noticed. Report it

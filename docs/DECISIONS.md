@@ -398,3 +398,43 @@ un seul appel dans l'intervalle — et la cascade continue sur l'autre. Si rien
 ne répond, l'erreur nomme le ou les fournisseurs refusés et le lien pour
 régénérer la clé. `router.available()` en tient compte, donc le dispatcher ne
 prend aucune tâche qu'aucun fournisseur ne peut traiter.
+
+---
+
+### D-021 — Un seul cerveau, et des agents qui voient ce qu'ils modifient
+**2026-09-10 · actif**
+
+Trois défauts découverts en reconstituant l'échec de la mission 1, aucun
+visible dans le code relu à froid.
+
+**Six workers tournaient en même temps**, le plus ancien depuis le matin. Sous
+Windows, arrêter `npm run worker` tue npm et laisse vivre le `node` enfant :
+chaque redémarrage *ajoutait* un worker. Chacun faisait son propre cycle de
+Maître, avec sa propre version du code et ses propres clés — tâches en
+double, exécutions concurrentes, échecs signés par un code qui n'existait plus.
+→ **Verrou en base** (`settings.worker_lock`) : un second worker refuse de
+démarrer tant que le premier bat (toutes les 20 s) ; après 90 s de silence il
+est présumé mort. En base plutôt qu'en fichier PID, parce que le cerveau doit
+pouvoir changer de machine sans que deux machines se croient aux commandes.
+
+**Les agents travaillaient à l'aveugle.** Rien ne remplissait `context_refs` :
+le Codeur réécrivait `Cargo.toml` de zéro à chaque tentative sans voir celui
+de la tentative précédente, et l'Architecte a répondu à une relecture « je n'ai
+aucun moyen de lire le fichier ».
+→ Chaque prompt contient désormais **le contenu du dépôt** : fichiers de la
+branche de l'agent (ceux qu'il peut modifier d'abord, marqués *writable*), puis
+le reste de `kernel/` en lecture seule, puis les documents de conception. Liste
+complète, contenus bornés à 60 000 caractères par ordre de priorité — manifeste,
+toolchain et point d'entrée en premier.
+
+**Le plan de l'Architecte n'a jamais été vu.** Il est resté sur sa branche de
+tâche, jamais fusionnée, alors que la branche du Codeur part de `main`.
+→ Un travail **uniquement documentaire** est commité directement sur `main`
+(le sandbox l'a déjà confiné à `docs/`). Tout le reste reste sur la branche de
+tâche, et rien de ce qui touche au code ne contourne la CI.
+
+**En prime** : la dernière erreur réelle venait de la crate `x86_64 0.14`,
+incompatible avec la nightly du jour. La CI respecte désormais
+`kernel/rust-toolchain.toml` quand il existe, et le prompt du Codeur demande
+d'épingler la toolchain et d'éviter les crates pour de simples entrées/sorties
+de port.

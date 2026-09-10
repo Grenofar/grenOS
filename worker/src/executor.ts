@@ -3,6 +3,7 @@ import { config, log } from "./config.ts";
 import { db, emit } from "./db.ts";
 import { parseEnvelope, EnvelopeError, type AgentAction } from "./envelope.ts";
 import { authorize } from "./sandbox.ts";
+import { repoContext } from "./context.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
@@ -61,7 +62,9 @@ export async function executeTask(
     const result = await router.complete({
       role: agent.modelRole,
       system: agent.systemPrompt,
-      messages: [{ role: "user", content: await buildPrompt(task, allowedPaths, gh, readRef) }],
+      messages: [
+        { role: "user", content: await buildPrompt(task, agent, allowedPaths, gh, readRef) },
+      ],
       maxOutputTokens: 8192,
       json: true,
     });
@@ -185,10 +188,19 @@ export async function executeTask(
   }
 
   // ---- Commit once ---------------------------------------------------------
+  // Documentation-only work goes straight to the default branch. CI never
+  // verifies it, and left on a task branch nobody merges it is invisible to
+  // every other agent: the Coder's branch is cut from main, so the Architect's
+  // plan for mission 1 sat on agent/4002c138 and the Coder never saw it. The
+  // rule is docs/ only — code under apps/ or packages/ must never reach main
+  // this way, since nothing would have verified it.
+  const docsOnly = changes.length > 0 && changes.every((c) => c.path.startsWith("docs/"));
+  const commitBranch = docsOnly ? await gh.defaultBranch() : branch;
+
   let commitSha: string | null = null;
   if (changes.length > 0) {
     const commit = await gh.commit({
-      branch,
+      branch: commitBranch,
       message: `${agent.id}: ${firstLine(envelope.summary)} (task ${task.id.slice(0, 8)})`,
       changes,
     });
@@ -284,9 +296,10 @@ export async function executeTask(
 
 async function buildPrompt(
   task: TaskRow,
+  agent: AgentDefinition,
   allowedPaths: string[],
   gh: GitHub,
-  branch: string,
+  readRef: string,
 ): Promise<string> {
   const parts: string[] = [];
 
@@ -315,6 +328,11 @@ async function buildPrompt(
     );
   }
 
+  // The repository as it stands on the agent's branch, plus the design
+  // documents (context.ts). Before this, agents never saw a single file.
+  parts.push(await repoContext(gh, agent, allowedPaths, readRef));
+
+  // Files the Master named explicitly, beyond what the view above shows.
   const files = task.context_refs
     .filter((ref) => ref.startsWith("file:"))
     .map((ref) => ref.slice(5));
@@ -322,7 +340,7 @@ async function buildPrompt(
   if (files.length > 0) {
     parts.push("\n# Current file contents\n");
     for (const path of files.slice(0, 12)) {
-      const content = await gh.readFile(path, branch);
+      const content = await gh.readFile(path, readRef);
       parts.push(
         content === null
           ? `\n## ${path}\n(does not exist yet)`
