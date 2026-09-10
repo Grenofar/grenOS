@@ -136,12 +136,29 @@ jobs:
       - name: Rapporter le verdict
         if: always()
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # `secrets` d'abord, `vars` en repli : l'écran GitHub a deux onglets
+          # côte à côte, Secrets et Variables, et une valeur rangée dans le
+          # mauvais reste invisible à `secrets.X` sans aucun message. La CI
+          # passait alors au vert en jetant son propre verdict.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+          # Uniquement pour dire d'où vient la valeur, jamais la valeur.
+          HAS_SECRET_URL: ${{ secrets.SUPABASE_URL != '' }}
+          HAS_SECRET_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+          HAS_VAR_URL: ${{ vars.SUPABASE_URL != '' }}
+          HAS_VAR_KEY: ${{ vars.SUPABASE_SERVICE_ROLE_KEY != '' }}
         run: |
-          if [ -z "$SUPABASE_URL" ]; then
-            echo "::warning::Secrets Supabase absents — verdict non transmis."
-            exit 0
+          echo "SUPABASE_URL               → secret:$HAS_SECRET_URL  variable:$HAS_VAR_URL"
+          echo "SUPABASE_SERVICE_ROLE_KEY  → secret:$HAS_SECRET_KEY  variable:$HAS_VAR_KEY"
+
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Verdict non transmis : SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY est vide côté Actions."
+            echo "::error::Settings → Secrets and variables → Actions → onglet *Secrets* (pas Variables) → New repository secret."
+            exit 1
+          fi
+
+          if [ "$HAS_VAR_KEY" = "true" ]; then
+            echo "::warning::La service_role est rangée dans *Variables*, où elle est lisible en clair par quiconque peut voir les logs. Déplace-la dans *Secrets*."
           fi
 
           if [ "${{ steps.probe.outputs.present }}" != "true" ]; then
