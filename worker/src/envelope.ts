@@ -28,6 +28,8 @@ export type AgentAction =
       goal: string;
       acceptance_criteria: string[];
       allowed_paths?: string[];
+      /** The task whose branch this one builds on, or "main" (lineage.ts). */
+      continue_from?: string;
     }
   | { type: "escalate"; reason: string; options?: string[] }
   /**
@@ -178,6 +180,9 @@ function validateAction(value: unknown, index: number, raw: string): AgentAction
         acceptance_criteria: criteria.map(String),
         ...(Array.isArray(value["allowed_paths"])
           ? { allowed_paths: value["allowed_paths"].map(String) }
+          : {}),
+        ...(typeof value["continue_from"] === "string" && value["continue_from"].trim()
+          ? { continue_from: value["continue_from"].trim() }
           : {}),
       };
     }

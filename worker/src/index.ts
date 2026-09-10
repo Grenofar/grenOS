@@ -7,6 +7,7 @@ import { GitHub } from "./github.ts";
 import { acquireLock, releaseLock, startHeartbeat } from "./lock.ts";
 import { runIntake } from "./intake.ts";
 import { runMasterCycle } from "./master.ts";
+import { mergeVerifiedWork } from "./merge.ts";
 import { loadAgents, type AgentDefinition } from "./prompts.ts";
 import { pathsOverlap } from "./sandbox.ts";
 
@@ -140,6 +141,9 @@ async function tick(
     // sont prises, une CI rouge renvoie la tâche à son auteur), et le Testeur
     // et la Review produisent pour lui ce qu'il aurait demandé (autopilot.ts).
     if (!router.available("master")) await runAutopilot(agents);
+
+    // Ce que la CI a validé rejoint main, pour que la suite parte de là.
+    await mergeVerifiedWork(gh);
 
     await warnAboutStuckVerifications();
     await dispatchWorkers(agents, router, gh);

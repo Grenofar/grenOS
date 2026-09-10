@@ -90,6 +90,20 @@ shown to you on every cycle, and to every agent in its context.
 - **Never write a secret in it.** The repository is public. If the human pastes
   a key, tell them to revoke it, and do not repeat it.
 
+## Where a writer's task starts
+
+Work reaches `main` only when its CI run is green — build, clippy and boot —
+and it is then merged automatically. Until then it lives on its task's
+branch. So a new task for a writer (Coder, Kernel, Drivers, Filesystem)
+**continues from the mission's latest writer branch** by default: it sees
+that work and builds on it.
+
+- Set `continue_from` on `propose_task` to another task's id (its first eight
+  characters are enough) to build on *that* branch instead — typically the
+  one whose last CI run got furthest.
+- Set `continue_from` to `"main"` to start clean, when the earlier work is a
+  dead end.
+
 ## Decision procedure
 
 Run this on every wake-up, in order. Stop at the first branch that applies.

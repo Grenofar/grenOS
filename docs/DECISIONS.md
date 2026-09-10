@@ -525,3 +525,28 @@ trouve, rien n'est commité et l'agent reçoit la liste dans la même tentative.
 Deux corrections ; ensuite la tentative est perdue, mais pas un run de CI.
 Seulement des certitudes : une fausse alerte apprendrait aux agents à ignorer
 la liste.
+
+### D-026 — Le travail continue d'une tâche à l'autre, et le vert rejoint main
+**2026-09-10 · actif · complète D-009**
+
+Trois constats sur la même tentative ratée de la mission 1.
+1. **Rien n'était jamais fusionné.** `main` ne contenait que des documents :
+   « jamais fusionné sans CI verte » avait été appliqué, « fusionné quand c'est
+   vert » n'existait pas.
+2. **Chaque tâche partait de `main`.** La deuxième tâche du Codeur est donc
+   partie d'un dépôt sans kernel : elle a perdu la toolchain épinglée et le
+   manifeste que la précédente avait enfin fait compiler.
+3. **Les versions inventées** : `limine = "0.11"` alors que la dernière est
+   0.6.5. Cargo abandonne avant la première ligne de code.
+
+→ Une tâche d'écriture (Codeur, Kernel, Drivers, Filesystem) **continue la
+dernière branche d'écriture de la mission**, ou celle que le Maître désigne par
+`continue_from` (`"main"` pour repartir de zéro). Le prompt de l'agent le lui
+dit explicitement, pour qu'il ne prenne pas ce travail pour le sien et ne
+recommence pas tout.
+→ Une tâche dont un run de CI est **vert** est fusionnée dans `main` par le
+worker, une seule fois ; un conflit est signalé, jamais forcé.
+→ Le pré-vol vérifie chaque dépendance de `Cargo.toml` sur crates.io (règles
+caret, tilde et exacte de cargo) : une version qu'aucune publication ne
+satisfait revient à l'agent avec la plus récente. Ce que le contrôle ne sait
+pas juger, ou un crates.io muet, est laissé à la CI.

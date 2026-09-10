@@ -7,6 +7,7 @@ import { repoContext } from "./context.ts";
 import { renderEvidence } from "./evidence.ts";
 import { consult, CONSULT_ROUNDS } from "./consult.ts";
 import { preflight, renderPreflight, PREFLIGHT_ROUNDS } from "./preflight.ts";
+import { checkDependencies, crateVersions } from "./deps.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
@@ -24,10 +25,11 @@ import type { AgentDefinition } from "./prompts.ts";
  *
  * The answer is a short conversation, not a single call. The agent may first
  * ask to read documentation instead of guessing an API (consult.ts), and a
- * mistake it can fix — a misspelled file name, a patch that does not apply, a
- * path it was not given — goes straight back to it with the list of problems
- * (preflight.ts). All of it happens inside the attempt; before, each one cost
- * a CI run or the attempt itself.
+ * mistake it can fix — a misspelled file name, a crate version that was never
+ * published, a patch that does not apply, a path it was not given — goes
+ * straight back to it with the list of problems (preflight.ts, deps.ts). All
+ * of it happens inside the attempt; before, each one cost a CI run or the
+ * attempt itself.
  */
 
 export interface TaskRow {
@@ -57,12 +59,16 @@ export async function executeTask(
   log.info(`▶ ${agent.id} · ${task.goal.slice(0, 70)}`);
 
   const branch = task.branch ?? `agent/${task.id.slice(0, 8)}`;
-  // Read from the agent's branch if it exists, otherwise from the default
-  // branch. The branch itself is created by the first commit (github.ts),
-  // never up front: creating it early is a push of main's content, which ran
-  // CI on a branch holding none of the agent's work and produced a verdict
-  // that burned an attempt before a single line had been written.
-  const readRef = await gh.resolveRef(branch);
+  // The work this task builds on (lineage.ts): the mission's latest writer
+  // branch, or the one the Master named. Starting from main threw away
+  // everything that was not green yet.
+  const base = task.context_refs.find((r) => r.startsWith("base:"))?.slice(5) ?? null;
+  // Read from the agent's branch if it exists, then from its base, then from
+  // the default branch. The branch itself is created by the first commit
+  // (github.ts), never up front: creating it early is a push, which ran CI on
+  // a branch holding none of the agent's work and produced a verdict that
+  // burned an attempt before a single line had been written.
+  const readRef = await gh.resolveRef(branch, base);
 
   // Task paths narrow the agent's own permissions; they never widen them
   // (agents/README.md §3).
@@ -71,7 +77,7 @@ export async function executeTask(
 
   // ---- Answer: read if needed, fix what pre-flight finds -------------------
   const conversation: Array<{ role: "user" | "assistant"; content: string }> = [
-    { role: "user", content: await buildPrompt(task, agent, allowedPaths, gh, readRef) },
+    { role: "user", content: await buildPrompt(task, agent, allowedPaths, gh, branch, readRef) },
   ];
 
   let envelope: AgentEnvelope | null = null;
@@ -160,6 +166,7 @@ export async function executeTask(
             ),
             ...resolved.problems,
             ...preflight(resolved.changes),
+            ...(await checkDependencies(resolved.changes, crateVersions)),
           ];
     if (asks.length > 0 && resolved.changes.length === 0 && envelope.status !== "failed") {
       problems.push(
@@ -258,6 +265,7 @@ export async function executeTask(
       branch: commitBranch,
       message: `${agent.id}: ${firstLine(envelope.summary)} (task ${task.id.slice(0, 8)})`,
       changes,
+      base: docsOnly ? null : base,
     });
     commitSha = commit?.sha ?? null;
   }
@@ -429,6 +437,7 @@ async function buildPrompt(
   agent: AgentDefinition,
   allowedPaths: string[],
   gh: GitHub,
+  branch: string,
   readRef: string,
 ): Promise<string> {
   const parts: string[] = [];
@@ -455,6 +464,16 @@ async function buildPrompt(
     parts.push(
       `\n# Previous attempt failed\n\n${task.failure_detail}\n\n` +
         "Change your approach. Repeating the previous attempt is itself a failure.",
+    );
+  }
+
+  // A new branch that continues earlier work: say so, or the agent takes the
+  // files it is shown for its own and starts over.
+  if (readRef !== branch && readRef.startsWith("agent/")) {
+    parts.push(
+      `\n# Starting point\n\nYour branch ${branch} starts from ${readRef}, an earlier task of ` +
+        "this mission. The files below are that work: build on it, and fix what its " +
+        "last CI run reported, rather than starting again.",
     );
   }
 

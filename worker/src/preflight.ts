@@ -67,6 +67,14 @@ export function preflight(changes: Change[]): string[] {
       );
     }
 
+    // A script that writes the configuration builds an image Limine cannot
+    // read: mission 1's first make-iso.sh wrote a limine.cfg from a heredoc.
+    if (/\.sh$|(^|\/)(GNU)?[Mm]akefile$/.test(path) && /limine\.cfg\b/.test(content)) {
+      problems.push(
+        `${path}: produces a limine.cfg. Limine reads limine.conf, in the syntax of its CONFIG.md (\`protocol: limine\`, \`kernel_path: boot():/boot/kernel\`).`,
+      );
+    }
+
     if (!content.trim() && name !== ".gitkeep") {
       problems.push(`${path}: the file is empty.`);
     }

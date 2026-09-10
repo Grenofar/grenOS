@@ -88,6 +88,14 @@ test("limine.conf in the syntax Limine reads today, not the one models remember"
   assert.match(preflight([w("kernel/limine.conf", remembered)])[0]!, /old limine\.cfg syntax/);
 });
 
+test("a build script that writes limine.cfg", () => {
+  // Mission 1's first make-iso.sh wrote one from a heredoc.
+  const script = '#!/bin/sh\ncat > "$ISO_ROOT/boot/limine.cfg" <<EOF\nTIMEOUT 20\nEOF\n';
+  assert.match(preflight([w("kernel/scripts/make-iso.sh", script)])[0]!, /produces a limine\.cfg/);
+  const good = "#!/bin/sh\ncp limine.conf iso_root/boot/limine/\n";
+  assert.deepEqual(preflight([w("kernel/scripts/make-iso.sh", good)]), []);
+});
+
 test("an empty file is never what was meant", () => {
   assert.match(preflight([w("kernel/src/serial.rs", "  \n")])[0]!, /empty/);
 });

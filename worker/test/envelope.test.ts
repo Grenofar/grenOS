@@ -175,3 +175,14 @@ test("consult asks to read a document before writing", () => {
     EnvelopeError,
   );
 });
+
+test("propose_task can name the work it builds on", () => {
+  const base = { type: "propose_task", assigned_to: "coder", goal: "g", acceptance_criteria: ["c"] };
+  const parse = (action: object) =>
+    parseEnvelope(JSON.stringify({ status: "done", summary: "s", actions: [action] })).actions[0]!;
+
+  const named = parse({ ...base, continue_from: " 4b7d4930 " });
+  assert.ok(named.type === "propose_task" && named.continue_from === "4b7d4930");
+  const plain = parse(base);
+  assert.ok(plain.type === "propose_task" && plain.continue_from === undefined);
+});

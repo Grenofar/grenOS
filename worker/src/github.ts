@@ -30,6 +30,15 @@ export class GitHub {
     this.token = token;
   }
 
+  private headers(): Record<string, string> {
+    return {
+      accept: "application/vnd.github+json",
+      authorization: `Bearer ${this.token}`,
+      "x-github-api-version": "2022-11-28",
+      "content-type": "application/json",
+    };
+  }
+
   private async call<T>(
     path: string,
     init: RequestInit = {},
@@ -37,13 +46,7 @@ export class GitHub {
   ): Promise<T> {
     const res = await fetch(`${API}${path}`, {
       ...init,
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${this.token}`,
-        "x-github-api-version": "2022-11-28",
-        "content-type": "application/json",
-        ...(init.headers ?? {}),
-      },
+      headers: { ...this.headers(), ...(init.headers ?? {}) },
     });
 
     if (!okStatuses.includes(res.status)) {
@@ -79,8 +82,8 @@ export class GitHub {
   }
 
   /**
-   * The ref an agent reads from: its own branch if it exists, the default
-   * branch otherwise.
+   * The ref an agent reads from: its own branch if it exists, then the branch
+   * its task builds on (lineage.ts), then the default branch.
    *
    * Deliberately creates nothing. Creating the branch up front — which this
    * used to do — is a push of the default branch's content, and every push to
@@ -89,8 +92,10 @@ export class GitHub {
    * written a line. The branch now comes into existence with its first commit
    * (see commit()), so the first CI run it triggers judges real work.
    */
-  async resolveRef(branch: string): Promise<string> {
-    return (await this.branchSha(branch)) ? branch : this.defaultBranch();
+  async resolveRef(branch: string, base: string | null = null): Promise<string> {
+    if (await this.branchSha(branch)) return branch;
+    if (base && (await this.branchSha(base))) return base;
+    return this.defaultBranch();
   }
 
   /** Every file at `ref`, with its size. One request, no clone. */
@@ -131,20 +136,27 @@ export class GitHub {
    * One commit per task, never one per file: a task is the unit of work that
    * CI verifies and that a human reviews, so it should also be the unit that
    * can be reverted.
+   *
+   * A missing branch is created by this commit, from `base` when it exists
+   * and from the default branch otherwise: born with the agent's content, and
+   * carrying the work it builds on.
    */
   async commit(opts: {
     branch: string;
     message: string;
     changes: Change[];
+    base?: string | null;
   }): Promise<{ sha: string } | null> {
     if (opts.changes.length === 0) return null;
 
-    // A missing branch is not an error: this commit creates it, so it is born
-    // with the agent's content rather than as a copy of the default branch.
     const existing = await this.branchSha(opts.branch);
-    const base = existing ? null : await this.defaultBranch();
-    const headSha = existing ?? (await this.branchSha(base!));
-    if (!headSha) throw new Error(`Branche de base introuvable : ${base}`);
+    let from = opts.branch;
+    let headSha = existing;
+    if (!headSha) {
+      from = opts.base && (await this.branchSha(opts.base)) ? opts.base : await this.defaultBranch();
+      headSha = await this.branchSha(from);
+    }
+    if (!headSha) throw new Error(`Branche de base introuvable : ${from}`);
 
     const head = await this.call<{ tree: { sha: string } }>(
       `/repos/${this.repo}/git/commits/${headSha}`,
@@ -191,12 +203,31 @@ export class GitHub {
         method: "POST",
         body: JSON.stringify({ ref: `refs/heads/${opts.branch}`, sha: commit.sha }),
       });
-      log.info(`branche ${opts.branch} créée depuis ${base}, avec son premier commit`);
+      log.info(`branche ${opts.branch} créée depuis ${from}, avec son premier commit`);
     }
 
     this.blobCache.clear();
     log.info(`commit ${commit.sha.slice(0, 7)} sur ${opts.branch} (${tree.length} fichiers)`);
     return { sha: commit.sha };
+  }
+
+  /**
+   * Merge a branch into the default branch (merge.ts). GitHub reports the
+   * outcome through the status code, so it is returned rather than thrown:
+   * a conflict is information for the Master, not a crash of the loop.
+   */
+  async merge(head: string, message: string): Promise<"merged" | "up_to_date" | "conflict" | "missing"> {
+    const base = await this.defaultBranch();
+    const res = await fetch(`${API}/repos/${this.repo}/merges`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ base, head, commit_message: message }),
+    });
+    if (res.status === 201) return "merged";
+    if (res.status === 204) return "up_to_date";
+    if (res.status === 409) return "conflict";
+    if (res.status === 404) return "missing";
+    throw new Error(`GitHub merge ${head} → ${res.status}: ${(await res.text()).slice(0, 300)}`);
   }
 
   clearCache(): void {

@@ -19,7 +19,7 @@ import type { AgentDefinition } from "./prompts.ts";
  */
 
 /** Agents whose tasks produce code that CI judges. */
-const WRITERS = new Set(["coder", "kernel", "drivers", "filesystem"]);
+export const WRITERS = new Set(["coder", "kernel", "drivers", "filesystem"]);
 
 /** CI verdicts followed up per tick, so a backlog cannot flood the queue. */
 const PER_TICK = 2;

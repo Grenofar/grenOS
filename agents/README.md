@@ -125,8 +125,8 @@ no trailing commentary. The runtime parses it; anything else is a failed turn.
     { "type": "request_build", "profile": "debug" },
     { "type": "request_test",  "suite": "boot" },
     { "type": "request_help",  "capability": "driver-design", "question": "..." },
-    { "type": "propose_task",  "assigned_to": "tester", "goal": "...",
-      "acceptance_criteria": ["..."] },
+    { "type": "propose_task",  "assigned_to": "coder", "goal": "...",
+      "acceptance_criteria": ["..."], "continue_from": "4b7d4930" },
     { "type": "escalate", "reason": "...", "options": ["...", "..."] },
     { "type": "consult", "url": "https://docs.rs/limine/latest/limine/",
       "why": "the current API of the limine crate" }
@@ -164,6 +164,9 @@ Coder says "done"     ->  status becomes awaiting_verification, not done
 Tester runs the real build + QEMU boot in CI
 CI writes the verdict straight into Supabase
 Master reads the verdict and decides: accept, retry, or escalate
+CI green              ->  the branch is merged into main; later tasks build on it
+CI red                ->  the next writer task continues that branch, unless the
+                          Master names another one with continue_from
 ```
 
 Self-reported success is the main failure mode of AI coding teams: the model is

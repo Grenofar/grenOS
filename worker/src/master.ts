@@ -3,6 +3,7 @@ import { log } from "./config.ts";
 import { db, emit } from "./db.ts";
 import { parseEnvelope, EnvelopeError, type AgentEnvelope } from "./envelope.ts";
 import { authorize } from "./sandbox.ts";
+import { baseFor } from "./lineage.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
@@ -234,12 +235,17 @@ export async function runMasterCycle(
           break;
         }
 
+        // A writer's task continues the mission's work instead of starting
+        // from a main that holds none of it (lineage.ts).
+        const base = await baseFor(mission.id, assignee.id, action.continue_from);
+
         const { error } = await db.from("tasks").insert({
           mission_id: mission.id,
           assigned_to: assignee.id,
           goal: action.goal,
           acceptance_criteria: action.acceptance_criteria,
           allowed_paths: action.allowed_paths ?? assignee.allowedPaths,
+          context_refs: base ? [`base:${base}`] : [],
           status: "ready",
           max_attempts: assignee.maxAttempts,
           token_budget: assignee.maxTokensPerTask,
