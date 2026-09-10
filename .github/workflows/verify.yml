@@ -96,8 +96,14 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          if [ -x kernel/scripts/make-iso.sh ]; then
-            kernel/scripts/make-iso.sh
+          # `bash script` et non `./script` : les agents committent par l'API
+          # GitHub, qui écrit tout en mode 100644. Le bit exécutable n'existe
+          # donc jamais sur leurs fichiers, et un test `-x` échouerait toujours
+          # — l'image ne serait pas construite et le Codeur recevrait un échec
+          # qu'aucune correction de son code ne pourrait résoudre.
+          if [ -f kernel/scripts/make-iso.sh ]; then
+            echo "Construction de l'image via kernel/scripts/make-iso.sh"
+            bash kernel/scripts/make-iso.sh
           fi
 
           IMAGE=$(find kernel -name '*.iso' -o -name '*.img' | head -n1)
