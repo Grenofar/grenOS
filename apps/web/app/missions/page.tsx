@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useLive } from "@/lib/useLive";
@@ -143,7 +144,7 @@ function MissionCard({ mission }: { mission: MissionOverview }) {
           : "";
 
   return (
-    <div className="card">
+    <Link href={`/missions/${mission.id}`} className="card card-link">
       <div className="between" style={{ marginBottom: 8 }}>
         <b>{mission.title}</b>
         <span className={`badge ${tone}`}>{t(`status.${mission.status}`)}</span>
@@ -164,7 +165,7 @@ function MissionCard({ mission }: { mission: MissionOverview }) {
           {fmtTokens(mission.tokens_used)} / {fmtTokens(mission.token_budget)}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
 

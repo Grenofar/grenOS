@@ -4,75 +4,79 @@
 > Écrit pour quelqu'un qui revient après un jour d'absence et ne se souvient de
 > rien. Actuellement tenu à la main.
 >
-> Dernière mise à jour : 2026-09-09
+> Dernière mise à jour : 2026-09-10
 
 ## Situation
 
-**La fabrique est complète.** Site, base, routeur, worker et CI existent et se
-raccordent. Aucun agent n'a encore tourné : il manque les clés et le passage
-des migrations.
+**La fabrique est complète et branchée.** Les cinq clés ont été vérifiées
+contre les vrais services, les cinq migrations sont passées, le site compile.
+Rien n'a encore tourné en conditions réelles : le worker n'a jamais fait un
+tour de boucle complet.
 
-Le `kernel/` est volontairement vide — c'est le travail des agents, pas le
-mien. Si la fabrique ne sait pas produire un hello-world, mieux vaut le
-découvrir tout de suite.
+`kernel/` est vide, volontairement. L'écrire est la mission n°1 — si la
+fabrique ne sait pas produire un hello-world, mieux vaut le découvrir tout de
+suite.
 
-## Mission en cours
+## Vérifié contre les vrais services
 
-Aucune. La première sera : **faire booter un kernel hello-world dans QEMU**,
-par la chaîne Maître → Architecte → Codeur → Testeur, sans intervention humaine
-sur le code.
+```
+npm run doctor
+  supabase  ✓ 11 tables · fonctions SQL (0004) · 9 agents (4 actifs)
+            ✓ opérateurs : belgacemmaroua@gmail.com, rayanbelgacem747@gmail.com
+  gemini    ✓ clé valide, les 3 modèles du catalogue existent
+  github    ✓ dépôt accessible en écriture · lecture des runs Actions
+```
 
-La CI attend déjà ce contrat précis :
+## La contrainte qui gouverne tout : le quota
+
+**~20 requêtes/jour et par modèle**, mesuré, pas lu (D-016). Trois modèles
+dans la cascade, donc **~60 requêtes/jour au total**. Une tâche de codeur en
+coûte 1 à 3.
+
+Concrètement : une vingtaine de tâches par jour, tous agents confondus. Assez
+pour prouver la mission n°1, pas pour construire un OS. Les options pour
+élargir sont dans D-016, aucune n'est urgente.
+
+## Mission n°1
+
+**Faire booter un kernel hello-world dans QEMU**, par la chaîne Maître →
+Architecte → Codeur → Testeur, sans intervention humaine sur le code.
+
+Contrat que la CI applique déjà :
 - `kernel/Cargo.toml` existe
 - `cargo build --release` passe
 - `cargo clippy -- -D warnings` passe
-- une image `.iso` ou `.img` est produite (via `kernel/scripts/make-iso.sh` si présent)
-- au boot QEMU, la chaîne `grenOS` apparaît sur le port série
-- aucun `panic`, `double fault` ni `triple fault` dans le log
+- une image `.iso` ou `.img` est produite
+- au boot QEMU, `grenOS` apparaît sur le port série
+- aucun `panic`, `double fault` ni `triple fault`
 - le tout en moins de 90 secondes
 
 ## Fait
 
-- Architecture arrêtée, décisions D-001 à D-015
-- Protocole de coordination et 9 agents spécifiés
+- Architecture et décisions D-001 à D-016
+- Protocole de coordination, 4 agents actifs + 5 dormants
 - **Base** — 5 migrations : schéma, RLS, seed, fonctions atomiques, raccord CI
-- **`@grenos/router`** — cascade Gemini 3.8 → 3.7 → 3.6, quotas, cooldowns
+- **Routeur** — cascade Gemini, quotas appris du serveur, modèles à
+  raisonnement, 403 non répété
 - **Worker** — chargeur de prompts, sandbox de chemins, enveloppe JSON, client
-  GitHub sans clone, exécuteur, cycle du Maître, boucle principale
-- **CI** — `.github/workflows/verify.yml`, build + clippy + boot QEMU, verdict
-  écrit directement dans Supabase
-- **Site** — auth, dashboard live, missions, runs, agents, coupe-circuit, FR/EN
-- **24 tests** verts (`npm test`) : sandbox, chargeur de prompts, enveloppe,
-  cascade du routeur
+  GitHub sans clone, exécuteur, cycle du Maître conditionné au changement d'état
+- **CI** — build + clippy + boot QEMU, verdict écrit dans Supabase, triggers SQL
+  qui font avancer la tâche
+- **Site** — connexion Google (repli par lien email), dashboard live, missions,
+  détail de mission, runs, agents, coupe-circuit, FR/EN
+- **Outils** — `npm run doctor`, `npm run env`, `npm run vercel`
+- **34 tests** verts
 
-## Non vérifié
+## Reste à faire
 
-- Rien n'a été exécuté contre un vrai Supabase ni un vrai Gemini.
-- Le site n'a jamais été compilé (`npm install` non lancé).
-- Les 5 migrations n'ont jamais été passées.
-
-Ce sont les trois premières choses qui casseront. C'est normal à ce stade.
-
-## En attente de l'humain
-
-| Clé | Où | Statut |
-|---|---|---|
-| `SUPABASE_*` (3) | supabase.com → Settings → API | à créer |
-| `GEMINI_API_KEY` | aistudio.google.com/apikey | à créer |
-| `GITHUB_TOKEN` | PAT fine-grained sur `Grenofar/grenOS` | en cours |
-
-Puis :
-1. Passer les 5 migrations dans le SQL Editor, dans l'ordre.
-2. Ajouter `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` dans
-   **Settings → Secrets → Actions** du dépôt, sinon la CI ne pourra pas
-   rapporter ses verdicts.
-3. `npm install`, puis `npm run dev` et `npm run worker`.
-
-## À construire ensuite
-
-1. Première exécution réelle, correction de ce qui casse
-2. Mission n°1
-3. Activation des sous-agents une fois que le Maître sait les router
+1. **Premier lancement réel** : `npm run worker`. C'est là que ça cassera —
+   rien n'a jamais tourné de bout en bout.
+2. **Secrets GitHub Actions** : `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY`
+   dans Settings → Secrets → Actions. Sans eux la CI compile mais ne rapporte
+   aucun verdict, et les tâches restent bloquées en `awaiting_verification`.
+3. **Vercel** : Root Directory `apps/web`, les deux `NEXT_PUBLIC_*`, et l'URL
+   du site dans Supabase → Authentication → Redirect URLs.
+4. Mission n°1.
 
 ## Bloqué
 
@@ -80,4 +84,5 @@ Rien.
 
 ## Budget consommé
 
-Aucun appel LLM effectué à ce jour.
+Une poignée d'appels Gemini pour les tests de bout en bout. Aucune mission
+lancée.

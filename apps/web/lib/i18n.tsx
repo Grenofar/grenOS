@@ -82,6 +82,27 @@ const STRINGS: Dict = {
   },
   "auth.signout": { fr: "Se déconnecter", en: "Sign out" },
 
+  "mission.escalation": { fr: "Décision requise", en: "Decision needed" },
+  "mission.tasks": { fr: "Tâches", en: "Tasks" },
+  "mission.noTasks": {
+    fr: "Le Maître n'a pas encore décomposé la mission.",
+    en: "The Master has not decomposed the mission yet.",
+  },
+
+  "task.pending": { fr: "en attente", en: "pending" },
+  "task.ready": { fr: "prête", en: "ready" },
+  "task.in_progress": { fr: "en cours", en: "in progress" },
+  "task.awaiting_verification": { fr: "vérification", en: "verifying" },
+  "task.done": { fr: "terminée", en: "done" },
+  "task.failed": { fr: "échouée", en: "failed" },
+  "task.blocked": { fr: "bloquée", en: "blocked" },
+  "task.cancelled": { fr: "annulée", en: "cancelled" },
+  "task.attempt": { fr: "tentative", en: "attempt" },
+  "task.awaitingCI": {
+    fr: "en attente du verdict CI — rien n'est terminé avant",
+    en: "waiting on the CI verdict — nothing is done before that",
+  },
+
   "status.draft": { fr: "brouillon", en: "draft" },
   "status.planning": { fr: "planification", en: "planning" },
   "status.running": { fr: "en cours", en: "running" },
