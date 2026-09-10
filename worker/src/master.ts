@@ -635,25 +635,31 @@ export function redactSecrets(text: string): string {
 /**
  * The language to answer in. Told to use "the human's language", the Master
  * answered its first French message in English; naming the language outright
- * is what models actually follow.
+ * is what models actually follow. When a message says too little to tell —
+ * "ok", "go" — it is French: that is who runs this project.
  */
-export function humanLanguage(texts: string[]): string {
+export function humanLanguage(texts: string[], fallback = "French"): string {
   const sample = ` ${texts.join(" ").toLowerCase().replace(/[.,;:!?()«»"]/g, " ")} `;
   const french = (
     sample.match(/[éèêàùçœ]| (le|la|les|des|est|et|pour|avec|pas|une|dans|que|je|tu|puis) /g) ?? []
   ).length;
   const english = (sample.match(/ (the|is|and|for|with|not|this|that|you|are|then) /g) ?? []).length;
   if (french > english) return "French";
-  if (english > 0) return "English";
-  return "the human's language";
+  if (english > french) return "English";
+  return fallback;
 }
 
 function renderState(mission: Mission, state: State, notebook: string | null): string {
   const parts: string[] = [];
+  // Everything the human reads is written in their language, whether or not
+  // they wrote this cycle: replies, summaries, escalations and their options.
+  const language = humanLanguage([
+    ...state.conversation.filter((m) => m.role === "user").map((m) => m.content),
+    ...state.human.map((h) => h.content),
+  ]);
 
   // The human first: their message preempts everything (decision step 1).
   if (state.human.length > 0) {
-    const language = humanLanguage(state.human.map((h) => h.content));
     parts.push("# The human is waiting for your answer\n");
     for (const h of state.human) parts.push(`> ${h.content.replace(/\n/g, "\n> ")}\n`);
     parts.push(
@@ -706,7 +712,7 @@ function renderState(mission: Mission, state: State, notebook: string | null): s
 
   if (state.runs.length > 0) {
     parts.push("\n# CI verdicts (the only source of truth)\n");
-    parts.push(JSON.stringify(state.runs, null, 2));
+    parts.push(JSON.stringify(state.runs.map(ciDigest), null, 2));
   }
 
   if (state.pending.length > 0) {
@@ -723,10 +729,39 @@ function renderState(mission: Mission, state: State, notebook: string | null): s
   parts.push(
     "\n# Your turn\n\nRun your decision procedure and return exactly one JSON " +
       "object. Use propose_task to dispatch work, escalate when blocked. " +
-      "If there is nothing to do, return status \"done\" with an empty actions array.",
+      "If there is nothing to do, return status \"done\" with an empty actions array.\n\n" +
+      `Language: write \`summary\`, and the \`reason\` and \`options\` of any escalation, in ${language} — ` +
+      "the human reads them. Task goals and acceptance criteria stay in English: agents read those.",
   );
 
   return parts.join("\n");
+}
+
+/**
+ * A CI run as the Master needs it: the verdict, and the lines that explain it.
+ *
+ * The full log tail is 6,000 characters per run and the Master was shown
+ * eight: on mission 1 it spent two thirds of the tokens, more than the Coder
+ * who writes the code. Judging and routing needs the error, not the build
+ * noise. The Coder still receives the whole log with its retry.
+ */
+export function ciDigest(run: State["runs"][number]): Record<string, unknown> {
+  const errors = (run.log_excerpt ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) =>
+      /\b(error|warning|panic|fault|failed|Finished)\b|^-->|Marqueur|Aucune image/i.test(line),
+    )
+    .slice(0, 12)
+    .join("\n")
+    .slice(0, 1500);
+  return {
+    branch: run.branch,
+    status: run.status,
+    failure: run.failure,
+    verdicts: run.verdicts,
+    errors: errors || null,
+  };
 }
 
 /** The standing instructions in full, the journal only in its latest lines. */

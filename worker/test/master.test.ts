@@ -195,7 +195,9 @@ test("the Master is told which language to answer in", () => {
     "French",
   );
   assert.equal(humanLanguage(["The build passes. Now fix clippy and then make the image."]), "English");
-  assert.equal(humanLanguage(["ok"]), "the human's language");
+  // Too short to tell: French, the language of the people running grenOS.
+  assert.equal(humanLanguage(["ok"]), "French");
+  assert.equal(humanLanguage([]), "French");
 });
 
 test("a key pasted into the chat never reaches the public repository", () => {
@@ -221,4 +223,35 @@ test("new work closes the tasks it answers, so they are not escalated again", as
     ],
   });
   assert.deepEqual(supersededByNewWork(board as never).sort(), ["failed", "parked"]);
+});
+
+test("the Master reads a CI run's verdict and its errors, not the whole log", async () => {
+  const { ciDigest } = await import("../src/master.ts");
+  // Eight full log tails per cycle made the Master the biggest spender of
+  // mission 1, ahead of the Coder.
+  const log = [
+    "--- build ---",
+    "   Compiling kernel v0.1.0 (/home/runner/work/grenOS/grenOS/kernel)",
+    "    Finished `release` profile [optimized] target(s) in 0.10s",
+    "--- clippy ---",
+    "error: empty `loop {}` wastes CPU cycles",
+    " --> src/main.rs:8:5",
+    ...Array.from({ length: 300 }, () => "   noise from a long build"),
+  ].join("\n");
+  const run = {
+    branch: "agent/4b7d4930",
+    status: "failed",
+    failure: "compile_error",
+    verdicts: [],
+    log_excerpt: log,
+  };
+
+  const digest = ciDigest(run);
+  // The build passed and clippy failed: exactly what the Master must see.
+  assert.match(String(digest.errors), /Finished `release`/);
+  assert.match(String(digest.errors), /empty `loop \{\}`/);
+  assert.match(String(digest.errors), /--> src\/main\.rs:8:5/);
+  assert.doesNotMatch(String(digest.errors), /noise|Compiling/);
+  assert.ok(String(digest.errors).length <= 1500);
+  assert.equal(ciDigest({ ...run, log_excerpt: null }).errors, null);
 });

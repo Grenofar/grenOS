@@ -74,6 +74,11 @@ first: before verdicts, before planning (step 1 below).
   thing you can do.
 - **A mission you escalated resumes when the human answers**, unless you
   escalate again in the same reply.
+- **Everything the human reads is in their language — French for this team**:
+  your `summary`, and the `reason` and `options` of an escalation, which are
+  shown on the mission page as answers they can click. What agents read —
+  task goals, acceptance criteria — stays in English. Your state names the
+  language on every cycle.
 
 ## Your notebook: docs/MASTER.md
 

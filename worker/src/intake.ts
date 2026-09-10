@@ -2,6 +2,7 @@ import { Router } from "@grenos/router";
 import { log } from "./config.ts";
 import { db, emit } from "./db.ts";
 import { parseEnvelope, EnvelopeError } from "./envelope.ts";
+import { humanLanguage } from "./master.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
 /**
@@ -109,7 +110,16 @@ async function answerOne(
   try {
     const result = await router.complete({
       role: intake.modelRole,
-      system: [intake.systemPrompt, renderRoadmap(steps)].filter(Boolean).join("\n\n---\n\n"),
+      system: [
+        intake.systemPrompt,
+        renderRoadmap(steps),
+        // Named outright: "the human's language" is what models ignore.
+        `# Language\n\nWrite \`summary\` in ${humanLanguage(
+          messages.filter((m) => m.role === "user").map((m) => m.content),
+        )}: the human reads it. \`description\` and \`acceptance_criteria\` stay in English, for the agents.`,
+      ]
+        .filter(Boolean)
+        .join("\n\n---\n\n"),
       messages,
       maxOutputTokens: 4000,
     });
