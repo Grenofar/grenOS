@@ -39,6 +39,7 @@ async function main(): Promise<void> {
   const usage = new SupabaseUsageStore();
   const router = new Router({
     geminiApiKey: config.geminiApiKey,
+    nvidiaApiKey: config.nvidiaApiKey,
     usage,
     onEvent: (e) => {
       if (e.outcome !== "ok") {
@@ -49,6 +50,11 @@ async function main(): Promise<void> {
 
   const gh = new GitHub();
   log.info(`dépôt ${gh.repo} · ${definitions.filter((a) => a.status === "active").length} agents actifs`);
+  log.info(
+    config.nvidiaApiKey
+      ? "providers : NVIDIA NIM (40 req/min) + Gemini en repli"
+      : "providers : Gemini seul — ~20 req/jour et par modèle, ajoute NVIDIA_API_KEY",
+  );
 
   subscribe();
   installShutdown();

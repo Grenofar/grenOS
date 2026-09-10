@@ -3,32 +3,72 @@ import assert from "node:assert/strict";
 import { Router, RouterExhaustedError, type UsageStore } from "../src/index.ts";
 
 /**
- * The cascade is the part of the router that only misbehaves under conditions
- * that are inconvenient to reproduce by hand: an exhausted quota at 6pm, a
- * model retired by Google overnight. Stubbing fetch makes those the normal
+ * The cascade only misbehaves under conditions that are inconvenient to
+ * reproduce by hand: an exhausted quota at 6pm, a model retired overnight, a
+ * provider timing out on a cold start. Stubbing fetch makes those the normal
  * case for a test run.
+ *
+ * The stub speaks both providers, because the point of the cascade is that it
+ * crosses them: NVIDIA leads on speed and volume, Gemini is the floor that
+ * never runs out of credits.
  */
 
 const realFetch = globalThis.fetch;
 
-function stubFetch(handler: (model: string) => Response | Promise<Response>): string[] {
+const NV = "deepseek-ai/deepseek-v4-pro-0813";
+const NEMO = "nvidia/nemotron-3-super-120b-a12b";
+const KIMI = "moonshotai/kimi-k3";
+
+type Handler = (model: string, budget: number) => Response | Promise<Response>;
+
+/** Records every model actually called, in order. */
+function stubFetch(handler: Handler): string[] {
   const calls: string[] = [];
-  globalThis.fetch = (async (url: string | URL | Request) => {
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     const href = String(url);
-    const model = href.slice(href.lastIndexOf("/") + 1).replace(":generateContent", "");
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+
+    // Gemini names the model in the path; NVIDIA puts it in the body.
+    const model = href.includes("generativelanguage")
+      ? href.slice(href.lastIndexOf("/") + 1).replace(":generateContent", "")
+      : body.model;
+    const budget = body.generationConfig?.maxOutputTokens ?? body.max_tokens ?? 0;
+
     calls.push(model);
-    return handler(model);
+    return handler(model, budget);
   }) as typeof fetch;
   return calls;
 }
 
-const okResponse = (text: string) =>
+const geminiOk = (text = "{}") =>
   new Response(
     JSON.stringify({
       candidates: [{ content: { parts: [{ text }] }, finishReason: "STOP" }],
       usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
     }),
-    { status: 200, headers: { "content-type": "application/json" } },
+    { status: 200 },
+  );
+
+const nvidiaOk = (text = "{}") =>
+  new Response(
+    JSON.stringify({
+      choices: [{ message: { content: text }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    }),
+    { status: 200 },
+  );
+
+const anyOk = (model: string) => (model.includes("gemini") ? geminiOk() : nvidiaOk());
+
+const dailyQuota429 = () =>
+  new Response(
+    JSON.stringify({
+      error: {
+        code: 429,
+        message: "Quota exceeded for metric: generate_content_free_tier_requests, limit: 20",
+      },
+    }),
+    { status: 429 },
   );
 
 class FakeUsage implements UsageStore {
@@ -45,128 +85,191 @@ class FakeUsage implements UsageStore {
 }
 
 let usage: FakeUsage;
+const both = () => ({ geminiApiKey: "g", nvidiaApiKey: "n", usage });
+
 beforeEach(() => {
   usage = new FakeUsage();
   globalThis.fetch = realFetch;
 });
 
-test("uses the first model in the role cascade", async () => {
-  const calls = stubFetch(() => okResponse('{"ok":true}'));
-  const router = new Router({ geminiApiKey: "k", usage });
+test("the coder starts on the strongest model, not the cheapest", async () => {
+  const calls = stubFetch(anyOk);
+  const res = await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
 
-  const res = await router.complete({ role: "coder", system: "s", messages: [] });
+  assert.equal(res.model, NV);
+  assert.equal(res.provider, "nvidia");
+  assert.deepEqual(calls, [NV]);
+});
+
+test("the master starts on the fastest model — it runs on every state change", async () => {
+  stubFetch(anyOk);
+  const res = await new Router(both()).complete({ role: "master", system: "s", messages: [] });
+  assert.equal(res.model, NEMO);
+});
+
+test("the architect may use the slow model — it runs rarely", async () => {
+  stubFetch((m) => (m === NV ? new Response("down", { status: 503 }) : anyOk(m)));
+  const res = await new Router(both()).complete({ role: "architect", system: "s", messages: [] });
+  assert.equal(res.model, KIMI);
+});
+
+test("the cascade crosses providers when NVIDIA fails", async () => {
+  // The whole point of mixing them: NVIDIA has the volume, Gemini has the
+  // permanence. One provider being down must not stop the team.
+  const calls = stubFetch((m) =>
+    m.includes("gemini") ? geminiOk() : new Response("gateway timeout", { status: 504 }),
+  );
+  const res = await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
+
+  assert.equal(res.provider, "gemini");
+  assert.equal(res.model, "gemini-3.8-flash");
+  assert.deepEqual(calls, [NV, NEMO, "gemini-3.8-flash"]);
+});
+
+test("without an NVIDIA key its models are skipped, not called", async () => {
+  const calls = stubFetch(anyOk);
+  const res = await new Router({ geminiApiKey: "g", usage }).complete({
+    role: "coder",
+    system: "s",
+    messages: [],
+  });
 
   assert.equal(res.model, "gemini-3.8-flash");
-  assert.deepEqual(calls, ["gemini-3.8-flash"]);
-  assert.equal(res.tokensIn, 10);
+  assert.deepEqual(calls, ["gemini-3.8-flash"], "aucun appel réseau vers NVIDIA");
+  assert.equal(res.attempts[0]?.outcome, "skipped");
 });
-
-test("the tester starts on 3.6, leaving 3.8 quota to the others", async () => {
-  stubFetch(() => okResponse("{}"));
-  const router = new Router({ geminiApiKey: "k", usage });
-
-  const res = await router.complete({ role: "tester", system: "s", messages: [] });
-  assert.equal(res.model, "gemini-3.6-flash");
-});
-
-const dailyQuota429 = () =>
-  new Response(
-    JSON.stringify({
-      error: {
-        code: 429,
-        message:
-          "You exceeded your current quota. Quota exceeded for metric: " +
-          "generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20",
-      },
-    }),
-    { status: 429 },
-  );
 
 test("a daily quota retires the model for the rest of the day", async () => {
   // Learned from the server, never guessed: published free-tier figures were
   // wrong by two orders of magnitude.
-  let calls = stubFetch((model) =>
-    model === "gemini-3.8-flash" ? dailyQuota429() : okResponse("{}"),
-  );
-  const router = new Router({ geminiApiKey: "k", usage });
+  const calls = stubFetch((m) => (m === NV ? dailyQuota429() : anyOk(m)));
+  const router = new Router(both());
 
   const first = await router.complete({ role: "coder", system: "s", messages: [] });
-  assert.equal(first.model, "gemini-3.7-flash");
+  assert.equal(first.model, NEMO);
   assert.equal(first.attempts[0]?.outcome, "quota_exhausted");
 
-  // The next call must not spend a round trip re-discovering the same limit.
   calls.length = 0;
   const second = await router.complete({ role: "coder", system: "s", messages: [] });
-  assert.equal(second.model, "gemini-3.7-flash");
-  assert.ok(!calls.includes("gemini-3.8-flash"), "3.8 est épuisé jusqu'à demain");
+  assert.equal(second.model, NEMO);
+  assert.ok(!calls.includes(NV), "épuisé jusqu'à demain, on ne le rappelle pas");
 });
 
 test("a per-minute 429 is a cooldown, not a retirement", async () => {
   const perMinute = () =>
-    new Response(
-      JSON.stringify({
-        error: { code: 429, message: "Quota exceeded for metric: ...generate_requests_per_minute" },
-      }),
-      { status: 429, headers: { "retry-after": "1" } },
-    );
-  stubFetch((model) => (model === "gemini-3.8-flash" ? perMinute() : okResponse("{}")));
-  const router = new Router({ geminiApiKey: "k", usage });
+    new Response(JSON.stringify({ error: { message: "Quota exceeded: requests_per_minute" } }), {
+      status: 429,
+      headers: { "retry-after": "1" },
+    });
+  stubFetch((m) => (m === NV ? perMinute() : anyOk(m)));
 
-  const res = await router.complete({ role: "coder", system: "s", messages: [] });
-  assert.equal(res.model, "gemini-3.7-flash");
+  const res = await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
   assert.equal(res.attempts[0]?.outcome, "rate_limited", "pas quota_exhausted");
 });
 
-test("a 429 falls through and puts that model in cooldown", async () => {
-  const calls = stubFetch((model) =>
-    model === "gemini-3.8-flash"
-      ? new Response("rate limited", { status: 429, headers: { "retry-after": "30" } })
-      : okResponse("{}"),
-  );
-  const router = new Router({ geminiApiKey: "k", usage });
-
-  const first = await router.complete({ role: "coder", system: "s", messages: [] });
-  assert.equal(first.model, "gemini-3.7-flash");
-
-  // The second call must not re-try the model that just said 429.
-  calls.length = 0;
-  const second = await router.complete({ role: "coder", system: "s", messages: [] });
-  assert.equal(second.model, "gemini-3.7-flash");
-  assert.ok(!calls.includes("gemini-3.8-flash"), "3.8 devrait être en cooldown");
-});
-
 test("a model that vanished (404) does not stop the system", async () => {
-  stubFetch((model) =>
-    model === "gemini-3.8-flash"
-      ? new Response("model not found", { status: 404 })
-      : okResponse("{}"),
-  );
-  const router = new Router({ geminiApiKey: "k", usage });
-
-  const res = await router.complete({ role: "coder", system: "s", messages: [] });
-  assert.equal(res.model, "gemini-3.7-flash");
+  stubFetch((m) => (m === NV ? new Response("gone", { status: 404 }) : anyOk(m)));
+  const res = await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
+  assert.equal(res.model, NEMO);
 });
 
-test("a truncated answer is a failure, not a half-parsed envelope", async () => {
-  stubFetch((model) =>
-    model === "gemini-3.8-flash"
-      ? new Response(
-          JSON.stringify({
-            candidates: [{ content: { parts: [{ text: '{"status":"do' }] }, finishReason: "MAX_TOKENS" }],
-          }),
-          { status: 200 },
-        )
-      : okResponse("{}"),
-  );
-  const router = new Router({ geminiApiKey: "k", usage });
+test("a model that thinks past its budget gets more room, not a different model", async () => {
+  // Reasoning tokens come out of the same allowance as the answer, so a tight
+  // budget returns an empty body. Switching models would hit the same wall.
+  const budgets: number[] = [];
+  stubFetch((model, budget) => {
+    if (model !== NV) return anyOk(model);
+    budgets.push(budget);
+    if (budget < 20_000) {
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "" }, finish_reason: "length" }],
+          usage: { completion_tokens: budget },
+        }),
+        { status: 200 },
+      );
+    }
+    return nvidiaOk();
+  });
 
-  const res = await router.complete({ role: "coder", system: "s", messages: [] });
-  assert.equal(res.model, "gemini-3.7-flash", "la troncature doit faire basculer de modèle");
+  const res = await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
+
+  assert.equal(res.model, NV, "même modèle, pas un repli");
+  assert.equal(budgets.length, 2);
+  assert.ok(budgets[1]! > budgets[0]!, "le second essai doit avoir plus de place");
+});
+
+test("a reasoning model that never answers is a truncation, not an empty reply", async () => {
+  // Some models put their thinking in a separate field and return empty
+  // content. That is the same failure wearing a different shape.
+  let calls = 0;
+  stubFetch((model, budget) => {
+    if (model !== NV) return anyOk(model);
+    calls += 1;
+    if (budget < 20_000) {
+      return new Response(
+        JSON.stringify({
+          choices: [
+            { message: { content: "", reasoning_content: "thinking..." }, finish_reason: "stop" },
+          ],
+          usage: { completion_tokens: 100 },
+        }),
+        { status: 200 },
+      );
+    }
+    return nvidiaOk();
+  });
+
+  const res = await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
+  assert.equal(res.model, NV);
+  assert.equal(calls, 2, "relancé avec plus de place");
+});
+
+test("reasoning tokens are counted, not hidden", async () => {
+  stubFetch(() =>
+    new Response(
+      JSON.stringify({
+        candidates: [{ content: { parts: [{ text: "{}" }] }, finishReason: "STOP" }],
+        usageMetadata: {
+          promptTokenCount: 100,
+          candidatesTokenCount: 40,
+          thoughtsTokenCount: 900,
+        },
+      }),
+      { status: 200 },
+    ),
+  );
+  const res = await new Router({ geminiApiKey: "g", usage }).complete({
+    role: "coder",
+    system: "s",
+    messages: [],
+  });
+
+  // 940, not 40: a mission budget that ignores reasoning would let the Master
+  // overspend by an order of magnitude.
+  assert.equal(res.tokensOut, 940);
+});
+
+test("a refused key stops the cascade instead of repeating the 403", async () => {
+  // Every Gemini model shares one key and one project, so a refusal is the
+  // same refusal three times over.
+  const calls = stubFetch(() => new Response("denied", { status: 403 }));
+
+  await assert.rejects(
+    () =>
+      new Router({ geminiApiKey: "g", usage }).complete({
+        role: "coder",
+        system: "s",
+        messages: [],
+      }),
+    /refuse la clé ou son projet/,
+  );
+  assert.equal(calls.length, 1);
 });
 
 test("only fails once every model is unusable", async () => {
   const calls = stubFetch(() => dailyQuota429());
-  const router = new Router({ geminiApiKey: "k", usage });
+  const router = new Router(both());
 
   await assert.rejects(
     () => router.complete({ role: "coder", system: "s", messages: [] }),
@@ -174,7 +277,6 @@ test("only fails once every model is unusable", async () => {
   );
   assert.equal(calls.length, 3, "un appel par modèle pour apprendre chaque limite");
 
-  // Second time round, nothing is left to try and nothing is spent finding out.
   calls.length = 0;
   await assert.rejects(
     () => router.complete({ role: "coder", system: "s", messages: [] }),
@@ -183,89 +285,12 @@ test("only fails once every model is unusable", async () => {
   assert.equal(calls.length, 0, "les limites apprises évitent tout appel");
 });
 
-test("a model that thinks past its budget gets more room, not a different model", async () => {
-  // Gemini 3.x spends reasoning tokens from the same allowance as the answer,
-  // so a tight budget returns MAX_TOKENS with an empty body. Switching models
-  // would hit the same wall.
-  const budgets: number[] = [];
-  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-    const body = JSON.parse(String(init?.body));
-    const max = body.generationConfig.maxOutputTokens;
-    budgets.push(max);
-    if (max < 20_000) {
-      return new Response(
-        JSON.stringify({
-          candidates: [{ content: { parts: [] }, finishReason: "MAX_TOKENS" }],
-          usageMetadata: { thoughtsTokenCount: max },
-        }),
-        { status: 200 },
-      );
-    }
-    return okResponse("{}");
-  }) as typeof fetch;
-
-  const router = new Router({ geminiApiKey: "k", usage });
-  const res = await router.complete({ role: "coder", system: "s", messages: [] });
-
-  assert.equal(res.model, "gemini-3.8-flash", "même modèle, pas un repli");
-  assert.equal(budgets.length, 2);
-  assert.ok(budgets[1]! > budgets[0]!, "le second essai doit avoir plus de place");
-});
-
-test("reasoning tokens are counted, not hidden", async () => {
-  stubFetch(
-    () =>
-      new Response(
-        JSON.stringify({
-          candidates: [{ content: { parts: [{ text: "{}" }] }, finishReason: "STOP" }],
-          usageMetadata: {
-            promptTokenCount: 100,
-            candidatesTokenCount: 40,
-            thoughtsTokenCount: 900,
-          },
-        }),
-        { status: 200 },
-      ),
-  );
-  const router = new Router({ geminiApiKey: "k", usage });
-  const res = await router.complete({ role: "coder", system: "s", messages: [] });
-
-  // 940, not 40: reasoning is billed, and a mission budget that ignores it
-  // would let the Master overspend by an order of magnitude.
-  assert.equal(res.tokensOut, 940);
-});
-
 test("failures are recorded so the dashboard can show them", async () => {
-  stubFetch((model) =>
-    model === "gemini-3.8-flash" ? new Response("boom", { status: 500 }) : okResponse("{}"),
-  );
-  const router = new Router({ geminiApiKey: "k", usage });
-
-  await router.complete({ role: "coder", system: "s", messages: [] });
-  assert.ok(usage.recorded.some((r) => r.model === "gemini-3.8-flash" && r.error));
+  stubFetch((m) => (m === NV ? new Response("boom", { status: 500 }) : anyOk(m)));
+  await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
+  assert.ok(usage.recorded.some((r) => r.model === NV && r.error));
 });
 
-test("a missing key fails loudly at construction", () => {
+test("a missing Gemini key fails loudly at construction", () => {
   assert.throws(() => new Router({ geminiApiKey: "", usage }), /GEMINI_API_KEY/);
-});
-
-test("a refused project stops the cascade instead of repeating the 403", async () => {
-  const calls = stubFetch(
-    () =>
-      new Response(
-        JSON.stringify({
-          error: { code: 403, message: "Your project has been denied access." },
-        }),
-        { status: 403 },
-      ),
-  );
-  const router = new Router({ geminiApiKey: "k", usage });
-
-  await assert.rejects(
-    () => router.complete({ role: "coder", system: "s", messages: [] }),
-    // The message must name the real cause, not "no model available": every
-    // model shares one key and one project, so this is not a quota problem.
-    /refuse la clé ou son projet/,
-  );
-  assert.equal(calls.length, 1, "un seul appel — inutile de répéter le même refus");
 });

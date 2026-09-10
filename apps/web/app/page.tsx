@@ -126,8 +126,10 @@ function AgentCard({ agent, task }: { agent: Agent; task?: Task }) {
 function QuotaPanel({ usage }: { usage: ModelUsage[] }) {
   const { t } = useLang();
 
-  // Free-tier Flash quota, per model. Three models means three of these.
-  const DAILY_LIMIT = 20;
+  // Gemini meters requests per day, per model — observed at 20, not the 1500
+  // the published figures claimed. NVIDIA meters credits instead, so no
+  // per-day gauge would be honest there: it gets a plain count.
+  const GEMINI_DAILY = 20;
 
   if (usage.length === 0) {
     return (
@@ -140,19 +142,26 @@ function QuotaPanel({ usage }: { usage: ModelUsage[] }) {
   return (
     <>
       {usage.map((u) => {
-        const pct = Math.min(100, (u.requests / DAILY_LIMIT) * 100);
+        const metered = u.provider === "gemini";
+        const pct = metered ? Math.min(100, (u.requests / GEMINI_DAILY) * 100) : 0;
         const tone = pct > 90 ? "err" : pct > 70 ? "warn" : "";
         return (
           <div className="quota-row" key={`${u.provider}/${u.model}`}>
             <div className="quota-head">
-              <b>{u.model}</b>
+              <b>{u.model.replace(/^[^/]+\//, "")}</b>
               <span>
-                {u.requests} / {DAILY_LIMIT}
+                {metered ? `${u.requests} / ${GEMINI_DAILY}` : `${u.requests} ${t("quota.requests")}`}
               </span>
             </div>
-            <div className="meter">
-              <span className={tone} style={{ width: `${pct}%` }} />
-            </div>
+            {metered ? (
+              <div className="meter">
+                <span className={tone} style={{ width: `${pct}%` }} />
+              </div>
+            ) : (
+              <div className="faint" style={{ fontSize: 11 }}>
+                {u.provider} · {t("quota.credits")}
+              </div>
+            )}
           </div>
         );
       })}

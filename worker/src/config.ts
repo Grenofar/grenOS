@@ -65,6 +65,9 @@ export const config = {
   // service_role : contourne RLS. Ne doit jamais quitter ce process.
   supabaseServiceKey: required("SUPABASE_SERVICE_ROLE_KEY"),
   geminiApiKey: required("GEMINI_API_KEY"),
+  // Optionnelle : sans elle les cascades retombent sur Gemini, qui tient
+  // ~20 requêtes/jour et par modèle. Avec elle, 40 par minute (D-017).
+  nvidiaApiKey: process.env.NVIDIA_API_KEY ?? "",
   githubToken: required("GITHUB_TOKEN"),
   githubRepo: process.env.GITHUB_REPO ?? "Grenofar/grenOS",
 

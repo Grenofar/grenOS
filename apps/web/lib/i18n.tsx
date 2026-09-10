@@ -37,9 +37,10 @@ const STRINGS: Dict = {
   "quota.title": { fr: "Quota du jour", en: "Today's quota" },
   "quota.requests": { fr: "requêtes", en: "requests" },
   "quota.remaining": { fr: "restantes", en: "remaining" },
+  "quota.credits": { fr: "décompté en crédits", en: "metered in credits" },
   "quota.explain": {
-    fr: "Les quotas sont par modèle : répartir la charge sur trois versions triple le budget quotidien.",
-    en: "Quotas are per model: spreading load across three versions triples the daily budget.",
+    fr: "NVIDIA : 40 requêtes/minute, crédits limités. Gemini : ~20 requêtes/jour et par modèle, mais permanent — c'est le plancher quand les crédits s'épuisent.",
+    en: "NVIDIA: 40 requests/minute, finite credits. Gemini: ~20 requests/day per model but permanent — the floor when credits run out.",
   },
 
   "missions.title": { fr: "Missions", en: "Missions" },

@@ -250,3 +250,55 @@ sans) :
   euros par mois ;
 - revenir sur MiniMax (D-014), toujours le meilleur rapport qualité/prix en
   agentique.
+
+---
+
+### D-017 — NVIDIA NIM en tête de cascade, Gemini en plancher
+**2026-09-10 · actif · lève la contrainte de D-016**
+
+Une seule clé de compte (`nvapi-…`, build.nvidia.com) ouvre 80 modèles, tous
+exposés au format OpenAI. Vérifié : la clé est bien globale, pas par modèle.
+
+| | Gemini | NVIDIA NIM |
+|---|---|---|
+| Débit | ~20 requêtes / **jour** / modèle | 40 requêtes / **minute** |
+| Épuisement | quotidien, se recharge | crédits finis |
+| Modèles | 3 Flash | DeepSeek V4 Pro, Kimi K3, Nemotron 3 Super… |
+
+Les deux sont complémentaires, pas concurrents : **NVIDIA a le volume, Gemini a
+la permanence.** NVIDIA mène chaque cascade, Gemini est le plancher sur lequel
+le système retombe quand les crédits s'épuisent — et il ne s'épuise jamais
+définitivement.
+
+**Modèles retenus, tous testés contre l'API :**
+
+| Modèle | Latence mesurée | Rôle |
+|---|---|---|
+| DeepSeek V4 Pro | 4,9 s | Codeur, Architecte — le plus fort |
+| Nemotron 3 Super | 2,5 s | Maître, Testeur — tournent souvent |
+| Kimi K3 | 14,4 s | Architecte en repli — raisonne longtemps, tourne rarement |
+
+`deepseek-v4-flash-0731` est **écarté** : HTTP 504. Une cascade bâtie sur un
+modèle qui ne répond pas est pire qu'une cascade plus courte.
+
+**Ce que l'intégration a appris :**
+
+- **Pas de `response_format: json_object`.** Le support varie sur 80 modèles et
+  un modèle qui le refuse fait échouer tout l'appel. Le parseur d'enveloppe
+  récupère déjà le JSON d'un bloc de code ou d'une phrase d'introduction : la
+  robustesse tient à un seul endroit plutôt qu'à un tableau de compatibilité
+  par modèle, qui pourrirait.
+- **Un modèle qui raisonne sans répondre est une troncature déguisée.** Certains
+  renvoient un `content` vide avec la réflexion dans `reasoning_content`. Traité
+  comme un manque de place, donc relancé avec un budget triplé sur le *même*
+  modèle — changer de modèle heurterait le même mur.
+- **L'ordre des tests de 429 compte.** « Quota exceeded … requests_per_minute »
+  contient le mot *quota* : tester les crédits en premier classait chaque limite
+  transitoire comme définitive et mettait au repos jusqu'au lendemain un modèle
+  parfaitement fonctionnel.
+
+**Validation de bout en bout** : prompt réel du Codeur (14 016 caractères chargés
+depuis `agents/02-coder.md`) → DeepSeek V4 Pro → enveloppe JSON valide → sandbox
+de chemins → code Rust `no_std` portant un commentaire `// SAFETY:` sur son bloc
+`unsafe`, exactement comme le protocole l'exige. Les prompts pilotent
+réellement le comportement.

@@ -1,4 +1,4 @@
-import { CASCADES, MODELS, specFor, type ModelRole } from "./models.ts";
+import { CASCADES, MODELS, specFor, type ModelRole, type ModelSpec } from "./models.ts";
 import {
   AccessDeniedError,
   callGemini,
@@ -6,6 +6,7 @@ import {
   RateLimitedError,
   TruncatedError,
 } from "./gemini.ts";
+import { callNvidia } from "./nvidia.ts";
 import {
   RouterExhaustedError,
   type AttemptRecord,
@@ -19,6 +20,8 @@ export * from "./types.ts";
 
 export interface RouterOptions {
   geminiApiKey: string;
+  /** NVIDIA NIM. Optional: without it the cascades fall through to Gemini. */
+  nvidiaApiKey?: string;
   usage: UsageStore;
   /**
    * Stop using a model once it has spent this share of its published daily
@@ -48,6 +51,7 @@ export interface RouterEvent {
  */
 export class Router {
   private readonly key: string;
+  private readonly nvidiaKey: string;
   private readonly usage: UsageStore;
   private readonly margin: number;
   private readonly onEvent: (e: RouterEvent) => void;
@@ -74,6 +78,7 @@ export class Router {
       );
     }
     this.key = opts.geminiApiKey;
+    this.nvidiaKey = opts.nvidiaApiKey ?? "";
     this.usage = opts.usage;
     this.margin = opts.quotaSafetyMargin ?? 0.9;
     this.onEvent = opts.onEvent ?? (() => {});
@@ -90,6 +95,13 @@ export class Router {
       const cooling = this.cooldownUntil.get(modelId) ?? 0;
       if (Date.now() < cooling) {
         this.note(attempts, req.role, modelId, "rate_limited", "in cooldown");
+        continue;
+      }
+
+      // No NVIDIA key: skip its models rather than failing on each one.
+      // The cascade then degrades to Gemini on its own.
+      if (spec.provider === "nvidia" && !this.nvidiaKey) {
+        this.note(attempts, req.role, modelId, "skipped", "NVIDIA_API_KEY absente");
         continue;
       }
 
@@ -123,16 +135,7 @@ export class Router {
         let budget = req.maxOutputTokens ?? DEFAULT_OUTPUT_TOKENS;
         let out;
         try {
-          out = await callGemini({
-            apiKey: this.key,
-            model: spec.id,
-            system: req.system,
-            messages: req.messages,
-            maxOutputTokens: budget,
-            temperature: req.temperature ?? 0.2,
-            json: req.json ?? false,
-            timeoutMs,
-          });
+          out = await this.invoke(spec, req, budget, timeoutMs);
         } catch (err) {
           // The model thought its way through the whole budget without
           // answering. Switching models would hit the same wall, so give this
@@ -141,16 +144,7 @@ export class Router {
           budget = Math.min(budget * 3, MAX_OUTPUT_TOKENS);
           this.note(attempts, req.role, modelId, "error", `${err.message} — nouvel essai à ${budget} tokens`);
           this.markCall(modelId);
-          out = await callGemini({
-            apiKey: this.key,
-            model: spec.id,
-            system: req.system,
-            messages: req.messages,
-            maxOutputTokens: budget,
-            temperature: req.temperature ?? 0.2,
-            json: req.json ?? false,
-            timeoutMs,
-          });
+          out = await this.invoke(spec, req, budget, timeoutMs);
         }
 
         await this.usage.record({
@@ -233,9 +227,45 @@ export class Router {
     throw new RouterExhaustedError(req.role, attempts);
   }
 
+  /**
+   * One call to one model, routed to its provider's adapter.
+   *
+   * Both adapters throw the same error types, so everything above this line
+   * reasons about failures rather than about vendors — which is what lets a
+   * cascade mix providers freely.
+   */
+  private invoke(
+    spec: ModelSpec,
+    req: CompletionRequest,
+    maxOutputTokens: number,
+    timeoutMs: number,
+  ) {
+    if (spec.provider === "nvidia") {
+      return callNvidia({
+        apiKey: this.nvidiaKey,
+        model: spec.id,
+        system: req.system,
+        messages: req.messages,
+        maxOutputTokens,
+        temperature: req.temperature ?? 0.2,
+        timeoutMs,
+      });
+    }
+    return callGemini({
+      apiKey: this.key,
+      model: spec.id,
+      system: req.system,
+      messages: req.messages,
+      maxOutputTokens,
+      temperature: req.temperature ?? 0.2,
+      json: req.json ?? false,
+      timeoutMs,
+    });
+  }
+
   /** Snapshot for the dashboard: what is left today, per model. */
   async budgetSnapshot(): Promise<
-    Array<{ model: string; label: string; used: number; limit: number }>
+    Array<{ model: string; label: string; used: number; limit: number | null }>
   > {
     return Promise.all(
       Object.values(MODELS).map(async (spec) => ({

@@ -159,10 +159,13 @@ async function checkGemini() {
   const { MODELS } = await import(
     pathToFileURL(join(root, "packages/router/src/models.ts")).href
   );
-  const absent = Object.keys(MODELS).filter((id) => !available.has(id));
+  // Filtrer par provider : comparer les modèles NVIDIA au catalogue Google
+  // produisait un avertissement qui n'avait aucun sens.
+  const wanted = Object.values(MODELS).filter((m) => m.provider === "gemini");
+  const absent = wanted.filter((m) => !available.has(m.id)).map((m) => m.id);
 
   if (absent.length === 0) {
-    ok("gemini", `clé valide, les ${Object.keys(MODELS).length} modèles du catalogue existent`);
+    ok("gemini", `clé valide, les ${wanted.length} modèles Gemini utilisés existent`);
   } else {
     warn(
       "gemini",
@@ -178,7 +181,7 @@ async function checkGemini() {
     return;
   }
 
-  const first = Object.keys(MODELS)[0];
+  const first = Object.values(MODELS).find((m) => m.provider === "gemini").id;
   const gen = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${first}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": key },
@@ -193,6 +196,43 @@ async function checkGemini() {
   else {
     const msg = await gen.text();
     bad("gemini", `génération refusée (HTTP ${gen.status})`, msg.slice(0, 160));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3 bis. NVIDIA NIM
+// ---------------------------------------------------------------------------
+async function checkNvidia() {
+  const key = env.NVIDIA_API_KEY;
+  if (!key) {
+    return warn(
+      "nvidia",
+      "NVIDIA_API_KEY absente",
+      "Sans elle tout retombe sur Gemini : ~20 requêtes/jour et par modèle. build.nvidia.com/settings/api-keys",
+    );
+  }
+
+  const res = await fetch("https://integrate.api.nvidia.com/v1/models", {
+    headers: { authorization: `Bearer ${key}` },
+  }).catch(() => null);
+
+  if (!res) return bad("nvidia", "Injoignable", "Problème réseau.");
+  if (res.status === 401 || res.status === 403) {
+    return bad("nvidia", "Clé refusée", "Régénère-la sur build.nvidia.com/settings/api-keys.");
+  }
+  if (!res.ok) return bad("nvidia", `HTTP ${res.status}`, "");
+
+  const ids = new Set(((await res.json()).data ?? []).map((m) => m.id));
+  const { MODELS } = await import(
+    pathToFileURL(join(root, "packages/router/src/models.ts")).href
+  );
+  const wanted = Object.values(MODELS).filter((m) => m.provider === "nvidia");
+  const absent = wanted.filter((m) => !ids.has(m.id)).map((m) => m.id);
+
+  if (absent.length === 0) {
+    ok("nvidia", `clé valide, ${ids.size} modèles au catalogue, les ${wanted.length} utilisés sont présents`);
+  } else {
+    warn("nvidia", `modèles absents : ${absent.join(", ")}`, "Mets à jour packages/router/src/models.ts.");
   }
 }
 
@@ -252,6 +292,7 @@ async function checkGitHub() {
 // ---------------------------------------------------------------------------
 await checkSupabase().catch((e) => bad("supabase", e.message, ""));
 await checkGemini().catch((e) => bad("gemini", e.message, ""));
+await checkNvidia().catch((e) => bad("nvidia", e.message, ""));
 await checkGitHub().catch((e) => bad("github", e.message, ""));
 
 const icon = { ok: "✓", warn: "!", bad: "✗" };
