@@ -31,6 +31,12 @@ export type AgentAction =
     }
   | { type: "escalate"; reason: string; options?: string[] }
   /**
+   * Read a document before writing (consult.ts). The host allowlist is
+   * enforced where the fetch happens, not here: a refused URL is answered
+   * with the list of allowed hosts, not by failing the attempt.
+   */
+  | { type: "consult"; url: string; why?: string }
+  /**
    * Ends a mission-intake conversation and launches the mission.
    *
    * Only the intake agent emits this, and emitting it locks the chat: the
@@ -181,6 +187,13 @@ function validateAction(value: unknown, index: number, raw: string): AgentAction
         type,
         reason: text("reason"),
         ...(Array.isArray(value["options"]) ? { options: value["options"].map(String) } : {}),
+      };
+
+    case "consult":
+      return {
+        type,
+        url: text("url").trim(),
+        ...(typeof value["why"] === "string" ? { why: value["why"] } : {}),
       };
 
     case "finalize_mission": {

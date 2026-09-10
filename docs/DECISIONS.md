@@ -498,3 +498,30 @@ de tentative) ; la décision suivante du Maître la remplace et l'annule.
 → Les tâches annulées ne comptent plus pour clore une mission, et le Maître lit
 des tentatives **consommées** : il avait escaladé une tâche « 3/3 » dont la
 troisième tentative n'avait pas encore tourné.
+
+### D-025 — Des agents qui vérifient avant d'écrire
+**2026-09-10 · actif · demandé par l'humain (« rends-les plus intelligents »)**
+
+Deux causes d'échec dominaient la mission 1, et aucune n'était un manque de
+talent du modèle.
+1. **Ils inventaient** faute de pouvoir vérifier : une cible JSON sur mesure,
+   une crate qui ne compilait plus sur la nightly du jour. La règle « n'invente
+   jamais une API » n'avait aucun moyen derrière elle.
+2. **Ils découvraient leurs fautes dix minutes trop tard** : `Cargo.tompl`, un
+   `loop {}` vide refusé par clippy, un `patch_file` qui ne s'appliquait pas.
+   Chacune coûtait un run de CI et une tentative.
+
+→ **`consult`** : un agent peut rendre une enveloppe qui ne contient que des
+demandes de lecture. Le worker va chercher les documents (https seulement, six
+hôtes de documentation vérifiés depuis la machine, 600 Ko et 14 000 caractères
+au plus par document), les lui rend, et l'agent répond après les avoir lus.
+Deux tours par tentative. Le texte rapporté est cité comme non fiable : il ne
+peut changer ni la tâche ni les chemins, et le sandbox ne lit pas les prompts.
+→ **Pré-vol** : avant tout commit, le worker vérifie les fichiers pour les
+erreurs **certaines** (noms mal orthographiés, `.cargo/config`, `limine.cfg`,
+JSON invalide, cible sur mesure, toolchain sans `x86_64-unknown-none`,
+manifeste sans `[package]`, `loop {}` vide, patch inapplicable). S'il en
+trouve, rien n'est commité et l'agent reçoit la liste dans la même tentative.
+Deux corrections ; ensuite la tentative est perdue, mais pas un run de CI.
+Seulement des certitudes : une fausse alerte apprendrait aux agents à ignorer
+la liste.

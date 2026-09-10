@@ -1,10 +1,12 @@
 import { Router } from "@grenos/router";
 import { config, log } from "./config.ts";
 import { db, emit } from "./db.ts";
-import { parseEnvelope, EnvelopeError, type AgentAction } from "./envelope.ts";
+import { parseEnvelope, EnvelopeError, type AgentAction, type AgentEnvelope } from "./envelope.ts";
 import { authorize } from "./sandbox.ts";
 import { repoContext } from "./context.ts";
 import { renderEvidence } from "./evidence.ts";
+import { consult, CONSULT_ROUNDS } from "./consult.ts";
+import { preflight, renderPreflight, PREFLIGHT_ROUNDS } from "./preflight.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
@@ -13,12 +15,19 @@ import type { AgentDefinition } from "./prompts.ts";
  *
  * The order of operations matters and is not negotiable:
  *
- *   authorise every write  ->  take every lease  ->  commit once
+ *   answer  ->  authorise every write  ->  pre-flight  ->  take every lease  ->  commit once
  *
  * Authorisation before leases means a task that was going to be rejected never
  * locks a file. Leases before the commit means two agents cannot interleave
  * writes to the same path. One commit at the end means a task is atomic: it
  * either landed or it did not, and CI never sees a half-applied task.
+ *
+ * The answer is a short conversation, not a single call. The agent may first
+ * ask to read documentation instead of guessing an API (consult.ts), and a
+ * mistake it can fix — a misspelled file name, a patch that does not apply, a
+ * path it was not given — goes straight back to it with the list of problems
+ * (preflight.ts). All of it happens inside the attempt; before, each one cost
+ * a CI run or the attempt itself.
  */
 
 export interface TaskRow {
@@ -35,6 +44,9 @@ export interface TaskRow {
   failure_detail: string | null;
   branch: string | null;
 }
+
+type Change = { path: string; content: string | null };
+type Violation = { path: string; reason: string };
 
 export async function executeTask(
   task: TaskRow,
@@ -57,109 +69,151 @@ export async function executeTask(
   const allowedPaths =
     task.allowed_paths.length > 0 ? task.allowed_paths : agent.allowedPaths;
 
-  let envelope;
+  // ---- Answer: read if needed, fix what pre-flight finds -------------------
+  const conversation: Array<{ role: "user" | "assistant"; content: string }> = [
+    { role: "user", content: await buildPrompt(task, agent, allowedPaths, gh, readRef) },
+  ];
+
+  let envelope: AgentEnvelope | null = null;
+  let changes: Change[] = [];
   let modelUsed = "";
-  try {
-    const result = await router.complete({
-      role: agent.modelRole,
-      system: agent.systemPrompt,
-      messages: [
-        { role: "user", content: await buildPrompt(task, agent, allowedPaths, gh, readRef) },
-      ],
-      maxOutputTokens: 8192,
-      json: true,
-    });
-    modelUsed = result.model;
+  let usage = { tokensIn: 0, tokensOut: 0, latencyMs: 0 };
+  let consulted = 0;
+  let corrected = 0;
 
-    await db.rpc("add_mission_tokens", {
-      p_mission_id: task.mission_id,
-      p_task_id: task.id,
-      p_tokens: result.tokensIn + result.tokensOut,
-    });
+  for (;;) {
+    let text = "";
+    try {
+      const result = await router.complete({
+        role: agent.modelRole,
+        system: agent.systemPrompt,
+        messages: conversation,
+        maxOutputTokens: 8192,
+        json: true,
+      });
+      modelUsed = result.model;
+      usage = {
+        tokensIn: usage.tokensIn + result.tokensIn,
+        tokensOut: usage.tokensOut + result.tokensOut,
+        latencyMs: usage.latencyMs + result.latencyMs,
+      };
 
-    envelope = parseEnvelope(result.text);
+      await db.rpc("add_mission_tokens", {
+        p_mission_id: task.mission_id,
+        p_task_id: task.id,
+        p_tokens: result.tokensIn + result.tokensOut,
+      });
 
-    await db.from("messages").insert({
-      mission_id: task.mission_id,
-      task_id: task.id,
-      from_agent: agent.id,
-      to_agent: "master",
-      kind: "result",
-      content: envelope as unknown as Record<string, unknown>,
-      model: result.model,
-      tokens_in: result.tokensIn,
-      tokens_out: result.tokensOut,
-      latency_ms: result.latencyMs,
-    });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
+      text = result.text;
+      envelope = parseEnvelope(text);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
 
-    // A malformed envelope is the agent's fault; a router exhaustion is not.
-    // Only the first should consume an attempt, otherwise a quiet afternoon of
-    // rate limits would burn every retry a task has.
-    const isProvider = !(err instanceof EnvelopeError);
-    await failTask(task, isProvider ? "provider_error" : "spec_gap", detail, !isProvider);
-    return;
-  }
+      // A malformed envelope is the agent's fault; a router exhaustion is not.
+      // Only the first should consume an attempt, otherwise a quiet afternoon of
+      // rate limits would burn every retry a task has.
+      const isProvider = !(err instanceof EnvelopeError);
+      await failTask(task, isProvider ? "provider_error" : "spec_gap", detail, !isProvider);
+      return;
+    }
 
-  // ---- Authorise everything before touching anything -----------------------
-  const writes = envelope.actions.filter(isWrite);
-  const changes: Array<{ path: string; content: string | null }> = [];
+    // The agent asks to read before it writes.
+    const asks = envelope.actions.filter(isConsult);
+    if (asks.length > 0 && consulted < CONSULT_ROUNDS) {
+      consulted += 1;
+      log.info(`  consulte · ${asks.map((a) => a.url).join(" · ").slice(0, 200)}`);
+      conversation.push(
+        { role: "assistant", content: text },
+        { role: "user", content: await consult(asks, CONSULT_ROUNDS - consulted) },
+      );
+      continue;
+    }
 
-  for (const action of writes) {
-    const verdict = authorize(action.path, {
-      allowedPaths,
-      forbiddenPaths: agent.forbiddenPaths,
-      canWrite: agent.canWrite,
-    });
+    const resolved = await resolveWrites(envelope, agent, allowedPaths, gh, readRef);
 
-    if (!verdict.ok) {
+    // The sandbox is the law: nothing outside the allowed paths is ever
+    // written, and every attempt is logged. But one stray path — deleting a
+    // junk file the task did not list, on mission 1 — used to throw away the
+    // whole answer and the attempt with it. The agent is told which paths it
+    // has, and answers again; only persisting fails the task.
+    for (const v of resolved.violations) {
       await emit({
         missionId: task.mission_id,
         taskId: task.id,
         agentId: agent.id,
-        level: "error",
+        level: "warn",
         type: "policy_violation",
-        message: verdict.reason,
-        payload: { path: action.path },
+        message: v.reason,
+        payload: { path: v.path },
       });
-      await failTask(task, "policy_violation", verdict.reason, true);
-      return;
     }
 
-    if (action.type === "write_file") {
-      changes.push({ path: verdict.path, content: action.content });
-    } else if (action.type === "delete_file") {
-      changes.push({ path: verdict.path, content: null });
-    } else {
-      const current = await gh.readFile(verdict.path, readRef);
-      if (current === null) {
-        await failTask(
-          task,
-          "spec_gap",
-          `patch_file sur un fichier inexistant : ${verdict.path}`,
-          true,
-        );
-        return;
-      }
-      const occurrences = current.split(action.old_str).length - 1;
-      if (occurrences !== 1) {
-        // Ambiguous or absent: applying it would edit the wrong place, or
-        // every place. Both are worse than failing the attempt.
-        await failTask(
-          task,
-          "spec_gap",
-          `old_str apparaît ${occurrences} fois dans ${verdict.path} (attendu : 1)`,
-          true,
-        );
-        return;
-      }
-      changes.push({
-        path: verdict.path,
-        content: current.replace(action.old_str, action.new_str),
-      });
+    // An agent reporting failure is not asked to polish its files first.
+    const problems =
+      envelope.status === "failed"
+        ? []
+        : [
+            ...resolved.violations.map(
+              (v) =>
+                `${v.path}: outside your allowed paths (${allowedPaths.join(", ")}). Remove that action. ` +
+                "If the task cannot be done without it, return failed and name the path you need.",
+            ),
+            ...resolved.problems,
+            ...preflight(resolved.changes),
+          ];
+    if (asks.length > 0 && resolved.changes.length === 0 && envelope.status !== "failed") {
+      problems.push(
+        "you asked to consult again, but no consultation is left in this attempt: answer with your complete work now",
+      );
     }
+
+    if (problems.length === 0) {
+      changes = resolved.changes;
+      break;
+    }
+
+    if (corrected < PREFLIGHT_ROUNDS) {
+      corrected += 1;
+      log.info(`  pré-vol · ${problems.length} problème(s) renvoyé(s) à l'agent`);
+      await emit({
+        missionId: task.mission_id,
+        taskId: task.id,
+        agentId: agent.id,
+        level: "info",
+        type: "preflight",
+        message: problems.join(" · ").slice(0, 500),
+      });
+      conversation.push(
+        { role: "assistant", content: text },
+        { role: "user", content: renderPreflight(problems, PREFLIGHT_ROUNDS - corrected) },
+      );
+      continue;
+    }
+
+    // Still wrong after every correction: the attempt is spent, a CI run is not.
+    await failTask(
+      task,
+      resolved.violations.length > 0 ? "policy_violation" : "compile_error",
+      `Pré-vol toujours en échec après ${PREFLIGHT_ROUNDS} corrections :\n- ${problems.join("\n- ")}`,
+      true,
+    );
+    return;
   }
+
+  if (!envelope) return;
+
+  await db.from("messages").insert({
+    mission_id: task.mission_id,
+    task_id: task.id,
+    from_agent: agent.id,
+    to_agent: "master",
+    kind: "result",
+    content: envelope as unknown as Record<string, unknown>,
+    model: modelUsed,
+    tokens_in: usage.tokensIn,
+    tokens_out: usage.tokensOut,
+    latency_ms: usage.latencyMs,
+  });
 
   // ---- Take every lease, or none ------------------------------------------
   if (changes.length > 0) {
@@ -293,6 +347,8 @@ export async function executeTask(
       files: changes.length,
       commit: commitSha,
       readRef,
+      consulted,
+      corrected,
       ...(escalation && escalation.type === "escalate"
         ? { escalation: escalation.reason }
         : {}),
@@ -300,6 +356,72 @@ export async function executeTask(
   });
 
   log.info(`  ${status} · ${changes.length} fichier(s) · ${modelUsed}`);
+}
+
+/**
+ * Authorise every write and turn the envelope into file contents.
+ *
+ * A write outside the allowed paths is never applied: it is set aside as a
+ * violation and reported. A patch that does not apply is a mechanical mistake
+ * the agent can fix in seconds, so it is reported with the pre-flight
+ * problems rather than failing the attempt.
+ */
+async function resolveWrites(
+  envelope: AgentEnvelope,
+  agent: AgentDefinition,
+  allowedPaths: string[],
+  gh: GitHub,
+  readRef: string,
+): Promise<{ changes: Change[]; problems: string[]; violations: Violation[] }> {
+  const changes: Change[] = [];
+  const problems: string[] = [];
+  const violations: Violation[] = [];
+
+  for (const action of envelope.actions.filter(isWrite)) {
+    const verdict = authorize(action.path, {
+      allowedPaths,
+      forbiddenPaths: agent.forbiddenPaths,
+      canWrite: agent.canWrite,
+    });
+    if (!verdict.ok) {
+      violations.push({ path: action.path, reason: verdict.reason });
+      continue;
+    }
+
+    const earlier = changes.find((c) => c.path === verdict.path);
+
+    if (action.type === "write_file" || action.type === "delete_file") {
+      const content = action.type === "write_file" ? action.content : null;
+      if (earlier) earlier.content = content;
+      else changes.push({ path: verdict.path, content });
+      continue;
+    }
+
+    // A patch applies to the file as this envelope has left it so far, and
+    // otherwise to the branch.
+    const current = earlier ? earlier.content : await gh.readFile(verdict.path, readRef);
+    if (current === null) {
+      problems.push(`patch_file on ${verdict.path}: the file does not exist. Create it with write_file.`);
+      continue;
+    }
+    const occurrences = current.split(action.old_str).length - 1;
+    if (occurrences !== 1) {
+      // Ambiguous or absent: applying it would edit the wrong place, or every
+      // place. Both are worse than asking again.
+      problems.push(
+        `patch_file on ${verdict.path}: old_str appears ${occurrences} times and must appear exactly once. ` +
+          "Copy it verbatim from the file shown, with enough surrounding lines to be unique, or use write_file.",
+      );
+      continue;
+    }
+    // A function replacer: a string one would expand "$1" or "$&" inside
+    // new_str, and shell scripts and Rust macros are full of dollars.
+    const next = current.replace(action.old_str, () => action.new_str);
+    if (earlier) earlier.content = next;
+    else changes.push({ path: verdict.path, content: next });
+  }
+
+  return { changes, problems, violations };
 }
 
 async function buildPrompt(
@@ -362,7 +484,8 @@ async function buildPrompt(
 
   parts.push(
     "\n# Answer\n\nReturn exactly one JSON object as specified in the protocol. " +
-      "No prose, no code fence.",
+      "No prose, no code fence. If you are not certain of an API, a version or a " +
+      "file format, return only `consult` actions first (protocol §9, rule 1).",
   );
 
   return parts.join("\n");
@@ -408,6 +531,9 @@ const isWrite = (
   a: AgentAction,
 ): a is Extract<AgentAction, { type: "write_file" | "patch_file" | "delete_file" }> =>
   a.type === "write_file" || a.type === "patch_file" || a.type === "delete_file";
+
+const isConsult = (a: AgentAction): a is Extract<AgentAction, { type: "consult" }> =>
+  a.type === "consult";
 
 const firstLine = (s: string): string => s.split("\n")[0]!.slice(0, 60);
 

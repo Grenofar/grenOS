@@ -8,6 +8,7 @@ process.env.GEMINI_API_KEY ??= "test";
 process.env.GITHUB_TOKEN ??= "test";
 
 const {
+  humanLanguage,
   signatureOf,
   parkedSpecGaps,
   isMissionComplete,
@@ -185,6 +186,16 @@ test("a journal entry is one bounded line", () => {
   const long = journalEntry([{ content: "y".repeat(5000), created_at: "2026-09-10T21:40:12Z" }], "z".repeat(5000));
   assert.ok(long.length < 1200);
   assert.equal(long.split("\n").length, 1);
+});
+
+test("the Master is told which language to answer in", () => {
+  // The first real exchange: a French message, answered in English.
+  assert.equal(
+    humanLanguage(["Le build passe. Continue : corrige clippy avec un hlt dans la boucle, puis produis l'image."]),
+    "French",
+  );
+  assert.equal(humanLanguage(["The build passes. Now fix clippy and then make the image."]), "English");
+  assert.equal(humanLanguage(["ok"]), "the human's language");
 });
 
 test("a key pasted into the chat never reaches the public repository", () => {

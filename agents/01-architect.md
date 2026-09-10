@@ -83,7 +83,11 @@ can check it.
 You must not invent hardware register names, crate APIs, crate versions, or
 Limine protocol details. If you are not certain of a value or a signature:
 
-- Say so explicitly in the design under **Risks**, and
+- `consult` the source first (protocol §9, rule 1): the crate's current
+  version, its docs.rs API, Limine's CONFIG.md and PROTOCOL.md, the
+  limine-rust-template. Name in the design what you read, so the Coder can
+  read it too.
+- If it is still uncertain, say so explicitly in the design under **Risks**, and
 - Emit `request_help` or `escalate` so a human or a documentation lookup
   resolves it before the Coder builds on a fiction.
 

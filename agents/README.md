@@ -127,7 +127,9 @@ no trailing commentary. The runtime parses it; anything else is a failed turn.
     { "type": "request_help",  "capability": "driver-design", "question": "..." },
     { "type": "propose_task",  "assigned_to": "tester", "goal": "...",
       "acceptance_criteria": ["..."] },
-    { "type": "escalate", "reason": "...", "options": ["...", "..."] }
+    { "type": "escalate", "reason": "...", "options": ["...", "..."] },
+    { "type": "consult", "url": "https://docs.rs/limine/latest/limine/",
+      "why": "the current API of the limine crate" }
   ],
   "tokens_used": 12400
 }
@@ -207,6 +209,18 @@ Consequences that have already cost real attempts:
   the old manifest and the attempt is spent. Check every path before you
   return.
 
+### Pre-flight: fixable mistakes come back at once
+
+Before anything is committed, the runtime checks your answer for mistakes that
+are certain to fail: a misspelled file name, `.cargo/config` or `limine.cfg`,
+the old `KEY=value` syntax in `limine.conf`, invalid JSON, a custom target
+spec, a toolchain file without `x86_64-unknown-none`, a `Cargo.toml` without
+`[package]`, an empty `loop {}` that clippy rejects, a `patch_file` whose
+`old_str` does not appear exactly once, a path outside your `allowed_paths`.
+If it finds any, nothing is committed and you get the list immediately, in
+the same attempt: fix every item and return your complete answer again. Two
+corrections per attempt; after that the attempt is spent, but no CI run is.
+
 ---
 
 ## 7. Budgets, retries and escalation
@@ -248,11 +262,31 @@ produces three failed attempts. Sending it back to the Architect fixes it once.
 
 ## 9. Hard rules for every agent
 
-1. **Never invent an API, crate version, or hardware register.** If unsure, emit
-   `request_help` or `escalate`. A plausible hallucination in kernel code costs
-   far more than an hour of waiting for a human.
-2. **Never write outside `allowed_paths`.** The runtime blocks it; attempting it
-   is logged as a policy violation.
+1. **Never invent an API, crate version, file format or hardware register:
+   look it up.** Return an envelope whose only actions are `consult` (up to 3
+   URLs); the documents come back to you and you answer after reading them, in
+   the same attempt, for up to two rounds. Sources that answer from here:
+   - `https://crates.io/api/v1/crates/<name>` — a crate's current version
+   - `https://docs.rs/<crate>/<version>/<crate>/` — that version's API
+   - `https://raw.githubusercontent.com/limine-bootloader/limine/trunk/CONFIG.md`
+     — the `limine.conf` syntax
+   - `https://raw.githubusercontent.com/limine-bootloader/limine-protocol/trunk/PROTOCOL.md`
+     — the boot protocol: requests, base revision, memory map
+   - `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/<path>`
+     — a Rust kernel known to boot with Limine: `kernel/Cargo.toml`,
+     `kernel/build.rs`, `kernel/linker-x86_64.ld`, `kernel/rust-toolchain.toml`,
+     `kernel/src/main.rs`, `limine.conf`, and `GNUmakefile`, which shows how
+     its ISO is built
+   - `https://doc.rust-lang.org/rustc/platform-support/x86_64-unknown-none.html`
+
+   Allowed hosts: crates.io, docs.rs, doc.rust-lang.org,
+   raw.githubusercontent.com, codeberg.org, github.com. If the documents do not
+   settle it, emit `request_help` or `escalate`: a plausible hallucination in
+   kernel code costs far more than an hour of waiting for a human.
+2. **Never write outside `allowed_paths`.** The runtime blocks it and logs it
+   as a policy violation. Your answer comes back to you with the paths you do
+   have; if the task truly needs another one, return `failed` and name it, so
+   the Master can widen the task instead of you working around it.
 3. **Never touch `agents/`, `.github/workflows/`, or any `.env` file.** Prompt
    and pipeline changes are human-reviewed. This prevents self-modifying drift.
 4. **Never commit a secret.** The repo is public. Assume every line is read by

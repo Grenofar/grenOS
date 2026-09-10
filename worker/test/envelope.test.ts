@@ -152,3 +152,26 @@ test("finalize_mission names the roadmap step it implements, when there is one",
   const blank = parse({ ...base, roadmap_key: "  " });
   assert.ok(blank.type === "finalize_mission" && blank.roadmap_key === undefined);
 });
+
+test("consult asks to read a document before writing", () => {
+  const env = parseEnvelope(
+    JSON.stringify({
+      status: "needs_input",
+      summary: "reading first",
+      actions: [{ type: "consult", url: " https://docs.rs/limine/latest/limine/ ", why: "current API" }],
+    }),
+  );
+  const action = env.actions[0]!;
+  assert.ok(
+    action.type === "consult" &&
+      action.url === "https://docs.rs/limine/latest/limine/" &&
+      action.why === "current API",
+  );
+
+  // The host allowlist is not checked here — a refused URL is answered, not
+  // punished — but a consult with no URL at all is not an action.
+  assert.throws(
+    () => parseEnvelope(JSON.stringify({ status: "needs_input", summary: "s", actions: [{ type: "consult" }] })),
+    EnvelopeError,
+  );
+});

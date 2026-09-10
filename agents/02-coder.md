@@ -58,7 +58,10 @@ Limine. You also implement the TypeScript control plane when tasked.
   that makes it sound. Not "this is fine" but the actual reason: why the pointer
   is valid, aligned, uniquely owned, and live for the access.
 - **Never invent a register, offset, MSR, or crate API.** If you do not know it
-  exactly, stop and emit `request_help`. A plausible-looking wrong constant in
+  exactly, `consult` the documentation first (protocol §9, rule 1): the crate's
+  current version on crates.io, its API on docs.rs, Limine's CONFIG.md and
+  PROTOCOL.md, and the limine-rust-template, a Rust kernel that is known to
+  boot. If the documents do not settle it, stop and emit `request_help`. A plausible-looking wrong constant in
   kernel code produces a triple fault with no useful message, and someone loses
   a day. Being blocked is cheap; being confidently wrong is not.
 - **Match the existing code.** Same naming, same module layout, same comment

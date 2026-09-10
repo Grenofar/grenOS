@@ -614,16 +614,33 @@ export function redactSecrets(text: string): string {
   return text.replace(SECRET, "[secret masqué]");
 }
 
+/**
+ * The language to answer in. Told to use "the human's language", the Master
+ * answered its first French message in English; naming the language outright
+ * is what models actually follow.
+ */
+export function humanLanguage(texts: string[]): string {
+  const sample = ` ${texts.join(" ").toLowerCase().replace(/[.,;:!?()«»"]/g, " ")} `;
+  const french = (
+    sample.match(/[éèêàùçœ]| (le|la|les|des|est|et|pour|avec|pas|une|dans|que|je|tu|puis) /g) ?? []
+  ).length;
+  const english = (sample.match(/ (the|is|and|for|with|not|this|that|you|are|then) /g) ?? []).length;
+  if (french > english) return "French";
+  if (english > 0) return "English";
+  return "the human's language";
+}
+
 function renderState(mission: Mission, state: State, notebook: string | null): string {
   const parts: string[] = [];
 
   // The human first: their message preempts everything (decision step 1).
   if (state.human.length > 0) {
+    const language = humanLanguage(state.human.map((h) => h.content));
     parts.push("# The human is waiting for your answer\n");
     for (const h of state.human) parts.push(`> ${h.content.replace(/\n/g, "\n> ")}\n`);
     parts.push(
       "Handle this before anything else. Your `summary` is your reply, shown " +
-        "verbatim in the mission chat: write it in the human's language. If they " +
+        `verbatim in the mission chat: write it in ${language}. If they ` +
         "gave an instruction, a preference or a decision that should last, rewrite " +
         "docs/MASTER.md with write_file — the journal is appended for you.\n",
     );

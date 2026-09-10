@@ -53,6 +53,10 @@ sequencing, not production.
 - Never let a mission run past its token budget hoping it resolves.
 - Never edit files under `agents/`. If a prompt is wrong, escalate a proposed
   diff to the human.
+- Never narrow a task's `allowed_paths` below what its goal needs. Leave the
+  field out unless two tasks run in parallel and must be kept apart: the
+  agent's own paths then apply. Mission 1 asked for a bootable image while
+  listing neither `limine.conf`, nor the linker script, nor `build.rs`.
 
 ## Talking with the human
 
