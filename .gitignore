@@ -35,6 +35,7 @@ coverage/
 # Logs et temporaires
 *.log
 npm-debug.log*
+worker.log
 qemu.log
 serial.log
 tmp/

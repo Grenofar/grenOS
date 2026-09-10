@@ -193,10 +193,21 @@ export async function executeTask(
   await db.rpc("release_leases", { p_task_id: task.id });
 
   // ---- Record the outcome --------------------------------------------------
+  // Only work CI can actually judge goes to CI.
+  //
+  // Sending every diff for verification looks safe but is not: the pipeline
+  // builds the kernel and nothing else, so a documentation-only task — the
+  // Architect's normal output — comes back "no kernel to verify", fails, and
+  // burns one of its three attempts on a question nobody asked. Design
+  // documents are judged by the Master reading them, not by a compiler.
+  const VERIFIED_PREFIXES = ["kernel/", "tests/"];
+  const touchesVerifiableCode = changes.some((c) =>
+    VERIFIED_PREFIXES.some((prefix) => c.path.startsWith(prefix)),
+  );
   const wantsVerification =
     envelope.actions.some(
       (a) => a.type === "request_build" || a.type === "request_test",
-    ) || changes.length > 0;
+    ) || touchesVerifiableCode;
 
   const escalation = envelope.actions.find((a) => a.type === "escalate");
   const help = envelope.actions.find((a) => a.type === "request_help");
