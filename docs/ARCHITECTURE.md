@@ -112,6 +112,35 @@ Pages :
 Le site **n'exécute jamais un agent**. Il lit Supabase et écrit des missions.
 Aucune clé de modèle ne l'atteint.
 
+## 6 bis. Déploiement Vercel — pourquoi `vercel.json` est à la racine
+
+Le site vit dans `apps/web`, mais `vercel.json` est à la **racine du dépôt**.
+
+La raison : le réglage *Root Directory* n'existe que dans l'interface Vercel et
+ne peut pas être exprimé en JSON. Tant qu'on en dépendait, l'installation
+reposait sur un clic introuvable. On construit donc depuis la racine :
+
+```json
+"buildCommand":    "npm run build --workspace=@grenos/web"
+"outputDirectory": "apps/web/.next"
+```
+
+Trois pièges, tous rencontrés pour de vrai :
+
+1. **`next` doit figurer dans le `package.json` de la racine.** Vercel détecte
+   le framework à la racine du déploiement ; sans lui il refuse avec
+   « No Next.js version detected » avant même de lancer quoi que ce soit.
+   `npm workspaces` mutualise la dépendance, elle n'est pas installée deux fois.
+
+2. **`vercel.json` n'accepte aucune propriété hors schéma.** Les clés `"//"`
+   utilisées comme commentaires font échouer la validation — d'où cette section
+   plutôt que des commentaires dans le fichier.
+
+3. **Un seul `vercel.json` est lu** : celui qui se trouve à la racine du
+   déploiement. Si *Root Directory* est un jour réglé sur `apps/web`, c'est
+   celui de `apps/web` qui compte et celui de la racine devient inerte. En
+   garder deux, c'est se condamner à modifier celui qui est ignoré.
+
 ## 7. Sécurité structurelle
 
 Les garde-fous sont dans le code, pas dans les prompts :

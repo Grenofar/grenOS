@@ -1,31 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "//": "Configuration à la RACINE, pour ne dépendre d'aucun réglage du tableau de bord. Le site vit dans apps/web, mais Root Directory n'est modifiable que depuis l'interface Vercel : on construit donc depuis la racine et on indique où atterrit le résultat. Si tu finis par régler Root Directory sur apps/web, c'est ce fichier-ci qui cesse d'être lu — garde-en un seul.",
-
   "framework": "nextjs",
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace=@grenos/web",
   "outputDirectory": "apps/web/.next",
-
   "regions": ["cdg1"],
-
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        {
-          "//": "La page porte une session Supabase et expose un coupe-circuit : interdire l'iframe empêche le détournement de clic.",
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
+        { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
-        {
-          "//": "Les URL de mission portent des identifiants : on ne les transmet pas aux sites tiers.",
-          "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
-        },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         {
           "key": "Permissions-Policy",
           "value": "camera=(), microphone=(), geolocation=(), interest-cohort=()"
