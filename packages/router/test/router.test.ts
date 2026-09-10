@@ -320,3 +320,38 @@ test("available() answers no once every model of the role is cooling down", asyn
   // already knows about costs no model call and no provider_error event.
   assert.equal(router.available("coder"), false);
 });
+
+test("a refused key sets its whole provider aside instead of retrying every tick", async () => {
+  const calls = stubFetch(() => new Response("denied", { status: 403 }));
+  const router = new Router({ geminiApiKey: "g", usage });
+
+  await assert.rejects(
+    () => router.complete({ role: "tester", system: "s", messages: [] }),
+    /refuse la clé ou son projet/,
+  );
+
+  // A stale .env.local put a refused Gemini key back in production, and the
+  // worker hit the same 403 on every 15-second tick. The refusal is known now:
+  // the next call must not cost a single request.
+  calls.length = 0;
+  await assert.rejects(
+    () => router.complete({ role: "coder", system: "s", messages: [] }),
+    /refuse la clé/,
+  );
+  assert.equal(calls.length, 0);
+  assert.equal(router.available("coder"), false);
+});
+
+test("a refused NVIDIA key is reported as NVIDIA's, not Gemini's", async () => {
+  stubFetch((m) =>
+    m.includes("gemini")
+      ? new Response("overloaded", { status: 503 })
+      : new Response("unauthorized", { status: 401 }),
+  );
+  const router = new Router(both());
+
+  await assert.rejects(
+    () => router.complete({ role: "coder", system: "s", messages: [] }),
+    (err: Error) => /NVIDIA refuse la clé/.test(err.message) && !/Gemini refuse/.test(err.message),
+  );
+});

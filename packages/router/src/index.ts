@@ -1,4 +1,11 @@
-import { CASCADES, MODELS, specFor, type ModelRole, type ModelSpec } from "./models.ts";
+import {
+  CASCADES,
+  MODELS,
+  specFor,
+  type ModelRole,
+  type ModelSpec,
+  type ProviderId,
+} from "./models.ts";
 import {
   AccessDeniedError,
   callGemini,
@@ -70,6 +77,13 @@ export class Router {
    * small price for never being wrong about it.
    */
   private readonly exhaustedOn = new Map<string, string>();
+  /**
+   * provider -> until when its key is known to be refused, and why.
+   *
+   * Tracked per provider, not per model: every model behind one key shares
+   * the refusal, and a refusal does not fix itself between two ticks.
+   */
+  private readonly deniedUntil = new Map<ProviderId, { until: number; detail: string }>();
 
   constructor(opts: RouterOptions) {
     if (!opts.geminiApiKey) {
@@ -106,6 +120,12 @@ export class Router {
       // The cascade then degrades to Gemini on its own.
       if (spec.provider === "nvidia" && !this.nvidiaKey) {
         this.note(attempts, req.role, modelId, "skipped", "NVIDIA_API_KEY absente");
+        continue;
+      }
+
+      const denied = this.deniedUntil.get(spec.provider);
+      if (denied && denied.until > Date.now()) {
+        this.note(attempts, req.role, modelId, "skipped", `${spec.provider} : clé refusée`);
         continue;
       }
 
@@ -184,14 +204,16 @@ export class Router {
             tokensOut: 0,
             error: detail.slice(0, 300),
           });
-          throw new Error(
-            "Gemini refuse la clé ou son projet Google (HTTP 403/401). " +
-              "Ce n'est pas un problème de quota : tous les modèles partagent " +
-              "le même projet, donc la cascade n'y changera rien. Vérifie la " +
-              "clé sur https://aistudio.google.com/apikey, ou crée-en une dans " +
-              "un nouveau projet. Détail : " +
-              detail.slice(0, 300),
-          );
+          // Every model behind this key shares the refusal, so the whole
+          // provider is set aside — ten minutes, not one 403 per tick. The
+          // cascade then moves on to the other provider rather than stopping:
+          // that rule dates from when Gemini was the only one, and with two
+          // it meant a refused Gemini key left NVIDIA unasked.
+          this.deniedUntil.set(spec.provider, {
+            until: Date.now() + DENIED_COOLDOWN_MS,
+            detail,
+          });
+          continue;
         }
 
         if (err instanceof RateLimitedError) {
@@ -239,6 +261,12 @@ export class Router {
       }
     }
 
+    // A refused key is the one failure a human must act on, so it outranks
+    // "no model available" and names the provider — the old message blamed
+    // Gemini for every refusal, including NVIDIA's.
+    const refused = [...this.deniedUntil.entries()].filter(([, d]) => d.until > Date.now());
+    if (refused.length > 0) throw new Error(refusedMessage(refused));
+
     throw new RouterExhaustedError(req.role, attempts);
   }
 
@@ -257,6 +285,7 @@ export class Router {
       if (!spec) return false;
       if (spec.provider === "nvidia" && !this.nvidiaKey) return false;
       if ((this.cooldownUntil.get(modelId) ?? 0) > now) return false;
+      if ((this.deniedUntil.get(spec.provider)?.until ?? 0) > now) return false;
       return this.exhaustedOn.get(modelId) !== today();
     });
   }
@@ -372,3 +401,22 @@ const today = (): string => new Date().toISOString().slice(0, 10);
  */
 const DEFAULT_OUTPUT_TOKENS = 16_384;
 const MAX_OUTPUT_TOKENS = 48_000;
+
+/** How long a provider whose key was refused is left alone. */
+const DENIED_COOLDOWN_MS = 10 * 60 * 1000;
+
+function refusedMessage(refused: Array<[ProviderId, { detail: string }]>): string {
+  return refused
+    .map(([provider, { detail }]) =>
+      provider === "gemini"
+        ? "Gemini refuse la clé ou son projet Google (HTTP 403/401). Ce n'est " +
+          "pas un problème de quota : tous les modèles Gemini partagent ce " +
+          "projet. Vérifie la clé sur https://aistudio.google.com/apikey, ou " +
+          "crée-en une dans un nouveau projet. Détail : " +
+          detail.slice(0, 300)
+        : "NVIDIA refuse la clé (HTTP 401/403). Régénère-la sur " +
+          "https://build.nvidia.com/settings/api-keys. Détail : " +
+          detail.slice(0, 300),
+    )
+    .join(" | ");
+}

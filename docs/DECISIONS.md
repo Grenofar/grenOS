@@ -377,3 +377,24 @@ d'après les événements et les messages en base :
 Le principe : **un agent ne doit lire que ce qu'il a lui-même produit ou ce que
 la CI a constaté.** Tout le reste — pannes, quotas, erreurs réseau — relève de
 l'infrastructure et reste dans les événements, où seuls les humains le lisent.
+
+---
+
+### D-020 — Un refus de clé écarte le fournisseur, pas la cascade
+**2026-09-10 · actif · complète D-017**
+
+La règle « un 401/403 arrête la cascade » date de l'époque où Gemini était le
+seul fournisseur : tous les modèles partageaient la même clé, donc le même
+refus. Avec deux fournisseurs, elle faisait qu'une clé Gemini refusée
+empêchait d'interroger NVIDIA, et l'erreur accusait Gemini même quand c'était
+la clé NVIDIA qui était rejetée.
+
+Constaté quand un onglet `.env.local` périmé a été enregistré par-dessus le
+fichier à jour : clé Gemini refusée remise en place, clé NVIDIA supprimée. Le
+worker retapait le même 403 à chaque tick de 15 secondes.
+
+Désormais un refus met **tout le fournisseur** de côté pendant 10 minutes — plus
+un seul appel dans l'intervalle — et la cascade continue sur l'autre. Si rien
+ne répond, l'erreur nomme le ou les fournisseurs refusés et le lien pour
+régénérer la clé. `router.available()` en tient compte, donc le dispatcher ne
+prend aucune tâche qu'aucun fournisseur ne peut traiter.
