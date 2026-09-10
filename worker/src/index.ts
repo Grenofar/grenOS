@@ -108,6 +108,7 @@ async function tick(
       await runMasterCycle(mission, master, agents, router, gh);
     }
 
+    await warnAboutStuckVerifications();
     await dispatchWorkers(agents, router, gh);
   } finally {
     ticking = false;
@@ -191,6 +192,59 @@ async function dispatchWorkers(
 
   if (inFlight.length > 0) await Promise.all(inFlight);
 }
+
+/** Tasks already reported, so the warning is emitted once and not every tick. */
+const warnedStuck = new Set<string>();
+
+/**
+ * A verdict that never arrives is the quietest failure this system has.
+ *
+ * `awaiting_verification` is a correct, expected state — nothing is done until
+ * CI says so (D-009). But if the verdict never comes, the task sits there
+ * forever: no error, no retry, no escalation, and the mission simply stops
+ * making progress while looking perfectly healthy.
+ *
+ * The usual cause is the two Actions secrets being absent, in which case CI
+ * builds and tests normally and then discards its own verdict — which is why
+ * this says so by name rather than reporting a timeout.
+ */
+async function warnAboutStuckVerifications(): Promise<void> {
+  const cutoff = new Date(Date.now() - STUCK_AFTER_MS).toISOString();
+
+  const { data: stuck } = await db
+    .from("tasks")
+    .select("id,mission_id,assigned_to,branch,updated_at")
+    .eq("status", "awaiting_verification")
+    .lt("updated_at", cutoff);
+
+  for (const task of stuck ?? []) {
+    if (warnedStuck.has(task.id)) continue;
+
+    // A run row means CI did reach us; the task is merely slow, not stranded.
+    const { count } = await db
+      .from("runs")
+      .select("id", { count: "exact", head: true })
+      .eq("task_id", task.id);
+    if ((count ?? 0) > 0) continue;
+
+    warnedStuck.add(task.id);
+    await emit({
+      missionId: task.mission_id,
+      taskId: task.id,
+      agentId: task.assigned_to,
+      level: "error",
+      type: "verdict_missing",
+      message:
+        `Aucun verdict de CI depuis ${Math.round(STUCK_AFTER_MS / 60000)} min sur ${task.branch}. ` +
+        `La tâche restera bloquée tant qu'un run n'arrive pas. Cause la plus probable : ` +
+        `les secrets SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY manquent dans ` +
+        `Settings → Secrets → Actions du dépôt.`,
+    });
+    log.warn(`verdict manquant sur ${task.branch} — secrets Actions absents ?`);
+  }
+}
+
+const STUCK_AFTER_MS = 20 * 60 * 1000;
 
 /** Realtime is the primary wake-up; the interval is the fallback. */
 function subscribe(): void {

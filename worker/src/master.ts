@@ -115,9 +115,39 @@ export async function runMasterCycle(
   let created = 0;
   let escalated = false;
 
+  // Which agents already have work in flight for this mission.
+  //
+  // The Master is asked to decide again on every state change, and its
+  // in-memory "already decided this" marker does not survive a restart. Both
+  // of those are fine on their own; together they let it dispatch the same
+  // task two or three times, each on its own branch, each burning a full
+  // model call and a CI run. Whether it is a prompt lapse or a restart, the
+  // outcome must be impossible rather than unlikely.
+  const OPEN = ["pending", "ready", "in_progress", "awaiting_verification"];
+  const { data: openTasks } = await db
+    .from("tasks")
+    .select("assigned_to")
+    .eq("mission_id", mission.id)
+    .in("status", OPEN);
+  const busy = new Set((openTasks ?? []).map((t) => t.assigned_to));
+
   for (const action of envelope.actions) {
     switch (action.type) {
       case "propose_task": {
+        if (busy.has(action.assigned_to)) {
+          await emit({
+            missionId: mission.id,
+            agentId: "master",
+            level: "warn",
+            type: "duplicate_task_refused",
+            message:
+              `Tâche refusée : ${action.assigned_to} a déjà une tâche ouverte sur cette mission. ` +
+              `Attends son résultat plutôt que d'en ouvrir une seconde.`,
+            payload: { goal: action.goal },
+          });
+          break;
+        }
+
         const assignee = agents.get(action.assigned_to);
         if (!assignee || assignee.status !== "active") {
           await emit({
@@ -155,6 +185,9 @@ export async function runMasterCycle(
           });
         } else {
           created += 1;
+          // Guard the rest of this same envelope too: a single reply can
+          // legitimately propose two tasks for the same agent.
+          busy.add(assignee.id);
         }
         break;
       }
@@ -267,7 +300,7 @@ export interface State {
 }
 
 async function gatherState(mission: Mission): Promise<State> {
-  const [{ data: tasks }, { data: pending }, { data: runs }] = await Promise.all([
+  const [{ data: tasks }, pendingRes, { data: runs }] = await Promise.all([
     db
       .from("tasks")
       .select("id,assigned_to,goal,status,attempt,max_attempts,failure,failure_detail")
@@ -289,11 +322,22 @@ async function gatherState(mission: Mission): Promise<State> {
       .limit(5),
   ]);
 
+  // A failure here used to degrade to an empty list, which looks exactly like
+  // "nothing new happened" — so the Master would keep planning while never
+  // reading a single thing its agents sent back. Silence is the one outcome
+  // this query must never produce.
+  if (pendingRes.error) {
+    throw new Error(
+      `Impossible de lire les messages en attente : ${pendingRes.error.message}. ` +
+        `Si la colonne seen_at manque, passe packages/db/migrations/0006_repair.sql.`,
+    );
+  }
+
   const rows = tasks ?? [];
   return {
     tasks: rows,
     activeCount: rows.filter((t) => ACTIVE_TASK_STATES.includes(t.status)).length,
-    pending: pending ?? [],
+    pending: pendingRes.data ?? [],
     runs: runs ?? [],
   };
 }

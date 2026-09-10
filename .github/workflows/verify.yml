@@ -96,8 +96,14 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          if [ -x kernel/scripts/make-iso.sh ]; then
-            kernel/scripts/make-iso.sh
+          # `bash script` et non `./script` : les agents committent par l'API
+          # GitHub, qui écrit tout en mode 100644. Le bit exécutable n'existe
+          # donc jamais sur leurs fichiers, et un test `-x` échouerait toujours
+          # — l'image ne serait pas construite et le Codeur recevrait un échec
+          # qu'aucune correction de son code ne pourrait résoudre.
+          if [ -f kernel/scripts/make-iso.sh ]; then
+            echo "Construction de l'image via kernel/scripts/make-iso.sh"
+            bash kernel/scripts/make-iso.sh
           fi
 
           IMAGE=$(find kernel -name '*.iso' -o -name '*.img' | head -n1)
@@ -130,21 +136,37 @@ jobs:
       - name: Rapporter le verdict
         if: always()
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # L'URL du projet n'est pas un secret : elle part déjà en clair dans
+          # le JavaScript du site à chaque visite. En exiger la configuration
+          # ajoutait une étape — et une occasion de se tromper — pour aucun
+          # gain. Elle reste surchargeable par un secret ou une variable.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          # Celle-ci contourne toute la RLS : uniquement en secret, jamais en
+          # variable — les variables sont lisibles en clair dans les logs d'un
+          # dépôt public.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          HAS_VAR_KEY: ${{ vars.SUPABASE_SERVICE_ROLE_KEY != '' }}
+          PROBE: ${{ steps.probe.outputs.present }}
+          BUILD: ${{ steps.build.outcome }}
+          CLIPPY: ${{ steps.clippy.outcome }}
+          QEMU: ${{ steps.qemu.outcome }}
         run: |
-          if [ -z "$SUPABASE_URL" ]; then
-            echo "::warning::Secrets Supabase absents — verdict non transmis."
-            exit 0
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Verdict non transmis : le secret SUPABASE_SERVICE_ROLE_KEY est absent."
+            echo "::error::https://github.com/Grenofar/grenOS/settings/secrets/actions/new"
+            exit 1
+          fi
+          if [ "$HAS_VAR_KEY" = "true" ]; then
+            echo "::warning::Une variable SUPABASE_SERVICE_ROLE_KEY existe. Les variables sont lisibles en clair dans les logs : supprime-la, seul le secret est utilisé."
           fi
 
-          if [ "${{ steps.probe.outputs.present }}" != "true" ]; then
+          if [ "$PROBE" != "true" ]; then
             STATUS="error";   FAILURE="spec_gap"
-          elif [ "${{ steps.build.outcome }}" != "success" ]; then
+          elif [ "$BUILD" != "success" ]; then
             STATUS="failed";  FAILURE="compile_error"
-          elif [ "${{ steps.clippy.outcome }}" != "success" ]; then
+          elif [ "$CLIPPY" != "success" ]; then
             STATUS="failed";  FAILURE="compile_error"
-          elif [ "${{ steps.qemu.outcome }}" != "success" ]; then
+          elif [ "$QEMU" != "success" ]; then
             STATUS="failed";  FAILURE="test_failure"
           else
             STATUS="passed";  FAILURE=""
@@ -152,52 +174,38 @@ jobs:
 
           # On garde la fin des logs : l'erreur qui compte est presque toujours
           # la dernière, et un dump complet noie le Codeur au retour.
-          # Concaténation explicite plutôt que `tail` multi-fichiers, qui
-          # insère des en-têtes "==> fichier <==" et échoue sur un absent.
           : > combined.log
           for f in build clippy qemu; do
-            [ -f "$RUNNER_TEMP/$f.log" ] && {
-              echo "--- $f ---" >> combined.log
+            if [ -f "$RUNNER_TEMP/$f.log" ]; then
+              printf -- '--- %s ---
+' "$f" >> combined.log
               cat "$RUNNER_TEMP/$f.log" >> combined.log
-            }
+            fi
           done
-          LOG=$(tail -c 6000 combined.log 2>/dev/null || echo "pas de log")
+          LOG=$(tail -c 6000 combined.log || true)
+          [ -n "$LOG" ] || LOG="(aucun log : étapes non exécutées)"
 
-          # Tout passe par --arg / --argjson : interpoler des variables shell
-          # dans le programme jq casse dès qu'un log contient une apostrophe.
-          jq -n \
-            --arg  branch  "$GITHUB_REF_NAME" \
-            --arg  sha     "$GITHUB_SHA" \
-            --arg  status  "$STATUS" \
-            --arg  failure "$FAILURE" \
-            --arg  log     "$LOG" \
-            --arg  url     "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --arg  ended   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --argjson runid "$GITHUB_RUN_ID" \
-            '{
-               branch:          $branch,
-               commit_sha:      $sha,
-               status:          $status,
-               failure:         (if $failure == "" then null else $failure end),
-               log_excerpt:     $log,
-               log_url:         $url,
-               workflow_run_id: $runid,
-               finished_at:     $ended
-             }' > payload.json
+          # JSON produit par python3 -c, pas par jq. Assembler du JSON dans un
+          # programme jq passé au shell empile trois niveaux de guillemets, et
+          # la moindre erreur produit un fichier vide que PostgREST rejette
+          # avec « Empty or invalid json » — un message qui accuse les
+          # identifiants alors que le corps était le problème. Les valeurs
+          # passent par l'environnement : le shell ne les interprète jamais.
+          BRANCH="$GITHUB_REF_NAME" SHA="$GITHUB_SHA" ST="$STATUS" FL="$FAILURE"           LOGTXT="$LOG" RUNID="$GITHUB_RUN_ID"           URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"           python3 -c 'import json,os,datetime; print(json.dumps({"branch":os.environ["BRANCH"],"commit_sha":os.environ["SHA"],"status":os.environ["ST"],"failure":os.environ["FL"] or None,"log_excerpt":os.environ["LOGTXT"],"log_url":os.environ["URL"],"workflow_run_id":int(os.environ["RUNID"]),"finished_at":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}))' > payload.json
 
-          # --fail-with-body : sans ça, curl sort en 0 même sur un 401, le
-          # verdict n'arrive jamais et la tâche reste bloquée en
-          # awaiting_verification sans que rien ne signale le problème.
-          if ! curl -sS --fail-with-body -X POST "${SUPABASE_URL}/rest/v1/runs" \
-                -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
-                -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
-                -H "Content-Type: application/json" \
-                -H "Prefer: return=minimal" \
-                --data @payload.json; then
-            echo "::error::Verdict non transmis à Supabase. Vérifie les secrets SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY du dépôt."
+          echo "payload.json : $(wc -c < payload.json) octets"
+          if [ ! -s payload.json ]; then
+            echo "::error::payload.json est vide — la génération du corps a échoué."
             exit 1
           fi
 
+          # --fail-with-body : sans ça curl sort en 0 même sur un 401, le
+          # verdict n'arrive jamais et la tâche reste bloquée en
+          # awaiting_verification sans que rien ne le signale.
+          if ! curl -sS --fail-with-body -X POST "${SUPABASE_URL}/rest/v1/runs"                 -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}"                 -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}"                 -H "Content-Type: application/json"                 -H "Prefer: return=minimal"                 --data @payload.json; then
+            echo "::error::Supabase a refusé le verdict (voir la réponse ci-dessus)."
+            exit 1
+          fi
           echo "Verdict transmis : $STATUS"
 
       - name: Échouer si la vérification a échoué
