@@ -2,12 +2,22 @@
 name = "kernel"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/grenOS/grenOS"
 
 [dependencies]
-lazy_static = "1.4.0"
-spin = "0.5.2"
-x86_64 = "0.14.2"
+x86_64 = "0.14"
+bitflags = "2"
+volatile = "0.4"
+lazy_static = "1"
+spin = "0.5"
+bit_field = "0.10"
 
-[[bin]]
-name = "kernel"
-path = "src/main.rs"
+[profile.dev]
+panic = "abort"
+overflow-checks = false
+
+[profile.release]
+panic = "abort"
+overflow-checks = false
+lto = true
