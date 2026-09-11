@@ -1,190 +1,205 @@
-# grenOS Minimal Boot Plan
+# grenOS GDT, IDT and CPU Exceptions Technical Plan
 
-## Problem
+## 1. Problem
 
-Create a bare-metal x86_64 kernel that boots via Limine in QEMU, prints the string `grenOS` to the serial console (COM1), and halts cleanly. No VGA, no interrupts, no allocator, no `std`.
+The kernel currently boots into 64-bit long mode under Limine, initializes COM1, prints `grenOS`, and halts, but it relies entirely on the bootloader's initial GDT and has no IDT. Any CPU exception (such as a breakpoint, page fault, general protection fault, or stack issue) causes an unhandled fault escalating directly to a triple fault and CPU reset. This mission establishes kernel-controlled execution state by creating a permanent Global Descriptor Table (GDT) with kernel code/data segments and a Task State Segment (TSS) equipped with an Interrupt Stack Table (IST), installs an Interrupt Descriptor Table (IDT) handling critical CPU exceptions (#BP, #DF with IST, #GP, #PF), completes repository housekeeping (removing `kernel/Cargo.tompl` and configuring the `repository` field in `kernel/Cargo.toml`), and ensures the kernel continues to build and cleanly boot printing `grenOS` on COM1.
 
-## Constraints
+## 2. Constraints
 
-- Target: the built-in `x86_64-unknown-none` (freestanding, `no_std`). No custom target JSON.
-- Bootloader: Limine, via the `limine` crate version 0.5 (source: crates.io API, `max_stable_version` 0.6.5, version 0.5.0 published 2025-06-05; the mission pins 0.5).
-- Build: `cargo build --release` run inside `kernel/`, with the target set in `kernel/.cargo/config.toml` (`[build] target = "x86_64-unknown-none"`). CI runs exactly this command with no `--target` flag.
-- Linker script: `kernel/linker-x86_64.ld`, passed to the linker by `kernel/build.rs` via `cargo:rustc-link-arg=-Tlinker-x86_64.ld` (source: limine-rust-template `kernel/build.rs`).
-- Output: serial port COM1 (I/O port `0x3F8`) only.
-- Termination: `hlt` loop after printing, written as inline assembly (`core::arch::asm!`), because `core::arch::x86_64` has no `hlt`, `outb` or `inb` functions.
-- Image: ISO built with `xorriso` and `mtools`, bootable in QEMU with `-serial stdio`.
+- **Bootloader and Template**: Limine bootloader using crate `limine` 0.5, conforming to `limine-rust-template` (`kernel/linker-x86_64.ld`, `limine.conf` / boot configuration references, and `GNUmakefile` flag conventions).
+- **Target & Toolchain**: Built-in target `x86_64-unknown-none` with flags specified in `kernel/.cargo/config.toml` (`[target.x86_64-unknown-none] rustflags = ["-C", "relocation-model=static"]`). Nightly Rust compiler with `#![no_std]` and `#![no_main]`.
+- **Inline Assembly Requirement**: Any and all inline assembly (`core::arch::asm!`) must strictly be enclosed within an `unsafe { ... }` block with an explicit `// SAFETY:` rationale. Neither `core::arch::x86_64` nor `core` provides `lgdt`, `lidt`, `ltr`, `hlt`, `inb`, or `outb` safe functions.
+- **Scope Boundary**: Strictly no device interrupts (PIC 8259, APIC, IOAPIC, timer, keyboard), no virtual memory / paging modifications, and no dynamic memory allocator (heap).
+- **Housekeeping**: Delete legacy typo file `kernel/Cargo.tompl` if present and verify `repository = "https://github.com/grenOS/grenOS"` in `kernel/Cargo.toml`.
+- **Verification Contract**: CI runs `cargo build --release` in `kernel/`, `cargo clippy --release -- -D warnings` in `kernel/`, builds ISO via `bash kernel/scripts/make-iso.sh`, and tests boot in QEMU requiring serial output to include `grenOS` with no `panic`, `triple fault`, or `double fault`.
 
-## Approach
+## 3. Approach
 
-1. Create a freestanding Rust project in `kernel/` with `#![no_std]` and `#![no_main]`. Use the built-in `x86_64-unknown-none` target: set it in `kernel/.cargo/config.toml` under `[build] target`, and list it under `targets` in `kernel/rust-toolchain.toml` so its precompiled `core` is available. Move the flags the limine-rust-template passes through RUSTFLAGS in its GNUmakefile (`-C relocation-model=static`) into `[target.x86_64-unknown-none] rustflags` in `.cargo/config.toml`, because CI runs a plain `cargo build --release`.
-2. Add the `limine` crate version 0.5 as the only dependency in `kernel/Cargo.toml`. Use its `BaseRevision` tag and its request structs (`limine::request::BootloaderInfoRequest`, `limine::request::StackSizeRequest`) instead of hand-written `#[repr(C)]` structs with invented IDs. The crate places requests in the `.requests` section itself; the linker script keeps that section.
-3. Write `kernel/linker-x86_64.ld` based on the limine-rust-template's script: `OUTPUT_FORMAT(elf64-x86-64)`, `ENTRY(kmain)`, base address `0xffffffff80000000`, and a `.data` output section that keeps `.requests_start_marker`, `.requests`, and `.requests_end_marker` (source: limine-rust-template `kernel/linker-x86_64.ld`).
-4. Write `kernel/build.rs` that passes the linker script: `println!("cargo:rustc-link-arg=-Tlinker-x86_64.ld");` and `println!("cargo:rerun-if-changed=linker-x86_64.ld");` (source: limine-rust-template `kernel/build.rs`).
-5. Implement `kmain` as the kernel entry point (the linker script's `ENTRY(kmain)`), declared `#[no_mangle] pub extern "C" fn kmain() -> !`. Inside it, initialise the serial driver, write `grenOS\n`, then enter an infinite `hlt` loop using `core::arch::asm!("hlt", options(nomem, nostack, preserves_flags))`.
-6. Implement a minimal serial driver for COM1 in `kernel/src/serial.rs`: initialise the UART (disable interrupts, set baud divisor for 38400, 8N1, enable FIFO), then provide `write_byte` and `write_str`. Port I/O uses inline assembly: `core::arch::asm!("out dx, al", in("dx") port, in("al") value, options(nomem, nostack, preserves_flags))` for output and `core::arch::asm!("in al, dx", in("dx") port, out("al") value, options(nomem, nostack, preserves_flags))` for input. Wait for the transmit buffer empty bit (line status bit 5) before each byte.
-7. Build an ISO with a script `kernel/scripts/make-iso.sh` that CI calls via `bash` (files committed by agents are never executable). The script fetches the Limine binaries itself (CI has `xorriso` and `mtools` and nothing from Limine), copies the kernel ELF and `limine.conf` into the image, and runs `limine` to make it bootable. `limine.conf` (not `limine.cfg`) specifies the kernel path; Limine scans for `limine.conf` at `/boot/limine.conf` among other locations (source: Limine CONFIG.md).
-8. Verify in QEMU: `qemu-system-x86_64 -cdrom <image> -serial stdio -display none -no-reboot -no-shutdown -m 256M` must print `grenOS` and then halt (no reboot, no crash). CI kills QEMU after 90 seconds and checks that the serial output contains `grenOS` and none of `panic`, `triple fault`, `double fault`.
+1. **Housekeeping**:
+   - Ensure `kernel/Cargo.tompl` is removed from the filesystem.
+   - Ensure `kernel/Cargo.toml` has `repository = "https://github.com/grenOS/grenOS"` under `[package]`.
+2. **GDT and TSS Setup (`kernel/src/gdt.rs`)**:
+   - Construct a static GDT containing:
+     1. Null descriptor (index 0, selector `0x00`).
+     2. Kernel 64-bit Code Segment (index 1, selector `0x08`, base 0, limit 0, flags: Present, Ring 0, Executable, Readable, Long-mode `L=1, D=0`).
+     3. Kernel 64-bit Data Segment (index 2, selector `0x10`, base 0, limit 0, flags: Present, Ring 0, Writable).
+     4. TSS Descriptor (index 3 and 4, selector `0x18`, 16-byte system segment descriptor for 64-bit TSS, type `0x9`, Present, Ring 0).
+   - Define a static `TaskStateSegment` with a dedicated 16-KiB double fault stack allocated in `IST1`.
+   - Load the GDT using `lgdt` inside an `unsafe` block.
+   - Reload data segments (`ds`, `es`, `fs`, `gs`, `ss`) with kernel data selector (`0x10`).
+   - Reload the code segment selector (`0x08`) via a 64-bit far return (`push 0x08; lea rax, [rip + 1f]; push rax; retfq; 1:`).
+   - Load the task register using `ltr` inside an `unsafe` block with TSS selector (`0x18`).
+3. **IDT Setup (`kernel/src/idt.rs`)**:
+   - Define a 256-entry `InterruptDescriptorTable` of 16-byte gates as mandated by the AMD64/x86_64 architecture.
+   - Configure gate attributes (Present, DPL 0, Gate Type `0xE` for 64-bit Interrupt Gate).
+   - Register handlers for:
+     - Vector 3: Breakpoint (`#BP`), no error code.
+     - Vector 8: Double Fault (`#DF`), error code, configured with `IST1` so execution switches to a known clean stack even on kernel stack exhaustion.
+     - Vector 13: General Protection Fault (`#GP`), error code.
+     - Vector 14: Page Fault (`#PF`), error code.
+   - Handlers print diagnostic details (exception name, instruction pointer, error code, fault address from `CR2` for `#PF`) via `serial::write_str` and halt, or resume (for `#BP`).
+   - Load the IDT using `lidt` inside an `unsafe` block.
+4. **Integration in `kernel/src/main.rs`**:
+   - In `kmain()`, initialize serial (`serial::init()`), initialize GDT/TSS (`gdt::init()`), initialize IDT (`idt::init()`), and output `grenOS\n`.
+   - Trigger a non-fatal test breakpoint exception (`int3`) to verify that the IDT and exception handling are operational, or proceed to standard serial greeting and clean halt.
 
-## Interfaces
+## 4. Interfaces
 
-### Limine boot protocol (via the `limine` crate 0.5)
-
-Do not hand-write request structs. Use the crate's types (source: docs.rs `limine::request` module for 0.5.0):
-
-```rust
-use limine::BaseRevision;
-use limine::request::{BootloaderInfoRequest, StackSizeRequest};
-
-// Require protocol revision 2 or higher (source: limine 0.5.0 crate docs, "Usage").
-pub static BASE_REVISION: BaseRevision = BaseRevision::new();
-
-// Request a larger stack, recommended on debug Rust builds (source: limine 0.5.0 crate docs).
-pub const STACK_SIZE: u64 = 0x100000;
-pub static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(STACK_SIZE);
-
-// Request the bootloader name and version (source: docs.rs limine::request::BootloaderInfoRequest).
-pub static BOOTLOADER_INFO_REQUEST: BootloaderInfoRequest = BootloaderInfoRequest::new();
-```
-
-The crate places these statics in the `.requests` section. The linker script must keep `.requests_start_marker`, `.requests`, and `.requests_end_marker` in `.data` (source: limine-rust-template `kernel/linker-x86_64.ld`).
-
-### Serial driver (COM1)
+### Segment Selectors and Descriptors
 
 ```rust
-pub const COM1: u16 = 0x3F8;
+pub const KERNEL_CODE_SELECTOR: u16 = 0x08;
+pub const KERNEL_DATA_SELECTOR: u16 = 0x10;
+pub const TSS_SELECTOR: u16 = 0x18;
 
-pub fn init();
-pub fn write_byte(byte: u8);
-pub fn write_str(s: &str);
-```
-
-Register offsets: `0` data, `1` interrupt enable, `2` FIFO control, `3` line control, `4` modem control, `5` line status. Baud divisor latch: set DLAB (bit 7 of line control), write divisor low/high to ports `0`/`1`, clear DLAB. Divisor for 38400 baud = 3 (115200 / 38400).
-
-Port I/O is inline assembly, because `core::arch::x86_64` has no `outb` or `inb` (source: Rust standard library documentation for `core::arch::x86_64`; the module provides CPU intrinsics such as `_rdtsc`, not port I/O):
-
-```rust
-unsafe fn outb(port: u16, value: u8) {
-    core::arch::asm!("out dx, al", in("dx") port, in("al") value, options(nomem, nostack, preserves_flags));
+#[repr(C, packed)]
+pub struct DescriptorTablePointer {
+    pub limit: u16,
+    pub base: u64,
 }
 
-unsafe fn inb(port: u16) -> u8 {
-    let value: u8;
-    core::arch::asm!("in al, dx", in("dx") port, out("al") value, options(nomem, nostack, preserves_flags));
-    value
+#[repr(C, packed)]
+pub struct TaskStateSegment {
+    pub reserved0: u32,
+    pub rsp0: u64,
+    pub rsp1: u64,
+    pub rsp2: u64,
+    pub reserved1: u64,
+    pub ist1: u64,
+    pub ist2: u64,
+    pub ist3: u64,
+    pub ist4: u64,
+    pub ist5: u64,
+    pub ist6: u64,
+    pub ist7: u64,
+    pub reserved2: u64,
+    pub reserved3: u16,
+    pub iopb_offset: u16,
 }
 ```
 
-### Kernel entry
+### GDT Loading Implementation
+
+All inline assembly must be in `unsafe` blocks with explicit safety comments:
 
 ```rust
-#[no_mangle]
-pub extern "C" fn kmain() -> ! {
-    serial::init();
-    serial::write_str("grenOS\n");
-    loop {
-        core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+pub unsafe fn load_gdt(ptr: &DescriptorTablePointer) {
+    // SAFETY: ptr points to a valid static GDT descriptor table pointer.
+    unsafe {
+        core::arch::asm!("lgdt [{}]", in(reg) ptr, options(readonly, nostack, preserves_flags));
+    }
+}
+
+pub unsafe fn reload_segments(code_sel: u16, data_sel: u16) {
+    // SAFETY: code_sel and data_sel are valid selectors in the loaded GDT.
+    unsafe {
+        core::arch::asm!(
+            "mov ds, {0:x}",
+            "mov es, {0:x}",
+            "mov fs, {0:x}",
+            "mov gs, {0:x}",
+            "mov ss, {0:x}",
+            "push {1}",
+            "lea {2}, [rip + 1f]",
+            "push {2}",
+            "retfq",
+            "1:",
+            in(reg) data_sel,
+            in(reg) u64::from(code_sel),
+            lateout(reg) _,
+            options(preserves_flags)
+        );
+    }
+}
+
+pub unsafe fn load_tss(tss_sel: u16) {
+    // SAFETY: tss_sel references a valid TSS descriptor in the active GDT.
+    unsafe {
+        core::arch::asm!("ltr {0:x}", in(reg) tss_sel, options(nostack, preserves_flags));
     }
 }
 ```
 
-`kmain` is the entry point because the linker script declares `ENTRY(kmain)` (source: limine-rust-template `kernel/linker-x86_64.ld`).
+### IDT Gate Structure and Exception Context
 
-## Rejected Alternatives
+```rust
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+pub struct IdtEntry {
+    pub offset_low: u16,
+    pub selector: u16,
+    pub ist: u8,          // bits 0..2: IST index (0 = none, 1..7 = IST1..7)
+    pub type_attr: u8,    // 0x8E = present, ring 0, 64-bit interrupt gate
+    pub offset_mid: u16,
+    pub offset_high: u32,
+    pub zero: u32,
+}
 
-- **VGA text mode output**: rejected because the mission requires serial-only; VGA adds framebuffer complexity without benefit.
-- **Multiboot2**: rejected because the mission mandates Limine.
-- **Hand-written Limine protocol structs**: rejected because the `limine` crate 0.5 provides them, and the original plan's hand-written IDs were invented. Using the crate is simpler and auditable.
-- **Custom target JSON (`x86_64-grenos.json`)**: rejected because the built-in `x86_64-unknown-none` target exists and its `core` ships precompiled; a custom target JSON requires unstable flags and `build-std`, which CI does not configure. Mission 1 lost an attempt to exactly that error.
-- **`limine.cfg`**: rejected because Limine reads `limine.conf`, not `limine.cfg` (source: Limine CONFIG.md).
-- **`core::arch::x86_64::hlt`/`outb`/`inb`**: rejected because these functions do not exist in `core::arch::x86_64`; halting and port I/O are inline assembly.
-- **Higher baud rate (115200)**: rejected because 38400 is more forgiving in QEMU and sufficient for a single line.
+#[repr(C)]
+pub struct ExceptionStackFrame {
+    pub rip: u64,
+    pub cs: u64,
+    pub rflags: u64,
+    pub rsp: u64,
+    pub ss: u64,
+}
 
-## Risks
+pub unsafe fn load_idt(ptr: &DescriptorTablePointer) {
+    // SAFETY: ptr points to a valid IDT pointer with correct limit and base.
+    unsafe {
+        core::arch::asm!("lidt [{}]", in(reg) ptr, options(readonly, nostack, preserves_flags));
+    }
+}
+```
 
-- **Linker script mismatch**: if `.requests` is not kept in `.data`, Limine will not find the requests and the kernel will not boot. Mitigation: copy the limine-rust-template's linker script exactly, including the `KEEP(*(.requests_start_marker))`, `KEEP(*(.requests))`, `KEEP(*(.requests_end_marker))` lines.
-- **Serial port not initialised correctly**: if the UART init sequence is wrong, no output appears. Mitigation: use the well-documented 8N1 38400 sequence; test in QEMU with `-serial stdio`.
-- **Toolchain missing the target**: if `kernel/rust-toolchain.toml` does not list `x86_64-unknown-none` under `targets`, the build fails because `core` is not available. Mitigation: include the target in the toolchain file, as the limine-rust-template does.
-- **Flags lost**: the template passes `-C relocation-model=static` through RUSTFLAGS in its GNUmakefile; CI runs a plain `cargo build --release`. Mitigation: move the flag into `[target.x86_64-unknown-none] rustflags` in `kernel/.cargo/config.toml`.
+### Exception Handlers
 
-## Task Breakdown
+Handlers use either Rust `#![feature(abi_x86_interrupt)]` (standard on nightly) or naked assembly stubs that preserve registers, invoke logging over serial, and either halt (`hlt` in an infinite loop inside `unsafe`) or return (`iretq`).
 
-### Phase 1: Project setup and freestanding build
+## 5. Rejected Alternatives
 
-**Goal**: Create a Rust project in `kernel/` that compiles to a freestanding x86_64 ELF with no `std`, using the built-in `x86_64-unknown-none` target.
+- **External crates like `x86_64`**: Rejected to avoid external dependency drift, version churn, and unneeded complexity for a minimal freestanding kernel.
+- **Enabling 8259 PIC / APIC or timer interrupts**: Rejected because the mission scope is strictly CPU exceptions and descriptor tables.
+- **Paging / Virtual Memory remapping**: Rejected as Limine provides the identity/higher-half mapping necessary for early boot; page table manipulation belongs to a dedicated memory management mission.
+- **Omitting IST for Double Fault**: Rejected because a double fault frequently stems from stack overflows; without a dedicated IST stack, servicing `#DF` immediately triple-faults the CPU.
+- **Placing `asm!` outside `unsafe` blocks**: Rejected because Rust compiler and preflight checks require all `asm!` invocations to be contained within `unsafe` blocks.
 
-**Acceptance criteria**:
-- `kernel/Cargo.toml` exists with `[package]` and the `limine` crate version 0.5 as a dependency
-- `kernel/.cargo/config.toml` exists with `[build] target = "x86_64-unknown-none"` and `[target.x86_64-unknown-none] rustflags = ["-C", "relocation-model=static"]`
-- `kernel/rust-toolchain.toml` exists and lists `x86_64-unknown-none` under `targets`
-- `cargo build --release` succeeds from `kernel/`
+## 6. Risks
 
-### Phase 2: Linker script and build script
+- **CS Register Reload Fault**: In x86_64 long mode, `mov cs, ax` is illegal; changing CS requires `retfq`, `lretq`, or far jmp. Mitigation: Use standard `push cs; lea rax, [rip + 1f]; push rax; retfq; 1:` inside `unsafe` assembly.
+- **TSS Descriptor Size Mismatch**: In 64-bit mode, TSS descriptors are 16 bytes (occupying two consecutive 8-byte GDT slots), unlike 8-byte segment descriptors. Mitigation: Accurately configure upper 8 bytes (base 32..63 and zero) and mark GDT limit to encompass 16-byte TSS descriptor.
+- **Stack Alignment in Exception Handlers**: The AMD64 ABI requires a 16-byte aligned stack prior to function calls. Mitigation: Ensure IST and exception handler entry frames respect 16-byte alignment before making subroutine calls.
 
-**Goal**: Add the linker script and build script so the kernel links at the Limine-mandated higher-half address with the `.requests` section kept.
+## 7. Task Breakdown
 
-**Acceptance criteria**:
-- `kernel/linker-x86_64.ld` exists with `OUTPUT_FORMAT(elf64-x86-64)`, `ENTRY(kmain)`, base address `0xffffffff80000000`, and `KEEP(*(.requests_start_marker))`, `KEEP(*(.requests))`, `KEEP(*(.requests_end_marker))` in `.data`
-- `kernel/build.rs` exists and passes `-Tlinker-x86_64.ld` via `cargo:rustc-link-arg`
-- `cargo build --release` succeeds from `kernel/`
+### Task 1: Housekeeping and GDT/TSS Initialization
+**Goal**: Clean up legacy files and establish a valid 64-bit GDT with kernel code/data segments and TSS with IST.
+**Assigned to**: `coder`
+**Acceptance Criteria**:
+- `kernel/Cargo.tompl` does not exist.
+- `kernel/Cargo.toml` contains `repository = "https://github.com/grenOS/grenOS"`.
+- `kernel/src/gdt.rs` is implemented with kernel code segment, kernel data segment, TSS with IST1 stack, and initialization functions.
+- All `asm!` calls are strictly inside `unsafe` blocks.
+- `cargo build --release` succeeds in `kernel/`.
+- `cargo clippy --release -- -D warnings` succeeds in `kernel/`.
+- QEMU boot succeeds and prints `grenOS` on COM1 without panic or faults.
 
-### Phase 3: Limine requests via the crate
+### Task 2: IDT and CPU Exception Handlers
+**Goal**: Implement the IDT with handlers for breakpoint (#BP), double fault (#DF with IST1), general protection (#GP), and page fault (#PF).
+**Assigned to**: `coder`
+**Acceptance Criteria**:
+- `kernel/src/idt.rs` provides a 256-entry IDT loaded via `lidt` inside an `unsafe` block.
+- Exception handlers for vector 3 (#BP), vector 8 (#DF using IST1), vector 13 (#GP), and vector 14 (#PF) are registered.
+- All `asm!` calls are strictly inside `unsafe` blocks.
+- `kmain()` invokes `gdt::init()` and `idt::init()` and serial output retains `grenOS\n`.
+- No PIC/APIC or hardware device interrupts, paging changes, or heap code are introduced.
+- `cargo build --release` and `cargo clippy --release -- -D warnings` succeed in `kernel/`.
+- Kernel boots cleanly in QEMU printing `grenOS` with no unexpected faults.
 
-**Goal**: Use the `limine` crate 0.5 to declare the base revision and requests.
+## 8. Sources
 
-**Acceptance criteria**:
-- `kernel/src/main.rs` exists with `#![no_std]` and `#![no_main]`
-- A static `BASE_REVISION: BaseRevision = BaseRevision::new()` exists
-- A static `STACK_SIZE_REQUEST: StackSizeRequest` exists
-- `cargo build --release` succeeds from `kernel/`
-
-### Phase 4: Kernel entry point
-
-**Goal**: Implement `kmain` that initialises serial, prints `grenOS`, and halts.
-
-**Acceptance criteria**:
-- `kernel/src/main.rs` defines `#[no_mangle] pub extern "C" fn kmain() -> !`
-- `kmain` calls `serial::init()` and `serial::write_str("grenOS\n")`
-- `kmain` enters an infinite `hlt` loop using `core::arch::asm!("hlt", options(nomem, nostack, preserves_flags))`
-- `cargo build --release` succeeds from `kernel/`
-- `cargo clippy --release -- -D warnings` succeeds from `kernel/`
-
-### Phase 5: Serial output driver
-
-**Goal**: Implement a minimal COM1 serial driver with `init`, `write_byte`, `write_str`.
-
-**Acceptance criteria**:
-- `kernel/src/serial.rs` exists with the functions specified in Interfaces
-- `init` configures COM1 for 38400 baud, 8N1, FIFO enabled, interrupts disabled
-- `write_str` writes each byte via inline-assembly port I/O and waits for transmit buffer empty (line status bit 5)
-- `cargo build --release` succeeds from `kernel/`
-- `cargo clippy --release -- -D warnings` succeeds from `kernel/`
-
-### Phase 6: Image build
-
-**Goal**: Produce a bootable ISO containing the kernel and Limine bootloader.
-
-**Acceptance criteria**:
-- `kernel/scripts/make-iso.sh` exists and, when run via `bash`, produces a bootable ISO
-- The script fetches the Limine binaries itself (CI has `xorriso` and `mtools` and nothing from Limine)
-- The ISO contains the kernel ELF and `limine.conf` (not `limine.cfg`)
-- `limine.conf` specifies the kernel path
-- The ISO is non-empty and bootable
-
-### Phase 7: QEMU verification
-
-**Goal**: Boot the ISO in QEMU and verify serial output.
-
-**Acceptance criteria**:
-- `qemu-system-x86_64 -cdrom <image> -serial stdio -display none -no-reboot -no-shutdown -m 256M` prints `grenOS`
-- The serial output contains `grenOS` and none of `panic`, `triple fault`, `double fault`
-- QEMU process remains running (kernel halted, not crashed or rebooted)
-
-## Sources
-
-- crates.io API for `limine`: confirmed version 0.5.0 exists (published 2025-06-05).
-- docs.rs `limine` 0.5.0 crate page: `BaseRevision` tag, request usage, `StackSizeRequest::new().with_size(...)`.
-- docs.rs `limine::request` module for 0.5.0: `BootloaderInfoRequest`, `StackSizeRequest`, and other request structs.
-- Limine CONFIG.md: `limine.conf` is the config file name; Limine scans `/boot/limine.conf` among other locations.
-- limine-rust-template `kernel/linker-x86_64.ld`: linker script with `ENTRY(kmain)`, base `0xffffffff80000000`, and `.requests` kept in `.data`.
-- limine-rust-template `kernel/build.rs`: passes the linker script via `cargo:rustc-link-arg=-Tlinker-x86_64.ld`.
-- Rust standard library documentation for `core::arch::x86_64`: the module provides CPU intrinsics, not `hlt`, `outb` or `inb`; those are inline assembly.
+- `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/kernel/linker-x86_64.ld` — Linker script configuration and higher-half section placements.
+- `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/limine.conf` and `CONFIG.md` — Limine bootloader protocol and configuration formats.
+- `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/GNUmakefile` — Relocation model (`-C relocation-model=static`) and static linkage settings.
+- `https://doc.rust-lang.org/reference/inline-assembly.html` — Rust `core::arch::asm!` requirements and unsafe qualification.
+- AMD64 Architecture Programmer's Manual, Volume 2: System Programming (Segments, TSS 64-bit format, IDT gate descriptors, IST mechanics).
