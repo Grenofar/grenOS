@@ -501,6 +501,22 @@ export function renderPreflight(problems: string[], left: number): string {
   ].join("\n");
 }
 
+/** What the agent reads when its answer could not be parsed at all. */
+export function renderUnreadable(reason: string, left: number): string {
+  return [
+    "# Your answer could not be read",
+    "",
+    `The runtime could not parse it: ${reason}`,
+    "Nothing was committed.",
+    "",
+    "Return your complete answer again as exactly one JSON object, as the protocol defines it — every action, not only a fix. " +
+      'Inside a JSON string, write a quote as \\" and a line break as \\n; no comment, no trailing comma, no code fence.',
+    left > 0
+      ? `After this one, ${left} correction(s) remain in this attempt.`
+      : "This is the last correction in this attempt: after it, the attempt is spent.",
+  ].join("\n");
+}
+
 /** Comments do not make a loop non-empty for clippy, so they are removed first. */
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");

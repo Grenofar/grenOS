@@ -6,7 +6,13 @@ import { authorize } from "./sandbox.ts";
 import { repoContext } from "./context.ts";
 import { renderEvidence } from "./evidence.ts";
 import { consult, CONSULT_ROUNDS } from "./consult.ts";
-import { crateRoots, preflight, renderPreflight, PREFLIGHT_ROUNDS } from "./preflight.ts";
+import {
+  crateRoots,
+  preflight,
+  renderPreflight,
+  renderUnreadable,
+  PREFLIGHT_ROUNDS,
+} from "./preflight.ts";
 import { checkDependencies, checkEditions, crateReleases, crateVersions } from "./deps.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
@@ -114,6 +120,29 @@ export async function executeTask(
       envelope = parseEnvelope(text);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
+
+      // An answer that cannot be read is a slip the model can fix at once,
+      // like a pre-flight problem. On 2026-09-11 a Coder answer finally came
+      // through an hour of provider outage and was lost to one misplaced
+      // character. It comes back with the parser's reason, within the same
+      // corrections budget.
+      if (err instanceof EnvelopeError && text && corrected < PREFLIGHT_ROUNDS) {
+        corrected += 1;
+        log.info(`  réponse illisible · renvoyée à l'agent (${detail.slice(0, 80)})`);
+        await emit({
+          missionId: task.mission_id,
+          taskId: task.id,
+          agentId: agent.id,
+          level: "info",
+          type: "unreadable_answer",
+          message: detail.slice(0, 500),
+        });
+        conversation.push(
+          { role: "assistant", content: text },
+          { role: "user", content: renderUnreadable(detail, PREFLIGHT_ROUNDS - corrected) },
+        );
+        continue;
+      }
 
       // A malformed envelope is the agent's fault; a router exhaustion is not.
       // Only the first should consume an attempt, otherwise a quiet afternoon of

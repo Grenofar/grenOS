@@ -5,6 +5,7 @@ import {
   binaryAsmLabels,
   preflight,
   renderPreflight,
+  renderUnreadable,
   pinnedBeforeRust185,
 } from "../src/preflight.ts";
 
@@ -329,6 +330,16 @@ test("asm! labels made only of 0 and 1, which rustc refuses", () => {
     '\nfn g() { let _ = "1: not assembly, 1f either"; }';
   assert.deepEqual(binaryAsmLabels(fine), []);
   assert.deepEqual(preflight([w("kernel/src/gdt.rs", fine)]), []);
+});
+
+test("an answer that is not valid JSON comes back with the parser's reason", () => {
+  // Mission 2, 2026-09-11: an attempt spent on one misplaced character.
+  const text = renderUnreadable("Expected ',' or '}' after property value in JSON at position 681", 1);
+  assert.match(text, /could not parse it: Expected ','/);
+  assert.match(text, /Nothing was committed/);
+  assert.match(text, /exactly one JSON object/);
+  assert.match(text, /1 correction\(s\) remain/);
+  assert.match(renderUnreadable("x", 0), /last correction/);
 });
 
 test("the agent is told what is left of its corrections", () => {
