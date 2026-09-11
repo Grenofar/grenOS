@@ -39,13 +39,13 @@ const FR = {
   none: "La première image est en cours de publication. Reviens dans quelques minutes.",
   checked: "Vérifié automatiquement dans QEMU. VirtualBox et les vrais PC ne sont pas testés par la CI.",
   nowTitle: "Ce qu'il fait aujourd'hui",
-  now: "Étape 2 sur 10 : il démarre avec le chargeur Limine, écrit « grenOS » sur le port série COM1, installe ses tables de segments et d'interruptions (GDT, IDT), puis déclenche exprès deux exceptions pour prouver qu'il les attrape : un point d'arrêt, dont il repart, et une faute de page, dont il écrit l'adresse avant de s'arrêter. Il n'affiche encore rien à l'écran : c'est par le port série qu'on le voit.",
+  now: "Étape 3 sur 11 : il démarre avec le chargeur Limine, installe ses tables de segments et d'interruptions (GDT, IDT) et dessine un bureau façon Windows 95 : fond sarcelle, icônes, une fenêtre de bienvenue, la barre des tâches avec le bouton Démarrer et l'heure. C'est encore une image fixe : la souris et le clavier arrivent à l'étape suivante.",
   vboxTitle: "VirtualBox",
   vbox: [
     "Télécharger le zip « pour VirtualBox » et l'extraire (clic droit → Extraire tout) : l'ISO et le fichier .vbox sont côte à côte.",
     "Double-cliquer sur le fichier .vbox, ou dans VirtualBox : Machine → Ajouter…, puis le choisir. La machine grenOS apparaît, déjà réglée : 64 bits, 256 Mo, l'ISO dans le lecteur optique.",
-    "La démarrer. Après le menu de Limine (3 secondes), le kernel démarre.",
-    "Ce qu'il écrit sur le port série est dans C:\\Users\\Public\\Documents\\grenos-serie.txt : grenOS, puis Breakpoint, puis Page fault suivi de l'adresse fautive.",
+    "La démarrer. Après le menu de Limine (3 secondes), le bureau de grenOS s'affiche.",
+    "Ce qu'il écrit sur le port série est dans C:\\Users\\Public\\Documents\\grenos-serie.txt : grenOS, Breakpoint, puis desktop: drawn.",
   ],
   vboxNote: "Une machine 64 bits demande la virtualisation matérielle (VT-x ou AMD-V) activée dans le BIOS du PC. Sans le fichier .vbox : nouvelle machine Other/Unknown (64-bit), 256 Mo, sans disque dur, l'ISO dans le lecteur optique, port série 1 en « Fichier brut ».",
   qemuTitle: "QEMU",
@@ -54,7 +54,7 @@ const FR = {
   usb: [
     "Écrire l'image sur une clé avec Rufus (mode image DD), balenaEtcher, ou sous Linux la commande ci-dessous. La clé est entièrement effacée.",
     "Démarrer le PC sur la clé, en mode Legacy / BIOS (CSM).",
-    "Sans câble série branché sur COM1, on ne voit que le menu de Limine : l'affichage à l'écran viendra plus tard.",
+    "Le bureau s'affiche après le menu de Limine. La souris et le clavier ne répondent pas encore.",
   ],
   source: "Code source",
 };
@@ -77,13 +77,13 @@ const EN: typeof FR = {
   none: "The first image is being published. Come back in a few minutes.",
   checked: "Checked automatically in QEMU. VirtualBox and real PCs are not tested by CI.",
   nowTitle: "What it does today",
-  now: "Step 2 of 10: it boots with the Limine bootloader, writes “grenOS” to the COM1 serial port, loads its segment and interrupt tables (GDT, IDT), then raises two exceptions on purpose to prove it catches them: a breakpoint, which it returns from, and a page fault, whose address it writes before halting. It shows nothing on screen yet: the serial port is where you see it.",
+  now: "Step 3 of 11: it boots with the Limine bootloader, loads its segment and interrupt tables (GDT, IDT) and draws a Windows 95 style desktop: teal wallpaper, icons, a welcome window, the taskbar with the Start button and the time. It is still a still picture: the mouse and the keyboard come next.",
   vboxTitle: "VirtualBox",
   vbox: [
     "Download the zip “for VirtualBox” and extract it (right-click → Extract All): the ISO and the .vbox file sit side by side.",
     "Double-click the .vbox file, or in VirtualBox: Machine → Add…, and pick it. The grenOS machine appears, already set up: 64-bit, 256 MB, the ISO in the optical drive.",
-    "Start it. After Limine's menu (3 seconds), the kernel boots.",
-    "What it writes to the serial port is in C:\\Users\\Public\\Documents\\grenos-serie.txt: grenOS, then Breakpoint, then Page fault with the faulting address.",
+    "Start it. After Limine's menu (3 seconds), the grenOS desktop appears.",
+    "What it writes to the serial port is in C:\\Users\\Public\\Documents\\grenos-serie.txt: grenOS, Breakpoint, then desktop: drawn.",
   ],
   vboxNote: "A 64-bit machine needs hardware virtualisation (VT-x or AMD-V) enabled in the host PC's firmware. Without the .vbox file: new machine Other/Unknown (64-bit), 256 MB, no hard disk, the ISO in the optical drive, serial port 1 in Raw File mode.",
   qemuTitle: "QEMU",
@@ -92,7 +92,7 @@ const EN: typeof FR = {
   usb: [
     "Write the image to a stick with Rufus (DD image mode), balenaEtcher, or on Linux the command below. The stick is erased.",
     "Boot the PC from the stick in Legacy / BIOS (CSM) mode.",
-    "Without a serial cable on COM1 you only see Limine's menu: on-screen output comes later.",
+    "The desktop appears after Limine's menu. The mouse and the keyboard do not respond yet.",
   ],
   source: "Source code",
 };
