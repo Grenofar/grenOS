@@ -49,3 +49,21 @@ pub fn write_str(s: &str) {
         write_byte(byte);
     }
 }
+
+pub fn write_hex(mut val: u64) {
+    if val == 0 {
+        write_byte(b'0');
+        return;
+    }
+    let mut buf = [0u8; 16];
+    let mut len = 0;
+    while val > 0 {
+        let nibble = (val & 0xf) as u8;
+        buf[len] = if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 };
+        len += 1;
+        val >>= 4;
+    }
+    for i in (0..len).rev() {
+        write_byte(buf[i]);
+    }
+}

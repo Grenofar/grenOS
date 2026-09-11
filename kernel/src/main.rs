@@ -2,6 +2,8 @@
 #![no_main]
 
 mod serial;
+mod gdt;
+mod idt;
 
 use core::panic::PanicInfo;
 
@@ -25,11 +27,22 @@ static _START_MARKER: RequestsStartMarker = RequestsStartMarker::new();
 static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn kmain() -> ! {
+extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
 
     serial::init();
+    gdt::init();
+    idt::init();
+
     serial::write_str("grenOS\n");
+
+    // Trigger a breakpoint exception
+    unsafe { core::arch::asm!("int3"); }
+
+    // Trigger a page fault by accessing an unmapped address
+    // We choose an address in the higher half that is likely not mapped: 2MiB above the kernel base
+    let ptr = 0xffffffff80000000 + 0x200000 as *const u8;
+    let _ = unsafe { *ptr }; // This should cause a page fault
 
     loop {
         unsafe {
