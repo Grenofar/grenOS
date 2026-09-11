@@ -257,6 +257,27 @@ export function preflight(changes: Change[], branch: Change[] | null = null): st
   return problems;
 }
 
+/** The module name a file under src/ answers to: `gdt` for gdt.rs and gdt/mod.rs. */
+function moduleStem(path: string, prefix: string): string {
+  const rel = path.slice(`${prefix}src/`.length);
+  return (rel.endsWith("/mod.rs") ? rel.slice(0, -"/mod.rs".length) : rel.slice(0, -".rs".length)).split("/").pop()!;
+}
+
+/** Whether cargo compiles a file under src/: a crate root, src/bin/, or a module some `mod` declares. */
+function compiled(path: string, prefix: string, files: Map<string, string>): boolean {
+  const rel = path.slice(`${prefix}src/`.length);
+  if (rel === "main.rs" || rel === "lib.rs" || rel.startsWith("bin/")) return true;
+  const stem = moduleStem(path, prefix);
+  const declaration = new RegExp(`\\bmod\\s+(?:r#)?${stem}\\s*[;{]`);
+  return [...files].some(
+    ([other, content]) =>
+      other !== path &&
+      other.startsWith(`${prefix}src/`) &&
+      other.endsWith(".rs") &&
+      (declaration.test(stripComments(content)) || content.includes(`${stem}.rs"`)),
+  );
+}
+
 /**
  * Checks that need the whole crate, not only the files the answer changed: a
  * panic handler may live in any file of the crate, and the toolchain that
@@ -297,26 +318,31 @@ function crateProblems(changes: Change[], branch: Change[] | null): string[] {
     // GDT nor the bugs in that file ever reached it.
     for (const { path } of changes) {
       if (!path.startsWith(`${prefix}src/`) || !path.endsWith(".rs") || !files.has(path)) continue;
-      const rel = path.slice(`${prefix}src/`.length);
-      // The crate roots, and src/bin/, whose files cargo builds on its own.
-      if (rel === "main.rs" || rel === "lib.rs" || rel.startsWith("bin/")) continue;
-      const stem = (rel.endsWith("/mod.rs") ? rel.slice(0, -"/mod.rs".length) : rel.slice(0, -".rs".length))
-        .split("/")
-        .pop()!;
-      const declaration = new RegExp(`\\bmod\\s+(?:r#)?${stem}\\s*[;{]`);
-      const declared = [...files].some(
-        ([other, content]) =>
-          other !== path &&
-          other.startsWith(`${prefix}src/`) &&
-          other.endsWith(".rs") &&
-          (declaration.test(stripComments(content)) || content.includes(`${stem}.rs"`)),
-      );
-      if (!declared) {
+      if (!compiled(path, prefix, files)) {
+        const stem = moduleStem(path, prefix);
         problems.push(
           `${path}: no \`mod ${stem};\` declares this file, so cargo never compiles it and CI would pass without it. ` +
             `Declare it in ${prefix}src/main.rs (or in its parent module) and call what it provides.`,
         );
       }
+    }
+
+    // The build judges the whole crate, not only what the answer changed.
+    // Mission 2's last GDT/IDT attempt rewrote idt.rs and serial.rs; nine
+    // clippy errors in gdt.rs, untouched, waited behind a type error, and
+    // nothing had ever reported them. A file nothing compiles is left alone.
+    const changed = new Set(changes.map((c) => c.path));
+    const untouched = branch.filter(
+      (c) =>
+        !changed.has(c.path) &&
+        c.path.startsWith(`${prefix}src/`) &&
+        c.path.endsWith(".rs") &&
+        compiled(c.path, prefix, files),
+    );
+    for (const problem of preflight(untouched, null)) {
+      problems.push(
+        `${problem} (You did not change this file, but the build judges the whole crate: fix it, or answer spec_gap if it is outside your allowed paths.)`,
+      );
     }
 
     const manifest = files.get(`${prefix}Cargo.toml`);
@@ -480,6 +506,13 @@ export function castBeforeLessThan(source: string): number[] {
 
 const INTEGER = "(?:[iu](?:8|16|32|64|128|size))";
 
+/**
+ * A token that starts here, not in the middle of a word or after a field dot:
+ * `t.0` and `self.IDT` are fields, but `0..IDT.len()` is a range, whose second
+ * dot hid mission 2's last reference to IDT from the first version of this.
+ */
+const OWN_NAME = "(?<!\\w)(?<!(?<!\\.)\\.)";
+
 /** Array methods that borrow the array, and so the static that holds it. */
 const BORROWING_METHODS =
   "len|is_empty|iter|iter_mut|as_ptr|as_mut_ptr|as_slice|as_mut_slice|fill|first|first_mut|last|last_mut|" +
@@ -499,7 +532,7 @@ export function staticMutReferences(source: string): Array<{ name: string; lines
     const name = decl[1]!;
     // `a && NAME` and `a & NAME` are not references: the & must touch the name.
     const patterns = [new RegExp(`(?<![\\w)\\]&])&(?:mut\\s+)?${name}\\b(?!\\s*\\[)`, "g")];
-    if (decl[2]) patterns.push(new RegExp(`(?<![\\w.])${name}\\s*\\.\\s*(?:${BORROWING_METHODS})\\s*\\(`, "g"));
+    if (decl[2]) patterns.push(new RegExp(`${OWN_NAME}${name}\\s*\\.\\s*(?:${BORROWING_METHODS})\\s*\\(`, "g"));
     const lines = new Set<number>();
     for (const pattern of patterns) for (const m of code.matchAll(pattern)) lines.add(lineAt(code, m.index!));
     if (lines.size > 0) found.push({ name, lines: [...lines].sort((a, b) => a - b) });
@@ -519,7 +552,7 @@ export function fnPointerCasts(source: string): Array<{ name: string; line: numb
     ...code.matchAll(/^(?:pub(?:\([^)]*\))?\s+)?(?:const\s+)?(?:unsafe\s+)?(?:extern\s+(?:"[^"]*"\s+)?)?fn\s+([A-Za-z_]\w*)/gm),
   ].map((m) => m[1]!);
   if (names.length === 0) return [];
-  const cast = new RegExp(`(?<![\\w.])(${names.join("|")})\\s+as\\s+(?!usize\\b)${INTEGER}\\b`, "g");
+  const cast = new RegExp(`${OWN_NAME}(${names.join("|")})\\s+as\\s+(?!usize\\b)${INTEGER}\\b`, "g");
   return [...code.matchAll(cast)].map((m) => ({ name: m[1]!, line: lineAt(code, m.index!) }));
 }
 
@@ -531,7 +564,7 @@ export function fnPointerCasts(source: string): Array<{ name: string; line: numb
 export function literalCasts(source: string): number[] {
   const code = blankLiterals(source);
   const literal = new RegExp(
-    `(?<![\\w.])(?:0x[0-9a-fA-F_]+|0o[0-7_]+|0b[01_]+|\\d[\\d_]*)\\s+as\\s+(?:${INTEGER}|f32|f64)\\b`,
+    `${OWN_NAME}(?:0x[0-9a-fA-F_]+|0o[0-7_]+|0b[01_]+|\\d[\\d_]*)\\s+as\\s+(?:${INTEGER}|f32|f64)\\b`,
     "g",
   );
   return [...new Set([...code.matchAll(literal)].map((m) => lineAt(code, m.index!)))];

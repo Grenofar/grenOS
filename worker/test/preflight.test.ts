@@ -453,6 +453,37 @@ test("what clippy -D warnings rejects once rustc is satisfied", () => {
   assert.deepEqual(preflight([w("kernel/src/idt.rs", fine)]), []);
 });
 
+test("a range before a static, and the compiled files the answer left alone", () => {
+  // Mission 2's last attempt: `0..IDT.len()` borrows IDT, and the range's
+  // second dot hid it from the first version of the rule.
+  const range = ["static mut IDT: [u64; 4] = [0; 4];", "pub fn init() {", "    unsafe { for i in 0..IDT.len() { let _ = i; } }", "}"].join("\n");
+  assert.deepEqual(staticMutReferences(range), [{ name: "IDT", lines: [3] }]);
+  // A float and a tuple field are not literals cast; a range bound is.
+  assert.deepEqual(literalCasts(["let x = 1.5 as u32;", "let y = t.0 as u64;", "for i in 0..10 as usize {}"].join("\n")), [3]);
+
+  // The same attempt left gdt.rs as it was, with its clippy errors: the build
+  // judges it anyway. old.rs, which no mod declares, is never compiled.
+  const main = [
+    "#![no_std]",
+    "#![no_main]",
+    "mod gdt;",
+    "mod idt;",
+    "#[panic_handler]",
+    'fn panic(_i: &core::panic::PanicInfo) -> ! { loop { unsafe { core::arch::asm!("hlt") } } }',
+  ].join("\n");
+  const broken = ["static mut GDT: [u64; 3] = [0; 3];", "pub fn init() {", "    unsafe { let _base = &GDT as *const _ as u64; }", "}"].join("\n");
+  const fixedIdt = ["static mut IDT: [u64; 4] = [0; 4];", "pub fn init() {", "    unsafe { (*core::ptr::addr_of_mut!(IDT))[0] = 0; }", "}"].join("\n");
+  const branch = [
+    w("kernel/src/main.rs", main),
+    w("kernel/src/gdt.rs", broken),
+    w("kernel/src/old.rs", broken),
+    w("kernel/src/idt.rs", range),
+  ];
+  const problems = preflight([w("kernel/src/idt.rs", fixedIdt)], branch);
+  assert.equal(problems.length, 1, problems.join("\n"));
+  assert.match(problems[0]!, /^kernel\/src\/gdt\.rs: a reference to static mut GDT \(line 3\).*You did not change this file/);
+});
+
 test("an answer that is not valid JSON comes back with the parser's reason", () => {
   // Mission 2, 2026-09-11: an attempt spent on one misplaced character.
   const text = renderUnreadable("Expected ',' or '}' after property value in JSON at position 681", 1);
