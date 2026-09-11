@@ -270,7 +270,12 @@ reference to a `static mut` (`&GDT`, `GDT.len()`: take `addr_of!(GDT)`
 instead), a function cast to an integer other than `usize`
 (`handler as usize as u64`), a number literal cast with `as` (`0x89_u64`, not
 `0x89 as u64`), a parameter the body never uses, a `pub fn` that takes or
-returns a type private to its module.
+returns a type private to its module, a loop that indexes one array by its
+counter (`for row in 0..8 { glyph[row] }`: iterate with
+`glyph.iter().enumerate()`), a `return` as a function's last statement, more
+than 7 parameters, an `if` whose whole body is another `if`, and
+`if let Some(_) =`. These run on every file the crate compiles, the ones you
+did not touch included.
 If it finds any, nothing is committed and you get the list immediately, in
 the same attempt: fix every item and return your complete answer again. Two
 corrections per attempt; after that the attempt is spent, but no CI run is.

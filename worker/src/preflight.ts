@@ -250,6 +250,45 @@ export function preflight(changes: Change[], branch: Change[] | null = null): st
             "rustc's private_interfaces lint rejects them under clippy -D warnings. Make the type pub, or the function private.",
         );
       }
+
+      // What drawing code trips on (mission 3, the desktop): a font drawn row
+      // by row, a function that ends on return, a draw call with a parameter
+      // per coordinate and colour.
+      const loops = indexedLoops(content);
+      if (loops.length > 0) {
+        problems.push(
+          `${path}: loops that index one array by their counter (${loops.map((l) => `${l.array}[${l.index}], line ${l.line}`).join("; ")}): ` +
+            "clippy::needless_range_loop rejects them under -D warnings. Iterate instead: for (row, bits) in glyph.iter().enumerate().",
+        );
+      }
+      const returns = needlessReturns(content);
+      if (returns.length > 0) {
+        problems.push(
+          `${path}: a return as the last statement of a function (line ${returns.join(", ")}): clippy::needless_return rejects it under -D warnings. ` +
+            "End the function on the value itself, with no return and no semicolon.",
+        );
+      }
+      const crowded = crowdedFunctions(content);
+      if (crowded.length > 0) {
+        problems.push(
+          `${path}: functions with more than 7 parameters, self included (${crowded.map((f) => `${f.fn} has ${f.count}, line ${f.line}`).join("; ")}): ` +
+            "clippy::too_many_arguments rejects them under -D warnings. Group parameters in a struct, such as a Rect or a Colour.",
+        );
+      }
+      const nestedIfs = collapsibleIfs(content);
+      if (nestedIfs.length > 0) {
+        problems.push(
+          `${path}: an if whose whole body is another if (line ${nestedIfs.join(", ")}): clippy::collapsible_if rejects it under -D warnings. ` +
+            "Join the conditions: if a && b { … }.",
+        );
+      }
+      const patterns = redundantPatterns(content);
+      if (patterns.length > 0) {
+        problems.push(
+          `${path}: if let Some(_), None, Ok(_) or Err(_), which only tests (line ${patterns.join(", ")}): clippy::redundant_pattern_matching rejects it under -D warnings. ` +
+            "Call is_some(), is_none(), is_ok() or is_err() instead.",
+        );
+      }
     }
   }
 
@@ -623,6 +662,140 @@ export function privateInterfaces(path: string, source: string): Array<{ fn: str
     if (type) found.push({ fn: m[1]!, type, line: lineAt(code, m.index!) });
   }
   return found;
+}
+
+/**
+ * `for i in 0..n` loops whose body indexes one array by `i` alone: clippy's
+ * needless_range_loop rejects them under -D warnings, statics included
+ * (`FONT[c]`). It lets a loop be when the counter also indexes another
+ * array, reaches one through a field or a pointer (`self.buf[i]`,
+ * `(*p)[i]`), sits in arithmetic inside the brackets (`g[i + 1]`), or when
+ * the body uses the array some other way.
+ */
+export function indexedLoops(source: string): Array<{ index: string; array: string; line: number }> {
+  const code = blankLiterals(source);
+  const found: Array<{ index: string; array: string; line: number }> = [];
+  for (const m of code.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\s+0\s*\.\.=?[^{;]*\{/g)) {
+    const index = m[1]!;
+    const open = m.index! + m[0].length - 1;
+    const close = closingDelimiter(code, open);
+    if (close === -1) continue;
+    const body = code.slice(open + 1, close);
+    const counter = new RegExp(`\\b${index}\\b`);
+    const direct = new Set<string>();
+    let indirect = false;
+    for (let i = body.indexOf("["); i !== -1; i = body.indexOf("[", i + 1)) {
+      const end = closingDelimiter(body, i);
+      if (end === -1) break;
+      const inside = body.slice(i + 1, end);
+      if (!counter.test(inside)) continue;
+      const name = body.slice(0, i).match(/(?<![\w.)\]])([A-Za-z_]\w*)\s*$/)?.[1];
+      if (inside.trim() === index && name) direct.add(name);
+      else indirect = true;
+    }
+    if (indirect || direct.size !== 1) continue;
+    const array = [...direct][0]!;
+    const uses = body.match(new RegExp(`\\b${array}\\b`, "g"))?.length ?? 0;
+    const indexed = body.match(new RegExp(`\\b${array}\\s*\\[`, "g"))?.length ?? 0;
+    if (uses === indexed) found.push({ index, array, line: lineAt(code, m.index!) });
+  }
+  return found;
+}
+
+/**
+ * Lines of a `return` that ends a function body, `return x;` or `return;`:
+ * clippy's needless_return rejects it under -D warnings. An early return
+ * followed by a tail value passes.
+ */
+export function needlessReturns(source: string): number[] {
+  const code = blankLiterals(source);
+  const lines: number[] = [];
+  for (const m of code.matchAll(/\bfn\s+[A-Za-z_]\w*[^(;{]*\(/g)) {
+    const open = m.index! + m[0].length - 1;
+    const close = closingDelimiter(code, open);
+    if (close === -1) continue;
+    let brace = close + 1;
+    while (brace < code.length && code[brace] !== "{" && code[brace] !== ";") brace++;
+    if (code[brace] !== "{") continue;
+    const end = closingDelimiter(code, brace);
+    if (end === -1) continue;
+    // The last statement at the top level of the body.
+    const body = code.slice(brace + 1, end).trimEnd();
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < body.length; i++) {
+      const c = body[i]!;
+      if ("([{".includes(c)) depth++;
+      else if (")]}".includes(c)) {
+        depth--;
+        if (depth === 0 && c === "}") start = i + 1;
+      } else if (c === ";" && depth === 0 && i < body.length - 1) start = i + 1;
+    }
+    const last = body.slice(start).trim();
+    if (/^return\b/.test(last)) lines.push(lineAt(code, brace + 1 + body.lastIndexOf(last)));
+  }
+  return lines;
+}
+
+/** Functions with more than 7 parameters, self included: clippy::too_many_arguments. */
+export function crowdedFunctions(source: string): Array<{ fn: string; count: number; line: number }> {
+  if (/too_many_arguments/.test(source)) return [];
+  const code = blankLiterals(source);
+  const found: Array<{ fn: string; count: number; line: number }> = [];
+  for (const m of code.matchAll(/\bfn\s+([A-Za-z_]\w*)[^(;{]*\(/g)) {
+    const open = m.index! + m[0].length - 1;
+    const close = closingDelimiter(code, open);
+    if (close === -1) continue;
+    const count = topLevelParts(code.slice(open + 1, close)).filter((p) => p.trim() !== "").length;
+    if (count > 7) found.push({ fn: m[1]!, count, line: lineAt(code, m.index!) });
+  }
+  return found;
+}
+
+/**
+ * Lines of an `if` whose whole body is another `if`, neither with an else:
+ * clippy's collapsible_if rejects it under -D warnings, an `else if` branch
+ * included. `if let`, an else on either, another statement, or a comment
+ * between the two keeps them apart, as clippy does.
+ */
+export function collapsibleIfs(source: string): number[] {
+  const code = blankLiterals(source);
+  const lines: number[] = [];
+  for (const m of code.matchAll(/\bif\s+(?!let\b)/g)) {
+    const open = blockAfterCondition(code, m.index! + m[0].length);
+    if (open === -1) continue;
+    const close = closingDelimiter(code, open);
+    if (close === -1 || /^\s*else\b/.test(code.slice(close + 1))) continue;
+    // The raw source: a comment inside the outer block keeps the ifs apart.
+    const inner = source.slice(open + 1, close).match(/^\s*if\s+(?!let\b)/);
+    if (!inner) continue;
+    const innerOpen = blockAfterCondition(code, open + 1 + inner[0].length);
+    if (innerOpen === -1 || innerOpen > close) continue;
+    const innerClose = closingDelimiter(code, innerOpen);
+    if (innerClose === -1 || innerClose > close) continue;
+    if (source.slice(innerClose + 1, close).trim() === "") lines.push(lineAt(code, m.index!));
+  }
+  return lines;
+}
+
+/** Lines of `if let` or `while let` on Some(_), None, Ok(_) or Err(_): clippy::redundant_pattern_matching. */
+export function redundantPatterns(source: string): number[] {
+  const code = blankLiterals(source);
+  const test = /\b(?:if|while)\s+let\s+(?:(?:Some|Ok|Err)\s*\(\s*_\s*\)|None)\s*=[^=]/g;
+  return [...new Set([...code.matchAll(test)].map((m) => lineAt(code, m.index!)))];
+}
+
+/** The `{` opening the block of an if whose condition starts at `from`; -1 if none. */
+function blockAfterCondition(code: string, from: number): number {
+  let depth = 0;
+  for (let i = from; i < code.length; i++) {
+    const c = code[i];
+    if (c === "(" || c === "[") depth++;
+    else if (c === ")" || c === "]") depth--;
+    else if (c === "{" && depth === 0) return i;
+    else if (c === ";" && depth === 0) return -1;
+  }
+  return -1;
 }
 
 /** The 1-based line of an offset. */

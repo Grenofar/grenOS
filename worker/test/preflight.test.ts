@@ -4,6 +4,11 @@ import {
   asmOutsideUnsafe,
   binaryAsmLabels,
   castBeforeLessThan,
+  collapsibleIfs,
+  crowdedFunctions,
+  indexedLoops,
+  needlessReturns,
+  redundantPatterns,
   fnPointerCasts,
   literalCasts,
   privateInterfaces,
@@ -482,6 +487,63 @@ test("a range before a static, and the compiled files the answer left alone", ()
   const problems = preflight([w("kernel/src/idt.rs", fixedIdt)], branch);
   assert.equal(problems.length, 1, problems.join("\n"));
   assert.match(problems[0]!, /^kernel\/src\/gdt\.rs: a reference to static mut GDT \(line 3\).*You did not change this file/);
+});
+
+test("what drawing code trips on: indexed loops, a final return, crowded functions, nested ifs", () => {
+  // Checked against nightly-2024-11-15's clippy -D warnings for mission 3,
+  // the desktop: every line of `flagged` failed there, every one of `fine` passed.
+  const flagged = [
+    "fn font(g: &[u8; 8]) { for row in 0..8 { let bits = g[row]; plot(bits as usize, row); } }",
+    "fn len(g: &[u8]) { for i in 0..g.len() { plot(g[i] as usize, 0); } }",
+    "static FONT: [[u8; 8]; 4] = [[0; 8]; 4];",
+    "fn stat() { for c in 0..4 { plot(FONT[c][0] as usize, c); } }",
+    "fn incl(g: &[u8; 9]) { for i in 0..=8 { plot(g[i] as usize, 0); } }",
+    "fn tail(x: bool) -> u8 { if x { return 1; } return 2; }",
+    "fn unit() { plot(0, 0); return; }",
+    "fn args8(_a: u8, _b: u8, _c: u8, _d: u8, _e: u8, _f: u8, _g: u8, _h: u8) {}",
+    "fn nested(a: bool, b: bool) { if a { if b { plot(0, 0); } } }",
+    "fn chain(a: bool, b: bool, c: bool) { if a { plot(3, 3); } else if b { if c { plot(0, 0); } } }",
+    "fn probe(a: Option<u8>) { if let Some(_) = a { plot(0, 0); } }",
+  ].join("\n");
+  assert.deepEqual(
+    indexedLoops(flagged).map((l) => [l.array, l.index, l.line]),
+    [["g", "row", 1], ["g", "i", 2], ["FONT", "c", 4], ["g", "i", 5]],
+  );
+  assert.deepEqual(needlessReturns(flagged), [6, 7]);
+  assert.deepEqual(crowdedFunctions(flagged).map((f) => [f.fn, f.count]), [["args8", 8]]);
+  assert.deepEqual(collapsibleIfs(flagged), [9, 10]);
+  assert.deepEqual(redundantPatterns(flagged), [11]);
+  const problems = preflight([w("kernel/src/desktop.rs", flagged)]).join("\n");
+  assert.match(problems, /g\[row\], line 1.*needless_range_loop.*iter\(\)\.enumerate\(\)/);
+  assert.match(problems, /return as the last statement of a function \(line 6, 7\)/);
+  assert.match(problems, /args8 has 8, line 8/);
+  assert.match(problems, /collapsible_if/);
+  assert.match(problems, /is_some\(\)/);
+
+  const fine = [
+    "struct Buf { data: [u8; 8] }",
+    "impl Buf { fn fill(&mut self) { for i in 0..8 { self.data[i] = 1; } } }",
+    "fn raw(p: *mut [u8; 8]) { unsafe { for i in 0..8 { (*p)[i] = 0; } } }",
+    "fn plus(g: &[u8; 9]) { for i in 0..8 { plot(g[i] as usize, g[i + 1] as usize); } }",
+    "fn other(g: &mut [u8; 8]) { for i in 0..8 { g[i] = g.len() as u8; } }",
+    "fn nest(a: &[u8; 8], b: &[usize; 8]) { for i in 0..8 { plot(a[b[i]] as usize, 0); } }",
+    "fn two(g: &[u8; 8], h: &[u8; 8]) { for i in 0..8 { plot(g[i] as usize, h[i] as usize); } }",
+    "fn iter(glyph: &[u8; 8]) { for (row, bits) in glyph.iter().enumerate() { plot(*bits as usize, row); } }",
+    "fn early(x: bool) -> u8 { if x { return 1; } 2 }",
+    "fn args7(_a: u8, _b: u8, _c: u8, _d: u8, _e: u8, _f: u8, _g: u8) {}",
+    "fn outer_else(a: bool, b: bool) { if a { if b { plot(0, 0); } } else { plot(1, 1); } }",
+    "fn inner_else(a: bool, b: bool) { if a { if b { plot(0, 0); } else { plot(1, 1); } } }",
+    "fn more(a: bool, b: bool) { if a { plot(2, 2); if b { plot(0, 0); } } }",
+    "fn comment(a: bool, b: bool) { if a { // why",
+    "    if b { plot(0, 0); } } }",
+    "fn check(a: Option<u8>) -> bool { a.is_some() }",
+  ].join("\n");
+  assert.deepEqual(indexedLoops(fine), []);
+  assert.deepEqual(needlessReturns(fine), []);
+  assert.deepEqual(crowdedFunctions(fine), []);
+  assert.deepEqual(collapsibleIfs(fine), []);
+  assert.deepEqual(redundantPatterns(fine), []);
+  assert.deepEqual(preflight([w("kernel/src/desktop.rs", fine)]), []);
 });
 
 test("an answer that is not valid JSON comes back with the parser's reason", () => {
