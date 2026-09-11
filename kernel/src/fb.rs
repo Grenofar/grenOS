@@ -125,6 +125,38 @@ impl Screen {
         }
     }
 
+    /// The raw pixel at (x, y), to be put back later; 0 off the screen.
+    pub fn read_raw(&self, x: usize, y: usize) -> u32 {
+        if x >= self.mode.width || y >= self.mode.height {
+            return 0;
+        }
+        let bytes = self.mode.bits_per_pixel / 8;
+        let mut value = [0u8; 4];
+        // SAFETY: (x, y) is on the screen, so its bytes lie in the framebuffer.
+        unsafe {
+            let pixel = self.base.add(y * self.mode.pitch + x * bytes);
+            for (i, byte) in value.iter_mut().take(bytes).enumerate() {
+                *byte = pixel.add(i).read_volatile();
+            }
+        }
+        u32::from_le_bytes(value)
+    }
+
+    /// Puts back a pixel `read_raw` returned; nothing off the screen.
+    pub fn write_raw(&mut self, x: usize, y: usize, value: u32) {
+        if x >= self.mode.width || y >= self.mode.height {
+            return;
+        }
+        let bytes = self.mode.bits_per_pixel / 8;
+        // SAFETY: (x, y) is on the screen, so its bytes lie in the framebuffer.
+        unsafe {
+            let pixel = self.base.add(y * self.mode.pitch + x * bytes);
+            for (i, byte) in value.to_le_bytes().iter().take(bytes).enumerate() {
+                pixel.add(i).write_volatile(*byte);
+            }
+        }
+    }
+
     /// Text in the 8x8 font, each dot drawn as a `scale` x `scale` square.
     pub fn text(&mut self, x: usize, y: usize, text: &str, colour: Rgb, scale: usize) {
         for (i, c) in text.chars().enumerate() {
