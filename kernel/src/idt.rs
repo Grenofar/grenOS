@@ -68,27 +68,30 @@ extern "x86-interrupt" fn general_protection_handler(_stack_frame: ExceptionStac
     }
 }
 
-extern "x86-interrupt" fn page_fault_handler(stack_frame: ExceptionStackFrame, _error_code: u64) {
+extern "x86-interrupt" fn page_fault_handler(_stack_frame: ExceptionStackFrame, _error_code: u64) {
     let cr2: u64;
     unsafe {
         core::arch::asm!("mov {}, cr2", out(reg) cr2);
     }
-    crate::serial::write_str("Page fault\n");
+    crate::serial::write_str("Page fault ");
     crate::serial::write_hex(cr2);
+    crate::serial::write_str(" ");
+    crate::serial::write_hex(_error_code);
     crate::serial::write_str("\n");
+    loop {
+        unsafe {
+            core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+        }
+    }
 }
 
 pub fn init() {
     unsafe {
         // Set up IDT descriptor
-        let idt_ptr = DescriptorTablePointer {
-            limit: (size_of::<[IdtEntry; 256]>() - 1) as u16,
-            base: core::ptr::addr_of_mut!(IDT) as u64,
-        };
-
+        let idt_ptr = core::ptr::addr_of_mut!(IDT);
         // Zero IDT
-        for entry in IDT.iter_mut() {
-            *entry = IdtEntry {
+        for i in 0..IDT.len() {
+            (*idt_ptr)[i] = IdtEntry {
                 offset_low: 0,
                 selector: 0,
                 ist: 0,
@@ -101,50 +104,58 @@ pub fn init() {
 
         // Set up handlers
         // Breakpoint (#BP) - vector 3, no error code
-        IDT[3] = IdtEntry {
-            offset_low: breakpoint_handler as u64 & 0xFFFF,
+        let bp_addr = breakpoint_handler as usize as u64;
+        (*idt_ptr)[3] = IdtEntry {
+            offset_low: (bp_addr & 0xFFFF) as u16,
             selector: 0x08, // kernel code segment
             ist: 0,
             type_attr: 0x8E, // present, ring 0, 64-bit interrupt gate
-            offset_mid: (breakpoint_handler as u64 >> 16) & 0xFFFF,
-            offset_high: (breakpoint_handler as u64 >> 32) as u32,
+            offset_mid: ((bp_addr >> 16) & 0xFFFF) as u16,
+            offset_high: (bp_addr >> 32) as u32,
             zero: 0,
         };
 
         // Double fault (#DF) - vector 8, with error code, IST1
-        IDT[8] = IdtEntry {
-            offset_low: double_fault_handler as u64 & 0xFFFF,
+        let df_addr = double_fault_handler as usize as u64;
+        (*idt_ptr)[8] = IdtEntry {
+            offset_low: (df_addr & 0xFFFF) as u16,
             selector: 0x08,
             ist: 1, // IST1
             type_attr: 0x8E,
-            offset_mid: (double_fault_handler as u64 >> 16) & 0xFFFF,
-            offset_high: (double_fault_handler as u64 >> 32) as u32,
+            offset_mid: ((df_addr >> 16) & 0xFFFF) as u16,
+            offset_high: (df_addr >> 32) as u32,
             zero: 0,
         };
 
         // General protection fault (#GP) - vector 13, with error code
-        IDT[13] = IdtEntry {
-            offset_low: general_protection_handler as u64 & 0xFFFF,
+        let gp_addr = general_protection_handler as usize as u64;
+        (*idt_ptr)[13] = IdtEntry {
+            offset_low: (gp_addr & 0xFFFF) as u16,
             selector: 0x08,
             ist: 0,
             type_attr: 0x8E,
-            offset_mid: (general_protection_handler as u64 >> 16) & 0xFFFF,
-            offset_high: (general_protection_handler as u64 >> 32) as u32,
+            offset_mid: ((gp_addr >> 16) & 0xFFFF) as u16,
+            offset_high: (gp_addr >> 32) as u32,
             zero: 0,
         };
 
         // Page fault (#PF) - vector 14, with error code
-        IDT[14] = IdtEntry {
-            offset_low: page_fault_handler as u64 & 0xFFFF,
+        let pf_addr = page_fault_handler as usize as u64;
+        (*idt_ptr)[14] = IdtEntry {
+            offset_low: (pf_addr & 0xFFFF) as u16,
             selector: 0x08,
             ist: 0,
             type_attr: 0x8E,
-            offset_mid: (page_fault_handler as u64 >> 16) & 0xFFFF,
-            offset_high: (page_fault_handler as u64 >> 32) as u32,
+            offset_mid: ((pf_addr >> 16) & 0xFFFF) as u16,
+            offset_high: (pf_addr >> 32) as u32,
             zero: 0,
         };
 
         // Load IDT
+        let idt_ptr = DescriptorTablePointer {
+            limit: (size_of::<[IdtEntry; 256]>() - 1) as u16,
+            base: core::ptr::addr_of!(IDT) as u64,
+        };
         load_idt(&idt_ptr);
     }
 }

@@ -49,3 +49,16 @@ pub fn write_str(s: &str) {
         write_byte(byte);
     }
 }
+
+pub fn write_hex(value: u64) {
+    write_str("0x");
+    for i in (0..16).rev() {
+        let shift = i * 4;
+        let nibble = (value >> shift) & 0xF;
+        let c = match nibble {
+            0..=9 => b'0' + nibble,
+            10..=15 => b'A' + (nibble - 10),
+        };
+        write_byte(c);
+    }
+}
