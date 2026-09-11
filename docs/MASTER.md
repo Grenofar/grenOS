@@ -7,6 +7,13 @@
 - In idt.rs each IdtEntry offset field takes its own cast: with addr = handler as usize as u64, offset_low is (addr & 0xFFFF) as u16, offset_mid is ((addr >> 16) & 0xFFFF) as u16, offset_high is (addr >> 32) as u32.
 - page_fault_handler prints CR2 and the error code with write_hex, then halts in a hlt loop. Returning re-runs the faulting read forever.
 - In gdt.rs tss_base is already a u64: no as u64 on anything built from it, since clippy rejects a cast to the same type.
+- In serial.rs write_hex: let nibble = ((value >> shift) & 0xF) as u8; then let c = if nibble < 10 { b'0' + nibble } else { b'A' + (nibble - 10) }; with no match.
+- gdt.rs takes addresses with core::ptr::addr_of!(TSS), addr_of!(IST1_STACK) and addr_of!(GDT), never with &.
+- gdt.rs sets the GDT limit to size_of::<[u64; 5]>() - 1, not GDT.len() * 8 - 1.
+- gdt.rs drops as u64 on the tss_base expressions, already u64, and writes 0x89_u64.
+- gdt.rs makes DescriptorTablePointer pub, since pub fn load_gdt takes it.
+- idt.rs zeroes the table with for i in 0..256, not 0..IDT.len().
+- The serial output shows grenOS, a Breakpoint line, then a Page fault line with CR2 and the error code, then the kernel halts; never panic, triple fault or double fault.
 
 ## Exchange log
 
@@ -18,3 +25,4 @@
 - 2026-09-11 17:15 UTC · Human: "From Claude, on Grenofar's behalf. Your last three answers broke their JSON while copying my long list, which was full of double quotes. Here is the same list without any. Create one Coder task, continue_from main, whose acceptance criteria are these eleven lines; you do not need to rewrite docs/MASTER.md. 1. main.rs starts with #![feature(abi_x86_interrupt)], declares mod serial, mod gdt and mod…" → Master: "Created a Coder task to implement GDT, IDT, and exception handlers per the eleven acceptance criteria, continuing from main."
 - 2026-09-11 17:56 UTC · Human: "From Claude, on Grenofar's behalf. I built agent/395a7a9a here with its pinned nightly and clippy -D warnings. Task 395a7a9a keeps its last attempt: please do not create a new task. Add these four lines to the standing instructions in docs/MASTER.md, which the Coder reads before that attempt: 1. serial.rs defines pub fn write_hex(value: u64). idt.rs calls it and it does not exist yet. 2. In idt.r…" → Master: "Updated MASTER.md with the four required fixes and escalated because the coder's final attempt does not satisfy them."
 - 2026-09-11 18:01 UTC · Human: "From Claude, on Grenofar's behalf. Thank you, the four lines in docs/MASTER.md are right. Attempt 3 of task 395a7a9a has not run yet: the task is still ready, so there is nothing to judge. Resume the mission and let that attempt run; the Coder reads your notebook before it starts. Do not create a new task." → Master: "Resumed mission: letting task 395a7a9a attempt 3 run. Updated docs/STATE.md."
+- 2026-09-11 18:24 UTC · Human: "From Claude, on Grenofar's behalf. Attempt 3 came close. I built it here with its pinned nightly: with the six fixes below it builds, passes clippy -D warnings in release and links. Please create one Coder task with continue_from 395a7a9a, keeping everything else of that branch, and copy these criteria verbatim: 1. In serial.rs write_hex: let nibble = ((value >> shift) & 0xF) as u8; then let c = …" → Master: "Updated MASTER.md with the seven fixing criteria and created a new Coder task to apply them, continuing from the branch of task 395a7a9a."
