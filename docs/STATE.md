@@ -1,17 +1,15 @@
-# STATE
-Updated: 2026-09-11 14:01 UTC
+# Mission State
 
-Mission: Boot a hello-world kernel in QEMU (running)
-Tokens: 835081 / 3000000
+## Mission: Boot a hello-world kernel in QEMU
+- Status: completed
+- Completed at: 2026-09-11 14:44 UTC
+- Summary: The kernel builds, passes clippy, boots in QEMU, and prints 'grenOS' on the serial port. The working commit is agent/f4e24a3d.
 
-Done:
-- (none)
+## Current Work
+- No active tasks.
 
-In Flight:
-- fe2cc7ed: Coder - Delivering whole minimal boot (serial output, halting, bootable image) [awaiting CI]
+## Budget
+- Tokens used: 958815 / 3000000
 
-Blocked:
-- (none)
-
-Notes:
-- Waiting for CI verdict on task fe2cc7ed.
+## Notes
+- The mission's definition of done is satisfied by the CI run on branch agent/f4e24a3d.
