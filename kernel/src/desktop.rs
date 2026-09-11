@@ -18,7 +18,8 @@ const BLUE: Rgb = Rgb(0x28, 0x64, 0xDC);
 const YELLOW: Rgb = Rgb(0xF0, 0xC8, 0x28);
 
 const TITLE: &str = "Bienvenue dans grenOS";
-const MENU: &str = "Fichier  Édition  Affichage  ?";
+// The 8x8 font draws é well, but ô, ê and É poorly: the text keeps to é.
+const MENU: &str = "Fichier  Edition  Affichage  ?";
 /// Short lines, so they keep the large font down to 1024 pixels of width.
 const WELCOME: [&str; 9] = [
     "Bienvenue dans grenOS !",
@@ -28,8 +29,8 @@ const WELCOME: [&str; 9] = [
     "écrit par des agents d'IA,",
     "vérifié par la CI.",
     "",
-    "Bientôt : la souris,",
-    "le clavier, les fenêtres.",
+    "Prochaines étapes :",
+    "la souris et le clavier.",
 ];
 
 /// The mouse pointer: `X` for its black outline, `.` for its white inside.
