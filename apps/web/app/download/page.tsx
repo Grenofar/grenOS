@@ -31,6 +31,10 @@ interface Entry {
   commit: string;
   size: number;
   published_at: string;
+  /** The VirtualBox machine that boots `path` (D-033), when published with it. */
+  vbox?: string | null;
+  /** What CI saw on screen, when the kernel drew something. */
+  screen?: string | null;
 }
 
 async function publishedBuilds(): Promise<Build[]> {
@@ -47,6 +51,9 @@ async function publishedBuilds(): Promise<Build[]> {
         size: e.size,
         // ?download makes Storage send the file as an attachment, under this name.
         url: `${RELEASES}/${e.path}?download=grenos-${e.build}.iso`,
+        // The .vbox names the ISO by this same file name: both land side by side.
+        vboxUrl: e.vbox ? `${RELEASES}/${e.vbox}?download=grenos-${e.build}.vbox` : undefined,
+        screenUrl: e.screen ? `${RELEASES}/${e.screen}` : undefined,
       }));
   } catch {
     // Nothing published yet, or Storage unreachable: the page says so.

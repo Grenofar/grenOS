@@ -11,6 +11,8 @@ on:
     paths:
       - "kernel/**"
       - ".github/workflows/release.yml"
+      - "scripts/ci-screen.py"
+      - "scripts/make-vbox.py"
   workflow_dispatch:
 
 # Deux fusions rapprochees publient chacune leur image, dans l'ordre.
@@ -49,7 +51,12 @@ jobs:
           set -o pipefail
           IMAGE=$(find kernel -name '*.iso' | head -n1)
           test -n "$IMAGE"
-          timeout 90 qemu-system-x86_64 -cdrom "$IMAGE" -serial stdio -display none -no-reboot -no-shutdown -m 256M 2>&1 | tee qemu.log || true
+          MONITOR="$PWD/qemu-monitor.sock"
+          timeout 90 qemu-system-x86_64 -cdrom "$IMAGE" -serial stdio -display none -no-reboot -no-shutdown -m 256M \
+            -monitor "unix:$MONITOR,server,nowait" 2>&1 | tee qemu.log &
+          sleep 25
+          python3 scripts/ci-screen.py grab "$MONITOR" screen.ppm || true
+          wait || true
           if grep -qiE 'panic|triple fault|double fault' qemu.log; then
             echo "::error::Le kernel a panique au boot : rien n'est publie."
             exit 1
@@ -59,6 +66,13 @@ jobs:
             exit 1
           fi
           cp "$IMAGE" grenos.iso
+          # L'apercu de /download, quand le kernel dessine (D-033). Il n'empeche
+          # jamais une publication : ici, c'est la sortie serie qui juge le boot.
+          if python3 scripts/ci-screen.py judge screen.ppm screen.png; then
+            echo "Apercu publie avec l'image."
+          else
+            rm -f screen.png
+          fi
 
       # builds/grenos-<build>.iso ne change plus une fois deposee ; index.json
       # liste les dix dernieres, la plus recente en tete, et c'est lui que lit
@@ -82,14 +96,33 @@ jobs:
             -H "Content-Type: application/x-iso9660-image" -H "cache-control: max-age=31536000" \
             --data-binary @grenos.iso "$STORAGE/object/releases/$OBJECT" > /dev/null
 
+          # La machine VirtualBox qui va avec (D-033) : un .vbox a garder dans le
+          # meme dossier que l'ISO, qu'il designe par son nom.
+          VBOX="builds/grenos-${BUILD}.vbox"
+          python3 scripts/make-vbox.py "grenos-${BUILD}.iso" grenos.vbox
+          curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
+            -H "Content-Type: application/x-virtualbox-vbox" -H "cache-control: max-age=31536000" \
+            --data-binary @grenos.vbox "$STORAGE/object/releases/$VBOX" > /dev/null
+
+          # L'apercu, quand le kernel dessine quelque chose (etape Boot QEMU).
+          SCREEN=""
+          if [ -f screen.png ]; then
+            SCREEN="builds/grenos-${BUILD}.png"
+            curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
+              -H "Content-Type: image/png" -H "cache-control: max-age=31536000" \
+              --data-binary @screen.png "$STORAGE/object/releases/$SCREEN" > /dev/null
+          fi
+
           # L'index en place, lu avec la cle : le cache public a une minute de retard.
           if ! curl -fsS "${AUTH[@]}" "$STORAGE/object/releases/index.json" -o previous.json \
              || ! jq -e 'type == "array"' previous.json > /dev/null; then
             echo '[]' > previous.json
           fi
-          jq --arg build "$BUILD" --arg path "$OBJECT" --arg commit "$GITHUB_SHA" \
-             --argjson size "$(stat -c %s grenos.iso)" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-             '[{build: $build, path: $path, commit: $commit, size: $size, published_at: $at}] + .' \
+          jq --arg build "$BUILD" --arg path "$OBJECT" --arg vbox "$VBOX" --arg screen "$SCREEN" \
+             --arg commit "$GITHUB_SHA" --argjson size "$(stat -c %s grenos.iso)" \
+             --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+             '[{build: $build, path: $path, vbox: $vbox, screen: (if $screen == "" then null else $screen end),
+                commit: $commit, size: $size, published_at: $at}] + .' \
              previous.json > all.json
           jq '.[:10]' all.json > index.json
 
@@ -97,7 +130,7 @@ jobs:
             -H "Content-Type: application/json" -H "cache-control: max-age=60" \
             --data-binary @index.json "$STORAGE/object/releases/index.json" > /dev/null
 
-          DROPPED=$(jq -c '[.[10:][].path]' all.json)
+          DROPPED=$(jq -c '[.[10:][] | .path, .vbox, .screen | select(. != null)]' all.json)
           if [ "$DROPPED" != "[]" ]; then
             curl -fsS -X DELETE "${AUTH[@]}" -H "Content-Type: application/json" \
               -d "{\"prefixes\": $DROPPED}" "$STORAGE/object/releases" > /dev/null

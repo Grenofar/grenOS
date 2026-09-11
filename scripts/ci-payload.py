@@ -35,6 +35,8 @@ STEPS = [
     ("build", "BUILD", "cargo build --release succeeds in kernel/"),
     ("clippy", "CLIPPY", "cargo clippy --release -- -D warnings reports no warning"),
     ("boot", "QEMU", "the QEMU boot prints grenOS on the serial console, without panic or fault"),
+    # D-033 : la capture prise à 25 s, jugée par scripts/ci-screen.py.
+    ("screen", "SCREEN", "the screen is drawn: at least 3 colours, none on more than 90% of it"),
 ]
 OUTCOMES = {"success": "PASS", "failure": "FAIL"}
 

@@ -51,3 +51,6 @@ desktop.ini
 !.vscode/extensions.json
 .idea/
 *.swp
+
+# Python
+__pycache__/

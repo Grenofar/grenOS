@@ -8,6 +8,8 @@ export interface Build {
   publishedAt: string;
   size: number;
   url: string;
+  vboxUrl?: string;
+  screenUrl?: string;
 }
 
 /*
@@ -19,6 +21,9 @@ const FR = {
   title: "Télécharger grenOS",
   lead: "grenOS est un système d'exploitation x86_64 écrit en Rust par une équipe d'agents d'IA. Chaque image publiée ici a d'abord été construite, puis démarrée dans QEMU par la CI.",
   download: "Télécharger grenos.iso",
+  vboxButton: "Télécharger grenos.vbox (VirtualBox)",
+  preview: "Ce que la CI a vu à l'écran, 25 secondes après le démarrage, dans QEMU :",
+  previewAlt: "Capture d'écran de grenOS dans QEMU",
   mb: "Mo",
   build: "Version",
   published: "publiée le",
@@ -29,13 +34,12 @@ const FR = {
   now: "Étape 2 sur 10 : il démarre avec le chargeur Limine, écrit « grenOS » sur le port série COM1, installe ses tables de segments et d'interruptions (GDT, IDT), puis déclenche exprès deux exceptions pour prouver qu'il les attrape : un point d'arrêt, dont il repart, et une faute de page, dont il écrit l'adresse avant de s'arrêter. Il n'affiche encore rien à l'écran : c'est par le port série qu'on le voit.",
   vboxTitle: "VirtualBox",
   vbox: [
-    "Nouvelle machine : type Other, version Other/Unknown (64-bit), 256 Mo de mémoire, sans disque dur.",
-    "Configuration → Stockage : mettre grenos.iso dans le lecteur optique.",
-    "Configuration → Ports série : activer le port 1 (COM1), mode « Fichier brut » (Raw File), avec un chemin comme C:\\grenos-serie.txt.",
-    "Laisser l'EFI désactivé (Configuration → Système).",
-    "Démarrer : après le menu de Limine (3 secondes), le fichier contient grenOS, puis Breakpoint, puis Page fault suivi de l'adresse fautive. L'écran ne montre rien de plus, c'est normal à cette étape.",
+    "Télécharger les deux fichiers, grenos-….iso et grenos-….vbox, dans le même dossier (Téléchargements, par exemple).",
+    "Double-cliquer sur le fichier .vbox, ou dans VirtualBox : Machine → Ajouter…, puis le choisir. La machine grenOS apparaît, déjà réglée : 64 bits, 256 Mo, l'ISO dans le lecteur optique.",
+    "La démarrer. Après le menu de Limine (3 secondes), le kernel démarre.",
+    "Ce qu'il écrit sur le port série est dans C:\\Users\\Public\\Documents\\grenos-serie.txt : grenOS, puis Breakpoint, puis Page fault suivi de l'adresse fautive.",
   ],
-  vboxNote: "Une machine 64 bits demande la virtualisation matérielle (VT-x ou AMD-V) activée dans le BIOS du PC.",
+  vboxNote: "Une machine 64 bits demande la virtualisation matérielle (VT-x ou AMD-V) activée dans le BIOS du PC. Sans le fichier .vbox : nouvelle machine Other/Unknown (64-bit), 256 Mo, sans disque dur, l'ISO dans le lecteur optique, port série 1 en « Fichier brut ».",
   qemuTitle: "QEMU",
   qemu: "La sortie série s'affiche dans le terminal :",
   usbTitle: "Un vrai PC, sur clé USB",
@@ -51,6 +55,9 @@ const EN: typeof FR = {
   title: "Download grenOS",
   lead: "grenOS is an x86_64 operating system written in Rust by a team of AI agents. Every image published here was first built, then booted in QEMU, by CI.",
   download: "Download grenos.iso",
+  vboxButton: "Download grenos.vbox (VirtualBox)",
+  preview: "What CI saw on screen, 25 seconds after boot, in QEMU:",
+  previewAlt: "Screenshot of grenOS in QEMU",
   mb: "MB",
   build: "Build",
   published: "published",
@@ -61,13 +68,12 @@ const EN: typeof FR = {
   now: "Step 2 of 10: it boots with the Limine bootloader, writes “grenOS” to the COM1 serial port, loads its segment and interrupt tables (GDT, IDT), then raises two exceptions on purpose to prove it catches them: a breakpoint, which it returns from, and a page fault, whose address it writes before halting. It shows nothing on screen yet: the serial port is where you see it.",
   vboxTitle: "VirtualBox",
   vbox: [
-    "New machine: type Other, version Other/Unknown (64-bit), 256 MB of memory, no hard disk.",
-    "Settings → Storage: put grenos.iso in the optical drive.",
-    "Settings → Serial Ports: enable port 1 (COM1), mode Raw File, with a path such as C:\\grenos-serial.txt.",
-    "Leave EFI disabled (Settings → System).",
-    "Start it: after Limine's menu (3 seconds), the file contains grenOS, then Breakpoint, then Page fault with the faulting address. The screen shows nothing more, which is expected at this stage.",
+    "Download both files, grenos-….iso and grenos-….vbox, into the same folder (Downloads, for instance).",
+    "Double-click the .vbox file, or in VirtualBox: Machine → Add…, and pick it. The grenOS machine appears, already set up: 64-bit, 256 MB, the ISO in the optical drive.",
+    "Start it. After Limine's menu (3 seconds), the kernel boots.",
+    "What it writes to the serial port is in C:\\Users\\Public\\Documents\\grenos-serie.txt: grenOS, then Breakpoint, then Page fault with the faulting address.",
   ],
-  vboxNote: "A 64-bit machine needs hardware virtualisation (VT-x or AMD-V) enabled in the host PC's firmware.",
+  vboxNote: "A 64-bit machine needs hardware virtualisation (VT-x or AMD-V) enabled in the host PC's firmware. Without the .vbox file: new machine Other/Unknown (64-bit), 256 MB, no hard disk, the ISO in the optical drive, serial port 1 in Raw File mode.",
   qemuTitle: "QEMU",
   qemu: "The serial output appears in the terminal:",
   usbTitle: "A real PC, from a USB stick",
@@ -115,6 +121,11 @@ export function DownloadView({ builds, repo }: { builds: Build[]; repo: string }
                 <a className="dl-button" href={build.url}>
                   {c.download}
                 </a>
+                {build.vboxUrl && (
+                  <a className="dl-button" href={build.vboxUrl} style={{ marginLeft: 8 }}>
+                    {c.vboxButton}
+                  </a>
+                )}
               </div>
             </>
           ) : (
@@ -126,6 +137,18 @@ export function DownloadView({ builds, repo }: { builds: Build[]; repo: string }
         <p className="faint" style={{ marginTop: 8 }}>
           {c.checked}
         </p>
+        {build?.screenUrl && (
+          <figure style={{ margin: "14px 0 0" }}>
+            <figcaption className="faint" style={{ marginBottom: 6 }}>
+              {c.preview}
+            </figcaption>
+            <img
+              src={build.screenUrl}
+              alt={c.previewAlt}
+              style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid rgba(127,127,127,.3)" }}
+            />
+          </figure>
+        )}
         {earlier.length > 0 && (
           <details className="faint" style={{ marginTop: 8 }}>
             <summary>{c.all}</summary>
@@ -135,6 +158,11 @@ export function DownloadView({ builds, repo }: { builds: Build[]; repo: string }
                   <a href={b.url} className="mono">
                     {b.tag}
                   </a>{" "}
+                  {b.vboxUrl && (
+                    <>
+                      (<a href={b.vboxUrl}>.vbox</a>){" "}
+                    </>
+                  )}
                   · {(b.size / 1024 / 1024).toFixed(1)} {c.mb} · {b.publishedAt.slice(0, 10)}
                 </li>
               ))}

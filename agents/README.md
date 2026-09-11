@@ -198,11 +198,20 @@ and you say so in your `summary` so the Master can have it corrected.
    `--- iso ---`.
 5. **Boot.** The first `*.iso` or `*.img` found under `kernel/` runs as
    `qemu-system-x86_64 -cdrom <image> -serial stdio -display none -no-reboot -no-shutdown -m 256M`
-   and is killed after 90 seconds.
+   (plus a monitor socket) and is killed after 90 seconds. At 25 seconds the
+   monitor takes a screenshot: QEMU has no window, but it has a graphics card.
 6. **Green** only when the serial output contains `grenOS` and contains none of
    `panic`, `triple fault`, `double fault`, in any case.
-7. **The verdict** lists each step — `build`, `clippy`, `boot` — as PASS, FAIL
-   or UNVERIFIABLE (a step that did not run). A run replaced by a newer push
+7. **Screen** (since mission 3, the desktop; D-033). The screenshot must hold
+   at least three colours, none of them on more than 90 % of the screen. A
+   kernel that boots and draws nothing leaves black, or Limine's menu on black,
+   and the run is red (`test_failure`). What CI saw is in the verdict log under
+   `--- screen ---`: the size, the top colours, the dominant colour of the
+   bottom strip, the top strip and the centre, and a 48×16 map, one letter per
+   cell for its dominant colour, with the legend. It is all you will ever see
+   of the screen: draw so that it reads.
+8. **The verdict** lists each step — `build`, `clippy`, `boot`, `screen` — as
+   PASS, FAIL or UNVERIFIABLE (a step that did not run). A run replaced by a newer push
    on the same branch reports nothing: the newer run's verdict is the one
    that counts.
 
@@ -213,7 +222,18 @@ Consequences that have already cost real attempts:
   task whose goal stops before that — project setup alone, a linker script
   alone — can never be green, and spends its three attempts whatever it
   writes: mission 1 lost two tasks that way. Until the kernel boots, the
-  minimal boot is one task; after that, every task leaves it booting.
+  minimal boot is one task; after that, every task leaves it booting. From
+  mission 3 on, every task also leaves the screen drawn.
+- **Drawing goes through the Limine framebuffer.** Checked on 2026-09-11 by
+  compiling against `limine` 0.5.0 and `nightly-2024-11-15`: a
+  `limine::request::FramebufferRequest::new()` static, with `#[used]` and
+  `#[unsafe(link_section = ".requests")]` like the other requests;
+  `FRAMEBUFFER_REQUEST.get_response()`, then `.framebuffers().next()`; on the
+  `Framebuffer`, `addr() -> *mut u8`, `width()`, `height()` and `pitch()`
+  (bytes per row) as `u64`, `bpp() -> u16`, and `red_mask_shift()`,
+  `green_mask_shift()`, `blue_mask_shift()` for where each colour sits in a
+  pixel. The pixel at (x, y) starts at `addr + y * pitch + x * bpp / 8`; write
+  it with `write_volatile`, inside `unsafe` with its `// SAFETY:` comment.
 - **Target the built-in `x86_64-unknown-none`**, listed under `targets` in
   `rust-toolchain.toml`: its `core` ships precompiled. A custom target JSON is
   refused unless unstable flags and `build-std` are configured — mission 1

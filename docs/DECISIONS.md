@@ -683,3 +683,25 @@ déjà son seul secret.
 télécharge avec `?download=`, qui envoie le fichier en pièce jointe sous son
 nom. Le site ne détient toujours aucune clé : le bucket est public en lecture.
 → Plus de Release GitHub. Le code source reste lié, sur GitHub.
+
+### D-033 — Un bureau à l'écran, jugé par la CI, et une machine VirtualBox
+**2026-09-11 · actif · demandé par l'humain**
+
+L'humain veut ouvrir grenOS dans VirtualBox avec « un fichier iso et un fichier
+vbox », et y voir « un vrai UI type Windows (pas aussi bien pour l'instant mais
+ressemblant) », pas une console.
+→ Étape 3 de la feuille de route, « Bureau graphique », avant la mémoire
+physique : elle ne dépend que du boot. Les étapes suivantes descendent d'un
+rang, en base comme dans `docs/ROADMAP.md`.
+→ La CI juge l'écran. Le moniteur de QEMU fait une capture à 25 s
+(`scripts/ci-screen.py`) ; elle passe avec au moins trois couleurs, aucune sur
+plus de 90 % de l'écran. Exigé désormais pour tout run d'agent : étape
+`screen` du verdict. Les agents ne voient pas d'image ; le log du verdict la
+décrit, carte en lettres comprise.
+→ `release.yml` publie avec chaque image une machine VirtualBox,
+`builds/grenos-<build>.vbox` (`scripts/make-vbox.py`) : 64 bits, 256 Mo,
+l'ISO désignée par son nom (à garder dans le même dossier), COM1 écrit dans
+`C:\Users\Public\Documents\grenos-serie.txt`. Et l'aperçu de l'écran, quand le
+kernel dessine. `/download` montre les deux boutons et l'aperçu.
+→ Pas de VirtualBox sur l'hôte : l'ouverture du `.vbox` est testée par
+l'humain, sur son PC principal.
