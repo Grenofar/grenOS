@@ -40,10 +40,12 @@ let wakeUp: (() => void) | null = null;
 
 async function main(): Promise<void> {
   log.info("grenOS worker — démarrage");
+  const startedAt = new Date();
 
   // Before touching anything: a second brain must refuse to start rather
   // than plan, dispatch and commit alongside the first (lock.ts).
   await acquireLock();
+  await requeueOrphans(startedAt);
   const stopHeartbeat = startHeartbeat(() => {
     log.warn("verrou perdu : un autre worker a pris la main — arrêt immédiat");
     process.exit(1);
@@ -100,6 +102,39 @@ async function main(): Promise<void> {
   stopHeartbeat();
   await releaseLock();
   log.info("worker arrêté");
+}
+
+/**
+ * Tasks a previous worker left in_progress. One worker at a time holds the
+ * lock, so a task started before this one took it runs nowhere. Such a task
+ * used to stay in_progress for ever, holding a slot, and every new proposal
+ * of the Master for that agent was refused as a duplicate: mission 3 on
+ * 2026-09-11, after a restart in the middle of an attempt at 22:14. It goes
+ * back to ready with the same attempt, as dispatchWorkers does with a task
+ * it cannot start yet.
+ */
+async function requeueOrphans(since: Date): Promise<void> {
+  const { data, error } = await db
+    .from("tasks")
+    .update({ status: "ready", started_at: null })
+    .eq("status", "in_progress")
+    .lt("started_at", since.toISOString())
+    .select("id,mission_id,assigned_to");
+  if (error) {
+    log.warn(`tâches orphelines non reprises : ${error.message}`);
+    return;
+  }
+  for (const task of data ?? []) {
+    await emit({
+      missionId: task.mission_id,
+      taskId: task.id,
+      agentId: task.assigned_to,
+      level: "warn",
+      type: "task_requeued",
+      message: "Tâche reprise au démarrage du worker : le précédent s'est arrêté pendant sa tentative, qui repart du début.",
+    });
+  }
+  if (data?.length) log.warn(`${data.length} tâche(s) orpheline(s) remise(s) en file`);
 }
 
 async function tick(
