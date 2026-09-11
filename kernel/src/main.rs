@@ -4,6 +4,8 @@
 use core::panic::PanicInfo;
 use limine::{BaseRevision, request::{BootloaderInfoRequest, StackSizeRequest}};
 
+mod serial;
+
 // Limine requests
 pub static BASE_REVISION: BaseRevision = BaseRevision::new();
 pub static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(0x100000);
