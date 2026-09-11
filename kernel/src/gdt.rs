@@ -104,11 +104,11 @@ pub fn init() {
             (tss_limit as u64) |
             (tss_base & 0x00FF_FFFF) << 16 |
             0x89_u64 << 40 |
-            (((tss_base >> 24) & 0xFF)) << 56;
+            ((tss_base >> 24) & 0xFF) << 56;
 
         // High part of the TSS descriptor (8 bytes)
         let tss_high = 
-            ((tss_base >> 32) & 0xFFFF_FFFF) as u64;
+            (tss_base >> 32) & 0xFFFF_FFFF;
 
         GDT[3] = tss_low;
         GDT[4] = tss_high;
