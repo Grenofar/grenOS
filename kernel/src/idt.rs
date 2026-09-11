@@ -83,7 +83,7 @@ pub fn init() {
         // Set up IDT descriptor
         let idt_ptr = DescriptorTablePointer {
             limit: (size_of::<[IdtEntry; 256]>() - 1) as u16,
-            base: &IDT as *const _ as u64,
+            base: core::ptr::addr_of_mut!(IDT) as u64,
         };
 
         // Zero IDT

@@ -114,7 +114,7 @@ pub fn init() {
         GDT[4] = tss_high;
 
         // Set up the IST1 stack in the TSS
-        TSS.ist1 = (&IST1_STACK as *const u8 as u64) + size_of::<[u8; 0x4000>>() as u64;
+        TSS.ist1 = (&IST1_STACK as *const u8 as u64) + size_of::<[u8; 0x4000]>() as u64;
 
         // Load the GDT
         let gdt_ptr = DescriptorTablePointer {
