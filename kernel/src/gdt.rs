@@ -28,7 +28,23 @@ struct TaskStateSegment {
 }
 
 static mut GDT: [u64; 5] = [0; 5];
-static mut TSS: TaskStateSegment = TaskStateSegment::zero();
+static mut TSS: TaskStateSegment = TaskStateSegment {
+    reserved0: 0,
+    rsp0: 0,
+    rsp1: 0,
+    rsp2: 0,
+    reserved1: 0,
+    ist1: 0,
+    ist2: 0,
+    ist3: 0,
+    ist4: 0,
+    ist5: 0,
+    ist6: 0,
+    ist7: 0,
+    reserved2: 0,
+    reserved3: 0,
+    iopb_offset: 0,
+};
 static mut IST1_STACK: [u8; 0x4000] = [0; 0x4000]; // 16 KiB
 
 pub unsafe fn load_gdt(ptr: &DescriptorTablePointer) {
@@ -55,10 +71,10 @@ pub unsafe fn reload_segments(code_sel: u16, data_sel: u16) {
             "mov gs, {0:x}",
             "mov ss, {0:x}",
             "push {1}",
-            "lea {2}, [rip + 1f]",
+            "lea {2}, [rip + 2f]",
             "push {2}",
             "retfq",
-            "1:",
+            "2:",
             in(reg) data_sel,
             in(reg) u64::from(code_sel),
             lateout(reg) _,
@@ -86,21 +102,13 @@ pub fn init() {
         // Low part of the TSS descriptor (8 bytes)
         let tss_low = 
             (tss_limit as u64) |
-            ((tss_base & 0xFFFF) as u64) << 16 |
-            ((tss_base >> 16) & 0xFF) as u64 << 32 |
-            (0x8B as u64) << 40 | // Type: 0x8B (available 64-bit TSS)
-            (0x00 as u64) << 48; // Flags: granularity=0, etc.
+            ((tss_base & 0x00FF_FFFF) as u64) << 16 |
+            (0x89 as u64) << 40 |
+            (((tss_base >> 24) & 0xFF) as u64) << 56;
 
         // High part of the TSS descriptor (8 bytes)
         let tss_high = 
-            ((tss_base >> 24) & 0xFF) as u64 |
-            ((tss_base >> 32) & 0xFF) as u64 << 8 |
-            ((tss_base >> 40) & 0xFF) as u64 << 16 |
-            0x00 as u64 << 24 |
-            0x00 as u64 << 32 |
-            0x00 as u64 << 40 |
-            0x00 as u64 << 48 |
-            0x00 as u64 << 56;
+            ((tss_base >> 32) & 0xFFFF_FFFF) as u64;
 
         GDT[3] = tss_low;
         GDT[4] = tss_high;

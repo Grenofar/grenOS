@@ -1,7 +1,10 @@
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt)]
 
 mod serial;
+mod gdt;
+mod idt;
 
 use core::panic::PanicInfo;
 
@@ -25,12 +28,22 @@ static _START_MARKER: RequestsStartMarker = RequestsStartMarker::new();
 static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn kmain() -> ! {
+extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
 
     serial::init();
     serial::write_str("grenOS\n");
-
+    gdt::init();
+    idt::init();
+    
+    // Trigger breakpoint (int 3)
+    unsafe {
+        core::arch::asm!("int3", options(nomem, nostack, preserves_flags));
+    }
+    
+    // Cause page fault by reading from unmapped address
+    let _ = unsafe { core::ptr::read_volatile(0xffff_ffff_8020_0000 as *const u8) };
+    
     loop {
         unsafe {
             core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
