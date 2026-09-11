@@ -272,22 +272,34 @@ impl Desktop {
         }
     }
 
-    /// The notepad's text, wrapped to its width, with the caret at its end.
+    /// The notepad's text, wrapped between words to its width, with the caret
+    /// at its end. Only a word longer than a whole line is cut.
     fn draw_notes(&self, screen: &mut Screen, client: Rect) {
         sunken(screen, client, WHITE);
         let glyph = 8 * self.scale;
         let line_h = 10 * self.scale;
         let columns = (client.w.saturating_sub(24) / glyph).max(1);
         let bottom = client.y + client.h;
+        let text = &self.notes[..self.notes_len];
         let (mut column, mut row) = (0, 0);
         let mut buffer = [0u8; 4];
-        for &c in self.notes.iter().take(self.notes_len) {
-            if c == '\n' || column == columns {
+        for (i, &c) in text.iter().enumerate() {
+            if c == '\n' {
                 column = 0;
                 row += 1;
-            }
-            if c == '\n' {
                 continue;
+            }
+            let starts_word = c != ' ' && (i == 0 || text[i - 1] == ' ' || text[i - 1] == '\n');
+            if starts_word {
+                let word = text[i..].iter().take_while(|&&next| next != ' ' && next != '\n').count();
+                if column > 0 && column + word > columns && word <= columns {
+                    column = 0;
+                    row += 1;
+                }
+            }
+            if column == columns {
+                column = 0;
+                row += 1;
             }
             let y = client.y + 10 + row * line_h;
             if y + glyph > bottom {
@@ -295,6 +307,10 @@ impl Desktop {
             }
             screen.text(client.x + 12 + column * glyph, y, c.encode_utf8(&mut buffer), BLACK, self.scale);
             column += 1;
+        }
+        if column == columns {
+            column = 0;
+            row += 1;
         }
         let y = client.y + 10 + row * line_h;
         if y + glyph <= bottom {
