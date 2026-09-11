@@ -3,7 +3,7 @@
 use core::mem::size_of;
 
 #[repr(C, packed)]
-struct DescriptorTablePointer {
+pub struct DescriptorTablePointer {
     limit: u16,
     base: u64,
 }
@@ -28,7 +28,23 @@ struct TaskStateSegment {
 }
 
 static mut GDT: [u64; 5] = [0; 5];
-static mut TSS: TaskStateSegment = TaskStateSegment::zero();
+static mut TSS: TaskStateSegment = TaskStateSegment {
+    reserved0: 0,
+    rsp0: 0,
+    rsp1: 0,
+    rsp2: 0,
+    reserved1: 0,
+    ist1: 0,
+    ist2: 0,
+    ist3: 0,
+    ist4: 0,
+    ist5: 0,
+    ist6: 0,
+    ist7: 0,
+    reserved2: 0,
+    reserved3: 0,
+    iopb_offset: 0,
+};
 static mut IST1_STACK: [u8; 0x4000] = [0; 0x4000]; // 16 KiB
 
 pub unsafe fn load_gdt(ptr: &DescriptorTablePointer) {
@@ -55,10 +71,10 @@ pub unsafe fn reload_segments(code_sel: u16, data_sel: u16) {
             "mov gs, {0:x}",
             "mov ss, {0:x}",
             "push {1}",
-            "lea {2}, [rip + 1f]",
+            "lea {2}, [rip + 2f]",
             "push {2}",
             "retfq",
-            "1:",
+            "2:",
             in(reg) data_sel,
             in(reg) u64::from(code_sel),
             lateout(reg) _,
@@ -80,38 +96,30 @@ pub fn init() {
         GDT[2] = 0x0000920000000000;
 
         // Set up the TSS
-        let tss_base = &TSS as *const TaskStateSegment as u64;
+        let tss_base = core::ptr::addr_of!(TSS) as u64;
         let tss_limit = (size_of::<TaskStateSegment>() - 1) as u16;
 
         // Low part of the TSS descriptor (8 bytes)
         let tss_low = 
             (tss_limit as u64) |
-            ((tss_base & 0xFFFF) as u64) << 16 |
-            ((tss_base >> 16) & 0xFF) as u64 << 32 |
-            (0x8B as u64) << 40 | // Type: 0x8B (available 64-bit TSS)
-            (0x00 as u64) << 48; // Flags: granularity=0, etc.
+            (tss_base & 0x00FF_FFFF) << 16 |
+            0x89_u64 << 40 |
+            ((tss_base >> 24) & 0xFF) << 56;
 
         // High part of the TSS descriptor (8 bytes)
         let tss_high = 
-            ((tss_base >> 24) & 0xFF) as u64 |
-            ((tss_base >> 32) & 0xFF) as u64 << 8 |
-            ((tss_base >> 40) & 0xFF) as u64 << 16 |
-            0x00 as u64 << 24 |
-            0x00 as u64 << 32 |
-            0x00 as u64 << 40 |
-            0x00 as u64 << 48 |
-            0x00 as u64 << 56;
+            (tss_base >> 32) & 0xFFFF_FFFF;
 
         GDT[3] = tss_low;
         GDT[4] = tss_high;
 
         // Set up the IST1 stack in the TSS
-        TSS.ist1 = (&IST1_STACK as *const u8 as u64) + size_of::<[u8; 0x4000>>() as u64;
+        TSS.ist1 = (core::ptr::addr_of!(IST1_STACK) as u64) + size_of::<[u8; 0x4000]>() as u64;
 
         // Load the GDT
         let gdt_ptr = DescriptorTablePointer {
-            limit: (GDT.len() * 8 - 1) as u16,
-            base: &GDT as *const _ as u64,
+            limit: (size_of::<[u64; 5]>() - 1) as u16,
+            base: core::ptr::addr_of!(GDT) as u64,
         };
         load_gdt(&gdt_ptr);
 

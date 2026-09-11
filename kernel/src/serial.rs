@@ -49,3 +49,13 @@ pub fn write_str(s: &str) {
         write_byte(byte);
     }
 }
+
+pub fn write_hex(value: u64) {
+    write_str("0x");
+    for i in (0..16).rev() {
+        let shift = i * 4;
+        let nibble = ((value >> shift) & 0xF) as u8;
+        let c = if nibble < 10 { b'0' + nibble } else { b'A' + (nibble - 10) };
+        write_byte(c);
+    }
+}
