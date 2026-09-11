@@ -19,7 +19,7 @@ pub fn init() {
         outb(COM1 + 3, 0x80);
 
         // Set divisor to 3 (lo byte) 0 (hi byte) for 38400 baud
-        outb(COM1 + 0, 0x03);
+        outb(COM1, 0x03);
         outb(COM1 + 1, 0x00);
 
         // 8 bits, no parity, one stop bit
