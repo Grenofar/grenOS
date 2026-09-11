@@ -1,22 +1,21 @@
 # grenOS Agent System State
 
-**Now**: 2026-09-11 17:29 UTC
+**Updated**: 2026-09-11 18:01 UTC
 
-**Mission**: GDT, IDT and CPU exceptions (gdt-idt)
-- Status: running
-- Tokens used: 350,404 / 3,000,000
-- Goal: Install GDT and IDT with handlers for CPU exceptions so faults are reported on serial port instead of rebooting.
+## Mission: GDT, IDT and CPU exceptions (gdt-idt)
+- Status: blocked (waiting for task 395a7a9a attempt 3 to run)
+- Tokens used: 412924 / 3,000,000
 
-**Recent completed tasks**
-- Architect: technical plan done (docs/PLAN.md)
-- Coder (1a5832e9): housekeeping and GDT/TSS (green build, clippy, boot)
-- Coder (6ecd9189): cancelled after 3 attempts (compile error)
+## Completed
+- Task 1396d3fa (Architect): technical plan created (docs/PLAN.md)
+- Task 1a5832e9 (Coder): housekeeping and GDT implementation (build, clippy, and boot passed)
 
-**Current work**
-- Coder task 395a7a9a: implementing GDT, IDT, and exception handlers per acceptance criteria (awaiting verification)
+## In Progress
+- Task 395a7a9a (Coder): attempt 3 queued (ready to run)
 
-**Blocked**
-- None
+## Blocked
+- None (waiting for the current attempt to complete)
 
-**Next steps**
-- Await CI verification of the current Coder task; on success, mission proceeds to next roadmap step.
+## Notes
+- The Coder will read docs/MASTER.md before starting attempt 3 of task 395a7a9a.
+- No new tasks are to be created per human instruction.
