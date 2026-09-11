@@ -1,0 +1,18 @@
+[package]
+name = "kernel"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/grenOS/grenOS"
+
+[dependencies]
+limine = "0.5"
+
+[profile.dev]
+panic = "abort"
+overflow-checks = false
+
+[profile.release]
+panic = "abort"
+overflow-checks = false
+lto = true
