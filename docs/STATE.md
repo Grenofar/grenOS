@@ -1,15 +1,1 @@
-# Mission State
-
-## Mission: Boot a hello-world kernel in QEMU
-- Status: completed
-- Completed at: 2026-09-11 14:44 UTC
-- Summary: The kernel builds, passes clippy, boots in QEMU, and prints 'grenOS' on the serial port. The working commit is agent/f4e24a3d.
-
-## Current Work
-- No active tasks.
-
-## Budget
-- Tokens used: 958815 / 3000000
-
-## Notes
-- The mission's definition of done is satisfied by the CI run on branch agent/f4e24a3d.
+# State\n\nAs of 2026-09-11 16:36 UTC:\n\nMission: GDT, IDT and CPU exceptions (gdt-idt)\n- Status: running\n- Tokens used: 196169 / 3000000\n- Task in flight: Coder task 6ecd9189 (attempt 2/3) - awaiting CI verdict\n- Completed tasks:\n   - Architect task 1396d3fa: technical plan (done)\n   - Coder task 1a5832e9: housekeeping and GDT (done, but GDT not wired - superseded)\n- Next steps:\n   Await CI verdict on current Coder task. If it passes build, clippy, and boot (grenOS and no panic/fault), then escalate to human to verify breakpoint and page fault handlers.
