@@ -28,17 +28,20 @@ export interface Lineage {
 export interface RunProgress {
   branch: string;
   status: string;
+  failure?: string | null;
   verdicts?: unknown;
   log_excerpt?: string | null;
   started_at: string;
 }
 
 /**
- * How far a CI run got: 4 green, 3 built with clippy or the boot passing,
+ * How far a CI run got: 4 green, 3 built and passed clippy (or the boot),
  * 2 built, 1 did not build, 0 nothing CI could judge (no kernel, a runner
  * problem, still running).
  */
-export function progress(run: Pick<RunProgress, "status" | "verdicts" | "log_excerpt">): number {
+export function progress(
+  run: Pick<RunProgress, "status" | "failure" | "verdicts" | "log_excerpt">,
+): number {
   if (run.status === "passed") return 4;
   if (run.status !== "failed" && run.status !== "timeout") return 0;
 
@@ -52,8 +55,10 @@ export function progress(run: Pick<RunProgress, "status" | "verdicts" | "log_exc
     return Math.min(3, 1 + steps.filter((v) => v?.["verdict"] === "PASS").length);
   }
 
-  // Runs from before that: CI only runs clippy and the boot once the build
-  // has passed, and the log names each step it ran.
+  // Runs from before that. CI calls a failure test_failure only once the
+  // build and clippy have passed; it only runs clippy and the boot once the
+  // build has, and the log names each step it ran.
+  if (run.failure === "test_failure") return 3;
   return /^--- (clippy|qemu) ---$/m.test(run.log_excerpt ?? "") ? 2 : 1;
 }
 
@@ -101,7 +106,7 @@ export async function baseFor(
     db.from("tasks").select("id,assigned_to,branch,created_at").eq("mission_id", missionId),
     db
       .from("runs")
-      .select("branch,status,verdicts,log_excerpt,started_at")
+      .select("branch,status,failure,verdicts,log_excerpt,started_at")
       .eq("mission_id", missionId)
       .order("started_at", { ascending: false })
       .limit(100),

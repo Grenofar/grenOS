@@ -46,8 +46,12 @@ Limine. You also implement the TypeScript control plane when tasked.
 2. Read the files you are about to change. Never patch a file you have not read;
    you will guess the surrounding code wrong.
 3. Check that the acceptance criteria are achievable with the given
-   `allowed_paths`. If they are not, return `failed` with class `spec_gap`
-   immediately. Do not silently widen your scope, and do not guess at intent.
+   `allowed_paths`, and that CI can turn green once they are met: a run is
+   green only when the kernel builds, passes clippy and boots printing
+   `grenOS`. If either check fails — a task that stops at project setup while
+   the kernel does not boot yet, for instance — return `failed` with class
+   `spec_gap` immediately and say why. Do not silently widen your scope, and
+   do not guess at intent.
 4. List every API, constant, crate version and file format you are about to
    use without having read it in a source during this task — the plan's
    included. If that list is not empty, your first answer is `consult` actions
@@ -109,17 +113,30 @@ Limine from memory. What they show, read on 2026-09-11:
   in `kernel/.cargo/config.toml`, under `[target.x86_64-unknown-none]`, as
   `rustflags = ["-C", "relocation-model=static"]`.
 - **Every `#![no_std]` binary defines a `#[panic_handler]`.**
-- **Halting and port I/O are inline assembly.** `core::arch::x86_64` holds CPU
-  intrinsics such as `_rdtsc` and `__cpuid`, not `hlt`, `outb` or `inb`:
-  `core::arch::asm!("hlt")`, `asm!("out dx, al", in("dx") port, in("al") byte)`,
+- **Halting and port I/O are inline assembly, and `asm!` is unsafe**: each
+  one sits in an `unsafe` block with its `// SAFETY:` comment, whatever a
+  plan's snippet shows (E0133 cost mission 1 an attempt). `core::arch::x86_64`
+  holds CPU intrinsics such as `_rdtsc` and `__cpuid`, not `hlt`, `outb` or
+  `inb`: `core::arch::asm!("hlt")`,
+  `asm!("out dx, al", in("dx") port, in("al") byte)`,
   `asm!("in al, dx", out("al") byte, in("dx") port)`.
 - **The ISO** is built from Limine's prebuilt binaries: `git clone` its binary
   branch (`--branch=v10.x-binary --depth=1` in the template), then
   `make -C limine`. A release tarball is source code, with no
-  `limine-bios-cd.bin` in it. The Limine files and `limine.conf` go into
-  `iso_root/boot/limine/`; `xorriso -b` takes a path inside the image
-  (`boot/limine/limine-bios-cd.bin`); `limine bios-install` runs on the
-  finished ISO.
+  `limine-bios-cd.bin` in it. Copy only what the template copies —
+  `limine-bios.sys`, `limine-bios-cd.bin`, `limine-uefi-cd.bin`, `BOOTX64.EFI`,
+  `BOOTIA32.EFI` — never a name from memory. The Limine files and
+  `limine.conf` go into `iso_root/boot/limine/`; `xorriso -b` takes a path
+  inside the image (`boot/limine/limine-bios-cd.bin`); `limine bios-install`
+  runs on the finished ISO.
+- **`make-iso.sh` runs from the repository root**, not from `kernel/`: build
+  every path from the script's location, e.g.
+  `KERNEL_DIR="$(cd "$(dirname "$0")/.." && pwd)"`. Mission 1 lost two
+  attempts to a script that ran `cargo build` from the root.
+- **`limine.conf`** is the template's: `timeout: 3`, then an entry line
+  `/grenOS`, then, indented, `protocol: limine` and
+  `kernel_path: boot():/boot/kernel` (the path the script copies the kernel
+  to). Without an entry line, Limine has nothing to boot.
 
 ## Toolchain and dependencies
 

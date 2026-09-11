@@ -20,6 +20,14 @@ interface Change {
   content: string | null;
 }
 
+/** One entry of a tree the Git Data API builds; a null sha deletes the path. */
+interface TreeEntry {
+  path: string;
+  mode: "100644";
+  type: "blob";
+  sha: string | null;
+}
+
 export class GitHub {
   readonly repo: string;
   private readonly token: string;
@@ -137,9 +145,9 @@ export class GitHub {
    * CI verifies and that a human reviews, so it should also be the unit that
    * can be reverted.
    *
-   * A missing branch is created by this commit, from `base` when it exists
-   * and from the default branch otherwise: born with the agent's content, and
-   * carrying the work it builds on.
+   * A missing branch is created by this commit, on the default branch, and
+   * carries the changes of `base` when the task builds on another agent
+   * branch: born with the agent's content and the work it continues.
    */
   async commit(opts: {
     branch: string;
@@ -152,9 +160,19 @@ export class GitHub {
     const existing = await this.branchSha(opts.branch);
     let from = opts.branch;
     let headSha = existing;
+    // A new branch is born on the default branch; when it continues another
+    // agent branch, that branch's own changes are replayed onto it (D-029).
+    // GitHub runs the workflow of the pushed commit, and a branch cut from an
+    // agent branch of the day before ran that day's CI: no step verdicts, and
+    // blind to what make-iso.sh printed.
+    let carried: TreeEntry[] = [];
     if (!headSha) {
-      from = opts.base && (await this.branchSha(opts.base)) ? opts.base : await this.defaultBranch();
+      from = await this.defaultBranch();
       headSha = await this.branchSha(from);
+      if (opts.base && opts.base !== from && (await this.branchSha(opts.base))) {
+        carried = await this.changesSince(from, opts.base);
+        from = `${from} + ${opts.base}`;
+      }
     }
     if (!headSha) throw new Error(`Branche de base introuvable : ${from}`);
 
@@ -162,8 +180,8 @@ export class GitHub {
       `/repos/${this.repo}/git/commits/${headSha}`,
     );
 
-    const tree = await Promise.all(
-      opts.changes.map(async (change) => {
+    const written = await Promise.all(
+      opts.changes.map(async (change): Promise<TreeEntry> => {
         if (change.content === null) {
           // A null sha in a tree entry is how the API expresses a deletion.
           return { path: change.path, mode: "100644", type: "blob", sha: null };
@@ -178,6 +196,9 @@ export class GitHub {
         return { path: change.path, mode: "100644", type: "blob", sha: blob.sha };
       }),
     );
+    // The agent's own version of a file wins over the one it continues.
+    const own = new Set(written.map((e) => e.path));
+    const tree = [...carried.filter((e) => !own.has(e.path)), ...written];
 
     const newTree = await this.call<{ sha: string }>(`/repos/${this.repo}/git/trees`, {
       method: "POST",
@@ -209,6 +230,34 @@ export class GitHub {
     this.blobCache.clear();
     log.info(`commit ${commit.sha.slice(0, 7)} sur ${opts.branch} (${tree.length} fichiers)`);
     return { sha: commit.sha };
+  }
+
+  /**
+   * The changes `head` made since it left `base`, as tree entries that replay
+   * them: added and modified files by their blob, removed and renamed-away
+   * ones as deletions of paths `base` still has. Never a workflow file: those
+   * are the default branch's to define, and changing one takes a permission
+   * the worker's token does not hold.
+   */
+  private async changesSince(base: string, head: string): Promise<TreeEntry[]> {
+    const compare = await this.call<{
+      files?: Array<{ filename: string; status: string; sha: string; previous_filename?: string }>;
+    }>(`/repos/${this.repo}/compare/${base}...${head}`);
+    const present = new Set((await this.listTree(base)).map((f) => f.path));
+
+    const entries: TreeEntry[] = [];
+    const remove = (path: string) => {
+      if (present.has(path)) entries.push({ path, mode: "100644", type: "blob", sha: null });
+    };
+    for (const f of compare.files ?? []) {
+      if (f.status === "removed") {
+        remove(f.filename);
+        continue;
+      }
+      entries.push({ path: f.filename, mode: "100644", type: "blob", sha: f.sha });
+      if (f.status === "renamed" && f.previous_filename) remove(f.previous_filename);
+    }
+    return entries.filter((e) => !e.path.startsWith(".github/"));
   }
 
   /**

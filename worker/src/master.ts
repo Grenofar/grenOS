@@ -79,6 +79,22 @@ export const HUMAN_LANGUAGE = "English";
  */
 const lastSeen = new Map<string, string>();
 
+/**
+ * Unreadable decisions in a row, per mission (D-029). On mission 1 the Master
+ * answered once with a status of its own ("escalate") and once with a
+ * sentence instead of JSON. Both were refused, the board stayed marked as
+ * judged, and the mission sat still for eight hours without the human being
+ * told. An unreadable answer now leaves the board to be judged again on the
+ * next tick, and the third in a row is escalated to the human.
+ */
+const unreadable = new Map<string, number>();
+export const UNREADABLE_LIMIT = 3;
+
+/** What an unreadable decision leads to, given how many came in a row. */
+export function afterUnreadable(inARow: number): "retry" | "escalate" {
+  return inARow >= UNREADABLE_LIMIT ? "escalate" : "retry";
+}
+
 export async function runMasterCycle(
   mission: Mission,
   master: AgentDefinition,
@@ -163,23 +179,24 @@ export async function runMasterCycle(
     });
 
     envelope = parseEnvelope(result.text);
+    unreadable.delete(mission.id);
   } catch (err) {
     if (!(err instanceof EnvelopeError)) {
       // No model answered after all: a quota learned mid-call, an outage.
       // Forget the board, so the next tick with a model available decides on
       // it — otherwise the mission would wait for an unrelated change.
       lastSeen.delete(mission.id);
-    } else if (state.human.length > 0) {
-      // The Master answered, but not in the protocol. The human must not be
-      // left in front of "thinking…" for a reply that will never come.
-      await replyToHuman(
-        mission.id,
-        state.human,
-        "I could not put my decision into words. Send your message again, or rephrase it, and I will pick it up.",
-        model,
-        tokensIn,
-        tokensOut,
-      );
+    } else {
+      const inARow = (unreadable.get(mission.id) ?? 0) + 1;
+      if (afterUnreadable(inARow) === "retry") {
+        // The Master answered, but not in the protocol: the same board, the
+        // human's message included, is judged again on the next tick.
+        unreadable.set(mission.id, inARow);
+        lastSeen.delete(mission.id);
+      } else {
+        unreadable.delete(mission.id);
+        await escalateUnreadable(mission, state, err.message, model, tokensIn, tokensOut);
+      }
     }
     throw err;
   }
@@ -763,7 +780,7 @@ export function ciDigest(run: State["runs"][number]): Record<string, unknown> {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) =>
-      /\b(error|warning|panic|fault|failed|Finished)\b|^-->|Marqueur|Aucune image/i.test(line),
+      /\b(error|warning|panic|fault|failed|Finished)\b|^-->|^--- |Marqueur|Aucune image|cannot stat|No such file|not found/i.test(line),
     )
     .slice(0, 12)
     .join("\n")
@@ -821,6 +838,36 @@ async function replyToHuman(
     .from("draft_messages")
     .update({ answered_at: now })
     .in("id", human.map((h) => h.id));
+}
+
+/**
+ * Unreadable decisions, three in a row: the mission stops and the human is
+ * told, rather than left in front of a board nobody judges. Their next
+ * message reopens it.
+ */
+async function escalateUnreadable(
+  mission: Mission,
+  state: State,
+  detail: string,
+  model: string,
+  tokensIn: number,
+  tokensOut: number,
+): Promise<void> {
+  const reason =
+    `My last ${UNREADABLE_LIMIT} decisions could not be read (${detail.slice(0, 200)}). ` +
+    "The mission is paused until you write to me.";
+  await db.from("missions").update({ status: "blocked" }).eq("id", mission.id);
+  await emit({
+    missionId: mission.id,
+    agentId: "master",
+    level: "error",
+    type: "escalation",
+    message: reason,
+    payload: { options: ["Continue where you left off", "Tell me what to do next"] },
+  });
+  if (state.human.length > 0) {
+    await replyToHuman(mission.id, state.human, reason, model, tokensIn, tokensOut);
+  }
 }
 
 /**

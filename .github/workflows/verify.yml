@@ -104,9 +104,17 @@ jobs:
           # "bash script" et non "./script" : les agents committent par l'API
           # GitHub, qui ecrit tout en mode 100644. Le bit executable n'existe
           # jamais sur leurs fichiers, et un test -x echouerait toujours.
+          #
+          # Sa sortie part dans le log du verdict, sous "--- iso ---". Avant,
+          # elle ne restait que sur la page du run : sur la mission 1, deux
+          # tentatives ont echoue sur "could not find Cargo.toml" (script lance
+          # depuis la racine du depot) sans que le Codeur puisse le lire.
           if [ -f kernel/scripts/make-iso.sh ]; then
-            echo "Construction de l'image via kernel/scripts/make-iso.sh"
-            bash kernel/scripts/make-iso.sh
+            echo "Construction de l'image via kernel/scripts/make-iso.sh, lance depuis $(pwd)" | tee "$RUNNER_TEMP/iso.log"
+            if ! bash kernel/scripts/make-iso.sh 2>&1 | tee -a "$RUNNER_TEMP/iso.log"; then
+              echo "error: kernel/scripts/make-iso.sh failed (it runs from the repository root, not from kernel/)" | tee -a "$RUNNER_TEMP/iso.log"
+              exit 1
+            fi
           fi
 
           IMAGE=$(find kernel -name '*.iso' -o -name '*.img' | head -n1)
@@ -126,6 +134,20 @@ jobs:
             echo "::error::Marqueur grenOS absent de la sortie serie"
             exit 1
           fi
+
+      # L'image qui vient de booter, telechargeable depuis la page du run
+      # (section Artifacts) : c'est l'OS lui-meme, a lancer avec
+      # qemu-system-x86_64 -cdrom <image> -serial stdio. Un souci d'artefact
+      # ne doit jamais faire rougir un kernel qui boote.
+      - name: Garder l'image qui boote
+        if: steps.qemu.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: grenos-${{ github.sha }}
+          path: kernel/**/*.iso
+          if-no-files-found: ignore
+          retention-days: 30
 
       # Toujours executee : un run qui ne rapporte rien laisse une tache
       # bloquee en awaiting_verification jusqu'a intervention humaine.
@@ -213,7 +235,7 @@ jobs:
           # On garde la fin des logs : l'erreur qui compte est presque toujours
           # la derniere, et un dump complet noie le Codeur au retour.
           : > combined.log
-          for f in build clippy qemu; do
+          for f in build clippy iso qemu; do
             if [ -f "$RUNNER_TEMP/$f.log" ]; then
               echo "--- $f ---" >> combined.log
               cat "$RUNNER_TEMP/$f.log" >> combined.log

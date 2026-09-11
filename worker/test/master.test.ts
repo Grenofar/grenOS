@@ -9,6 +9,8 @@ process.env.GITHUB_TOKEN ??= "test";
 
 const {
   HUMAN_LANGUAGE,
+  UNREADABLE_LIMIT,
+  afterUnreadable,
   renderState,
   signatureOf,
   parkedSpecGaps,
@@ -214,6 +216,15 @@ test("the Master answers the human in English, whatever language they write in",
   assert.match(text, /write it in English/);
   assert.match(text, /`options` of any escalation, in English/);
   assert.doesNotMatch(text, /French/);
+});
+
+test("an unreadable decision is judged again, and the third in a row reaches the human", () => {
+  // Mission 1, 2026-09-11: status "escalate", then prose. Both were refused
+  // and nothing happened for eight hours.
+  assert.equal(UNREADABLE_LIMIT, 3);
+  assert.equal(afterUnreadable(1), "retry");
+  assert.equal(afterUnreadable(2), "retry");
+  assert.equal(afterUnreadable(3), "escalate");
 });
 
 test("the Master knows what time it is", () => {

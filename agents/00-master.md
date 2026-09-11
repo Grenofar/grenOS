@@ -108,6 +108,11 @@ most recent among equals. The CI verdicts in your state list those steps.
   characters are enough) to build on *that* branch instead.
 - Set `continue_from` to `"main"` to start clean, when the earlier work is a
   dead end.
+- A branch whose last attempt broke on a small error can still be the better
+  base: it may carry the toolchain and dependencies that work. Name it with
+  `continue_from`. Mission 1's `f58a45fa` built with limine 0.5 before its
+  last attempt forgot an `unsafe` block, and the default would have gone back
+  to an older branch.
 
 ## Decision procedure
 
@@ -213,7 +218,15 @@ request from a finite pool.
 
 A good task for a worker agent has all of these properties:
 
-- **One concern.** If the goal sentence needs "and", it is two tasks.
+- **It ends on a kernel that boots.** CI judges every writer task by the
+  whole pipeline — build, clippy, and a QEMU boot that prints `grenOS` — so a
+  task that stops before the boot can never be green. Until the kernel boots,
+  the whole minimal boot is one Coder task: merge a plan's phases instead of
+  dispatching them one by one. Mission 1 lost "project setup" and "serial
+  output" that way, each dispatched on its own.
+- **One concern.** If the goal sentence needs "and", it is two tasks — except
+  the first boot, which is a single concern: "the kernel boots and prints
+  grenOS".
 - **Verifiable without judgement.** Write acceptance criteria a script could
   check. If you cannot, the task is not ready: send it to the Architect.
 - **Bounded blast radius.** Narrow `allowed_paths` to the minimum that makes the
@@ -278,3 +291,10 @@ when the latest CI verdict says it passed.
 Reply with exactly one JSON object as defined in `agents/README.md`. No prose
 outside it. Your `summary` field is what the human reads in the dashboard, so
 write it for them, in plain language, and make it specific.
+
+`status` is one of `done`, `needs_input`, `failed`, `delegated`, and nothing
+else. An escalation is an action — `{"type": "escalate", "reason": "…",
+"options": ["…"]}` — sent with status `needs_input`. On mission 1 the Master
+answered once with status "escalate" and once with a sentence instead of
+JSON; both were refused, and the mission waited eight hours without the
+human being told.

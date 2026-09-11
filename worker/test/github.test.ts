@@ -97,6 +97,59 @@ test("a new branch is born with its first commit, not as a copy of main", async 
   assert.ok(!calls.some((c) => c.method === "PATCH"));
 });
 
+test("a branch that continues another agent branch is born on main, carrying that branch's changes", async () => {
+  // Mission 1's branches descended from a commit of 2026-09-10 and ran its
+  // CI: a branch now runs the workflow main has today.
+  const calls = stub((c) => {
+    if (c.method === "GET" && c.path.includes("/git/ref/heads/agent%2Fbase0000")) {
+      return { status: 200, json: { object: { sha: "basehead" } } };
+    }
+    if (c.method === "GET" && c.path === "/repos/o/r/compare/main...agent/base0000") {
+      return {
+        status: 200,
+        json: {
+          files: [
+            { filename: "kernel/Cargo.toml", status: "added", sha: "b-cargo" },
+            { filename: "kernel/src/main.rs", status: "modified", sha: "b-main" },
+            { filename: "kernel/old.rs", status: "removed", sha: "b-old" },
+            { filename: "kernel/gone.rs", status: "removed", sha: "b-gone" },
+            { filename: "kernel/new.rs", status: "renamed", sha: "b-new", previous_filename: "kernel/prev.rs" },
+            { filename: ".github/workflows/verify.yml", status: "modified", sha: "b-wf" },
+          ],
+        },
+      };
+    }
+    if (c.method === "GET" && c.path.startsWith("/repos/o/r/git/trees/main")) {
+      return {
+        status: 200,
+        json: { tree: [{ path: "kernel/old.rs", type: "blob", size: 1 }, { path: "kernel/prev.rs", type: "blob", size: 1 }] },
+      };
+    }
+    return repoWhere(false)(c);
+  });
+
+  await new GitHub("o/r", "t").commit({
+    branch: "agent/abc12345",
+    message: "coder: finish the boot",
+    changes: [{ path: "kernel/src/main.rs", content: "#![no_std]" }],
+    base: "agent/base0000",
+  });
+
+  const commit = calls.find((c) => c.method === "POST" && c.path.endsWith("/git/commits"));
+  assert.equal(commit?.body?.parents?.[0], "mainhead", "born on main, so it runs main's CI");
+
+  const posted = calls.find((c) => c.method === "POST" && c.path.endsWith("/git/trees"));
+  const entries = (posted?.body as unknown as { tree: Array<{ path: string; sha: string | null }> }).tree;
+  const sha = new Map(entries.map((e) => [e.path, e.sha]));
+  assert.equal(sha.get("kernel/Cargo.toml"), "b-cargo", "the work it continues comes along");
+  assert.equal(sha.get("kernel/src/main.rs"), "blob1", "the agent's own version wins");
+  assert.equal(sha.get("kernel/new.rs"), "b-new");
+  assert.equal(sha.get("kernel/old.rs"), null);
+  assert.equal(sha.get("kernel/prev.rs"), null);
+  assert.ok(!sha.has("kernel/gone.rs"), "no deletion of a path main does not have");
+  assert.ok(!sha.has(".github/workflows/verify.yml"), "never a workflow file");
+});
+
 test("an existing branch is fast-forwarded, never recreated", async () => {
   const calls = stub(repoWhere(true));
   await new GitHub("o/r", "t").commit({

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { preflight, renderPreflight, pinnedBeforeRust185 } from "../src/preflight.ts";
+import { asmOutsideUnsafe, preflight, renderPreflight, pinnedBeforeRust185 } from "../src/preflight.ts";
 
 // Every rule here was paid for with a real CI run on mission 1. The first test
 // matters as much as the others: a check that cries wolf teaches agents to
@@ -107,6 +107,19 @@ test("limine.conf in the syntax Limine reads today, not the one models remember"
   assert.match(preflight([w("kernel/limine.conf", remembered)])[0]!, /old limine\.cfg syntax/);
 });
 
+test("a limine.conf with nothing to boot", () => {
+  // fe2cc7ed, 2026-09-11: options, and no menu entry.
+  const invented = "PROTOCOL :\nBASETYPE :\n# Kernel path relative to the root of the ISO\nKERNEL_PATH : /boot/kernel.el\n";
+  const [noEntry, notAPath] = preflight([w("kernel/limine.conf", invented)]);
+  assert.match(noEntry!, /no menu entry/);
+  assert.match(notAPath!, /kernel_path "\/boot\/kernel\.el" is not a Limine path/);
+  // A path is resource(argument):/path: boot(), hdd(1:1), guid(…) all qualify.
+  assert.deepEqual(preflight([w("kernel/limine.conf", "/grenOS\n  protocol: limine\n  kernel_path: hdd(1:1):/k\n")]), []);
+  // Option names are not case sensitive (CONFIG.md): upper case is fine.
+  const upper = "TIMEOUT: 3\n\n/grenOS\n    PROTOCOL: limine\n    KERNEL_PATH: boot():/boot/kernel\n";
+  assert.deepEqual(preflight([w("kernel/limine.conf", upper)]), []);
+});
+
 test("a build script that writes limine.cfg", () => {
   // Mission 1's first make-iso.sh wrote one from a heredoc.
   const script = '#!/bin/sh\ncat > "$ISO_ROOT/boot/limine.cfg" <<EOF\nTIMEOUT 20\nEOF\n';
@@ -191,6 +204,72 @@ test("edition 2024 under a toolchain pinned before Rust 1.85", () => {
   assert.equal(pinnedBeforeRust185('channel = "nightly-2024-11-15"'), "nightly-2024-11-15");
   assert.equal(pinnedBeforeRust185('channel = "1.85.0"'), null);
   assert.equal(pinnedBeforeRust185('channel = "stable"'), null);
+});
+
+test("inline assembly outside an unsafe block", () => {
+  // The Coder's last attempt on f58a45fa, copied from the plan's snippet:
+  // rustc refused both lines with E0133.
+  const attempt = [
+    "#![no_std]",
+    "#![no_main]",
+    "",
+    "use core::panic::PanicInfo;",
+    "",
+    "#[no_mangle]",
+    'pub extern "C" fn _start() -> ! {',
+    "    loop {",
+    '        core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));',
+    "    }",
+    "}",
+    "",
+    "#[panic_handler]",
+    "fn panic(_info: &PanicInfo) -> ! {",
+    "    loop {",
+    '        core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));',
+    "    }",
+    "}",
+    "",
+  ].join("\n");
+  assert.deepEqual(asmOutsideUnsafe(attempt), [9, 16]);
+  assert.match(preflight([w("kernel/src/main.rs", attempt)])[0]!, /asm! outside an unsafe block \(line 9, 16\)/);
+
+  // Every way of being inside unsafe, and nothing read from a comment or a literal.
+  const fine = [
+    '// asm!("hlt") in a comment',
+    '/* and asm!("hlt") /* nested */ still a comment */',
+    'core::arch::global_asm!(".section .text");',
+    'const S: &str = "asm!(x) { unsafe";',
+    'const R: &str = r#"asm!("hlt") {"#;',
+    'macro_rules! halt { () => { core::arch::asm!("hlt") }; }',
+    "unsafe fn outb(port: u16, value: u8) {",
+    '    core::arch::asm!("out dx, al", in("dx") port, in("al") value);',
+    "}",
+    "#[unsafe(no_mangle)]",
+    'unsafe extern "C" fn kmain() -> ! {',
+    "    hcf()",
+    "}",
+    "fn hcf() -> ! {",
+    "    let brace = '{';",
+    "    loop {",
+    "        unsafe {",
+    '            #[cfg(target_arch = "x86_64")]',
+    '            core::arch::asm!("hlt");',
+    "        }",
+    "    }",
+    "}",
+    "fn read<'a>(port: &'a u16) -> u8 {",
+    "    let value: u8;",
+    '    unsafe { core::arch::asm!("in al, dx", out("al") value, in("dx") *port) };',
+    '    match value { 0 => unsafe { core::arch::asm!("nop") }, _ => {} }',
+    "    value",
+    "}",
+    'fn later() { unsafe { let f = || { core::arch::asm!("nop") }; f() } }',
+  ].join("\n");
+  assert.deepEqual(asmOutsideUnsafe(fine), []);
+  assert.deepEqual(preflight([w("kernel/src/arch.rs", fine)]), []);
+
+  // A nested fn does not inherit the unsafe block around it.
+  assert.deepEqual(asmOutsideUnsafe('fn f() { unsafe { fn g() { core::arch::asm!("nop") } g() } }'), [1]);
 });
 
 test("the agent is told what is left of its corrections", () => {

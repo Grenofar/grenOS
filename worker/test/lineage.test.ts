@@ -111,6 +111,8 @@ test("how far a run got, from the steps CI lists or, before that, from its log",
   );
   assert.equal(progress(runs[1]!), 2);
   assert.equal(progress(runs[0]!), 1);
+  // a5780922, 2026-09-11: build and clippy passed, the image script failed.
+  assert.equal(progress({ status: "failed", failure: "test_failure", verdicts: [], log_excerpt: "--- build ---" }), 3);
   // No kernel to judge, or a runner problem: nothing learned about the code.
   assert.equal(progress({ status: "error", verdicts: [], log_excerpt: null }), 0);
 });

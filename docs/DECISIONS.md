@@ -602,3 +602,39 @@ langue est nommée au modèle à chaque appel (`HUMAN_LANGUAGE`, `master.ts`).
 `## Journal des échanges` est encore lu, pour ne rien perdre de l'historique.
 → Inchangé : les événements du tableau de bord, écrits par le code, restent en
 français, comme `CLAUDE.md` et `docs/**`.
+
+### D-029 — Chaque tâche finit sur un kernel qui boote, et la CI dit tout
+**2026-09-11 · actif · demandé par l'humain (« vérifie tout ce qui est généré »)**
+
+La journée du 2026-09-11 a montré quatre défauts, tous invisibles en relisant
+le code.
+1. **Une tâche qui s'arrête avant le boot ne peut pas être verte** : la CI juge
+   build, clippy et boot ensemble. `f58a45fa` (« mise en place du projet ») a
+   brûlé ses trois tentatives sans pouvoir réussir.
+2. **La sortie de `make-iso.sh` n'arrivait pas aux agents** : `a5780922` avait
+   build et clippy verts, son script échouait (« could not find Cargo.toml »,
+   lancé depuis la racine du dépôt), et seule la page GitHub le montrait.
+3. **Les branches d'agents gardaient la CI de leur ancêtre** : GitHub exécute
+   le workflow du commit poussé, et toutes descendaient de `48584b5`
+   (2026-09-10).
+4. **Un Maître illisible figeait la mission** : deux réponses refusées
+   (`status: "escalate"`, puis de la prose), le plateau marqué comme jugé, et
+   huit heures sans rien, sans que l'humain le sache.
+
+→ Contrat CI, Maître, Architecte, Codeur : chaque tâche d'écriture se termine
+sur un kernel qui boote ; tant qu'il ne boote pas, le boot minimal est une
+seule tâche ; un Codeur qui reçoit une tâche impossible à rendre verte répond
+`spec_gap`.
+→ CI : la sortie de `make-iso.sh` entre dans le log du verdict sous
+`--- iso ---`, et l'image d'un boot réussi est gardée 30 jours comme artefact
+`grenos-<commit>`.
+→ Une branche d'agent naît toujours sur `main` ; quand elle continue une autre
+branche, les changements de celle-ci y sont rejoués (API compare), jamais un
+fichier de workflow, jamais la suppression d'un chemin que `main` n'a pas.
+→ Pré-vol : un `asm!` hors d'un bloc `unsafe`, un `limine.conf` sans entrée
+de menu.
+→ Choix de branche : un run `test_failure` compte comme « build et clippy
+passés ».
+→ Maître : une réponse illisible est rejugée au tick suivant ; la troisième
+d'affilée bloque la mission et prévient l'humain, en anglais. Son prompt dit
+que `status` n'a que quatre valeurs et qu'une escalade est une action.

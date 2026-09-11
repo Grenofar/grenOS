@@ -108,6 +108,24 @@ export function preflight(changes: Change[], branch: Change[] | null = null): st
       );
     }
 
+    // A menu entry is what Limine boots, and it opens with a line starting
+    // with "/" (CONFIG.md). Option names are not case sensitive, so only the
+    // missing entry is certain: fe2cc7ed wrote options and no entry at all.
+    if (name === "limine.conf" && !/^\s*\/+[^\s/]/m.test(content)) {
+      problems.push(
+        `${path}: no menu entry, so Limine has nothing to boot. An entry opens with a line starting with "/": \`/grenOS\`, then, indented, \`protocol: limine\` and \`kernel_path: boot():/boot/kernel\` (Limine's CONFIG.md).`,
+      );
+    }
+
+    // A Limine path is resource(argument):/path (CONFIG.md, Paths); a bare
+    // /boot/kernel names nothing. fe2cc7ed wrote `KERNEL_PATH : /boot/kernel.el`.
+    const kernelPath = name === "limine.conf" ? content.match(/^\s*kernel_path\s*:\s*(\S*)/im)?.[1] : undefined;
+    if (kernelPath !== undefined && !/^[a-z]+\([^)]*\):\//i.test(kernelPath)) {
+      problems.push(
+        `${path}: kernel_path "${kernelPath}" is not a Limine path. A path is resource(argument):/path — e.g. \`kernel_path: boot():/boot/kernel\` for the partition holding limine.conf (Limine's CONFIG.md, Paths).`,
+      );
+    }
+
     // A script that writes the configuration builds an image Limine cannot
     // read: mission 1's first make-iso.sh wrote a limine.cfg from a heredoc.
     if (/\.sh$|(^|\/)(GNU)?[Mm]akefile$/.test(path) && /limine\.cfg\b/.test(content)) {
@@ -164,6 +182,13 @@ export function preflight(changes: Change[], branch: Change[] | null = null): st
           `${path}: core::arch::x86_64 has no ${invented.join(", ")}: it holds CPU intrinsics such as _rdtsc and __cpuid. ` +
             "Write these as inline assembly, each in an unsafe block with its // SAFETY: comment: " +
             'core::arch::asm!("hlt"), asm!("out dx, al", in("dx") port, in("al") byte), asm!("in al, dx", out("al") byte, in("dx") port).',
+        );
+      }
+      const outside = asmOutsideUnsafe(content);
+      if (outside.length > 0) {
+        problems.push(
+          `${path}: asm! outside an unsafe block (line ${outside.join(", ")}). Inline assembly is unsafe and rustc refuses it anywhere else (E0133): ` +
+            "wrap each one in unsafe { … } with its // SAFETY: comment.",
         );
       }
     }
@@ -277,6 +302,120 @@ export function inventedIntrinsics(source: string): string[] {
     }
   }
   return [...names];
+}
+
+/**
+ * Lines holding inline assembly outside any unsafe context. `asm!` is unsafe
+ * (E0133), and a snippet without its `unsafe` block is the easiest thing to
+ * copy: mission 1's second plan showed `loop { core::arch::asm!("hlt") }` in a
+ * safe function, and the Coder's next attempt reproduced it twice.
+ *
+ * A brace scanner over the source, comments and literals blanked out. A block
+ * is unsafe when it follows `unsafe` or is the body of an `unsafe fn`; other
+ * blocks inherit from the one around them, except a `fn` body, which starts
+ * afresh. Nothing inside a macro_rules! body is judged: where the macro
+ * expands is what counts.
+ */
+export function asmOutsideUnsafe(source: string): number[] {
+  const code = blankLiterals(source);
+  const stack: Array<{ unsafe: boolean; macro: boolean }> = [];
+  const lines = new Set<number>();
+  let boundary = 0;
+
+  for (let i = 0; i < code.length; i++) {
+    const c = code[i];
+    if (c === "{") {
+      const header = code.slice(boundary, i);
+      const parent = stack[stack.length - 1] ?? { unsafe: false, macro: false };
+      let unsafe = parent.unsafe;
+      if (/\bfn\s+[A-Za-z_]/.test(header)) {
+        unsafe = /\bunsafe\s+(?:extern\s*(?:"[^"]*")?\s*)?fn\s+[A-Za-z_]/.test(header);
+      }
+      if (/\bunsafe\s*$/.test(header)) unsafe = true;
+      stack.push({ unsafe, macro: parent.macro || /\bmacro_rules!/.test(header) });
+      boundary = i + 1;
+    } else if (c === "}") {
+      stack.pop();
+      boundary = i + 1;
+    } else if (c === ";") {
+      boundary = i + 1;
+    } else if (c === "a" && !/\w/.test(code[i - 1] ?? "") && /^asm!\s*[([{]/.test(code.slice(i, i + 12))) {
+      const frame = stack[stack.length - 1];
+      if (frame && !frame.unsafe && !frame.macro) lines.add(code.slice(0, i).split("\n").length);
+    }
+  }
+  return [...lines];
+}
+
+/**
+ * The source with comments and string, raw-string and char literals turned
+ * into spaces, newlines kept: offsets and line numbers stay the original's,
+ * and no brace or keyword inside a literal is read as code.
+ */
+function blankLiterals(source: string): string {
+  const out = source.split("");
+  const blank = (from: number, to: number) => {
+    for (let k = from; k < to && k < out.length; k++) if (out[k] !== "\n") out[k] = " ";
+  };
+
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i];
+    const next = source[i + 1];
+
+    if (c === "/" && next === "/") {
+      const end = source.indexOf("\n", i);
+      const stop = end === -1 ? source.length : end;
+      blank(i, stop);
+      i = stop;
+    } else if (c === "/" && next === "*") {
+      // Rust block comments nest.
+      let depth = 1;
+      let j = i + 2;
+      while (j < source.length && depth > 0) {
+        if (source[j] === "/" && source[j + 1] === "*") (depth++, (j += 2));
+        else if (source[j] === "*" && source[j + 1] === "/") (depth--, (j += 2));
+        else j++;
+      }
+      blank(i, j);
+      i = j;
+    } else if ((c === "r" || (c === "b" && next === "r")) && !/\w/.test(source[i - 1] ?? "")) {
+      const raw = source.slice(i, i + 300).match(/^b?r(#*)"/);
+      if (!raw) {
+        i++;
+        continue;
+      }
+      const start = i + raw[0].length;
+      const end = source.indexOf(`"${raw[1]}`, start);
+      const stop = end === -1 ? source.length : end;
+      blank(start, stop);
+      i = stop + 1 + raw[1]!.length;
+    } else if (c === '"') {
+      let j = i + 1;
+      while (j < source.length && source[j] !== '"') j += source[j] === "\\" ? 2 : 1;
+      blank(i + 1, j);
+      i = j + 1;
+    } else if (c === "'") {
+      // A char literal, or a lifetime or label, which is left alone.
+      if (next === "\\") {
+        let j = i + 2;
+        j = source[j] === "u" && source[j + 1] === "{" ? source.indexOf("}", j) + 1 : j + 1;
+        if (source[j] === "'") {
+          blank(i + 1, j);
+          i = j + 1;
+          continue;
+        }
+      } else if (source[i + 2] === "'") {
+        blank(i + 1, i + 2);
+        i += 3;
+        continue;
+      }
+      i++;
+    } else {
+      i++;
+    }
+  }
+  return out.join("");
 }
 
 /** What the agent reads when its answer is sent back. */

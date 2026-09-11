@@ -189,10 +189,13 @@ and you say so in your `summary` so the Master can have it corrected.
    (`[build] target = "..."`).
 3. **`cargo clippy --release -- -D warnings`**, inside `kernel/`. One warning
    turns the run red.
-4. **`bash kernel/scripts/make-iso.sh`**, when that file exists. CI calls it
-   through `bash` because files committed by agents are never executable. The
-   runner has `xorriso` and `mtools` and nothing from Limine: the script
-   fetches the Limine binaries itself.
+4. **`bash kernel/scripts/make-iso.sh`**, when that file exists, run **from
+   the repository root**, not from `kernel/`: build every path from the
+   script's own location (`$(dirname "$0")`). CI calls it through `bash`
+   because files committed by agents are never executable. The runner has
+   `xorriso` and `mtools` and nothing from Limine: the script fetches the
+   Limine binaries itself. Its output is in the verdict log, under
+   `--- iso ---`.
 5. **Boot.** The first `*.iso` or `*.img` found under `kernel/` runs as
    `qemu-system-x86_64 -cdrom <image> -serial stdio -display none -no-reboot -no-shutdown -m 256M`
    and is killed after 90 seconds.
@@ -205,6 +208,12 @@ and you say so in your `summary` so the Master can have it corrected.
 
 Consequences that have already cost real attempts:
 
+- **Every writer task is judged by the whole pipeline.** A run is green only
+  when the kernel builds, passes clippy **and** boots printing `grenOS`. A
+  task whose goal stops before that — project setup alone, a linker script
+  alone — can never be green, and spends its three attempts whatever it
+  writes: mission 1 lost two tasks that way. Until the kernel boots, the
+  minimal boot is one task; after that, every task leaves it booting.
 - **Target the built-in `x86_64-unknown-none`**, listed under `targets` in
   `rust-toolchain.toml`: its `core` ships precompiled. A custom target JSON is
   refused unless unstable flags and `build-std` are configured — mission 1
@@ -227,8 +236,9 @@ Before anything is committed, the runtime checks your answer for mistakes that
 are certain to fail: a misspelled file name, `.cargo/config` or `limine.cfg`,
 the old `KEY=value` syntax in `limine.conf`, invalid JSON, a custom target
 spec, a toolchain file without `x86_64-unknown-none`, a `Cargo.toml` without
-`[package]`, an empty `loop {}` that clippy rejects, a function
-`core::arch::x86_64` does not have (`hlt`, `outb`, `inb`…), a `#![no_std]`
+`[package]`, an empty `loop {}` that clippy rejects, an `asm!` outside an
+`unsafe` block, a function `core::arch::x86_64` does not have (`hlt`,
+`outb`, `inb`…), a `#![no_std]`
 binary with no `#[panic_handler]` anywhere in its crate, edition 2024 — yours
 or a dependency's — under a toolchain pinned before Rust 1.85, a crate version
 that was never published, a `patch_file` whose `old_str` does not appear

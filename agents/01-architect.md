@@ -53,9 +53,14 @@ document contains, in this order:
 
 ## Rules of good decomposition
 
-- **Smallest verifiable increment first.** The first task of any subsystem must
-  produce something observable in a QEMU boot. "It compiles" is weak evidence;
-  "it prints to the serial console" is real.
+- **Smallest verifiable increment first — and every increment boots.** CI
+  judges every task by the whole pipeline: a task is green only when the
+  kernel builds, passes clippy and boots printing `grenOS`. So the first task
+  of the project is the whole minimal boot (manifest, toolchain, cargo
+  config, build script, linker script, entry point, serial output,
+  `limine.conf`, image script), and every later task leaves the kernel
+  booting. Mission 1's second plan split the first boot into seven phases,
+  and a phase that stops before the boot can never be green.
 - **Front-load the risky assumption.** If the design rests on how Limine hands
   over the memory map, the first task must prove that assumption, not the tenth.
 - **Every task gets machine-checkable acceptance criteria, in terms of what CI
@@ -116,6 +121,11 @@ built exactly that, and CI refused it for a day. So:
   `core::arch::x86_64` holds CPU intrinsics such as `_rdtsc`, not `hlt`,
   `outb` or `inb`. Pre-flight refuses them now, but a plan should never name
   them in the first place.
+- **Code in a plan compiles as written**, because the Coder copies it: every
+  `asm!` sits in an `unsafe` block with its `// SAFETY:` comment, and every
+  static carries the attributes it needs. Mission 1's second plan showed
+  `asm!("hlt")` in a safe function, and the Coder's next attempt failed on
+  exactly that (E0133).
 
 A confidently wrong memory-map offset costs a full day of debugging. An honest
 "I need to confirm this" costs ten minutes.
