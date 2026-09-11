@@ -126,6 +126,26 @@ test("the cascade crosses providers when NVIDIA fails", async () => {
   assert.deepEqual(calls, [NV, NEMO, "gemini-3.8-flash"]);
 });
 
+test("a second Gemini floor answers when the first is at high demand", async () => {
+  // 2026-09-11: the NIM models timing out or answering 503 while
+  // gemini-3.8-flash refused for "high demand", all at once, for most of an hour.
+  const calls = stubFetch((m) =>
+    m === "gemini-3.7-flash" ? geminiOk() : new Response("high demand", { status: 503 }),
+  );
+  const res = await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
+
+  assert.equal(res.model, "gemini-3.7-flash");
+  assert.deepEqual(calls, [NV, NEMO, "gemini-3.8-flash", "gemini-3.7-flash"]);
+});
+
+test("the architect's last resort is Nemotron, which answers when the big models do not", async () => {
+  const calls = stubFetch((m) => (m === NEMO ? nvidiaOk() : new Response("overloaded", { status: 503 })));
+  const res = await new Router(both()).complete({ role: "architect", system: "s", messages: [] });
+
+  assert.equal(res.model, NEMO);
+  assert.deepEqual(calls, [NV, KIMI, "gemini-3.8-flash", "gemini-3.7-flash", NEMO]);
+});
+
 test("without an NVIDIA key its models are skipped, not called", async () => {
   const calls = stubFetch(anyOk);
   const res = await new Router({ geminiApiKey: "g", usage }).complete({
@@ -275,7 +295,7 @@ test("only fails once every model is unusable", async () => {
     () => router.complete({ role: "coder", system: "s", messages: [] }),
     RouterExhaustedError,
   );
-  assert.equal(calls.length, 3, "un appel par modèle pour apprendre chaque limite");
+  assert.equal(calls.length, 4, "un appel par modèle pour apprendre chaque limite");
 
   calls.length = 0;
   await assert.rejects(

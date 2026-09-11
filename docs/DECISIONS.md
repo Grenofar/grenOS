@@ -656,3 +656,15 @@ Supabase : aucune donnée du projet n'y passe.
 → Elle dit ce que l'OS fait vraiment. À l'étape 1, il écrit sur le port série
 et rien à l'écran ; VirtualBox et les vrais PC ne sont pas vérifiés par la
 CI, QEMU l'est.
+
+### D-031 — Un second plancher
+**2026-09-11 · actif · complète D-017**
+
+Le 2026-09-11, de 17:12 à 18:20 environ, toutes les cascades sont tombées
+ensemble : DeepSeek et Kimi dépassaient leurs 240 s, Nemotron répondait 503,
+et gemini-3.8-flash refusait pour « forte demande ». La mission 2 a attendu une
+heure sans rien consommer.
+→ `gemini-3.7-flash` devient un second plancher pour le Maître, l'Architecte et
+le Codeur : chaque modèle Gemini a sa propre capacité et son propre quota
+journalier. Nemotron devient le dernier recours de l'Architecte. Aucun des deux
+n'est appelé tant que les modèles au-dessus répondent.

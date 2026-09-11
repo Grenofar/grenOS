@@ -118,22 +118,33 @@ export type ModelRole = "master" | "architect" | "coder" | "tester";
  * on every state change, so it gets the fast one; the Coder produces the diff
  * everything downstream depends on, so it gets the strongest; the Architect
  * runs rarely and thinks longest, so the 14-second model is fine there.
+ *
+ * The floor has two floors. On 2026-09-11 the NIM models timed out or answered
+ * 503 while gemini-3.8-flash refused for "high demand", all at once, and every
+ * cascade was down for most of an hour. Each Gemini model has its own
+ * capacity and its own daily quota, so gemini-3.7-flash is a real second
+ * floor; Nemotron, which answers when the big NIM models do not, is the
+ * Architect's last resort. Both are only reached when everything above failed.
  */
 export const CASCADES: Record<ModelRole, string[]> = {
   master: [
     "nvidia/nemotron-3-super-120b-a12b",
     "deepseek-ai/deepseek-v4-pro-0813",
     "gemini-3.8-flash",
+    "gemini-3.7-flash",
   ],
   architect: [
     "deepseek-ai/deepseek-v4-pro-0813",
     "moonshotai/kimi-k3",
     "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "nvidia/nemotron-3-super-120b-a12b",
   ],
   coder: [
     "deepseek-ai/deepseek-v4-pro-0813",
     "nvidia/nemotron-3-super-120b-a12b",
     "gemini-3.8-flash",
+    "gemini-3.7-flash",
   ],
   tester: [
     "nvidia/nemotron-3-super-120b-a12b",
