@@ -705,3 +705,22 @@ l'ISO désignée par son nom (à garder dans le même dossier), COM1 écrit dans
 kernel dessine. `/download` montre les deux boutons et l'aperçu.
 → Pas de VirtualBox sur l'hôte : l'ouverture du `.vbox` est testée par
 l'humain, sur son PC principal.
+
+### D-034 — Claude écrit le kernel quand l'humain le demande
+**2026-09-11 · actif · demandé par l'humain · exception à « kernel/ n'est écrit que par les agents »**
+
+L'humain voulait l'interface graphique plus vite que les agents ne la
+livraient : à 22:40, la tâche du bureau en était à sa première tentative,
+deux réponses illisibles et un seul fichier sur quatre. À la question de
+Claude, il a répondu « oui stp fais en sorte de terminer le kernel et de
+faire une interface graphique ».
+→ Claude écrit le bureau lui-même (`kernel/src/fb.rs`, `font.rs`, `rtc.rs`,
+`desktop.rs`, et `main.rs`), et continue le kernel de la même façon.
+→ Rien ne change au jugement : chaque changement passe par la même CI (build,
+clippy, boot, écran), sur une branche `agent/claude-<sujet>`, que
+`resolve_run_task` ne relie à aucune tâche puisque son nom ne commence pas par
+huit chiffres hexadécimaux. Il ne rejoint `main` que vert. Avant la CI, Claude
+compile avec la nightly épinglée et fait le rendu du bureau sur l'hôte
+(`scratchpad/gui_preview`), jugé par `scripts/ci-screen.py`.
+→ Les agents restent la fabrique : les tâches qui recoupent ce que Claude
+écrit sont annulées (`3bb077cc`), et le Maître en est prévenu dans le chat.
