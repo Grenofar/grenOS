@@ -32,13 +32,17 @@ unsafe extern "C" fn kmain() -> ! {
     serial::write_str("grenOS\n");
 
     loop {
-        core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+        unsafe {
+            core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+        }
     }
 }
 
 #[panic_handler]
 fn rust_panic(_info: &PanicInfo) -> ! {
     loop {
-        core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+        unsafe {
+            core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+        }
     }
 }
