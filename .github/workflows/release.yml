@@ -104,6 +104,17 @@ jobs:
             -H "Content-Type: application/x-virtualbox-vbox" -H "cache-control: max-age=31536000" \
             --data-binary @grenos.vbox "$STORAGE/object/releases/$VBOX" > /dev/null
 
+          # Le choix « VirtualBox » de /download : l'ISO et sa machine dans un
+          # seul zip, a extraire puis ouvrir ; le .vbox designe l'ISO par ce nom.
+          ZIP="builds/grenos-${BUILD}-virtualbox.zip"
+          cp grenos.iso "grenos-${BUILD}.iso"
+          cp grenos.vbox "grenos-${BUILD}.vbox"
+          python3 -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED, compresslevel=9); [z.write(f) for f in sys.argv[2:]]; z.close()' \
+            grenos-virtualbox.zip "grenos-${BUILD}.iso" "grenos-${BUILD}.vbox"
+          curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
+            -H "Content-Type: application/zip" -H "cache-control: max-age=31536000" \
+            --data-binary @grenos-virtualbox.zip "$STORAGE/object/releases/$ZIP" > /dev/null
+
           # L'apercu, quand le kernel dessine quelque chose (etape Boot QEMU).
           SCREEN=""
           if [ -f screen.png ]; then
@@ -119,9 +130,11 @@ jobs:
             echo '[]' > previous.json
           fi
           jq --arg build "$BUILD" --arg path "$OBJECT" --arg vbox "$VBOX" --arg screen "$SCREEN" \
+             --arg zip "$ZIP" --argjson zsize "$(stat -c %s grenos-virtualbox.zip)" \
              --arg commit "$GITHUB_SHA" --argjson size "$(stat -c %s grenos.iso)" \
              --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
              '[{build: $build, path: $path, vbox: $vbox, screen: (if $screen == "" then null else $screen end),
+                virtualbox: $zip, virtualbox_size: $zsize,
                 commit: $commit, size: $size, published_at: $at}] + .' \
              previous.json > all.json
           jq '.[:10]' all.json > index.json
@@ -130,7 +143,7 @@ jobs:
             -H "Content-Type: application/json" -H "cache-control: max-age=60" \
             --data-binary @index.json "$STORAGE/object/releases/index.json" > /dev/null
 
-          DROPPED=$(jq -c '[.[10:][] | .path, .vbox, .screen | select(. != null)]' all.json)
+          DROPPED=$(jq -c '[.[10:][] | .path, .vbox, .screen, .virtualbox | select(. != null)]' all.json)
           if [ "$DROPPED" != "[]" ]; then
             curl -fsS -X DELETE "${AUTH[@]}" -H "Content-Type: application/json" \
               -d "{\"prefixes\": $DROPPED}" "$STORAGE/object/releases" > /dev/null

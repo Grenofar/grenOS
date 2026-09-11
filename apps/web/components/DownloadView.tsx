@@ -10,7 +10,11 @@ export interface Build {
   url: string;
   vboxUrl?: string;
   screenUrl?: string;
+  virtualboxUrl?: string;
+  virtualboxSize?: number;
 }
+
+const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 
 /*
  * The page's copy lives here rather than in the shared dictionary: it is read
@@ -20,8 +24,12 @@ export interface Build {
 const FR = {
   title: "Télécharger grenOS",
   lead: "grenOS est un système d'exploitation x86_64 écrit en Rust par une équipe d'agents d'IA. Chaque image publiée ici a d'abord été construite, puis démarrée dans QEMU par la CI.",
-  download: "Télécharger grenos.iso",
-  vboxButton: "Télécharger grenos.vbox (VirtualBox)",
+  pcTitle: "PC, clé USB ou QEMU",
+  pcText: "L'image ISO seule : à écrire sur une clé USB pour démarrer un vrai PC, ou à lancer dans QEMU.",
+  pcButton: "Télécharger l'ISO",
+  vboxText: "L'ISO et sa machine VirtualBox déjà réglée, dans un seul zip : l'extraire, puis double-cliquer sur le fichier .vbox.",
+  vboxZipButton: "Télécharger pour VirtualBox",
+  vboxOnly: "ou seulement le fichier .vbox",
   preview: "Ce que la CI a vu à l'écran, 25 secondes après le démarrage, dans QEMU :",
   previewAlt: "Capture d'écran de grenOS dans QEMU",
   mb: "Mo",
@@ -34,7 +42,7 @@ const FR = {
   now: "Étape 2 sur 10 : il démarre avec le chargeur Limine, écrit « grenOS » sur le port série COM1, installe ses tables de segments et d'interruptions (GDT, IDT), puis déclenche exprès deux exceptions pour prouver qu'il les attrape : un point d'arrêt, dont il repart, et une faute de page, dont il écrit l'adresse avant de s'arrêter. Il n'affiche encore rien à l'écran : c'est par le port série qu'on le voit.",
   vboxTitle: "VirtualBox",
   vbox: [
-    "Télécharger les deux fichiers, grenos-….iso et grenos-….vbox, dans le même dossier (Téléchargements, par exemple).",
+    "Télécharger le zip « pour VirtualBox » et l'extraire (clic droit → Extraire tout) : l'ISO et le fichier .vbox sont côte à côte.",
     "Double-cliquer sur le fichier .vbox, ou dans VirtualBox : Machine → Ajouter…, puis le choisir. La machine grenOS apparaît, déjà réglée : 64 bits, 256 Mo, l'ISO dans le lecteur optique.",
     "La démarrer. Après le menu de Limine (3 secondes), le kernel démarre.",
     "Ce qu'il écrit sur le port série est dans C:\\Users\\Public\\Documents\\grenos-serie.txt : grenOS, puis Breakpoint, puis Page fault suivi de l'adresse fautive.",
@@ -54,8 +62,12 @@ const FR = {
 const EN: typeof FR = {
   title: "Download grenOS",
   lead: "grenOS is an x86_64 operating system written in Rust by a team of AI agents. Every image published here was first built, then booted in QEMU, by CI.",
-  download: "Download grenos.iso",
-  vboxButton: "Download grenos.vbox (VirtualBox)",
+  pcTitle: "PC, USB stick or QEMU",
+  pcText: "The ISO image alone: write it to a USB stick to boot a real PC, or run it in QEMU.",
+  pcButton: "Download the ISO",
+  vboxText: "The ISO and its ready-made VirtualBox machine, in one zip: extract it, then double-click the .vbox file.",
+  vboxZipButton: "Download for VirtualBox",
+  vboxOnly: "or just the .vbox file",
   preview: "What CI saw on screen, 25 seconds after boot, in QEMU:",
   previewAlt: "Screenshot of grenOS in QEMU",
   mb: "MB",
@@ -68,7 +80,7 @@ const EN: typeof FR = {
   now: "Step 2 of 10: it boots with the Limine bootloader, writes “grenOS” to the COM1 serial port, loads its segment and interrupt tables (GDT, IDT), then raises two exceptions on purpose to prove it catches them: a breakpoint, which it returns from, and a page fault, whose address it writes before halting. It shows nothing on screen yet: the serial port is where you see it.",
   vboxTitle: "VirtualBox",
   vbox: [
-    "Download both files, grenos-….iso and grenos-….vbox, into the same folder (Downloads, for instance).",
+    "Download the zip “for VirtualBox” and extract it (right-click → Extract All): the ISO and the .vbox file sit side by side.",
     "Double-click the .vbox file, or in VirtualBox: Machine → Add…, and pick it. The grenOS machine appears, already set up: 64-bit, 256 MB, the ISO in the optical drive.",
     "Start it. After Limine's menu (3 seconds), the kernel boots.",
     "What it writes to the serial port is in C:\\Users\\Public\\Documents\\grenos-serie.txt: grenOS, then Breakpoint, then Page fault with the faulting address.",
@@ -101,39 +113,61 @@ export function DownloadView({ builds, repo }: { builds: Build[]; repo: string }
       </div>
 
       <section>
-        <div className="card dl-card">
-          {build ? (
-            <>
-              <div>
-                <div className="row">
-                  <span className="dot ok" />
-                  <b>grenos.iso</b>
-                  <span className="faint mono">
-                    {(build.size / 1024 / 1024).toFixed(1)} {c.mb}
-                  </span>
-                </div>
-                <div className="faint" style={{ marginTop: 4 }}>
-                  {c.build} <span className="mono">{build.tag}</span> · {c.published}{" "}
-                  {build.publishedAt.slice(0, 10)}
-                </div>
-              </div>
-              <div className="row">
+        {build ? (
+          <>
+            <p className="faint" style={{ marginTop: 0 }}>
+              <span className="dot ok" /> {c.build} <span className="mono">{build.tag}</span> · {c.published}{" "}
+              {build.publishedAt.slice(0, 10)}
+            </p>
+            {/* Two choices, each enough on its own: the .vbox needs its ISO beside it. */}
+            <div className="grid cols-2">
+              <div className="card">
+                <h2>{c.pcTitle}</h2>
+                <p className="muted">{c.pcText}</p>
                 <a className="dl-button" href={build.url}>
-                  {c.download}
+                  {c.pcButton}
                 </a>
-                {build.vboxUrl && (
-                  <a className="dl-button" href={build.vboxUrl} style={{ marginLeft: 8 }}>
-                    {c.vboxButton}
-                  </a>
-                )}
+                <div className="faint mono" style={{ marginTop: 8 }}>
+                  grenos.iso · {mb(build.size)} {c.mb}
+                </div>
               </div>
-            </>
-          ) : (
+              <div className="card">
+                <h2>{c.vboxTitle}</h2>
+                <p className="muted">{c.vboxText}</p>
+                {build.virtualboxUrl ? (
+                  <a className="dl-button" href={build.virtualboxUrl}>
+                    {c.vboxZipButton}
+                  </a>
+                ) : (
+                  build.vboxUrl && (
+                    <a className="dl-button" href={build.vboxUrl}>
+                      {c.vboxZipButton}
+                    </a>
+                  )
+                )}
+                <div className="faint" style={{ marginTop: 8 }}>
+                  {build.virtualboxSize ? (
+                    <span className="mono">
+                      zip · {mb(build.virtualboxSize)} {c.mb}
+                    </span>
+                  ) : null}
+                  {build.virtualboxUrl && build.vboxUrl && (
+                    <>
+                      {" "}
+                      · <a href={build.vboxUrl}>{c.vboxOnly}</a>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="card dl-card">
             <p className="muted" style={{ margin: 0 }}>
               {c.none}
             </p>
-          )}
-        </div>
+          </div>
+        )}
         <p className="faint" style={{ marginTop: 8 }}>
           {c.checked}
         </p>

@@ -35,6 +35,9 @@ interface Entry {
   vbox?: string | null;
   /** What CI saw on screen, when the kernel drew something. */
   screen?: string | null;
+  /** The ISO and its .vbox in one zip: the VirtualBox choice. */
+  virtualbox?: string | null;
+  virtualbox_size?: number | null;
 }
 
 async function publishedBuilds(): Promise<Build[]> {
@@ -54,6 +57,8 @@ async function publishedBuilds(): Promise<Build[]> {
         // The .vbox names the ISO by this same file name: both land side by side.
         vboxUrl: e.vbox ? `${RELEASES}/${e.vbox}?download=grenos-${e.build}.vbox` : undefined,
         screenUrl: e.screen ? `${RELEASES}/${e.screen}` : undefined,
+        virtualboxUrl: e.virtualbox ? `${RELEASES}/${e.virtualbox}?download=grenos-${e.build}-virtualbox.zip` : undefined,
+        virtualboxSize: e.virtualbox_size ?? undefined,
       }));
   } catch {
     // Nothing published yet, or Storage unreachable: the page says so.
