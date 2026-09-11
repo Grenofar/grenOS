@@ -482,7 +482,10 @@ export interface State {
     failure: string | null;
     verdicts: unknown;
     log_excerpt: string | null;
+    started_at?: string | null;
   }>;
+  /** Branches merge.ts already put on main: nothing is left to fix on them. */
+  merged: string[];
   /** The human's messages the Master has not answered yet. */
   human: Array<{ id: string; content: string; created_at: string }>;
   /** The last few exchanges, oldest first, for context. */
@@ -490,7 +493,7 @@ export interface State {
 }
 
 async function gatherState(mission: Mission): Promise<State> {
-  const [{ data: tasks }, pendingRes, { data: runs }, humanRes, { data: recent }] =
+  const [{ data: tasks }, pendingRes, { data: runs }, humanRes, { data: recent }, { data: merges }] =
     await Promise.all([
       db
         .from("tasks")
@@ -509,7 +512,7 @@ async function gatherState(mission: Mission): Promise<State> {
         .limit(30),
       db
         .from("runs")
-        .select("branch,status,failure,verdicts,log_excerpt")
+        .select("branch,status,failure,verdicts,log_excerpt,started_at")
         .eq("mission_id", mission.id)
         .order("started_at", { ascending: false })
         .limit(8),
@@ -526,6 +529,7 @@ async function gatherState(mission: Mission): Promise<State> {
         .eq("mission_id", mission.id)
         .order("created_at", { ascending: false })
         .limit(12),
+      db.from("events").select("payload").eq("mission_id", mission.id).eq("type", "branch_merged"),
     ]);
 
   // A failure here used to degrade to an empty list, which looks exactly like
@@ -548,6 +552,9 @@ async function gatherState(mission: Mission): Promise<State> {
     activeCount: rows.filter((t) => ACTIVE_TASK_STATES.includes(t.status)).length,
     pending: pendingRes.data ?? [],
     runs: runs ?? [],
+    merged: (merges ?? [])
+      .map((e) => (e.payload as { branch?: unknown } | null)?.branch)
+      .filter((b): b is string => typeof b === "string"),
     human: humanRes.data ?? [],
     conversation: (recent ?? []).reverse(),
   };
@@ -767,7 +774,12 @@ export function renderState(
 
   if (state.runs.length > 0) {
     parts.push("\n# CI verdicts (the only source of truth)\n");
-    parts.push(JSON.stringify(state.runs.map(ciDigest), null, 2));
+    parts.push(
+      "Newest first. The latest run of a branch says what its code is now; an older run of the " +
+        "same branch is history, its errors fixed or replaced since. A merged branch is on main: " +
+        "nothing is left to fix on it.\n",
+    );
+    parts.push(JSON.stringify(ciHistory(state.runs, state.merged ?? []), null, 2));
   }
 
   if (state.pending.length > 0) {
@@ -818,6 +830,28 @@ export function ciDigest(run: State["runs"][number]): Record<string, unknown> {
     verdicts: run.verdicts,
     errors: errors || null,
   };
+}
+
+/**
+ * The runs as the Master should judge them: each branch by its latest run.
+ *
+ * On 2026-09-11 at 21:16 the Master was shown e7ead896's green run and, below
+ * it, the red run it replaced, errors included, with nothing to tell them
+ * apart: it created a task to fix two clippy errors fixed three minutes
+ * earlier, on a branch already merged. An older run of a branch now keeps its
+ * verdict and loses its errors, and a merged branch says so. Runs come newest
+ * first.
+ */
+export function ciHistory(runs: State["runs"], merged: string[]): Array<Record<string, unknown>> {
+  const judged = new Set<string>();
+  return runs.map((run) => {
+    const at = run.started_at ?? null;
+    if (judged.has(run.branch)) {
+      return { branch: run.branch, status: run.status, started_at: at, superseded: true };
+    }
+    judged.add(run.branch);
+    return { ...ciDigest(run), started_at: at, ...(merged.includes(run.branch) ? { merged: true } : {}) };
+  });
 }
 
 /** The standing instructions in full, the journal only in its latest lines. */

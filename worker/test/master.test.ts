@@ -12,6 +12,7 @@ const {
   UNREADABLE_LIMIT,
   afterUnreadable,
   renderState,
+  ciHistory,
   signatureOf,
   parkedSpecGaps,
   isMissionComplete,
@@ -48,6 +49,7 @@ const state = (over: Record<string, unknown> = {}) => ({
   activeCount: 1,
   pending: [],
   runs: [],
+  merged: [],
   human: [],
   conversation: [],
   ...over,
@@ -225,6 +227,36 @@ test("an unreadable decision is judged again, and the third in a row reaches the
   assert.equal(afterUnreadable(1), "retry");
   assert.equal(afterUnreadable(2), "retry");
   assert.equal(afterUnreadable(3), "escalate");
+});
+
+test("the Master judges a branch by its latest run, and knows what is merged", () => {
+  // 2026-09-11 21:16: e7ead896 had been green for three minutes and was merged,
+  // and the Master read the red run below it and created a task to fix what
+  // was fixed. Runs come newest first, as gatherState orders them.
+  const runs = [
+    { branch: "agent/e7ead896", status: "passed", failure: null, verdicts: [], log_excerpt: "--- qemu ---\ngrenOS", started_at: "2026-09-11T19:13:57Z" },
+    {
+      branch: "agent/e7ead896",
+      status: "failed",
+      failure: "compile_error",
+      verdicts: [],
+      log_excerpt: "error: consider removing unnecessary double parentheses\n   --> src/gdt.rs:107:13",
+      started_at: "2026-09-11T18:58:51Z",
+    },
+    { branch: "agent/395a7a9a", status: "failed", failure: "compile_error", verdicts: [], log_excerpt: "error[E0277]: cannot add `u64` to `u8`", started_at: "2026-09-11T18:16:34Z" },
+  ];
+  const history = ciHistory(runs, ["agent/e7ead896"]);
+  assert.equal(history[0]!.merged, true);
+  assert.equal(history[1]!.superseded, true);
+  assert.equal("errors" in history[1]!, false);
+  // A branch's only run is its latest: its errors stay, and it was never merged.
+  assert.match(String(history[2]!.errors), /cannot add/);
+  assert.equal(history[2]!.merged, undefined);
+
+  const text = renderState(mission, state({ runs, merged: ["agent/e7ead896"] }) as never, null);
+  assert.match(text, /A merged branch is on main/);
+  assert.match(text, /"merged": true/);
+  assert.doesNotMatch(text, /double parentheses/);
 });
 
 test("the Master knows what time it is", () => {
