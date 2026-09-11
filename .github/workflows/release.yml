@@ -1,7 +1,7 @@
-# Publie l'OS (D-030). A chaque kernel qui arrive sur main, l'image est
-# reconstruite, demarree dans QEMU avec le critere de verify.yml, puis publiee
-# en Release GitHub. Une Release se telecharge sans compte GitHub, contrairement
-# aux artefacts de la CI : c'est elle que sert la page /download du site.
+# Publie l'OS (D-030, D-032). A chaque kernel qui arrive sur main, l'image est
+# reconstruite, demarree dans QEMU avec le critere de verify.yml, puis deposee
+# dans Supabase Storage, bucket public « releases » : la page /download du site
+# la sert de la, sans compte et sans passer par GitHub.
 
 name: release
 
@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
@@ -60,17 +60,47 @@ jobs:
           fi
           cp "$IMAGE" grenos.iso
 
-      - name: Publier la Release
+      # builds/grenos-<build>.iso ne change plus une fois deposee ; index.json
+      # liste les dix dernieres, la plus recente en tete, et c'est lui que lit
+      # le site. Ce qui sort des dix est efface : le stockage gratuit fait 1 Go.
+      - name: Publier sur Supabase
         env:
-          GH_TOKEN: ${{ github.token }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          TAG="build-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
-          {
-            echo "Image construite depuis ${GITHUB_SHA}, puis demarree dans QEMU : la sortie serie contenait grenOS."
-            echo
-            echo "Lancer : qemu-system-x86_64 -cdrom grenos.iso -serial stdio"
-            echo
-            echo "VirtualBox, cle USB : https://grenos-dev.vercel.app/download"
-          } > notes.md
-          gh release create "$TAG" grenos.iso --target "$GITHUB_SHA" --title "grenOS $TAG" --notes-file notes.md --latest
-          echo "Release publiee : $TAG"
+          set -euo pipefail
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Secret SUPABASE_SERVICE_ROLE_KEY absent : rien n'est publie."
+            exit 1
+          fi
+          BUILD="$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
+          OBJECT="builds/grenos-${BUILD}.iso"
+          STORAGE="$SUPABASE_URL/storage/v1"
+          AUTH=(-H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
+
+          curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
+            -H "Content-Type: application/x-iso9660-image" -H "cache-control: max-age=31536000" \
+            --data-binary @grenos.iso "$STORAGE/object/releases/$OBJECT" > /dev/null
+
+          # L'index en place, lu avec la cle : le cache public a une minute de retard.
+          if ! curl -fsS "${AUTH[@]}" "$STORAGE/object/releases/index.json" -o previous.json \
+             || ! jq -e 'type == "array"' previous.json > /dev/null; then
+            echo '[]' > previous.json
+          fi
+          jq --arg build "$BUILD" --arg path "$OBJECT" --arg commit "$GITHUB_SHA" \
+             --argjson size "$(stat -c %s grenos.iso)" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+             '[{build: $build, path: $path, commit: $commit, size: $size, published_at: $at}] + .' \
+             previous.json > all.json
+          jq '.[:10]' all.json > index.json
+
+          curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
+            -H "Content-Type: application/json" -H "cache-control: max-age=60" \
+            --data-binary @index.json "$STORAGE/object/releases/index.json" > /dev/null
+
+          DROPPED=$(jq -c '[.[10:][].path]' all.json)
+          if [ "$DROPPED" != "[]" ]; then
+            curl -fsS -X DELETE "${AUTH[@]}" -H "Content-Type: application/json" \
+              -d "{\"prefixes\": $DROPPED}" "$STORAGE/object/releases" > /dev/null
+            echo "Effacees : $DROPPED"
+          fi
+          echo "Publiee : $SUPABASE_URL/storage/v1/object/public/releases/$OBJECT"

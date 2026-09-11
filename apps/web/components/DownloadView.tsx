@@ -2,10 +2,9 @@
 
 import { useLang, type Lang } from "@/lib/i18n";
 
-/** The latest published image, as the GitHub Releases API describes it. */
+/** A published image, as index.json in the Supabase "releases" bucket lists it. */
 export interface Build {
   tag: string;
-  page: string;
   publishedAt: string;
   size: number;
   url: string;
@@ -23,7 +22,7 @@ const FR = {
   mb: "Mo",
   build: "Version",
   published: "publiée le",
-  all: "Toutes les versions",
+  all: "Versions précédentes",
   none: "La première image est en cours de publication. Reviens dans quelques minutes.",
   checked: "Vérifié automatiquement dans QEMU. VirtualBox et les vrais PC ne sont pas testés par la CI.",
   nowTitle: "Ce qu'il fait aujourd'hui",
@@ -55,7 +54,7 @@ const EN: typeof FR = {
   mb: "MB",
   build: "Build",
   published: "published",
-  all: "All builds",
+  all: "Earlier builds",
   none: "The first image is being published. Come back in a few minutes.",
   checked: "Checked automatically in QEMU. VirtualBox and real PCs are not tested by CI.",
   nowTitle: "What it does today",
@@ -82,10 +81,11 @@ const EN: typeof FR = {
 
 const TEXT: Record<Lang, typeof FR> = { fr: FR, en: EN };
 
-export function DownloadView({ build, repo }: { build: Build | null; repo: string }) {
+export function DownloadView({ builds, repo }: { builds: Build[]; repo: string }) {
   const { lang } = useLang();
   const c = TEXT[lang];
-  const releases = `https://github.com/${repo}/releases`;
+  const build = builds[0] ?? null;
+  const earlier = builds.slice(1);
 
   return (
     <>
@@ -115,20 +115,32 @@ export function DownloadView({ build, repo }: { build: Build | null; repo: strin
                 <a className="dl-button" href={build.url}>
                   {c.download}
                 </a>
-                <a href={releases} className="faint" style={{ marginLeft: 6 }}>
-                  {c.all}
-                </a>
               </div>
             </>
           ) : (
             <p className="muted" style={{ margin: 0 }}>
-              {c.none} <a href={releases}>{c.all}</a>
+              {c.none}
             </p>
           )}
         </div>
         <p className="faint" style={{ marginTop: 8 }}>
           {c.checked}
         </p>
+        {earlier.length > 0 && (
+          <details className="faint" style={{ marginTop: 8 }}>
+            <summary>{c.all}</summary>
+            <ul>
+              {earlier.map((b) => (
+                <li key={b.tag}>
+                  <a href={b.url} className="mono">
+                    {b.tag}
+                  </a>{" "}
+                  · {(b.size / 1024 / 1024).toFixed(1)} {c.mb} · {b.publishedAt.slice(0, 10)}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </section>
 
       <section>

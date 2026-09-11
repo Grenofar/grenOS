@@ -668,3 +668,18 @@ heure sans rien consommer.
 le Codeur : chaque modèle Gemini a sa propre capacité et son propre quota
 journalier. Nemotron devient le dernier recours de l'Architecte. Aucun des deux
 n'est appelé tant que les modèles au-dessus répondent.
+
+### D-032 — Les images sont servies par Supabase, pas par GitHub
+**2026-09-11 · actif · demandé par l'humain · remplace la Release GitHub de D-030**
+
+L'humain veut que grenOS s'installe depuis le site, sans passer par GitHub.
+→ `release.yml` dépose chaque image qui a booté dans **Supabase Storage**,
+bucket public `releases` : `builds/grenos-<AAAAMMJJ-HHMM>-<sha7>.iso`, qui ne
+change plus, et `index.json`, les dix dernières images, la plus récente en
+tête, en cache une minute. Ce qui sort des dix est effacé : le stockage
+gratuit fait 1 Go, l'image 3,6 Mo. Le dépôt utilise la clé service de la CI,
+déjà son seul secret.
+→ `/download` lit `index.json` côté serveur (revalidé chaque minute) et
+télécharge avec `?download=`, qui envoie le fichier en pièce jointe sous son
+nom. Le site ne détient toujours aucune clé : le bucket est public en lecture.
+→ Plus de Release GitHub. Le code source reste lié, sur GitHub.
