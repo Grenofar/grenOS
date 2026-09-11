@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { asmOutsideUnsafe, preflight, renderPreflight, pinnedBeforeRust185 } from "../src/preflight.ts";
+import {
+  asmOutsideUnsafe,
+  binaryAsmLabels,
+  preflight,
+  renderPreflight,
+  pinnedBeforeRust185,
+} from "../src/preflight.ts";
 
 // Every rule here was paid for with a real CI run on mission 1. The first test
 // matters as much as the others: a check that cries wolf teaches agents to
@@ -270,6 +276,36 @@ test("inline assembly outside an unsafe block", () => {
 
   // A nested fn does not inherit the unsafe block around it.
   assert.deepEqual(asmOutsideUnsafe('fn f() { unsafe { fn g() { core::arch::asm!("nop") } g() } }'), [1]);
+});
+
+test("asm! labels made only of 0 and 1, which rustc refuses", () => {
+  // Mission 2's plan, 2026-09-11: its CS reload did not compile.
+  const plan = [
+    "pub unsafe fn reload_segments(code_sel: u16, data_sel: u16) {",
+    "    unsafe {",
+    "        core::arch::asm!(",
+    '            "mov ds, {0:x}",',
+    '            "push {1}",',
+    '            "lea {2}, [rip + 1f]",',
+    '            "push {2}",',
+    '            "retfq",',
+    '            "1:",',
+    "            in(reg) data_sel,",
+    "            in(reg) u64::from(code_sel),",
+    "            lateout(reg) _,",
+    "        );",
+    "    }",
+    "}",
+  ].join("\n");
+  assert.deepEqual(binaryAsmLabels(plan), [6, 9]);
+  assert.match(preflight([w("kernel/src/gdt.rs", plan)])[0]!, /label made only of the digits 0 and 1 \(line 6, 9\)/);
+
+  // Another label, operand modifiers, hex immediates and ordinary strings pass.
+  const fine = plan.replace("rip + 1f", "rip + 2f").replace('"1:",', '"2:",') +
+    '\nfn f() { unsafe { core::arch::asm!("mov rax, 0x1f", "jmp 2f", "2:", out("rax") _) } }' +
+    '\nfn g() { let _ = "1: not assembly, 1f either"; }';
+  assert.deepEqual(binaryAsmLabels(fine), []);
+  assert.deepEqual(preflight([w("kernel/src/gdt.rs", fine)]), []);
 });
 
 test("the agent is told what is left of its corrections", () => {

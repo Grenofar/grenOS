@@ -191,6 +191,13 @@ export function preflight(changes: Change[], branch: Change[] | null = null): st
             "wrap each one in unsafe { … } with its // SAFETY: comment.",
         );
       }
+      const binary = binaryAsmLabels(content);
+      if (binary.length > 0) {
+        problems.push(
+          `${path}: an asm! label made only of the digits 0 and 1 (line ${binary.join(", ")}). rustc refuses it (binary_asm_labels, deny by default): ` +
+            "in Intel syntax `1f` reads as a binary number. Use another label, e.g. `2:` and `2f`.",
+        );
+      }
     }
   }
 
@@ -342,6 +349,38 @@ export function asmOutsideUnsafe(source: string): number[] {
     } else if (c === "a" && !/\w/.test(code[i - 1] ?? "") && /^asm!\s*[([{]/.test(code.slice(i, i + 12))) {
       const frame = stack[stack.length - 1];
       if (frame && !frame.unsafe && !frame.macro) lines.add(code.slice(0, i).split("\n").length);
+    }
+  }
+  return [...lines];
+}
+
+/**
+ * Lines of asm! templates that use a label made only of the digits 0 and 1.
+ * rustc refuses them (the binary_asm_labels lint, deny by default): in Intel
+ * syntax `1f` reads as a binary number. Mission 2's plan reloaded CS with
+ * `lea {2}, [rip + 1f]` … `1:`, the pattern most examples still show.
+ */
+export function binaryAsmLabels(source: string): number[] {
+  const code = blankLiterals(source);
+  const lines = new Set<number>();
+  for (const call of code.matchAll(/(?<!\w)asm!\s*\(/g)) {
+    // The macro's arguments, up to the parenthesis that closes them; literals
+    // are blanked in `code`, so no parenthesis inside a string counts.
+    let depth = 0;
+    let end = code.length;
+    for (let i = call.index! + call[0].length - 1; i < code.length; i++) {
+      if (code[i] === "(") depth++;
+      else if (code[i] === ")" && --depth === 0) {
+        end = i;
+        break;
+      }
+    }
+    const args = source.slice(call.index!, end);
+    for (const literal of args.matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+      const template = literal[1]!;
+      if (/(^|[\s;])[01]+:/.test(template) || /(?<![\w.])[01]+[fb]\b/.test(template)) {
+        lines.add(source.slice(0, call.index! + literal.index!).split("\n").length);
+      }
     }
   }
   return [...lines];
