@@ -26,6 +26,18 @@ ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 # Tout caractère de contrôle sauf tabulation et saut de ligne.
 CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
+# Ce que la CI a jugé, étape par étape, dans la forme de runs.verdicts
+# ({criterion, verdict, evidence}) plus la clé `step`, que le worker lit pour
+# savoir jusqu'où une branche est allée et de laquelle repartir
+# (worker/src/lineage.ts, D-027). Le Maître et la page /runs les montrent tels
+# quels.
+STEPS = [
+    ("build", "BUILD", "cargo build --release succeeds in kernel/"),
+    ("clippy", "CLIPPY", "cargo clippy --release -- -D warnings reports no warning"),
+    ("boot", "QEMU", "the QEMU boot prints grenOS on the serial console, without panic or fault"),
+]
+OUTCOMES = {"success": "PASS", "failure": "FAIL"}
+
 
 def clean(text: str) -> str:
     """Rend un log de build sûr à insérer dans une colonne texte Postgres.
@@ -44,6 +56,25 @@ def clean(text: str) -> str:
     text = text.encode("utf-8", "replace").decode("utf-8", "replace")
     text = ANSI.sub("", text)
     return CONTROL.sub("", text)
+
+
+def verdicts() -> list:
+    """Une entrée par étape, ou aucune quand il n'y avait pas de kernel à juger."""
+    if os.environ.get("PROBE") != "true":
+        return []
+    out = []
+    for step, var, criterion in STEPS:
+        outcome = os.environ.get(var, "")
+        out.append(
+            {
+                "step": step,
+                "criterion": criterion,
+                # Une étape sautée ou annulée n'a rien jugé : ni PASS ni FAIL.
+                "verdict": OUTCOMES.get(outcome, "UNVERIFIABLE"),
+                "evidence": f"step outcome: {outcome or 'not run'}",
+            }
+        )
+    return out
 
 
 def main() -> int:
@@ -66,6 +97,7 @@ def main() -> int:
         # colonne est nullable et un failure vide fausserait le routage du
         # Maître, qui décide de la suite d'après cette valeur.
         "failure": os.environ.get("FL") or None,
+        "verdicts": verdicts(),
         "log_excerpt": clean(os.environ.get("LOGTXT", "")),
         "log_url": os.environ["URL"],
         "workflow_run_id": run_id,

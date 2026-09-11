@@ -39,19 +39,31 @@ const ACTIVE_TASK_STATES = ["ready", "in_progress", "awaiting_verification"];
 /** The Master's notebook: the human's standing instructions, kept by the Master. */
 export const NOTEBOOK = "docs/MASTER.md";
 
-const JOURNAL = "## Journal des échanges";
+const JOURNAL = "## Exchange log";
+
+/** The heading the journal had before D-028: still read, never written again. */
+const LEGACY_JOURNAL = "## Journal des échanges";
 
 const NOTEBOOK_HEADER = [
-  "# Carnet du Maître",
+  "# Master's notebook",
   "",
-  "> Tenu par l'agent Maître à partir de ce que l'humain lui dit dans le chat de",
-  "> mission. Relu à chaque décision et montré à tous les agents : ce qui est",
-  "> écrit ici fait foi pour toute l'équipe.",
+  "> Kept by the Master from what the human says in the mission chat. Re-read",
+  "> on every decision and shown to every agent: what is written here binds",
+  "> the whole team.",
   "",
-  "## Consignes en vigueur",
+  "## Standing instructions",
   "",
-  "(aucune pour l'instant)",
+  "(none yet)",
 ].join("\n");
+
+/**
+ * The language of everything the human reads from the Master: chat replies,
+ * summaries, escalations and their options, the notebook (D-028). English,
+ * whatever language they write in: the human asked for it on 2026-09-11.
+ * Named outright on every call, because "the human's language" is what
+ * models ignore.
+ */
+export const HUMAN_LANGUAGE = "English";
 
 /**
  * Signature of what the Master last reasoned about, per mission.
@@ -163,7 +175,7 @@ export async function runMasterCycle(
       await replyToHuman(
         mission.id,
         state.human,
-        "Je n'ai pas réussi à formuler ma décision. Renvoie ton message, ou reformule-le, et je reprends.",
+        "I could not put my decision into words. Send your message again, or rephrase it, and I will pick it up.",
         model,
         tokensIn,
         tokensOut,
@@ -596,12 +608,16 @@ export function withJournal(next: string, previous: string, entry: string, keep 
 }
 
 function splitNotebook(text: string): { body: string; entries: string[] } {
-  const at = text.indexOf(JOURNAL);
-  if (at === -1) return { body: text.trim(), entries: [] };
+  // The first journal heading, today's or the one from before D-028.
+  const found = [JOURNAL, LEGACY_JOURNAL]
+    .map((heading) => ({ heading, at: text.indexOf(heading) }))
+    .filter((h) => h.at !== -1)
+    .sort((a, b) => a.at - b.at)[0];
+  if (!found) return { body: text.trim(), entries: [] };
   return {
-    body: text.slice(0, at).trim(),
+    body: text.slice(0, found.at).trim(),
     entries: text
-      .slice(at + JOURNAL.length)
+      .slice(found.at + found.heading.length)
       .split("\n")
       .filter((line) => line.startsWith("- ")),
   };
@@ -620,7 +636,7 @@ export function journalEntry(
     .slice(0, 16)
     .replace("T", " ");
   const said = human.map((h) => flat(h.content, 400)).join(" / ");
-  return `- ${at} UTC · Humain : « ${flat(said, 600)} » → Maître : « ${flat(reply, 400)} »`;
+  return `- ${at} UTC · Human: "${flat(said, 600)}" → Master: "${flat(reply, 400)}"`;
 }
 
 // Supabase JWTs and secret keys, Google, NVIDIA, GitHub and OpenAI-style keys.
@@ -629,34 +645,23 @@ const SECRET =
 
 /** Masks anything shaped like a credential before it reaches the public repo. */
 export function redactSecrets(text: string): string {
-  return text.replace(SECRET, "[secret masqué]");
+  return text.replace(SECRET, "[redacted secret]");
 }
 
 /**
- * The language to answer in. Told to use "the human's language", the Master
- * answered its first French message in English; naming the language outright
- * is what models actually follow. When a message says too little to tell —
- * "ok", "go" — it is French: that is who runs this project.
+ * What the Master reads on every decision. Exported for the tests: the
+ * language it answers in and the time it is given are rules, not details.
  */
-export function humanLanguage(texts: string[], fallback = "French"): string {
-  const sample = ` ${texts.join(" ").toLowerCase().replace(/[.,;:!?()«»"]/g, " ")} `;
-  const french = (
-    sample.match(/[éèêàùçœ]| (le|la|les|des|est|et|pour|avec|pas|une|dans|que|je|tu|puis) /g) ?? []
-  ).length;
-  const english = (sample.match(/ (the|is|and|for|with|not|this|that|you|are|then) /g) ?? []).length;
-  if (french > english) return "French";
-  if (english > french) return "English";
-  return fallback;
-}
-
-function renderState(mission: Mission, state: State, notebook: string | null): string {
+export function renderState(
+  mission: Mission,
+  state: State,
+  notebook: string | null,
+  now: Date = new Date(),
+): string {
   const parts: string[] = [];
-  // Everything the human reads is written in their language, whether or not
-  // they wrote this cycle: replies, summaries, escalations and their options.
-  const language = humanLanguage([
-    ...state.conversation.filter((m) => m.role === "user").map((m) => m.content),
-    ...state.human.map((h) => h.content),
-  ]);
+  // Everything the human reads is in English, whether or not they wrote this
+  // cycle: replies, summaries, escalations and their options (D-028).
+  const language = HUMAN_LANGUAGE;
 
   // The human first: their message preempts everything (decision step 1).
   if (state.human.length > 0) {
@@ -664,11 +669,18 @@ function renderState(mission: Mission, state: State, notebook: string | null): s
     for (const h of state.human) parts.push(`> ${h.content.replace(/\n/g, "\n> ")}\n`);
     parts.push(
       "Handle this before anything else. Your `summary` is your reply, shown " +
-        `verbatim in the mission chat: write it in ${language}. If they ` +
-        "gave an instruction, a preference or a decision that should last, rewrite " +
-        "docs/MASTER.md with write_file — the journal is appended for you.\n",
+        `verbatim in the mission chat: write it in ${language}, even when they write in another ` +
+        "language. If they gave an instruction, a preference or a decision that should last, " +
+        "rewrite docs/MASTER.md with write_file — the journal is appended for you.\n",
     );
   }
+
+  // Without it the Master dated docs/STATE.md "At 2026-09-10 [current time]".
+  parts.push("# Now\n");
+  parts.push(
+    `${now.toISOString().slice(0, 16).replace("T", " ")} UTC. Date what you write in ` +
+      "docs/STATE.md with it; never write a placeholder.\n",
+  );
 
   parts.push("# Mission\n");
   parts.push(
@@ -731,7 +743,8 @@ function renderState(mission: Mission, state: State, notebook: string | null): s
       "object. Use propose_task to dispatch work, escalate when blocked. " +
       "If there is nothing to do, return status \"done\" with an empty actions array.\n\n" +
       `Language: write \`summary\`, and the \`reason\` and \`options\` of any escalation, in ${language} — ` +
-      "the human reads them. Task goals and acceptance criteria stay in English: agents read those.",
+      "the human reads them, and asked for English whatever language they write in. Task goals " +
+      "and acceptance criteria are in English too: agents read those.",
   );
 
   return parts.join("\n");
@@ -829,9 +842,9 @@ async function acknowledgeWhileAway(missionId: string): Promise<void> {
     mission_id: missionId,
     role: "master",
     content:
-      "Je n'ai plus de quota pour l'instant. Ton message est gardé : je le lis et je te " +
-      "réponds dès que j'en retrouve. En attendant, le Codeur continue, et le Testeur et " +
-      "la Review enregistrent pour moi ce qu'ils trouvent.",
+      "I am out of quota for now. Your message is kept: I will read it and answer as soon " +
+      "as I have quota again. Meanwhile the Coder keeps working, and the Tester and Review " +
+      "record what they find for me.",
     model: "system",
     answered_at: new Date().toISOString(),
   });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { preflight, renderPreflight } from "../src/preflight.ts";
+import { preflight, renderPreflight, pinnedBeforeRust185 } from "../src/preflight.ts";
 
 // Every rule here was paid for with a real CI run on mission 1. The first test
 // matters as much as the others: a check that cries wolf teaches agents to
@@ -9,20 +9,39 @@ import { preflight, renderPreflight } from "../src/preflight.ts";
 const w = (path: string, content: string | null = "x") => ({ path, content });
 
 test("a sound kernel skeleton passes untouched", () => {
+  const main = [
+    "#![no_std]",
+    "#![no_main]",
+    "",
+    "#[panic_handler]",
+    "fn panic(_info: &core::panic::PanicInfo) -> ! {",
+    "    halt()",
+    "}",
+    "",
+    "fn halt() -> ! {",
+    "    loop {",
+    '        unsafe { core::arch::asm!("hlt") }',
+    "    }",
+    "}",
+    "",
+  ].join("\n");
   assert.deepEqual(
-    preflight([
-      w("kernel/Cargo.toml", '[package]\nname = "kernel"\nversion = "0.1.0"\nedition = "2021"\n'),
-      w(
-        "kernel/rust-toolchain.toml",
-        '[toolchain]\nchannel = "nightly-2026-09-01"\ncomponents = ["rust-src", "clippy"]\ntargets = ["x86_64-unknown-none"]\n',
-      ),
-      w("kernel/.cargo/config.toml", '[build]\ntarget = "x86_64-unknown-none"\n'),
-      w("kernel/src/main.rs", '#![no_std]\nfn halt() -> ! {\n    loop {\n        unsafe { core::arch::asm!("hlt") }\n    }\n}\n'),
-      w("kernel/scripts/make-iso.sh", "#!/bin/sh\nset -e\nxorriso -as mkisofs \"$1\"\n"),
-      w("kernel/build.sh"),
-      w("kernel/linker.lds"),
-      w("kernel/x86_64-grenos.json", null),
-    ]),
+    preflight(
+      [
+        w("kernel/Cargo.toml", '[package]\nname = "kernel"\nversion = "0.1.0"\nedition = "2021"\n'),
+        w(
+          "kernel/rust-toolchain.toml",
+          '[toolchain]\nchannel = "nightly-2026-09-01"\ncomponents = ["rust-src", "clippy"]\ntargets = ["x86_64-unknown-none"]\n',
+        ),
+        w("kernel/.cargo/config.toml", '[build]\ntarget = "x86_64-unknown-none"\n'),
+        w("kernel/src/main.rs", main),
+        w("kernel/scripts/make-iso.sh", "#!/bin/sh\nset -e\nxorriso -as mkisofs \"$1\"\n"),
+        w("kernel/build.sh"),
+        w("kernel/linker.lds"),
+        w("kernel/x86_64-grenos.json", null),
+      ],
+      [],
+    ),
     [],
   );
 });
@@ -98,6 +117,80 @@ test("a build script that writes limine.cfg", () => {
 
 test("an empty file is never what was meant", () => {
   assert.match(preflight([w("kernel/src/serial.rs", "  \n")])[0]!, /empty/);
+});
+
+test("functions core::arch::x86_64 does not have", () => {
+  // Mission 1's plan, copied by the Coder: a halt loop and a serial driver
+  // written against functions that do not exist.
+  const main = '#![no_std]\npub extern "C" fn _start() -> ! {\n    loop { unsafe { core::arch::x86_64::hlt(); } }\n}\n';
+  assert.match(preflight([w("kernel/src/main.rs", main)])[0]!, /core::arch::x86_64 has no hlt/);
+
+  const serial =
+    "use core::arch::x86_64;\n" +
+    "unsafe fn outb(port: u16, val: u8) { x86_64::outb(port, val); }\n" +
+    "unsafe fn inb(port: u16) -> u8 { x86_64::inb(port) }\n";
+  assert.match(preflight([w("kernel/src/serial.rs", serial)])[0]!, /has no outb, inb:/);
+
+  assert.match(preflight([w("kernel/src/io.rs", "use core::arch::x86_64::{_rdtsc, outb};\n")])[0]!, /has no outb:/);
+
+  // Real intrinsics, the x86_64 crate's own paths and inline assembly pass.
+  const fine = [
+    "use core::arch::asm;",
+    "use core::arch::x86_64::{__cpuid, _rdtsc};",
+    "fn t() -> u64 { unsafe { core::arch::x86_64::_rdtsc() } }",
+    "fn h() { x86_64::instructions::hlt(); }",
+    'fn o(port: u16, byte: u8) { unsafe { asm!("out dx, al", in("dx") port, in("al") byte) } }',
+    "fn hlt_loop() -> ! { loop { unsafe { asm!(\"hlt\") } } }",
+  ].join("\n");
+  assert.deepEqual(preflight([w("kernel/src/io.rs", fine)]), []);
+});
+
+test("a no_std binary without a panic handler anywhere in the crate", () => {
+  const main =
+    '#![no_std]\n#![no_main]\nmod serial;\n\n#[unsafe(no_mangle)]\nextern "C" fn kmain() -> ! {\n    loop { unsafe { core::arch::asm!("hlt") } }\n}\n';
+  const handler =
+    '#[panic_handler]\nfn panic(_info: &core::panic::PanicInfo) -> ! {\n    loop { unsafe { core::arch::asm!("hlt") } }\n}\n';
+
+  // A known branch holding nothing else: a new crate, and no handler in it.
+  assert.match(preflight([w("kernel/src/main.rs", main)], [])[0]!, /must define a #\[panic_handler\]/);
+
+  // A handler elsewhere in the crate, on the branch or in the answer, is enough.
+  assert.deepEqual(preflight([w("kernel/src/main.rs", main)], [w("kernel/src/panic.rs", handler)]), []);
+  assert.deepEqual(preflight([w("kernel/src/main.rs", main), w("kernel/src/panic.rs", handler)], []), []);
+  // So is a crate that provides one.
+  const withCrate = '[package]\nname = "k"\n\n[dependencies]\npanic-halt = "1"\n';
+  assert.deepEqual(preflight([w("kernel/src/main.rs", main)], [w("kernel/Cargo.toml", withCrate)]), []);
+
+  // Deleting the file that held it brings the problem back.
+  assert.equal(
+    preflight([w("kernel/src/panic.rs", null)], [w("kernel/src/main.rs", main), w("kernel/src/panic.rs", handler)]).length,
+    1,
+  );
+
+  // A branch that could not be read proves nothing.
+  assert.deepEqual(preflight([w("kernel/src/main.rs", main)]), []);
+});
+
+test("edition 2024 under a toolchain pinned before Rust 1.85", () => {
+  const manifest = '[package]\nname = "kernel"\nversion = "0.1.0"\nedition = "2024"\n';
+  const pin = (channel: string) =>
+    w("kernel/rust-toolchain.toml", `[toolchain]\nchannel = "${channel}"\ntargets = ["x86_64-unknown-none"]\n`);
+
+  // Mission 1's pin, read from the branch while the answer changes the manifest.
+  assert.match(
+    preflight([w("kernel/Cargo.toml", manifest)], [pin("nightly-2024-11-15")])[0]!,
+    /edition = "2024" needs Rust 1\.85, and kernel\/rust-toolchain\.toml pins nightly-2024-11-15/,
+  );
+  // nightly-2024-11-22 is still 1.84; nightly-2024-11-23 is 1.85.
+  assert.equal(preflight([w("kernel/Cargo.toml", manifest)], [pin("nightly-2024-11-22")]).length, 1);
+  assert.deepEqual(preflight([w("kernel/Cargo.toml", manifest)], [pin("nightly-2024-11-23")]), []);
+  assert.deepEqual(preflight([w("kernel/Cargo.toml", manifest), pin("nightly-2026-09-01")], []), []);
+  assert.equal(preflight([w("kernel/Cargo.toml", manifest)], [pin("1.84.1")]).length, 1);
+  assert.deepEqual(preflight([w("kernel/Cargo.toml", manifest)], [pin("nightly")]), []);
+
+  assert.equal(pinnedBeforeRust185('channel = "nightly-2024-11-15"'), "nightly-2024-11-15");
+  assert.equal(pinnedBeforeRust185('channel = "1.85.0"'), null);
+  assert.equal(pinnedBeforeRust185('channel = "stable"'), null);
 });
 
 test("the agent is told what is left of its corrections", () => {

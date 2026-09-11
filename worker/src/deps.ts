@@ -1,10 +1,17 @@
+import { effectiveFiles, pinnedBeforeRust185, RECENT_NIGHTLY } from "./preflight.ts";
+
 /**
- * Crate versions checked against crates.io before a commit (D-026).
+ * Crate versions checked against crates.io before a commit (D-026, D-027).
  *
  * The most common invention in kernel code is a version number: mission 1
  * pinned `limine = "0.11"` when the newest release was 0.6.5, and cargo gave
  * up before compiling a single line. Whether a published version satisfies a
  * requirement is not a matter of judgement, so it belongs to pre-flight.
+ *
+ * So is the edition a release is built with. Cargo refuses the manifest of an
+ * edition-2024 crate under a toolchain older than Rust 1.85, again before
+ * compiling anything, and the limine crate is edition 2024 from 0.6 on while
+ * mission 1's toolchain pinned a nightly of November 2024.
  *
  * Only certainties. A requirement form this does not model, or a crates.io
  * that does not answer, is left for CI to judge.
@@ -17,6 +24,15 @@ type Change = { path: string; content: string | null };
  * exist; `undefined` when that could not be established.
  */
 export type Lookup = (name: string) => Promise<string[] | null | undefined>;
+
+/** A published, non-yanked release, with the edition its manifest declares. */
+export interface Release {
+  num: string;
+  edition: string | null;
+}
+
+/** Releases of a crate, with the same `null` and `undefined` as Lookup. */
+export type Releases = (name: string) => Promise<Release[] | null | undefined>;
 
 export interface Requirement {
   name: string;
@@ -123,13 +139,75 @@ export async function checkDependencies(changes: Change[], lookup: Lookup): Prom
   return problems;
 }
 
-const cache = new Map<string, { at: number; versions: string[] | null }>();
+/**
+ * Dependencies built with edition 2024 under a toolchain pinned before Rust
+ * 1.85. Judged for every crate whose manifest or toolchain file the answer
+ * changes, on the release cargo would select: the newest that satisfies the
+ * requirement. A Cargo.lock can select another one, so a crate that has one
+ * is left to CI, and so is a branch that could not be read.
+ */
+export async function checkEditions(
+  changes: Change[],
+  branch: Change[] | null,
+  releases: Releases,
+): Promise<string[]> {
+  if (branch === null) return [];
+  const files = effectiveFiles(changes, branch);
+  const problems: string[] = [];
+
+  const roots = new Set<string>();
+  for (const { path } of changes) {
+    const m = path.match(/^(?:(.+?)\/)?(?:Cargo\.toml|rust-toolchain\.toml)$/);
+    if (m) roots.add(m[1] ?? "");
+  }
+
+  for (const root of roots) {
+    const prefix = root ? `${root}/` : "";
+    const manifest = files.get(`${prefix}Cargo.toml`);
+    const toolchain = files.get(`${prefix}rust-toolchain.toml`);
+    const pinned = toolchain ? pinnedBeforeRust185(toolchain) : null;
+    if (!manifest || !pinned || files.has(`${prefix}Cargo.lock`)) continue;
+
+    for (const { name, req } of requirements(manifest)) {
+      const published = await releases(name);
+      if (!published) continue;
+      const selected = newestMatching(published, req);
+      if (!selected || selected.edition !== "2024") continue;
+
+      const fallback = published
+        .filter((r) => r.edition !== null && r.edition !== "2024" && !r.num.includes("-") && parse(r.num))
+        .sort((a, b) => compare(parse(b.num)!, parse(a.num)!))[0];
+      problems.push(
+        `${prefix}Cargo.toml: ${name} ${selected.num}, which cargo selects for "${req}", is built with edition 2024 and needs Rust 1.85, ` +
+          `but ${prefix}rust-toolchain.toml pins ${pinned}. Pin a recent dated nightly (${RECENT_NIGHTLY} exists, with clippy)` +
+          (fallback
+            ? `, or require ${name} = "${fallback.num}", the newest release built with edition ${fallback.edition}.`
+            : "."),
+      );
+    }
+  }
+  return problems;
+}
+
+/** The release cargo selects for a requirement; null when this module cannot tell. */
+function newestMatching(published: Release[], req: string): Release | null {
+  const judged = published.map((r) => ({ r, ok: satisfies(r.num, req) }));
+  if (judged.some((j) => j.ok === undefined)) return null;
+  return (
+    judged
+      .filter((j) => j.ok)
+      .map((j) => j.r)
+      .sort((a, b) => compare(parse(b.num)!, parse(a.num)!))[0] ?? null
+  );
+}
+
+const cache = new Map<string, { at: number; releases: Release[] | null }>();
 const CACHE_MS = 60 * 60 * 1000;
 
 /** The real lookup: crates.io, cached for an hour per crate. */
-export const crateVersions: Lookup = async (name) => {
+export const crateReleases: Releases = async (name) => {
   const hit = cache.get(name);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.versions;
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.releases;
 
   try {
     const res = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(name)}`, {
@@ -138,27 +216,33 @@ export const crateVersions: Lookup = async (name) => {
       signal: AbortSignal.timeout(15_000),
     });
     if (res.status === 404) {
-      cache.set(name, { at: Date.now(), versions: null });
+      cache.set(name, { at: Date.now(), releases: null });
       return null;
     }
     if (!res.ok) return undefined;
 
     const data = (await res.json()) as {
       crate?: { max_stable_version?: string };
-      versions?: Array<{ num: string; yanked: boolean }> | null;
+      versions?: Array<{ num: string; yanked: boolean; edition?: string | null }> | null;
     };
-    const versions = data.versions
-      ? data.versions.filter((v) => !v.yanked).map((v) => v.num)
+    const releases = data.versions
+      ? data.versions.filter((v) => !v.yanked).map((v) => ({ num: v.num, edition: v.edition ?? null }))
       : data.crate?.max_stable_version
-        ? [data.crate.max_stable_version]
+        ? [{ num: data.crate.max_stable_version, edition: null }]
         : undefined;
-    if (!versions) return undefined;
+    if (!releases) return undefined;
 
-    cache.set(name, { at: Date.now(), versions });
-    return versions;
+    cache.set(name, { at: Date.now(), releases });
+    return releases;
   } catch {
     return undefined;
   }
+};
+
+/** Published versions only, as checkDependencies reads them. */
+export const crateVersions: Lookup = async (name) => {
+  const releases = await crateReleases(name);
+  return releases ? releases.map((r) => r.num) : releases;
 };
 
 function parse(version: string): number[] | null {

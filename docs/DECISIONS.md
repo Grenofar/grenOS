@@ -550,3 +550,55 @@ worker, une seule fois ; un conflit est signalé, jamais forcé.
 caret, tilde et exacte de cargo) : une version qu'aucune publication ne
 satisfait revient à l'agent avec la plus récente. Ce que le contrôle ne sait
 pas juger, ou un crates.io muet, est laissé à la CI.
+
+### D-027 — La suite part de la branche la plus avancée, et un plan n'est pas une source
+**2026-09-11 · actif · demandé par l'humain (audit de la mission 1)**
+
+L'audit de la mission 1 (15 runs de CI sur du code kernel, aucun vert) a
+trouvé trois défauts que rien ne signalait.
+1. **Le plan de l'Architecte inventait, et le Codeur l'a recopié à la
+   lettre** : identifiants de requêtes Limine jamais vérifiés,
+   `core::arch::x86_64::hlt()`, `outb` et `inb` (qui n'existent pas), un
+   `limine.cfg`, une cible JSON. `docs/PLAN.md` est sur `main` et figure dans
+   chaque prompt du Codeur ; le contrat CI corrigeait les commandes, rien ne
+   corrigeait les API.
+2. **« La dernière branche » n'est pas la meilleure.** La tâche suivante
+   serait repartie de `agent/4ed99f62`, qui ne compile pas, plutôt que de
+   `agent/4b7d4930`, qui compile et ne bute que sur clippy.
+3. **Un run annulé rendait quand même un verdict.** L'étape du verdict tourne
+   toujours (`always()`), y compris quand `cancel-in-progress` annule le run
+   d'un commit remplacé ; le trigger comptait ce faux `failed` comme une
+   tentative.
+
+→ Une tâche d'écriture part de la branche dont le **dernier run est allé le
+plus loin** (vert, puis clippy ou boot passés, puis compilé), la plus récente
+à égalité ; le `continue_from` du Maître passe toujours avant. La CI liste ses
+étapes dans `runs.verdicts` (`build`, `clippy`, `boot` : PASS, FAIL ou
+UNVERIFIABLE) ; pour les runs plus anciens, les sections du log disent
+lesquelles ont tourné.
+→ Pré-vol, trois certitudes de plus : les fonctions que `core::arch::x86_64`
+n'a pas ; un binaire `#![no_std]` sans `#[panic_handler]` dans toute la crate,
+fichiers de la branche compris ; l'édition 2024, du manifeste ou d'une
+dépendance (sur la version que cargo choisirait), face à une toolchain
+épinglée avant Rust 1.85 — `nightly-2024-11-22` est la dernière 1.84. Une
+branche illisible ou un `Cargo.lock` laissent ces cas à la CI.
+→ CI : un commit remplacé ne rend aucun verdict ; un run interrompu sans avoir
+été remplacé rend `timeout`, pas `compile_error`.
+→ Prompts : un document de conception est une affirmation, pas une source ;
+les Interfaces de l'Architecte citent leurs sources ; le Codeur a le squelette
+du limine-rust-template, relu le 2026-09-11 ; le Maître connaît l'heure et ne
+lance pas de code sur un plan en cours de réécriture.
+
+### D-028 — Le Maître parle anglais à l'humain
+**2026-09-11 · actif · demandé par l'humain · remplace « tout ce que l'humain
+lit est en français » (2026-09-10), complète D-010**
+
+→ Tout ce que l'humain lit du Maître est en **anglais**, quelle que soit la
+langue dans laquelle il écrit : réponses du chat de mission et du chat de
+cadrage, questions, escalades et leurs options cliquables, messages
+automatiques (plus de quota, réponse impossible), carnet `docs/MASTER.md`. La
+langue est nommée au modèle à chaque appel (`HUMAN_LANGUAGE`, `master.ts`).
+→ Le journal du carnet s'écrit sous `## Exchange log` ; l'ancien titre
+`## Journal des échanges` est encore lu, pour ne rien perdre de l'historique.
+→ Inchangé : les événements du tableau de bord, écrits par le code, restent en
+français, comme `CLAUDE.md` et `docs/**`.

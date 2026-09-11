@@ -78,12 +78,16 @@ os.environ.update(
 import io
 from contextlib import redirect_stdout
 
-buf = io.StringIO()
-with redirect_stdout(buf):
-    code = ci.main()
 
+def run_payload():
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        code = ci.main()
+    return code, buf.getvalue()
+
+
+code, raw = run_payload()
 check("sort en 0", code == 0)
-raw = buf.getvalue()
 try:
     doc = json.loads(raw)
     check("JSON parsable", True)
@@ -91,17 +95,32 @@ except Exception as exc:  # noqa: BLE001
     check("JSON parsable", False, str(exc))
     doc = {}
 
-check("8 champs", len(doc) == 8, str(sorted(doc)))
+check("9 champs", len(doc) == 9, str(sorted(doc)))
 check("workflow_run_id est un entier", isinstance(doc.get("workflow_run_id"), int))
 check("aucun surrogate dans la sortie", "\\udc" not in raw)
 check("aucun NUL echappe dans la sortie", "\\u0000" not in raw)
 
 # failure vide doit devenir null : le Maître route d'après cette valeur.
 os.environ["FL"] = ""
-buf = io.StringIO()
-with redirect_stdout(buf):
-    ci.main()
-check("failure vide devient null", json.loads(buf.getvalue())["failure"] is None)
+check("failure vide devient null", json.loads(run_payload()[1])["failure"] is None)
+
+# Les étapes jugées : c'est d'elles que le worker déduit la branche la plus
+# avancée d'une mission (worker/src/lineage.ts).
+print("\nverdicts par etape :")
+os.environ.update({"PROBE": "true", "BUILD": "success", "CLIPPY": "failure", "QEMU": "skipped"})
+steps = json.loads(run_payload()[1])["verdicts"]
+check("une entree par etape", [s.get("step") for s in steps] == ["build", "clippy", "boot"], str(steps))
+check(
+    "success -> PASS, failure -> FAIL, sautee -> UNVERIFIABLE",
+    [s.get("verdict") for s in steps] == ["PASS", "FAIL", "UNVERIFIABLE"],
+    str(steps),
+)
+check(
+    "chaque entree a la forme de runs.verdicts",
+    all({"criterion", "verdict", "evidence"} <= set(s) for s in steps),
+)
+os.environ["PROBE"] = "false"
+check("pas de kernel -> aucun verdict d'etape", json.loads(run_payload()[1])["verdicts"] == [])
 
 # Une variable manquante doit échouer en le disant, pas produire un corps vide.
 os.environ["BRANCH"] = ""

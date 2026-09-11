@@ -8,7 +8,8 @@ process.env.GEMINI_API_KEY ??= "test";
 process.env.GITHUB_TOKEN ??= "test";
 
 const {
-  humanLanguage,
+  HUMAN_LANGUAGE,
+  renderState,
   signatureOf,
   parkedSpecGaps,
   isMissionComplete,
@@ -158,18 +159,29 @@ test("the Master reads what an agent did, not every byte it wrote", () => {
 
 test("every exchange lands in the notebook journal, whatever the model rewrote", () => {
   const first = withJournal("", "", "- a");
-  assert.match(first, /# Carnet du Maître/);
-  assert.match(first, /## Journal des échanges\n\n- a\n$/);
+  assert.match(first, /# Master's notebook/);
+  assert.match(first, /## Exchange log\n\n- a\n$/);
 
   // The Master rewrites its instructions and forgets the journal: kept anyway.
-  const second = withJournal("# Carnet du Maître\n\n## Consignes en vigueur\n\n- pas de crate x86_64", first, "- b");
-  assert.match(second, /- pas de crate x86_64/);
+  const second = withJournal("# Master's notebook\n\n## Standing instructions\n\n- no x86_64 crate", first, "- b");
+  assert.match(second, /- no x86_64 crate/);
   assert.match(second, /- a\n- b\n$/);
 
   // The Master does not write this time: its instructions stay as they were.
   const third = withJournal(second, second, "- c");
-  assert.match(third, /- pas de crate x86_64/);
+  assert.match(third, /- no x86_64 crate/);
   assert.match(third, /- a\n- b\n- c\n$/);
+});
+
+test("a notebook written in French before D-028 keeps its journal", () => {
+  // docs/MASTER.md as the Master left it on 2026-09-10.
+  const before =
+    "# Instructions du Maître\n\n## Consignes en vigueur\n- Le build doit passer.\n\n" +
+    "## Journal des échanges\n\n- 2026-09-10 19:54 UTC · Humain : « Le build passe. »\n";
+  const after = withJournal(before, before, "- new");
+  assert.match(after, /- Le build doit passer\./);
+  assert.match(after, /## Exchange log\n\n- 2026-09-10 19:54 UTC · Humain : « Le build passe\. »\n- new\n$/);
+  assert.doesNotMatch(after, /Journal des échanges/);
 });
 
 test("the journal keeps the most recent exchanges only", () => {
@@ -181,23 +193,33 @@ test("the journal keeps the most recent exchanges only", () => {
 });
 
 test("a journal entry is one bounded line", () => {
-  const entry = journalEntry([{ content: "ligne 1\nligne 2", created_at: "2026-09-10T21:40:12Z" }], "ok\nnoté");
-  assert.equal(entry, "- 2026-09-10 21:40 UTC · Humain : « ligne 1 ligne 2 » → Maître : « ok noté »");
+  const entry = journalEntry([{ content: "ligne 1\nligne 2", created_at: "2026-09-10T21:40:12Z" }], "ok\nnoted");
+  assert.equal(entry, '- 2026-09-10 21:40 UTC · Human: "ligne 1 ligne 2" → Master: "ok noted"');
   const long = journalEntry([{ content: "y".repeat(5000), created_at: "2026-09-10T21:40:12Z" }], "z".repeat(5000));
   assert.ok(long.length < 1200);
   assert.equal(long.split("\n").length, 1);
 });
 
-test("the Master is told which language to answer in", () => {
-  // The first real exchange: a French message, answered in English.
-  assert.equal(
-    humanLanguage(["Le build passe. Continue : corrige clippy avec un hlt dans la boucle, puis produis l'image."]),
-    "French",
+test("the Master answers the human in English, whatever language they write in", () => {
+  // Asked by the human on 2026-09-11 (D-028), after a day of replies in French.
+  assert.equal(HUMAN_LANGUAGE, "English");
+  const text = renderState(
+    mission,
+    state({
+      human: [{ id: "h1", content: "Le build passe. Continue : corrige clippy.", created_at: "2026-09-10T19:54:00Z" }],
+    }) as never,
+    null,
+    new Date("2026-09-11T08:00:00Z"),
   );
-  assert.equal(humanLanguage(["The build passes. Now fix clippy and then make the image."]), "English");
-  // Too short to tell: French, the language of the people running grenOS.
-  assert.equal(humanLanguage(["ok"]), "French");
-  assert.equal(humanLanguage([]), "French");
+  assert.match(text, /write it in English/);
+  assert.match(text, /`options` of any escalation, in English/);
+  assert.doesNotMatch(text, /French/);
+});
+
+test("the Master knows what time it is", () => {
+  // Without it, docs/STATE.md said "At 2026-09-10 [current time]".
+  const text = renderState(mission, state() as never, null, new Date("2026-09-11T08:05:00Z"));
+  assert.match(text, /# Now\n\n2026-09-11 08:05 UTC/);
 });
 
 test("a key pasted into the chat never reaches the public repository", () => {
@@ -205,7 +227,7 @@ test("a key pasted into the chat never reaches the public repository", () => {
   const nvidia = "nvapi-" + "a".repeat(30);
   const google = "AIza" + "S".repeat(35);
   const text = redactSecrets(`voici ${nvidia} et ${google}, merci`);
-  assert.equal(text, "voici [secret masqué] et [secret masqué], merci");
+  assert.equal(text, "voici [redacted secret] et [redacted secret], merci");
   assert.equal(redactSecrets("rien de secret ici"), "rien de secret ici");
 });
 

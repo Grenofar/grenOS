@@ -144,6 +144,7 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
           CLIPPY: ${{ steps.clippy.outcome }}
           QEMU: ${{ steps.qemu.outcome }}
+          JOB_STATUS: ${{ job.status }}
         run: |
           # Une branche identique a main ne porte aucun travail d'agent. Juger
           # ce commit, c'est rendre un verdict sur rien, et ce verdict etait
@@ -152,6 +153,18 @@ jobs:
           git fetch -q --depth=1 origin main
           if [ "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" ]; then
             echo "::notice::Branche identique a main : aucun travail a juger, pas de verdict."
+            exit 0
+          fi
+
+          # Un commit remplace ne juge plus rien. cancel-in-progress annule le
+          # run d'un commit des qu'un plus recent arrive sur la branche, mais
+          # cette etape tourne quand meme (always) : elle rapportait "failed"
+          # pour un commit que plus personne n'attendait, et le trigger le
+          # comptait comme une tentative de la tache qui attendait le verdict
+          # du suivant. C'est le run du commit le plus recent qui juge.
+          HEAD_NOW=$(git ls-remote --heads origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)
+          if [ -n "$HEAD_NOW" ] && [ "$HEAD_NOW" != "$GITHUB_SHA" ]; then
+            echo "::notice::Commit remplace par ${HEAD_NOW:0:7} sur la branche : son run rendra le verdict."
             exit 0
           fi
 
@@ -176,6 +189,13 @@ jobs:
           if [ "$PROBE" != "true" ]; then
             STATUS="error"
             FAILURE="spec_gap"
+          elif [ "$JOB_STATUS" = "cancelled" ]; then
+            # Interrompu sans avoir ete remplace : delai du job depasse, ou
+            # annulation a la main. Rien n'a ete juge jusqu'au bout, et dire
+            # "compile_error" enverrait le Codeur chercher une erreur qui
+            # n'existe pas.
+            STATUS="timeout"
+            FAILURE=""
           elif [ "$BUILD" != "success" ]; then
             STATUS="failed"
             FAILURE="compile_error"

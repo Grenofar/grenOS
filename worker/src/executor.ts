@@ -6,8 +6,8 @@ import { authorize } from "./sandbox.ts";
 import { repoContext } from "./context.ts";
 import { renderEvidence } from "./evidence.ts";
 import { consult, CONSULT_ROUNDS } from "./consult.ts";
-import { preflight, renderPreflight, PREFLIGHT_ROUNDS } from "./preflight.ts";
-import { checkDependencies, crateVersions } from "./deps.ts";
+import { crateRoots, preflight, renderPreflight, PREFLIGHT_ROUNDS } from "./preflight.ts";
+import { checkDependencies, checkEditions, crateReleases, crateVersions } from "./deps.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
@@ -155,6 +155,11 @@ export async function executeTask(
     }
 
     // An agent reporting failure is not asked to polish its files first.
+    // Otherwise the rest of each crate it touches is read from the branch:
+    // whether a crate has a panic handler, or which toolchain builds it, can
+    // depend on files the answer leaves alone (D-027).
+    const crate =
+      envelope.status === "failed" ? null : await crateContext(gh, readRef, resolved.changes);
     const problems =
       envelope.status === "failed"
         ? []
@@ -165,8 +170,9 @@ export async function executeTask(
                 "If the task cannot be done without it, return failed and name the path you need.",
             ),
             ...resolved.problems,
-            ...preflight(resolved.changes),
+            ...preflight(resolved.changes, crate),
             ...(await checkDependencies(resolved.changes, crateVersions)),
+            ...(await checkEditions(resolved.changes, crate, crateReleases)),
           ];
     if (asks.length > 0 && resolved.changes.length === 0 && envelope.status !== "failed") {
       problems.push(
@@ -430,6 +436,51 @@ async function resolveWrites(
   }
 
   return { changes, problems, violations };
+}
+
+/**
+ * The files of each crate an answer touches that the answer itself leaves
+ * alone, read from the ref it builds on (D-027): whether a crate has a panic
+ * handler, or which toolchain builds it, depends on them. `null` when they
+ * cannot all be read, so pre-flight skips those checks instead of guessing.
+ */
+async function crateContext(
+  gh: GitHub,
+  readRef: string,
+  changes: Change[],
+): Promise<Change[] | null> {
+  const roots = crateRoots(changes);
+  if (roots.length === 0) return [];
+  const changed = new Set(changes.map((c) => c.path));
+
+  try {
+    const wanted = (await gh.listTree(readRef)).filter(
+      ({ path }) => !changed.has(path) && roots.some((root) => inCrate(path, root)),
+    );
+    // A crate too large to read whole is left to CI: a panic handler in the
+    // file left out would be reported missing.
+    if (wanted.length > 80 || wanted.some((f) => f.size > 100_000)) return null;
+
+    const files: Change[] = [];
+    for (const { path } of wanted) {
+      const content = await gh.readFile(path, readRef);
+      if (content !== null) files.push({ path, content });
+    }
+    return files;
+  } catch (err) {
+    log.warn(`pré-vol : ${readRef} illisible — ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
+}
+
+function inCrate(path: string, root: string): boolean {
+  const prefix = root ? `${root}/` : "";
+  return (
+    path === `${prefix}Cargo.toml` ||
+    path === `${prefix}Cargo.lock` ||
+    path === `${prefix}rust-toolchain.toml` ||
+    (path.startsWith(`${prefix}src/`) && path.endsWith(".rs"))
+  );
 }
 
 async function buildPrompt(

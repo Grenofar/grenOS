@@ -2,7 +2,7 @@ import { Router } from "@grenos/router";
 import { log } from "./config.ts";
 import { db, emit } from "./db.ts";
 import { parseEnvelope, EnvelopeError } from "./envelope.ts";
-import { humanLanguage } from "./master.ts";
+import { HUMAN_LANGUAGE } from "./master.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
 /**
@@ -113,10 +113,9 @@ async function answerOne(
       system: [
         intake.systemPrompt,
         renderRoadmap(steps),
-        // Named outright: "the human's language" is what models ignore.
-        `# Language\n\nWrite \`summary\` in ${humanLanguage(
-          messages.filter((m) => m.role === "user").map((m) => m.content),
-        )}: the human reads it. \`description\` and \`acceptance_criteria\` stay in English, for the agents.`,
+        // Named outright: "the human's language" is what models ignore (D-028).
+        `# Language\n\nWrite \`summary\` in ${HUMAN_LANGUAGE}, even when the human writes in another ` +
+          "language: they asked for it. `description` and `acceptance_criteria` are in English too, for the agents.",
       ]
         .filter(Boolean)
         .join("\n\n---\n\n"),
@@ -145,8 +144,8 @@ async function answerOne(
       role: "master",
       content:
         err instanceof EnvelopeError
-          ? "Je n'ai pas réussi à formuler ma réponse. Reformule ta dernière phrase et je reprends."
-          : `Le modèle est indisponible pour l'instant (${detail.slice(0, 120)}). Réessaie dans un instant.`,
+          ? "I could not put my answer into words. Rephrase your last message and I will pick it up."
+          : `The model is unavailable right now (${detail.slice(0, 120)}). Try again in a moment.`,
       answered_at: new Date().toISOString(),
     });
     await markAnswered(missionId);

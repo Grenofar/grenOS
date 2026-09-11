@@ -57,7 +57,7 @@ Never rely on an agent choosing to obey.
 **No agent may address another agent directly.** All traffic goes through the
 Master. This is not bureaucracy, it is the single most important safeguard:
 
-- A mesh of 9 agents has 36 possible channels. Two agents that disagree can
+- A mesh of 10 agents has 45 possible channels. Two agents that disagree can
   ping-pong forever and burn an entire day of free quota overnight, unattended.
 - With a star, every message is one hop: logged, budgeted and interruptible.
 - The Master is the only component that needs global state, so there is exactly
@@ -194,10 +194,14 @@ and you say so in your `summary` so the Master can have it corrected.
    runner has `xorriso` and `mtools` and nothing from Limine: the script
    fetches the Limine binaries itself.
 5. **Boot.** The first `*.iso` or `*.img` found under `kernel/` runs as
-   `qemu-system-x86_64 -cdrom <image> -serial stdio -display none -no-reboot -m 256M`
+   `qemu-system-x86_64 -cdrom <image> -serial stdio -display none -no-reboot -no-shutdown -m 256M`
    and is killed after 90 seconds.
 6. **Green** only when the serial output contains `grenOS` and contains none of
    `panic`, `triple fault`, `double fault`, in any case.
+7. **The verdict** lists each step — `build`, `clippy`, `boot` — as PASS, FAIL
+   or UNVERIFIABLE (a step that did not run). A run replaced by a newer push
+   on the same branch reports nothing: the newer run's verdict is the one
+   that counts.
 
 Consequences that have already cost real attempts:
 
@@ -207,6 +211,11 @@ Consequences that have already cost real attempts:
   lost an attempt to exactly that error.
 - **Acceptance criteria name these commands**, e.g. "cargo build --release
   succeeds in kernel/", never a command CI does not run.
+- **What a Makefile would pass, `.cargo/config.toml` carries.** CI runs a
+  plain `cargo build --release`: a flag the limine-rust-template passes
+  through RUSTFLAGS in its GNUmakefile (`-C relocation-model=static`) goes
+  under `[target.x86_64-unknown-none] rustflags`, and the linker script is
+  handed over by `build.rs` (`cargo:rustc-link-arg=-T<script>`).
 - **Use the exact file names**: `Cargo.toml`, `.cargo/config.toml`,
   `rust-toolchain.toml`. Cargo ignores a `Cargo.tompl`; the build then runs on
   the old manifest and the attempt is spent. Check every path before you
@@ -218,8 +227,12 @@ Before anything is committed, the runtime checks your answer for mistakes that
 are certain to fail: a misspelled file name, `.cargo/config` or `limine.cfg`,
 the old `KEY=value` syntax in `limine.conf`, invalid JSON, a custom target
 spec, a toolchain file without `x86_64-unknown-none`, a `Cargo.toml` without
-`[package]`, an empty `loop {}` that clippy rejects, a `patch_file` whose
-`old_str` does not appear exactly once, a path outside your `allowed_paths`.
+`[package]`, an empty `loop {}` that clippy rejects, a function
+`core::arch::x86_64` does not have (`hlt`, `outb`, `inb`…), a `#![no_std]`
+binary with no `#[panic_handler]` anywhere in its crate, edition 2024 — yours
+or a dependency's — under a toolchain pinned before Rust 1.85, a crate version
+that was never published, a `patch_file` whose `old_str` does not appear
+exactly once, a path outside your `allowed_paths`.
 If it finds any, nothing is committed and you get the list immediately, in
 the same attempt: fix every item and return your complete answer again. Two
 corrections per attempt; after that the attempt is spent, but no CI run is.
@@ -266,7 +279,9 @@ produces three failed attempts. Sending it back to the Architect fixes it once.
 ## 9. Hard rules for every agent
 
 1. **Never invent an API, crate version, file format or hardware register:
-   look it up.** Return an envelope whose only actions are `consult` (up to 3
+   look it up.** A plan, a design document or an earlier task is not a
+   source: what it names is checked like your own memory. Return an envelope
+   whose only actions are `consult` (up to 3
    URLs); the documents come back to you and you answer after reading them, in
    the same attempt, for up to two rounds. Sources that answer from here:
    - `https://crates.io/api/v1/crates/<name>` — a crate's current version
@@ -278,8 +293,8 @@ produces three failed attempts. Sending it back to the Architect fixes it once.
    - `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/<path>`
      — a Rust kernel known to boot with Limine: `kernel/Cargo.toml`,
      `kernel/build.rs`, `kernel/linker-x86_64.ld`, `kernel/rust-toolchain.toml`,
-     `kernel/src/main.rs`, `limine.conf`, and `GNUmakefile`, which shows how
-     its ISO is built
+     `kernel/src/main.rs`, `kernel/GNUmakefile` (the flags it gives cargo),
+     `limine.conf`, and `GNUmakefile`, which shows how its ISO is built
    - `https://doc.rust-lang.org/rustc/platform-support/x86_64-unknown-none.html`
 
    Allowed hosts: crates.io, docs.rs, doc.rust-lang.org,
