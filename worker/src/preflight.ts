@@ -239,6 +239,34 @@ function crateProblems(changes: Change[], branch: Change[] | null): string[] {
       }
     }
 
+    // A module file that no `mod` declares is never compiled, and CI turns
+    // green without it. Mission 2's first GDT task wrote kernel/src/gdt.rs and
+    // no `mod gdt;`: the kernel CI booted was the one before, and neither the
+    // GDT nor the bugs in that file ever reached it.
+    for (const { path } of changes) {
+      if (!path.startsWith(`${prefix}src/`) || !path.endsWith(".rs") || !files.has(path)) continue;
+      const rel = path.slice(`${prefix}src/`.length);
+      // The crate roots, and src/bin/, whose files cargo builds on its own.
+      if (rel === "main.rs" || rel === "lib.rs" || rel.startsWith("bin/")) continue;
+      const stem = (rel.endsWith("/mod.rs") ? rel.slice(0, -"/mod.rs".length) : rel.slice(0, -".rs".length))
+        .split("/")
+        .pop()!;
+      const declaration = new RegExp(`\\bmod\\s+(?:r#)?${stem}\\s*[;{]`);
+      const declared = [...files].some(
+        ([other, content]) =>
+          other !== path &&
+          other.startsWith(`${prefix}src/`) &&
+          other.endsWith(".rs") &&
+          (declaration.test(stripComments(content)) || content.includes(`${stem}.rs"`)),
+      );
+      if (!declared) {
+        problems.push(
+          `${path}: no \`mod ${stem};\` declares this file, so cargo never compiles it and CI would pass without it. ` +
+            `Declare it in ${prefix}src/main.rs (or in its parent module) and call what it provides.`,
+        );
+      }
+    }
+
     const manifest = files.get(`${prefix}Cargo.toml`);
     const toolchain = files.get(`${prefix}rust-toolchain.toml`);
     const pinned = toolchain ? pinnedBeforeRust185(toolchain) : null;

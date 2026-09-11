@@ -166,7 +166,7 @@ test("functions core::arch::x86_64 does not have", () => {
 
 test("a no_std binary without a panic handler anywhere in the crate", () => {
   const main =
-    '#![no_std]\n#![no_main]\nmod serial;\n\n#[unsafe(no_mangle)]\nextern "C" fn kmain() -> ! {\n    loop { unsafe { core::arch::asm!("hlt") } }\n}\n';
+    '#![no_std]\n#![no_main]\nmod serial;\nmod panic;\n\n#[unsafe(no_mangle)]\nextern "C" fn kmain() -> ! {\n    loop { unsafe { core::arch::asm!("hlt") } }\n}\n';
   const handler =
     '#[panic_handler]\nfn panic(_info: &core::panic::PanicInfo) -> ! {\n    loop { unsafe { core::arch::asm!("hlt") } }\n}\n';
 
@@ -188,6 +188,29 @@ test("a no_std binary without a panic handler anywhere in the crate", () => {
 
   // A branch that could not be read proves nothing.
   assert.deepEqual(preflight([w("kernel/src/main.rs", main)]), []);
+});
+
+test("a module file nothing declares, which cargo never compiles", () => {
+  // Mission 2's first GDT task: kernel/src/gdt.rs and no `mod gdt;`. CI would
+  // have booted the kernel as it was, without the GDT or its bugs.
+  const main =
+    '#![no_std]\n#![no_main]\nmod serial;\n#[panic_handler]\nfn panic(_: &core::panic::PanicInfo) -> ! { loop { unsafe { core::arch::asm!("hlt") } } }\n';
+  const gdt = "pub fn init() {}\n";
+  const serial = w("kernel/src/serial.rs", "pub fn init() {}\n");
+
+  assert.match(
+    preflight([w("kernel/src/gdt.rs", gdt)], [w("kernel/src/main.rs", main), serial])[0]!,
+    /no `mod gdt;` declares this file/,
+  );
+  // Declared in main.rs, in the answer or on the branch.
+  const declared = main.replace("mod serial;", "mod serial;\nmod gdt;");
+  assert.deepEqual(preflight([w("kernel/src/gdt.rs", gdt), w("kernel/src/main.rs", declared)], [serial]), []);
+  assert.deepEqual(preflight([w("kernel/src/gdt.rs", gdt)], [w("kernel/src/main.rs", declared), serial]), []);
+  // A nested module, declared by its parent.
+  const nested = [w("kernel/src/main.rs", main.replace("mod serial;", "mod serial;\nmod arch;")), w("kernel/src/arch/mod.rs", "pub mod gdt;\n"), serial];
+  assert.deepEqual(preflight([w("kernel/src/arch/gdt.rs", gdt)], nested), []);
+  // A branch that could not be read proves nothing.
+  assert.deepEqual(preflight([w("kernel/src/gdt.rs", gdt)]), []);
 });
 
 test("edition 2024 under a toolchain pinned before Rust 1.85", () => {
