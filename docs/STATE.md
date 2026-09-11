@@ -1,23 +1,18 @@
-# grenOS Mission State
+# State as of 2026-09-11 05:16 UTC
 
-## Mission: Boot a hello-world kernel in QEMU
+Mission: Boot a hello-world kernel in QEMU (running)
+Tokens used: 524562 / 3000000
 
-### Done
-- Architect created a technical plan (task 4002c138).
+Recent events:
+- 2026-09-11 05:05 UTC: Human said docs/PLAN.md is wrong and asked Architect to rewrite from limine-rust-template.
+- 2026-09-11 05:16 UTC: Master asked Architect to rewrite docs/PLAN.md (task 7c4bb8a0) -> done.
+- 2026-09-11 05:16 UTC: Coder completed task f58a45fa (project setup) and requested build. Waiting for CI verdict.
 
-### In Flight
-- None (last task exhausted attempts).
+Next steps:
+- Wait for CI verdict on agent/f58a45fa.
+- If green, then move to the next step: implement serial output and halting (as per the human's earlier instruction).
+- If red, analyze the failure and decide.
 
-### Blocked
-- The kernel project does not build and pass clippy. We need to resolve the build issues before proceeding.
+Blocked: none.
 
-### Budget
-- Tokens used: 410243 / 3000000
-
-### Last Human Instruction
-- 2026-09-10 19:54 UTC: « Le build passe. Continue : corrige clippy avec un hlt dans la boucle, puis produis l'image bootable avec Limine. »
-
-### Escalation
-- At 2026-09-10 [current time], we escalated because task 4ed99f62 (Coder) failed 3 times. 
-  Last error: expected item after attributes at src/main.rs:28:1.
-  We proposed breaking the task into smaller steps, providing more detailed specifications, or assigning to a specialist.
+We are idle waiting for CI.
