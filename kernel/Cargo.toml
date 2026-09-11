@@ -7,6 +7,8 @@ repository = "https://github.com/Grenofar/grenOS"
 
 [dependencies]
 limine = "0.5"
+# The 8x8 font of the desktop; std is a default feature, and the kernel has none.
+font8x8 = { version = "0.3.1", default-features = false, features = ["unicode"] }
 
 [profile.dev]
 panic = "abort"
