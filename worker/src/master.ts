@@ -4,6 +4,7 @@ import { db, emit } from "./db.ts";
 import { parseEnvelope, EnvelopeError, type AgentEnvelope } from "./envelope.ts";
 import { authorize } from "./sandbox.ts";
 import { baseFor } from "./lineage.ts";
+import { renderUnreadable } from "./preflight.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
@@ -90,6 +91,13 @@ const lastSeen = new Map<string, string>();
 const unreadable = new Map<string, number>();
 export const UNREADABLE_LIMIT = 3;
 
+/**
+ * Corrections of an unreadable answer within one cycle. One, not a worker's
+ * two: every correction is a request against the Master's own quota, and the
+ * cycles above already retry.
+ */
+const MASTER_CORRECTIONS = 1;
+
 /** What an unreadable decision leads to, given how many came in a row. */
 export function afterUnreadable(inARow: number): "retry" | "escalate" {
   return inARow >= UNREADABLE_LIMIT ? "escalate" : "retry";
@@ -156,29 +164,47 @@ export async function runMasterCycle(
 
   const notebook = await readNotebook(gh);
 
-  let envelope: AgentEnvelope;
+  let envelope!: AgentEnvelope;
   let model = "";
   let tokensIn = 0;
   let tokensOut = 0;
   try {
-    const result = await router.complete({
-      role: "master",
-      system: master.systemPrompt,
-      messages: [{ role: "user", content: renderState(mission, state, notebook) }],
-      maxOutputTokens: 8192,
-      json: true,
-    });
-    model = result.model;
-    tokensIn = result.tokensIn;
-    tokensOut = result.tokensOut;
+    const messages: Array<{ role: "user" | "assistant"; content: string }> = [
+      { role: "user", content: renderState(mission, state, notebook) },
+    ];
+    // An answer that does not parse gets its correction in the same cycle, as
+    // a worker's does (executor.ts). On mission 2 the Master broke its JSON
+    // three cycles running while copying criteria full of quotes, and a fresh
+    // call on the same prompt made the same mistake each time.
+    for (let round = 0; ; round++) {
+      const result = await router.complete({
+        role: "master",
+        system: master.systemPrompt,
+        messages,
+        maxOutputTokens: 8192,
+        json: true,
+      });
+      model = result.model;
+      tokensIn += result.tokensIn;
+      tokensOut += result.tokensOut;
 
-    await db.rpc("add_mission_tokens", {
-      p_mission_id: mission.id,
-      p_task_id: null,
-      p_tokens: tokensIn + tokensOut,
-    });
+      await db.rpc("add_mission_tokens", {
+        p_mission_id: mission.id,
+        p_task_id: null,
+        p_tokens: result.tokensIn + result.tokensOut,
+      });
 
-    envelope = parseEnvelope(result.text);
+      try {
+        envelope = parseEnvelope(result.text);
+        break;
+      } catch (err) {
+        if (!(err instanceof EnvelopeError) || round >= MASTER_CORRECTIONS) throw err;
+        messages.push(
+          { role: "assistant", content: result.text },
+          { role: "user", content: renderUnreadable(err.message, MASTER_CORRECTIONS - round - 1) },
+        );
+      }
+    }
     unreadable.delete(mission.id);
   } catch (err) {
     if (!(err instanceof EnvelopeError)) {
