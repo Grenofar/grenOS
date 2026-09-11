@@ -16,6 +16,7 @@ export function Shell({ children }: { children: ReactNode }) {
     { href: "/missions", key: "nav.missions" },
     { href: "/runs", key: "nav.runs" },
     { href: "/agents", key: "nav.agents" },
+    { href: "/download", key: "nav.download" },
   ];
 
   return (

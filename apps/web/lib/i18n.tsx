@@ -25,6 +25,7 @@ const STRINGS: Dict = {
   "nav.runs": { fr: "Vérifications", en: "Runs" },
   "nav.agents": { fr: "Agents", en: "Agents" },
   "nav.roadmap": { fr: "Feuille de route", en: "Roadmap" },
+  "nav.download": { fr: "Télécharger", en: "Download" },
 
   "roadmap.intro": {
     fr: "Aucune case ne se coche ici : une étape passe à « terminée » parce que sa mission l'est, et une mission ne se termine que sur un verdict de CI. L'ordre est imposé par la matière — sans port série on ne sait pas pourquoi le kernel a redémarré.",

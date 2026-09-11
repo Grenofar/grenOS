@@ -1,0 +1,76 @@
+# Publie l'OS (D-030). A chaque kernel qui arrive sur main, l'image est
+# reconstruite, demarree dans QEMU avec le critere de verify.yml, puis publiee
+# en Release GitHub. Une Release se telecharge sans compte GitHub, contrairement
+# aux artefacts de la CI : c'est elle que sert la page /download du site.
+
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "kernel/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+# Deux fusions rapprochees publient chacune leur image, dans l'ordre.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain Rust
+        working-directory: kernel
+        run: |
+          rustup toolchain install || true
+          rustup show
+
+      - name: Outils image
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 xorriso mtools
+
+      - name: Image
+        run: bash kernel/scripts/make-iso.sh
+
+      # On ne publie que ce qui boote, avec le meme critere que verify.yml.
+      - name: Boot QEMU
+        run: |
+          set -o pipefail
+          IMAGE=$(find kernel -name '*.iso' | head -n1)
+          test -n "$IMAGE"
+          timeout 90 qemu-system-x86_64 -cdrom "$IMAGE" -serial stdio -display none -no-reboot -no-shutdown -m 256M 2>&1 | tee qemu.log || true
+          if grep -qiE 'panic|triple fault|double fault' qemu.log; then
+            echo "::error::Le kernel a panique au boot : rien n'est publie."
+            exit 1
+          fi
+          if ! grep -q 'grenOS' qemu.log; then
+            echo "::error::Marqueur grenOS absent : rien n'est publie."
+            exit 1
+          fi
+          cp "$IMAGE" grenos.iso
+
+      - name: Publier la Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
+          {
+            echo "Image construite depuis ${GITHUB_SHA}, puis demarree dans QEMU : la sortie serie contenait grenOS."
+            echo
+            echo "Lancer : qemu-system-x86_64 -cdrom grenos.iso -serial stdio"
+            echo
+            echo "VirtualBox, cle USB : https://grenos-dev.vercel.app/download"
+          } > notes.md
+          gh release create "$TAG" grenos.iso --target "$GITHUB_SHA" --title "grenOS $TAG" --notes-file notes.md --latest
+          echo "Release publiee : $TAG"

@@ -638,3 +638,21 @@ passés ».
 → Maître : une réponse illisible est rejugée au tick suivant ; la troisième
 d'affilée bloque la mission et prévient l'humain, en anglais. Son prompt dit
 que `status` n'a que quatre valeurs et qu'une escalade est une action.
+
+### D-030 — L'OS se télécharge sans compte
+**2026-09-11 · actif · demandé par l'humain**
+
+L'humain veut mettre grenOS sur un PC ou dans VirtualBox sans se connecter.
+Les artefacts de la CI ne s'y prêtent pas : GitHub exige un compte pour les
+télécharger, et ils expirent au bout de trente jours.
+→ Chaque kernel qui arrive sur `main` est reconstruit, démarré dans QEMU avec
+le critère de `verify.yml`, puis publié en **Release GitHub**
+(`.github/workflows/release.yml`) : public, versionné, sans expiration. Rien
+ne se publie s'il ne boote pas.
+→ La page **`/download`** du site est publique : ni session ni barre latérale
+(`apps/web/components/Frame.tsx`). Elle ne lit que la dernière Release (API
+publique de GitHub, côté serveur, revalidée toutes les cinq minutes), jamais
+Supabase : aucune donnée du projet n'y passe.
+→ Elle dit ce que l'OS fait vraiment. À l'étape 1, il écrit sur le port série
+et rien à l'écran ; VirtualBox et les vrais PC ne sont pas vérifiés par la
+CI, QEMU l'est.

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { LangProvider } from "@/lib/i18n";
-import { AuthGate } from "@/components/AuthGate";
-import { Shell } from "@/components/Shell";
+import { Frame } from "@/components/Frame";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,9 +17,7 @@ export default function RootLayout({
     <html lang="fr">
       <body>
         <LangProvider>
-          <AuthGate>
-            <Shell>{children}</Shell>
-          </AuthGate>
+          <Frame>{children}</Frame>
         </LangProvider>
       </body>
     </html>
