@@ -3,10 +3,17 @@
 #![feature(abi_x86_interrupt)]
 
 mod desktop;
+mod events;
 mod fb;
 mod font;
 mod gdt;
 mod idt;
+mod keyboard;
+mod mouse;
+mod pic;
+mod pit;
+mod port;
+mod ps2;
 mod rtc;
 mod serial;
 
@@ -48,44 +55,80 @@ extern "C" fn kmain() -> ! {
     // The IDT answers: the breakpoint handler prints its line and returns.
     // SAFETY: int3 only raises the breakpoint exception, which idt::init has
     // just given a handler.
-    unsafe {
-        core::arch::asm!("int3", options(nomem, nostack, preserves_flags));
-    }
+    unsafe { core::arch::asm!("int3", options(nomem, nostack, preserves_flags)) };
 
-    match FRAMEBUFFER_REQUEST.get_response().and_then(|response| response.framebuffers().next()) {
-        Some(frame) => {
-            let mode = fb::Mode {
-                width: frame.width() as usize,
-                height: frame.height() as usize,
-                pitch: frame.pitch() as usize,
-                bits_per_pixel: usize::from(frame.bpp()),
-                red_shift: frame.red_mask_shift(),
-                green_shift: frame.green_mask_shift(),
-                blue_shift: frame.blue_mask_shift(),
-            };
-            // SAFETY: Limine maps the framebuffer it describes, height rows of
-            // pitch bytes, writable for as long as the kernel runs.
-            let mut screen = unsafe { fb::Screen::new(frame.addr(), mode) };
-            desktop::draw(&mut screen, rtc::time());
-            serial::write_str("desktop: drawn\n");
-        }
-        None => serial::write_str("desktop: Limine gave no framebuffer\n"),
-    }
+    pic::init();
+    pit::init();
+    let mouse_ok = ps2::init();
+    // SAFETY: every vector the PIC can now raise has its handler in the IDT.
+    unsafe { core::arch::asm!("sti", options(nomem, nostack)) };
+    serial::write_str(if mouse_ok { "input: keyboard and mouse\n" } else { "input: keyboard, no mouse\n" });
 
+    let Some(frame) = FRAMEBUFFER_REQUEST.get_response().and_then(|response| response.framebuffers().next()) else {
+        serial::write_str("desktop: Limine gave no framebuffer\n");
+        halt();
+    };
+    let mode = fb::Mode {
+        width: frame.width() as usize,
+        height: frame.height() as usize,
+        pitch: frame.pitch() as usize,
+        bits_per_pixel: usize::from(frame.bpp()),
+        red_shift: frame.red_mask_shift(),
+        green_shift: frame.green_mask_shift(),
+        blue_shift: frame.blue_mask_shift(),
+    };
+    // SAFETY: Limine maps the framebuffer it describes, height rows of pitch
+    // bytes, writable for as long as the kernel runs.
+    let mut screen = unsafe { fb::Screen::new(frame.addr(), mode) };
+    let mut desktop = desktop::Desktop::new(&screen, rtc::time());
+    desktop.draw_all(&mut screen);
+    serial::write_str("desktop: drawn\n");
+
+    let mut keyboard = keyboard::Keyboard::default();
+    let mut mouse = mouse::Decoder::default();
     loop {
-        // SAFETY: hlt waits for an interrupt; with none enabled yet, the CPU
-        // rests with the desktop on screen.
-        unsafe {
-            core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+        while let Some(event) = events::pop() {
+            match event {
+                events::Event::Second => desktop.set_clock(&mut screen, rtc::time()),
+                events::Event::Key(code) => {
+                    if let Some(key) = keyboard.feed(code) {
+                        desktop.key(&mut screen, key);
+                    }
+                }
+                events::Event::Mouse(byte) => {
+                    if let Some(packet) = mouse.feed(byte) {
+                        desktop.mouse(&mut screen, packet);
+                    }
+                }
+            }
         }
+        idle();
+    }
+}
+
+/// Waits for the next interrupt, unless one has already left an event.
+fn idle() {
+    // SAFETY: cli, check, then sti immediately followed by hlt: sti takes
+    // effect after the next instruction, so an interrupt arriving after the
+    // check still wakes the hlt, and no event waits for the one after it.
+    unsafe {
+        core::arch::asm!("cli", options(nomem, nostack));
+        if events::is_empty() {
+            core::arch::asm!("sti", "hlt", options(nomem, nostack));
+        } else {
+            core::arch::asm!("sti", options(nomem, nostack));
+        }
+    }
+}
+
+fn halt() -> ! {
+    loop {
+        // SAFETY: hlt rests until the next interrupt.
+        unsafe { core::arch::asm!("hlt", options(nomem, nostack, preserves_flags)) };
     }
 }
 
 #[panic_handler]
 fn rust_panic(_info: &PanicInfo) -> ! {
-    loop {
-        unsafe {
-            core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
-        }
-    }
+    halt()
 }
