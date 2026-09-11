@@ -40,10 +40,16 @@ extern "C" fn kmain() -> ! {
     unsafe {
         core::arch::asm!("int3", options(nomem, nostack, preserves_flags));
     }
-    
-    // Cause page fault by reading from unmapped address
-    let _ = unsafe { core::ptr::read_volatile(0xffff_ffff_8020_0000 as *const u8) };
-    
+
+    // Initialize framebuffer and draw desktop
+    if let Some(response) = FRAMEBUFFER_REQUEST.get_response() {
+        if let Some(framebuffer) = response.framebuffers().next() {
+            let mut display = crate::fb::Display::from_limine(framebuffer);
+            crate::desktop::render_desktop(&mut display);
+            serial::write_str("desktop\n");
+        }
+    }
+
     loop {
         unsafe {
             core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
