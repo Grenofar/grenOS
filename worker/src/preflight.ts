@@ -191,11 +191,63 @@ export function preflight(changes: Change[], branch: Change[] | null = null): st
             "wrap each one in unsafe { … } with its // SAFETY: comment.",
         );
       }
+      const delimiter = unbalancedDelimiter(content);
+      if (delimiter) {
+        problems.push(
+          `${path}: ${delimiter}. rustc stops at the first delimiter that does not match, and every error behind it stays hidden until it is fixed.`,
+        );
+      }
+      const casts = castBeforeLessThan(content);
+      if (casts.length > 0) {
+        problems.push(
+          `${path}: a cast followed by < or << (line ${casts.join(", ")}): rustc reads the < as the start of generic arguments. ` +
+            "Put the cast in parentheses: (x as u64) << 16.",
+        );
+      }
       const binary = binaryAsmLabels(content);
       if (binary.length > 0) {
         problems.push(
           `${path}: an asm! label made only of the digits 0 and 1 (line ${binary.join(", ")}). rustc refuses it (binary_asm_labels, deny by default): ` +
             "in Intel syntax `1f` reads as a binary number. Use another label, e.g. `2:` and `2f`.",
+        );
+      }
+
+      // What clippy -D warnings rejects once rustc is satisfied: mission 2's
+      // IDT had 25 such lines behind its type errors, one CI run each layer.
+      for (const { name, lines } of staticMutReferences(content)) {
+        problems.push(
+          `${path}: a reference to static mut ${name} (line ${lines.join(", ")}): &${name}, &mut ${name}, &${name}.field, or a method that borrows it. ` +
+            "rustc's static_mut_refs lint rejects it under clippy -D warnings. " +
+            `Take the address instead, core::ptr::addr_of!(${name}) or addr_of_mut!(${name}), and call methods through it: (*core::ptr::addr_of_mut!(${name})).iter_mut().`,
+        );
+      }
+      const fnCasts = fnPointerCasts(content);
+      if (fnCasts.length > 0) {
+        const names = [...new Set(fnCasts.map((c) => c.name))].join(", ");
+        problems.push(
+          `${path}: a function cast to an integer other than usize (${names}; line ${fnCasts.map((c) => c.line).join(", ")}): ` +
+            "clippy::fn_to_numeric_cast rejects it under -D warnings. Cast to usize first: handler as usize as u64.",
+        );
+      }
+      const literals = literalCasts(content);
+      if (literals.length > 0) {
+        problems.push(
+          `${path}: a number literal cast with as (line ${literals.join(", ")}): clippy::unnecessary_cast rejects it under -D warnings. ` +
+            "Give the literal its type as a suffix instead: 0x89_u64, not 0x89 as u64.",
+        );
+      }
+      const unused = unusedParameters(content);
+      if (unused.length > 0) {
+        problems.push(
+          `${path}: parameters never used (${unused.map((u) => `${u.name} of ${u.fn}, line ${u.line}`).join("; ")}): ` +
+            "rustc's unused_variables lint rejects them under clippy -D warnings. Use each one, or start its name with _.",
+        );
+      }
+      const exposed = privateInterfaces(path, content);
+      if (exposed.length > 0) {
+        problems.push(
+          `${path}: public functions that take or return a type private to this module (${exposed.map((x) => `${x.fn} with ${x.type}, line ${x.line}`).join("; ")}): ` +
+            "rustc's private_interfaces lint rejects them under clippy -D warnings. Make the type pub, or the function private.",
         );
       }
     }
@@ -380,6 +432,198 @@ export function asmOutsideUnsafe(source: string): number[] {
     }
   }
   return [...lines];
+}
+
+/**
+ * The first delimiter that does not match, described; null when they all do.
+ * rustc stops there, so every error behind it stays hidden: mission 2's
+ * gdt.rs lost two CI runs to `size_of::<[u8; 0x4000>>()`, a bracket closed
+ * by a parenthesis, while the rest of the file waited unseen.
+ */
+export function unbalancedDelimiter(source: string): string | null {
+  const code = blankLiterals(source);
+  const opener: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+  const stack: Array<{ ch: string; line: number }> = [];
+  let line = 1;
+  for (const ch of code) {
+    if (ch === "\n") line++;
+    else if (ch === "(" || ch === "[" || ch === "{") stack.push({ ch, line });
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      const top = stack.pop();
+      if (!top) return `\`${ch}\` on line ${line} closes nothing`;
+      if (top.ch !== opener[ch]) {
+        return `\`${top.ch}\` opened on line ${top.line} is closed by \`${ch}\` on line ${line}`;
+      }
+    }
+  }
+  const last = stack.pop();
+  return last ? `\`${last.ch}\` opened on line ${last.line} is never closed` : null;
+}
+
+/**
+ * Lines where an integer cast is followed by `<` or `<<`: rustc reads the `<`
+ * as the start of generic arguments (`x as u64 << 16`). Mission 2's gdt.rs
+ * had eight of them behind its bracket error.
+ */
+export function castBeforeLessThan(source: string): number[] {
+  const code = blankLiterals(source);
+  const lines = new Set<number>();
+  for (const m of code.matchAll(/\bas\s+(?:[iu](?:8|16|32|64|128|size)|f32|f64)\s*<(?!=)/g)) {
+    lines.add(code.slice(0, m.index!).split("\n").length);
+  }
+  return [...lines];
+}
+
+// The clippy checks below were each held against nightly-2024-11-15's clippy
+// with -D warnings: what they report failed there, and their negative cases
+// passed (worker/test/preflight.test.ts keeps both).
+
+const INTEGER = "(?:[iu](?:8|16|32|64|128|size))";
+
+/** Array methods that borrow the array, and so the static that holds it. */
+const BORROWING_METHODS =
+  "len|is_empty|iter|iter_mut|as_ptr|as_mut_ptr|as_slice|as_mut_slice|fill|first|first_mut|last|last_mut|" +
+  "get|get_mut|copy_from_slice|clone_from_slice|swap|split_at|split_at_mut|chunks|chunks_mut|windows|contains|clone";
+
+/**
+ * References to each `static mut` of the file: `&NAME`, `&mut NAME`,
+ * `&NAME.field`, and a borrowing method called on an array static
+ * (`GDT.len()`, `IDT.iter_mut()`). rustc's static_mut_refs lint rejects them
+ * under clippy -D warnings. A reference to one element, `&NAME[i]`, and a
+ * method that takes the value, `COUNT.wrapping_add(1)`, pass.
+ */
+export function staticMutReferences(source: string): Array<{ name: string; lines: number[] }> {
+  const code = blankLiterals(source);
+  const found: Array<{ name: string; lines: number[] }> = [];
+  for (const decl of code.matchAll(/\bstatic\s+mut\s+([A-Za-z_]\w*)\s*:\s*(\[)?/g)) {
+    const name = decl[1]!;
+    // `a && NAME` and `a & NAME` are not references: the & must touch the name.
+    const patterns = [new RegExp(`(?<![\\w)\\]&])&(?:mut\\s+)?${name}\\b(?!\\s*\\[)`, "g")];
+    if (decl[2]) patterns.push(new RegExp(`(?<![\\w.])${name}\\s*\\.\\s*(?:${BORROWING_METHODS})\\s*\\(`, "g"));
+    const lines = new Set<number>();
+    for (const pattern of patterns) for (const m of code.matchAll(pattern)) lines.add(lineAt(code, m.index!));
+    if (lines.size > 0) found.push({ name, lines: [...lines].sort((a, b) => a - b) });
+  }
+  return found;
+}
+
+/**
+ * Functions of the file cast to an integer other than usize
+ * (`breakpoint_handler as u64`): clippy's fn_to_numeric_cast lints reject
+ * them under -D warnings. Only functions declared at the top of the file
+ * count, so a method or a local of the same name is not taken for one.
+ */
+export function fnPointerCasts(source: string): Array<{ name: string; line: number }> {
+  const code = blankLiterals(source);
+  const names = [
+    ...code.matchAll(/^(?:pub(?:\([^)]*\))?\s+)?(?:const\s+)?(?:unsafe\s+)?(?:extern\s+(?:"[^"]*"\s+)?)?fn\s+([A-Za-z_]\w*)/gm),
+  ].map((m) => m[1]!);
+  if (names.length === 0) return [];
+  const cast = new RegExp(`(?<![\\w.])(${names.join("|")})\\s+as\\s+(?!usize\\b)${INTEGER}\\b`, "g");
+  return [...code.matchAll(cast)].map((m) => ({ name: m[1]!, line: lineAt(code, m.index!) }));
+}
+
+/**
+ * Lines where a number literal without a suffix is cast (`0x89 as u64`):
+ * clippy's unnecessary_cast rejects it under -D warnings, in a const too. A
+ * literal with a suffix (`5u32 as u64`) is a real conversion and passes.
+ */
+export function literalCasts(source: string): number[] {
+  const code = blankLiterals(source);
+  const literal = new RegExp(
+    `(?<![\\w.])(?:0x[0-9a-fA-F_]+|0o[0-7_]+|0b[01_]+|\\d[\\d_]*)\\s+as\\s+(?:${INTEGER}|f32|f64)\\b`,
+    "g",
+  );
+  return [...new Set([...code.matchAll(literal)].map((m) => lineAt(code, m.index!)))];
+}
+
+/**
+ * Parameters a function body never mentions (`stack_frame` in a handler that
+ * only prints a message): rustc's unused_variables lint rejects them under
+ * clippy -D warnings. A name that starts with _ is exempt, and so is one the
+ * body mentions anywhere, a format string or a comment included.
+ */
+export function unusedParameters(source: string): Array<{ fn: string; name: string; line: number }> {
+  if (/allow\(\s*unused/.test(source)) return [];
+  const code = blankLiterals(source);
+  const found: Array<{ fn: string; name: string; line: number }> = [];
+  for (const m of code.matchAll(/\bfn\s+([A-Za-z_]\w*)[^(;{]*\(/g)) {
+    const open = m.index! + m[0].length - 1;
+    const close = closingDelimiter(code, open);
+    if (close === -1) continue;
+    // The body is the first { after the signature, unless a ; ends it first.
+    let brace = close + 1;
+    while (brace < code.length && code[brace] !== "{" && code[brace] !== ";") brace++;
+    if (code[brace] !== "{") continue;
+    const end = closingDelimiter(code, brace);
+    if (end === -1) continue;
+    const body = source.slice(brace, end + 1);
+    for (const param of topLevelParts(code.slice(open + 1, close))) {
+      const name = param.match(/^\s*(?:mut\s+)?([A-Za-z_]\w*)\s*:(?!:)/)?.[1];
+      if (!name || name.startsWith("_") || name === "self") continue;
+      if (!new RegExp(`\\b${name}\\b`).test(body)) found.push({ fn: m[1]!, name, line: lineAt(code, m.index!) });
+    }
+  }
+  return found;
+}
+
+/**
+ * Public functions of a module file that take or return a type private to it
+ * (`pub unsafe fn load_gdt(ptr: &DescriptorTablePointer)` beside a plain
+ * `struct DescriptorTablePointer`): rustc's private_interfaces lint rejects
+ * them under clippy -D warnings. At a crate root a private type is visible to
+ * the whole crate, so roots are skipped.
+ */
+export function privateInterfaces(path: string, source: string): Array<{ fn: string; type: string; line: number }> {
+  if (/(^|\/)(main|lib|build)\.rs$/.test(path) || /(^|\/)src\/bin\//.test(path)) return [];
+  const code = blankLiterals(source);
+  const hidden = [...code.matchAll(/^(?:struct|enum|union)\s+([A-Za-z_]\w*)/gm)].map((m) => m[1]!);
+  if (hidden.length === 0) return [];
+  const found: Array<{ fn: string; type: string; line: number }> = [];
+  const pubFn =
+    /^pub(?:\((?:crate|super)\))?\s+(?:const\s+)?(?:unsafe\s+)?(?:extern\s+(?:"[^"]*"\s+)?)?fn\s+([A-Za-z_]\w*)([^{;]*)/gm;
+  for (const m of code.matchAll(pubFn)) {
+    const signature = m[2]!;
+    // A generic parameter of the same name is not the private type.
+    const generics = signature.slice(0, Math.max(0, signature.indexOf("(")));
+    const type = hidden.find((t) => new RegExp(`\\b${t}\\b`).test(signature) && !new RegExp(`\\b${t}\\b`).test(generics));
+    if (type) found.push({ fn: m[1]!, type, line: lineAt(code, m.index!) });
+  }
+  return found;
+}
+
+/** The 1-based line of an offset. */
+function lineAt(text: string, index: number): number {
+  return text.slice(0, index).split("\n").length;
+}
+
+/** The offset of the delimiter closing the one at `open`, in blanked code; -1 if none. */
+function closingDelimiter(code: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    const c = code[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if ((c === ")" || c === "]" || c === "}") && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** A parameter list split at its top-level commas; `->` closes no generic. */
+function topLevelParts(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i]!;
+    if ("([{<".includes(c)) depth++;
+    else if (")]}".includes(c) || (c === ">" && list[i - 1] !== "-")) depth--;
+    else if (c === "," && depth === 0) {
+      parts.push(list.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(list.slice(start));
+  return parts;
 }
 
 /**

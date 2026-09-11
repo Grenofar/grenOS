@@ -237,12 +237,20 @@ are certain to fail: a misspelled file name, `.cargo/config` or `limine.cfg`,
 the old `KEY=value` syntax in `limine.conf`, invalid JSON, a custom target
 spec, a toolchain file without `x86_64-unknown-none`, a `Cargo.toml` without
 `[package]`, an empty `loop {}` that clippy rejects, an `asm!` outside an
-`unsafe` block, a function `core::arch::x86_64` does not have (`hlt`,
-`outb`, `inb`…), a `#![no_std]`
-binary with no `#[panic_handler]` anywhere in its crate, edition 2024 — yours
+`unsafe` block, an `asm!` label made only of 0 and 1, a function
+`core::arch::x86_64` does not have (`hlt`, `outb`, `inb`…), a delimiter that
+does not match, a cast followed by `<` or `<<`, a `#![no_std]`
+binary with no `#[panic_handler]` anywhere in its crate, a module file no `mod`
+declares, a `limine.conf` with no entry, edition 2024 — yours
 or a dependency's — under a toolchain pinned before Rust 1.85, a crate version
 that was never published, a `patch_file` whose `old_str` does not appear
 exactly once, a path outside your `allowed_paths`.
+It also catches what clippy `-D warnings` rejects once rustc is satisfied: a
+reference to a `static mut` (`&GDT`, `GDT.len()`: take `addr_of!(GDT)`
+instead), a function cast to an integer other than `usize`
+(`handler as usize as u64`), a number literal cast with `as` (`0x89_u64`, not
+`0x89 as u64`), a parameter the body never uses, a `pub fn` that takes or
+returns a type private to its module.
 If it finds any, nothing is committed and you get the list immediately, in
 the same attempt: fix every item and return your complete answer again. Two
 corrections per attempt; after that the attempt is spent, but no CI run is.

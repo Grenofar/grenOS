@@ -3,6 +3,13 @@ import assert from "node:assert/strict";
 import {
   asmOutsideUnsafe,
   binaryAsmLabels,
+  castBeforeLessThan,
+  fnPointerCasts,
+  literalCasts,
+  privateInterfaces,
+  staticMutReferences,
+  unbalancedDelimiter,
+  unusedParameters,
   preflight,
   renderPreflight,
   renderUnreadable,
@@ -330,6 +337,120 @@ test("asm! labels made only of 0 and 1, which rustc refuses", () => {
     '\nfn g() { let _ = "1: not assembly, 1f either"; }';
   assert.deepEqual(binaryAsmLabels(fine), []);
   assert.deepEqual(preflight([w("kernel/src/gdt.rs", fine)]), []);
+});
+
+test("a delimiter that does not match, and a cast read as generics", () => {
+  // Mission 2's gdt.rs, twice: a bracket closed by a parenthesis, then eight
+  // casts followed by a shift, each hidden until the one before was fixed.
+  const gdt = [
+    "pub fn init() {",
+    "    unsafe {",
+    "        TSS.ist1 = (&IST1_STACK as *const u8 as u64) + size_of::<[u8; 0x4000>>() as u64;",
+    "        let low = (limit as u64) | (base & 0xFFFF) as u64 << 16;",
+    "    }",
+    "}",
+  ].join("\n");
+  assert.equal(unbalancedDelimiter(gdt), "`[` opened on line 3 is closed by `}` on line 5");
+  assert.deepEqual(castBeforeLessThan(gdt), [4]);
+  const [bracket, cast] = preflight([w("kernel/src/gdt.rs", gdt)]);
+  assert.match(bracket!, /`\[` opened on line 3 is closed by `\}` on line 5/);
+  assert.match(cast!, /cast followed by < or << \(line 4\)/);
+
+  // Braces in strings, chars and comments, generics, and parenthesised casts pass.
+  const fine = [
+    "// a { in a comment",
+    'const S: &str = "} ) ]";',
+    "fn f(v: Vec<u64>, c: char) -> bool {",
+    "    let brace = '{';",
+    "    let shifted = (c as u64) << 16;",
+    "    let small = (v.len() as u64) < 3 && v.len() as u64 <= 9;",
+    "    shifted > 0 && small",
+    "}",
+  ].join("\n");
+  assert.equal(unbalancedDelimiter(fine), null);
+  assert.deepEqual(castBeforeLessThan(fine), []);
+  assert.deepEqual(preflight([w("kernel/src/lib.rs", fine)]), []);
+
+  assert.equal(unbalancedDelimiter("fn f() {"), "`{` opened on line 1 is never closed");
+  assert.equal(unbalancedDelimiter("fn f() {}\n}"), "`}` on line 2 closes nothing");
+});
+
+test("what clippy -D warnings rejects once rustc is satisfied", () => {
+  // Mission 2's GDT and IDT, cut down. Each line reported here failed under
+  // nightly-2024-11-15's clippy -D warnings, and every line of `fine` passed.
+  const gdt = [
+    "struct DescriptorTablePointer {",
+    "    limit: u16,",
+    "    base: u64,",
+    "}",
+    "static mut GDT: [u64; 5] = [0; 5];",
+    "static mut TSS: Tss = Tss { ist1: 0 };",
+    "pub unsafe fn load_gdt(ptr: &DescriptorTablePointer) {",
+    '    unsafe { core::arch::asm!("lgdt [{}]", in(reg) ptr) }',
+    "}",
+    'extern "x86-interrupt" fn page_fault_handler(stack_frame: Frame, _error_code: u64) {}',
+    "pub fn init() {",
+    "    unsafe {",
+    "        let tss_base = &TSS as *const Tss as u64;",
+    "        let limit = (GDT.len() * 8 - 1) as u16;",
+    "        let low = (0x89 as u64) << 40;",
+    "        let offset = page_fault_handler as u64 & 0xFFFF;",
+    "        let ist = &mut TSS.ist1;",
+    "    }",
+    "}",
+  ].join("\n");
+  assert.deepEqual(staticMutReferences(gdt), [
+    { name: "GDT", lines: [14] },
+    { name: "TSS", lines: [13, 17] },
+  ]);
+  assert.deepEqual(fnPointerCasts(gdt), [{ name: "page_fault_handler", line: 16 }]);
+  assert.deepEqual(literalCasts(gdt), [15]);
+  assert.deepEqual(unusedParameters(gdt), [{ fn: "page_fault_handler", name: "stack_frame", line: 10 }]);
+  assert.deepEqual(privateInterfaces("kernel/src/gdt.rs", gdt), [
+    { fn: "load_gdt", type: "DescriptorTablePointer", line: 7 },
+  ]);
+  // At the crate root a private type is visible to the whole crate.
+  assert.deepEqual(privateInterfaces("kernel/src/main.rs", gdt), []);
+
+  const problems = preflight([w("kernel/src/gdt.rs", gdt)]).join("\n");
+  assert.match(problems, /static mut GDT \(line 14\)/);
+  assert.match(problems, /static mut TSS \(line 13, 17\)/);
+  assert.match(problems, /page_fault_handler; line 16\).*as usize as u64/);
+  assert.match(problems, /literal cast with as \(line 15\).*0x89_u64/);
+  assert.match(problems, /stack_frame of page_fault_handler, line 10/);
+  assert.match(problems, /load_gdt with DescriptorTablePointer, line 7/);
+
+  const fine = [
+    "pub struct Pointer { pub limit: u16 }",
+    "struct Hidden;",
+    "static mut IDT: [u64; 4] = [0; 4];",
+    "static mut COUNT: u64 = 0;",
+    "fn handler() {}",
+    "fn private(_h: &Hidden) {}",
+    "pub fn take(p: &Pointer) -> u16 { p.limit }",
+    'pub fn show(x: u32) -> String { format!("{x}") }',
+    "pub fn apply<'a>(f: impl Fn(u32) -> u32, s: &'a str) -> usize { f(1) as usize + s.len() }",
+    "pub fn init() {",
+    "    unsafe {",
+    "        let _a = core::ptr::addr_of!(IDT) as u64;",
+    "        let _b = &raw const IDT;",
+    "        let _c = &IDT[0] as *const u64;",
+    "        let _d = COUNT.wrapping_add(1);",
+    "        let _e = 3 & IDT[1];",
+    "        (*core::ptr::addr_of_mut!(IDT)).iter_mut().for_each(|e| *e = 0);",
+    "    }",
+    "    let _f = handler as usize as u64;",
+    "    let _g = 5u32 as u64 + 0x89_u64;",
+    "    let v = 5;",
+    "    let _h = v as u64;",
+    "}",
+  ].join("\n");
+  assert.deepEqual(staticMutReferences(fine), []);
+  assert.deepEqual(fnPointerCasts(fine), []);
+  assert.deepEqual(literalCasts(fine), []);
+  assert.deepEqual(unusedParameters(fine), []);
+  assert.deepEqual(privateInterfaces("kernel/src/idt.rs", fine), []);
+  assert.deepEqual(preflight([w("kernel/src/idt.rs", fine)]), []);
 });
 
 test("an answer that is not valid JSON comes back with the parser's reason", () => {
