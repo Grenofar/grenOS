@@ -1,9 +1,1 @@
-# grenOS Agent System State
-
-**Now**: 2026-09-11 19:30 UTC
-
-**Mission**: GDT, IDT and CPU exceptions (gdt-idt)
-**Status**: done
-**Tokens used**: 756,554 / 3,000,000
-**Latest green commit**: 843bbd2 (task e7ead896 merged)
-**Notes**: Mission 2 completed: kernel boots, prints grenOS, handles breakpoint and page fault, halts without panic/triple/double fault. Task 48aab101 (clippy fix) attempted; main remains green regardless.
+# grenOS Mission State\n\n**Now**: 2026-09-11 19:32 UTC\n\n## Mission: GDT, IDT and CPU exceptions\n- Status: **done**\n- Token budget: 3,000,000\n- Tokens used: 777,410\n- Remaining: 2,222,590\n\n## What is done\n- Kernel builds with `cargo build --release` and passes `cargo clippy --release -- -D warnings`.\n- Bootable Limine image prints `grenOS` on serial COM1.\n- Handles breakpoint interrupt (int3) and prints a line.\n- Handles page fault by reading invalid address, prints CR2 and error code, then halts in hlt loop.\n- GDT with kernel code/data segments and TSS installed.\n- IDT with handlers for breakpoint, page fault, general protection, double fault (double fault uses IST stack).\n- Housekeeping: deleted kernel/Cargo.tompl, set repository in kernel/Cargo.toml to https://github.com/Grenofar/grenOS.\n- All changes merged into main (commit 843bbd2).\n\n## In flight\n- None.\n\n## Blocked\n- None.\n\n## Notes\n- Mission completed successfully; no further work required.
