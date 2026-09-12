@@ -60,8 +60,28 @@ extinction et redémarrage par ACPI, et une étape `input` de la CI qui injecte
 une vraie souris et de vraies touches dans QEMU.
 
 Restent **9** (disque : AHCI plutôt que VirtIO block, que VirtualBox n'a pas) et
-**11** (VFS en lecture seule), puis le réseau, hors périmètre jusqu'ici, dont
-dépend la vérification en ligne des mises à jour.
+**11** (VFS en lecture seule).
+
+**Deux choses que la feuille de route ne prévoyait pas** sont arrivées avant,
+parce que l'humain les a demandées (D-037, D-038) :
+
+- **Le réseau** (0.6.0) : pilote de carte Intel 8254x, ARP, IPv4, ICMP, UDP,
+  DHCP, DNS, un client TCP et assez d'HTTP pour une page. La CI l'exige
+  désormais : sixième étape `net`, qui vérifie que la machine obtient une
+  adresse par DHCP et que la passerelle répond à son ping. Manque TLS, donc
+  `https` et la vérification en ligne des mises à jour.
+- **La protection** (0.6.0) : NX, écriture du code interdite, SMEP et SMAP
+  allumés puis relus, tables de pages inspectées, empreinte du code du noyau,
+  analyse des fichiers avec quarantaine.
+
+Et le bureau est devenu un système utilisable (0.5.0) : explorateur de
+fichiers, navigateur, écran de connexion, animations, vraies icônes, sept
+sections de Paramètres.
+
+**Ce que le disque débloquera**, en plus de l'étape 11 : garder les fichiers,
+le mot de passe, et le fait qu'un démarrage n'est pas le premier — trois choses
+qui, aujourd'hui, disparaissent à l'extinction et que les fenêtres annoncent
+honnêtement.
 
 ## Qui fait quoi
 
