@@ -825,3 +825,67 @@ pilote réseau, sans changer l'écran.
 latin-1. Le tiret cadratin, les points de suspension, la puce et la flèche
 s'affichaient en `?` ; les textes n'utilisent plus que du latin-1, et les points
 du mot de passe sont dessinés en cercles plutôt que tapés.
+
+---
+
+### D-037 — Le réseau
+**2026-09-12 · actif · demandé par l'humain (« donne lui accès au reseau »)**
+
+→ **Un seul pilote pour les deux machines** : la carte `8086:100e` que QEMU
+donne par défaut est la même puce que la 82540EM de VirtualBox. Le `.vbox`
+publié demande donc explicitement cette carte, en NAT, et le pilote sert
+partout. Elle était déjà visible dans Paramètres, Matériel, sans personne pour
+lui parler.
+→ **Interrogée, pas interrompue** : le pilote est lu depuis la boucle
+principale. Tout ce que fait la pile alloue, et un gestionnaire d'interruption
+n'a pas le droit d'allouer ; une carte qu'on interroge cent fois par seconde
+suffit largement à un bureau qui charge une page quand on clique.
+→ **Registres non cachés** (PCD et PWT dans la table de pages, `map_device`) :
+une lecture mise en cache d'un registre d'état rend ce qu'elle avait lu la fois
+d'avant, et on cherche la panne ailleurs pendant une journée.
+→ **La pile** : ARP (avec cache), IPv4, ICMP (on répond aux pings et on en
+envoie), UDP, DHCP (adresse, masque, passerelle, serveur de noms), DNS, et un
+client TCP minimal pour HTTP. Le navigateur ouvre les pages `http:` pour de
+vrai, texte seulement.
+→ **Pas de TLS**, donc pas de `https` : c'est écrit dans le navigateur et dans
+Paramètres → Mise à jour, au lieu d'une page blanche. La vérification en ligne
+des mises à jour attend cela, notre propre site n'existant qu'en https.
+→ **La preuve** : le noyau imprime `net: address …` quand DHCP répond et
+`net: gateway replied to ping` au premier écho revenu. L'étape de CI dédiée ne
+sera rendue obligatoire qu'après l'avoir vue verte — on n'exige pas une étape
+qu'on n'a jamais vue passer.
+
+---
+
+### D-038 — La protection : ce que le processeur applique, ce que le noyau vérifie
+**2026-09-12 · actif · demandé par l'humain (« ajoute un systeme anti malware, et un systeme de protection comme windows »)**
+
+Un écran qui affiche « vous êtes protégé » sans rien faire est pire que rien :
+il apprend à faire confiance à une image. La fenêtre Sécurité ne montre donc
+que des choses mesurées.
+
+→ **Les défenses du processeur sont allumées puis relues** : NX (bit NXE de
+l'EFER, sans lequel le bit « non exécutable » des tables de pages ne veut rien
+dire), CR0.WP (le noyau lui-même ne peut plus écrire dans une page en lecture
+seule), SMEP et SMAP quand la puce les a. Elles sont ensuite **relues** dans
+CR0, CR4 et l'EFER : on affiche l'état réel, pas l'intention.
+→ **Les pages du noyau sont inspectées, pas supposées** : `paging::flags_of`
+parcourt les tables et vérifie que le code n'est pas inscriptible et que les
+données ne sont pas exécutables. Le script d'édition de liens exporte
+`__text_start`, `__text_end`, `__rodata_start`, `__data_start` et
+`__kernel_end` pour cela.
+→ **L'intégrité du code** : une empreinte de tout `.text` au démarrage, et le
+bouton « Vérifier l'intégrité » la recalcule. Ce n'est pas une empreinte
+cryptographique — elle détecte un changement, pas un adversaire qui connaît
+l'algorithme ; le jour où la machine sait hacher, c'est une ligne à remplacer.
+→ **L'analyse des fichiers** : chaque fichier est comparé à des signatures ; ce
+qui correspond part dans `/Système/Quarantaine`. La signature de référence est
+**EICAR**, le fichier de test standard de l'industrie : si le scanner ne
+l'attrape pas, le scanner ne marche pas.
+→ **Piège évité** : la chaîne EICAR est stockée **codée** (XOR 0x5A) et
+reconstruite à l'exécution. En clair dans le binaire, elle ferait mettre notre
+propre ISO en quarantaine par l'antivirus de la machine qui la télécharge.
+
+Ce que ça ne fait pas, et qui est dit dans la fenêtre : il n'y a pas encore
+d'espace utilisateur, donc SMEP et SMAP ne mordent sur rien ; et sans disque,
+la quarantaine ne survit pas à l'extinction.

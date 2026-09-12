@@ -39,6 +39,37 @@ fn read(bus: u8, slot: u8, function: u8, offset: u8) -> u32 {
     }
 }
 
+/// Writes 32 bits at `offset` of a function's configuration space.
+fn write(bus: u8, slot: u8, function: u8, offset: u8, value: u32) {
+    let address = 1 << 31
+        | u32::from(bus) << 16
+        | u32::from(slot & 0x1F) << 11
+        | u32::from(function & 0x07) << 8
+        | u32::from(offset & 0xFC);
+    // SAFETY: the configuration address and data ports. The only register
+    // written here is the command one, to let a card reach memory.
+    unsafe {
+        outl(ADDRESS, address);
+        outl(DATA, value);
+    }
+}
+
+/// Lets a device read and write memory by itself, and answer to its memory
+/// window. Without this bit a card's descriptor rings stay empty for ever.
+pub fn enable_bus_master(device: Device) {
+    let command = read(device.bus, device.slot, device.function, 0x04);
+    let wanted = command | (1 << 2) | (1 << 1); // bus master, memory space
+    if wanted != command {
+        write(device.bus, device.slot, device.function, 0x04, wanted);
+    }
+}
+
+/// Base address register `index` (0 to 5), with its flag bits kept: bit 0
+/// says whether it is memory or a port range.
+pub fn bar(device: Device, index: u8) -> u64 {
+    u64::from(read(device.bus, device.slot, device.function, 0x10 + index * 4))
+}
+
 fn probe(bus: u8, slot: u8, function: u8) -> Option<Device> {
     let identity = read(bus, slot, function, 0);
     let vendor = (identity & 0xFFFF) as u16;

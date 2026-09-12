@@ -190,6 +190,32 @@ jobs:
           cat "$RUNNER_TEMP/input.log"
           exit "$failed"
 
+      # Le reseau (D-037). QEMU met par defaut une carte e1000 derriere son
+      # reseau utilisateur : serveur DHCP en 10.0.2.2, adresse 10.0.2.15. Le
+      # kernel doit obtenir son adresse tout seul et voir revenir son ping.
+      # Etape rendue obligatoire seulement apres l'avoir vue verte (run
+      # 34689123565) : on n'exige pas ce qu'on n'a jamais vu passer.
+      - name: reseau
+        id: net
+        if: steps.qemu.outcome == 'success'
+        continue-on-error: true
+        run: |
+          grep -E '^net:' "$RUNNER_TEMP/qemu.log" > "$RUNNER_TEMP/net.log" || true
+          failed=0
+          if ! grep -q 'net: address ' "$RUNNER_TEMP/qemu.log"; then
+            echo "net: FAIL, aucune adresse obtenue par DHCP" | tee -a "$RUNNER_TEMP/net.log"
+            failed=1
+          fi
+          if ! grep -q 'net: gateway replied' "$RUNNER_TEMP/qemu.log"; then
+            echo "net: FAIL, la passerelle n'a pas repondu au ping" | tee -a "$RUNNER_TEMP/net.log"
+            failed=1
+          fi
+          if [ "$failed" = "0" ]; then
+            echo "net: PASS, adresse obtenue par DHCP et passerelle joignable" | tee -a "$RUNNER_TEMP/net.log"
+          fi
+          cat "$RUNNER_TEMP/net.log"
+          exit "$failed"
+
       # L'image qui vient de booter, telechargeable depuis la page du run
       # (section Artifacts) : c'est l'OS lui-meme, a lancer avec
       # qemu-system-x86_64 -cdrom <image> -serial stdio. Un souci d'artefact
@@ -223,6 +249,7 @@ jobs:
           QEMU: ${{ steps.qemu.outcome }}
           SCREEN: ${{ steps.screen.outcome }}
           INPUT: ${{ steps.input.outcome }}
+          NET: ${{ steps.net.outcome }}
           JOB_STATUS: ${{ job.status }}
         run: |
           # Une branche identique a main ne porte aucun travail d'agent. Juger
@@ -290,6 +317,9 @@ jobs:
           elif [ "$INPUT" != "success" ]; then
             STATUS="failed"
             FAILURE="test_failure"
+          elif [ "$NET" != "success" ]; then
+            STATUS="failed"
+            FAILURE="test_failure"
           else
             STATUS="passed"
             FAILURE=""
@@ -298,7 +328,7 @@ jobs:
           # On garde la fin des logs : l'erreur qui compte est presque toujours
           # la derniere, et un dump complet noie le Codeur au retour.
           : > combined.log
-          for f in build clippy iso qemu screen input; do
+          for f in build clippy iso qemu screen input net; do
             if [ -f "$RUNNER_TEMP/$f.log" ]; then
               echo "--- $f ---" >> combined.log
               cat "$RUNNER_TEMP/$f.log" >> combined.log
@@ -353,3 +383,4 @@ jobs:
           [ "${{ steps.qemu.outcome }}" = "success" ] || exit 1
           [ "${{ steps.screen.outcome }}" = "success" ] || exit 1
           [ "${{ steps.input.outcome }}" = "success" ] || exit 1
+          [ "${{ steps.net.outcome }}" = "success" ] || exit 1

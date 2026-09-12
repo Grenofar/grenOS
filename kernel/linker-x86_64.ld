@@ -22,21 +22,29 @@ SECTIONS
     /* that is the beginning of the region. */
     . = 0xffffffff80000000;
 
+    /* The bounds of each section, so the kernel can look at itself: the
+       security module checksums its own code and checks that the processor
+       is enforcing what these program headers ask for. */
     .text : {
+        __text_start = .;
         *(.text .text.*)
+        __text_end = .;
     } :text
 
     /* Move to the next memory page for .rodata */
     . = ALIGN(CONSTANT(MAXPAGESIZE));
 
     .rodata : {
+        __rodata_start = .;
         *(.rodata .rodata.*)
+        __rodata_end = .;
     } :rodata
 
     /* Move to the next memory page for .data */
     . = ALIGN(CONSTANT(MAXPAGESIZE));
 
     .data : {
+        __data_start = .;
         *(.data .data.*)
 
         /* Place the sections that contain the Limine requests as part of the .data */
@@ -53,6 +61,7 @@ SECTIONS
     .bss : {
         *(.bss .bss.*)
         *(COMMON)
+        __kernel_end = .;
     } :data
 
     /* Discard .note.* and .eh_frame* since they may cause issues on some hosts. */

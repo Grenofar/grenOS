@@ -43,6 +43,12 @@ STEPS = [
         "INPUT",
         "the kernel decodes the mouse and the keyboard: QEMU injects a move, a click and a key, and the serial log reports the first packet and the first key",
     ),
+    # D-037 : la carte e1000 par defaut de QEMU, derriere son reseau utilisateur.
+    (
+        "net",
+        "NET",
+        "the kernel gets an address by DHCP over the emulated network card, and the gateway answers its ping",
+    ),
 ]
 OUTCOMES = {"success": "PASS", "failure": "FAIL"}
 

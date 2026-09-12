@@ -5,6 +5,8 @@ use crate::memory::Frames;
 
 const PRESENT: u64 = 1;
 const WRITABLE: u64 = 1 << 1;
+const WRITE_THROUGH: u64 = 1 << 3;
+const CACHE_DISABLE: u64 = 1 << 4;
 const HUGE: u64 = 1 << 7;
 const ADDRESS: u64 = 0x000F_FFFF_FFFF_F000;
 
@@ -24,7 +26,7 @@ fn entry(table: u64, virt: u64, level: u32, hhdm: u64) -> *mut u64 {
 /// frame nothing else uses.
 pub unsafe fn map(frames: &mut Frames, virt: u64, frame: u64) -> Result<(), &'static str> {
     // SAFETY: the caller vouches for the address and the frame.
-    unsafe { put(frames, virt, frame, false) }
+    unsafe { put(frames, virt, frame, false, 0) }
 }
 
 /// Maps the page at `virt` to `frame` unless that mapping is already there,
@@ -39,13 +41,53 @@ pub unsafe fn map(frames: &mut Frames, virt: u64, frame: u64) -> Result<(), &'st
 /// and never handed out as a reference.
 pub unsafe fn map_shared(frames: &mut Frames, virt: u64, frame: u64) -> Result<(), &'static str> {
     // SAFETY: as above; an identical mapping already in place is accepted.
-    unsafe { put(frames, virt, frame, true) }
+    unsafe { put(frames, virt, frame, true, 0) }
+}
+
+/// Maps a device's registers: the same, but the processor must not cache
+/// them. A cached read of a card's status register answers with whatever was
+/// read last time, which is the sort of bug that takes a day.
+///
+/// # Safety
+///
+/// `frame` must be the physical address of a device's register window, and
+/// `virt` a page of the kernel's device window.
+pub unsafe fn map_device(frames: &mut Frames, virt: u64, frame: u64) -> Result<(), &'static str> {
+    // SAFETY: the caller vouches for the device address.
+    unsafe { put(frames, virt, frame, true, CACHE_DISABLE | WRITE_THROUGH) }
+}
+
+/// What the tables say about the page holding `virt`: the flags of its last
+/// entry, or None when nothing maps it. Reading only — this is how the
+/// security module checks that the code is not writable and the data not
+/// executable, rather than taking the program headers' word for it.
+pub fn flags_of(frames: &Frames, virt: u64) -> Option<u64> {
+    let hhdm = frames.hhdm();
+    let cr3: u64;
+    // SAFETY: reading CR3 has no effect.
+    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack, preserves_flags)) };
+    let mut table = cr3 & ADDRESS;
+    for level in [3, 2, 1] {
+        // SAFETY: `table` is a page table, which the HHDM maps.
+        let value = unsafe { entry(table, virt, level, hhdm).read_volatile() };
+        if value & PRESENT == 0 {
+            return None;
+        }
+        if value & HUGE != 0 {
+            return Some(value & !ADDRESS);
+        }
+        table = value & ADDRESS;
+    }
+    // SAFETY: the last table, which the HHDM maps.
+    let value = unsafe { entry(table, virt, 0, hhdm).read_volatile() };
+    (value & PRESENT != 0).then_some(value & !ADDRESS)
 }
 
 /// # Safety
 ///
-/// As [`map`]; `again` accepts a page already mapped to the same frame.
-unsafe fn put(frames: &mut Frames, virt: u64, frame: u64, again: bool) -> Result<(), &'static str> {
+/// As [`map`]; `again` accepts a page already mapped to the same frame, and
+/// `extra` adds bits to the leaf entry.
+unsafe fn put(frames: &mut Frames, virt: u64, frame: u64, again: bool, extra: u64) -> Result<(), &'static str> {
     let hhdm = frames.hhdm();
     let cr3: u64;
     // SAFETY: reading CR3 has no effect.
@@ -77,7 +119,7 @@ unsafe fn put(frames: &mut Frames, virt: u64, frame: u64, again: bool) -> Result
             }
             return Err("the page is already mapped");
         }
-        slot.write_volatile(frame | PRESENT | WRITABLE);
+        slot.write_volatile(frame | PRESENT | WRITABLE | extra);
         core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
     }
     Ok(())

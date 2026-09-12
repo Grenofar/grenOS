@@ -7,17 +7,21 @@ extern crate alloc;
 mod acpi;
 mod anim;
 mod desktop;
+mod dhcp;
+mod e1000;
 mod events;
 mod fb;
 mod font;
 mod fs;
 mod gdt;
 mod heap;
+mod http;
 mod icons;
 mod idt;
 mod keyboard;
 mod memory;
 mod mouse;
+mod net;
 mod paging;
 mod pci;
 mod pic;
@@ -26,6 +30,7 @@ mod port;
 mod power;
 mod ps2;
 mod rtc;
+mod security;
 mod serial;
 mod shell;
 mod sysinfo;
@@ -177,13 +182,47 @@ extern "C" fn kmain() -> ! {
     };
     log.say(heap_line);
 
+    // The processor's own defences, turned on and then read back, and the
+    // kernel's code measured while nothing has had a chance to touch it.
+    // SAFETY: called once, before interrupts are on, which is what it asks.
+    let mut guard = unsafe { security::arm(&frames) };
+    log.say(format!(
+        "security: NX {}, write protect {}, SMEP {}, SMAP {}",
+        on(guard.nx),
+        on(guard.write_protect),
+        on(guard.smep),
+        on(guard.smap)
+    ));
+    log.say(format!(
+        "security: kernel code {} KiB, fingerprint {:08x}, read-only {}, data non-executable {}",
+        (guard.text.1 - guard.text.0) / 1024,
+        guard.sum,
+        on(guard.text_read_only),
+        on(guard.data_no_execute)
+    ));
+
     let devices = pci::scan();
     log.say(format!("pci: {} devices", devices.len()));
-    let network = devices
-        .iter()
-        .find(|device| device.class == 0x02)
-        .map(|device| format!("carte {} détectée, pilote à écrire", device.vendor_name()))
-        .unwrap_or_else(|| "aucune carte réseau sur le bus".to_string());
+
+    // The network card, if this machine has one this kernel knows: QEMU gives
+    // an 8254x by default, and VirtualBox calls the same chip the 82540EM.
+    // SAFETY: called once, before the desktop starts; it maps the card's
+    // registers and hands it pages of our own.
+    let mut card = match unsafe { e1000::start(&mut frames) } {
+        Ok(nic) => {
+            log.say(format!("net: 8254x card, address {}", nic.mac_text()));
+            Some(nic)
+        }
+        Err(why) => {
+            log.say(format!("net: no card ({why})"));
+            None
+        }
+    };
+    let mut stack = card.as_ref().map(|nic| net::Stack::new(nic.mac));
+    let network = match &card {
+        Some(nic) => format!("carte 8254x, {}", nic.mac_text()),
+        None => "aucune carte réseau pilotée".to_string(),
+    };
 
     let acpi = RSDP_REQUEST
         .get_response()
@@ -213,6 +252,22 @@ extern "C" fn kmain() -> ! {
     unsafe { core::arch::asm!("sti", options(nomem, nostack)) };
     log.say(if mouse_ok { "input: keyboard and mouse".to_string() } else { "input: keyboard, no mouse".to_string() });
 
+    // The address comes from the network itself: ask for one as soon as the
+    // link is up, so the desktop opens with the answer already in hand.
+    let mut dhcp = dhcp::Dhcp::new();
+    let mut resolver = dhcp::Resolver::new();
+    let mut fetch = http::Fetch::new();
+    if let (Some(nic), Some(stack)) = (card.as_mut(), stack.as_mut()) {
+        for _ in 0..2_000_000 {
+            if nic.link_up() {
+                break;
+            }
+            core::hint::spin_loop();
+        }
+        log.say(format!("net: link {}", if nic.link_up() { "up" } else { "down" }));
+        dhcp.start(stack, nic, events::millis());
+    }
+
     font::tune(mode.height);
     // SAFETY: Limine maps the framebuffer it describes, height rows of pitch
     // bytes; the back buffer is the region reserved above, which the HHDM
@@ -235,7 +290,21 @@ extern "C" fn kmain() -> ! {
         can_power_off: off_switch.is_some(),
         network,
     };
-    let files = files(&machine);
+    let mut files = files(&machine);
+    // One pass over the files before the desktop opens, and one look at the
+    // code again now that the whole boot has run through it.
+    let scan = guard.scan(&mut files);
+    serial::write_str(&format!(
+        "security: scanned {} files, {} bytes, {} threats\n",
+        scan.files,
+        scan.bytes,
+        scan.threats.len()
+    ));
+    serial::write_str(if guard.verify() {
+        "security: integrity verified\n"
+    } else {
+        "security: the kernel code changed since boot\n"
+    });
     let mut desk = desktop::Desktop::new(&screen, rtc::now(), machine, files, true);
     desk.frame(&mut screen);
     serial::write_str("desktop: drawn\n");
@@ -244,6 +313,16 @@ extern "C" fn kmain() -> ! {
     let mut decoder = mouse::Decoder::default();
     let mut packets: u32 = 0;
     let mut keys: u32 = 0;
+    // The browser's page: whether its outcome has been handed over, what the
+    // last thing said about it was, and when the network was last reported.
+    let mut delivered = true;
+    let mut said = String::new();
+    let mut reported = 0u64;
+    // The gateway is pinged every few seconds: it is the shortest proof that
+    // the card, the stack and the router all work, and the CI reads it.
+    let mut next_ping = 0u64;
+    let mut ponged = false;
+    let mut secured = 0u64;
     loop {
         while let Some(event) = events::pop() {
             let action = match event {
@@ -284,11 +363,95 @@ extern "C" fn kmain() -> ! {
                 Some(desktop::Action::Lock) | None => {}
             }
         }
+        // The network is polled from here, never from a handler: everything
+        // it does allocates, and a handler may not.
+        let ms = events::millis();
+        if let (Some(nic), Some(stack)) = (card.as_mut(), stack.as_mut()) {
+            stack.poll(nic, ms);
+            dhcp.poll(stack, nic, ms);
+            resolver.poll(stack, nic, ms);
+            fetch.poll(stack, nic, &mut resolver, ms);
+            if let Some(url) = desk.wants_page() {
+                fetch.start(stack, nic, &mut resolver, &url, ms);
+                delivered = false;
+                said.clear();
+            }
+            if !delivered {
+                if matches!(fetch.phase, http::Phase::Done | http::Phase::Failed) {
+                    let text = (fetch.phase == http::Phase::Done).then(|| fetch.text.clone());
+                    desk.page_result(fetch.status.clone(), text);
+                    delivered = true;
+                } else if fetch.status != said {
+                    said = fetch.status.clone();
+                    desk.page_result(said.clone(), None);
+                }
+            }
+            if dhcp.state == dhcp::State::Bound && ms >= next_ping && stack.gateway != [0, 0, 0, 0] {
+                next_ping = ms + 5_000;
+                let gateway = stack.gateway;
+                stack.ping(nic, gateway, ms);
+            }
+            if stack.pong > 0 && !ponged {
+                ponged = true;
+                serial::write_str(&format!("net: gateway replied to ping, {} frames in\n", nic.received));
+            }
+            if ms >= reported {
+                reported = ms + 1000;
+                desk.set_network(report(stack, nic, &dhcp));
+            }
+        } else if let Some(url) = desk.wants_page() {
+            desk.page_result(format!("{url} : aucune carte réseau sur cette machine"), None);
+        }
+
+        // The Sécurité window asks; the kernel answers, because it is the one
+        // that can read its own code and every file at once.
+        if let Some((scan, verify)) = desk.wants_security() {
+            if verify {
+                guard.verify();
+            }
+            let threats = if scan { guard.scan(desk.files_mut()).threats } else { guard.last.threats.clone() };
+            desk.set_security(guard.lines(), threats);
+            secured = ms + 2_000;
+        } else if ms >= secured {
+            secured = ms + 2_000;
+            desk.set_security(guard.lines(), guard.last.threats.clone());
+        }
+
         // Everything that moves is moved by the clock, then drawn once.
-        desk.advance(events::millis());
+        desk.advance(ms);
         desk.frame(&mut screen);
         idle();
     }
+}
+
+/// A defence, in a word.
+fn on(state: bool) -> &'static str {
+    if state { "on" } else { "off" }
+}
+
+/// What Paramètres shows under Réseau: the state of the card and of the
+/// conversation it is having.
+fn report(stack: &net::Stack, nic: &e1000::Nic, dhcp: &dhcp::Dhcp) -> Vec<String> {
+    let state = match dhcp.state {
+        dhcp::State::Idle => "pas encore demandé",
+        dhcp::State::Asking => "demande d'adresse en cours (DHCP)",
+        dhcp::State::Confirming => "adresse proposée, confirmation en cours",
+        dhcp::State::Bound => "adresse obtenue par DHCP",
+        dhcp::State::Failed => "aucun serveur DHCP n'a répondu",
+    };
+    let mut lines = alloc::vec![
+        format!("Carte : Intel 8254x, {}", nic.mac_text()),
+        format!("Lien : {}", if nic.link_up() { "actif" } else { "inactif" }),
+        format!("État : {state}"),
+        format!("Adresse : {}", net::address_text(stack.ip)),
+        format!("Masque : {}", net::address_text(stack.mask)),
+        format!("Passerelle : {}", net::address_text(stack.gateway)),
+        format!("Serveur de noms : {}", net::address_text(stack.dns)),
+        format!("Trames : {} envoyées, {} reçues, {} perdues", nic.sent, nic.received, nic.dropped),
+        format!("ICMP : {} envoyés, {} revenus, {} répondus", stack.pings, stack.pong, stack.answered),
+    ];
+    lines.extend(stack.log.iter().rev().take(3).rev().cloned());
+    lines
 }
 
 /// What the file explorer finds at boot: the machine talking about itself.

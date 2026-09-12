@@ -58,6 +58,15 @@ def vbox(iso_name: str, machine: str = "", disc: str = "") -> str:
       <BIOS>
         <IOAPIC enabled="true"/>
       </BIOS>
+      <!-- Une carte réseau que le noyau sait piloter : la 82540EM est la même
+           puce que le e1000 de QEMU (8086:100e), donc un seul pilote pour les
+           deux. En NAT, VirtualBox fournit DHCP, DNS et la sortie vers
+           l'extérieur sans rien demander à l'humain. -->
+      <Network>
+        <Adapter slot="0" enabled="true" MACAddress="080027A1B2C3" type="82540EM" cable="true">
+          <NAT/>
+        </Adapter>
+      </Network>
       <UART>
         <Port slot="0" enabled="true" IOBase="0x3f8" IRQ="4" hostMode="RawFile" path="{SERIAL}"/>
       </UART>
