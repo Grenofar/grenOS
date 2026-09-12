@@ -825,3 +825,32 @@ pilote réseau, sans changer l'écran.
 latin-1. Le tiret cadratin, les points de suspension, la puce et la flèche
 s'affichaient en `?` ; les textes n'utilisent plus que du latin-1, et les points
 du mot de passe sont dessinés en cercles plutôt que tapés.
+
+---
+
+### D-037 — Le réseau
+**2026-09-12 · actif · demandé par l'humain (« donne lui accès au reseau »)**
+
+→ **Un seul pilote pour les deux machines** : la carte `8086:100e` que QEMU
+donne par défaut est la même puce que la 82540EM de VirtualBox. Le `.vbox`
+publié demande donc explicitement cette carte, en NAT, et le pilote sert
+partout. Elle était déjà visible dans Paramètres, Matériel, sans personne pour
+lui parler.
+→ **Interrogée, pas interrompue** : le pilote est lu depuis la boucle
+principale. Tout ce que fait la pile alloue, et un gestionnaire d'interruption
+n'a pas le droit d'allouer ; une carte qu'on interroge cent fois par seconde
+suffit largement à un bureau qui charge une page quand on clique.
+→ **Registres non cachés** (PCD et PWT dans la table de pages, `map_device`) :
+une lecture mise en cache d'un registre d'état rend ce qu'elle avait lu la fois
+d'avant, et on cherche la panne ailleurs pendant une journée.
+→ **La pile** : ARP (avec cache), IPv4, ICMP (on répond aux pings et on en
+envoie), UDP, DHCP (adresse, masque, passerelle, serveur de noms), DNS, et un
+client TCP minimal pour HTTP. Le navigateur ouvre les pages `http:` pour de
+vrai, texte seulement.
+→ **Pas de TLS**, donc pas de `https` : c'est écrit dans le navigateur et dans
+Paramètres → Mise à jour, au lieu d'une page blanche. La vérification en ligne
+des mises à jour attend cela, notre propre site n'existant qu'en https.
+→ **La preuve** : le noyau imprime `net: address …` quand DHCP répond et
+`net: gateway replied to ping` au premier écho revenu. L'étape de CI dédiée ne
+sera rendue obligatoire qu'après l'avoir vue verte — on n'exige pas une étape
+qu'on n'a jamais vue passer.

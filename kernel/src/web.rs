@@ -66,22 +66,30 @@ pub const PAGES: [Page; 5] = [
     Page {
         url: "grenos:reseau",
         title: "Le réseau",
-        body: "# Pourquoi le web ne s'ouvre pas\n\
-               Ce navigateur affiche les pages que le noyau porte en lui, et les fichiers de la machine. Le web, lui, demande quatre choses qui n'existent pas encore ici :\n\
+        body: "# Le réseau\n\
+               grenOS parle au réseau : pilote de carte Intel 8254x, ARP, IPv4, ICMP, UDP, DHCP, DNS, et un client TCP écrit pour ce navigateur.\n\
                \n\
-               - un pilote de carte réseau (e1000 dans QEMU, PCnet ou e1000 dans VirtualBox) ;\n\
-               - une pile IPv4 : ARP, DHCP pour obtenir une adresse, UDP, puis TCP ;\n\
-               - un résolveur DNS, pour traduire un nom en adresse ;\n\
-               - TLS, sans quoi presque aucun site n'accepte de répondre.\n\
+               ## Ce qui marche\n\
+               - La machine obtient son adresse toute seule, par DHCP. Paramètres, Réseau, la montre.\n\
+               - La passerelle répond au ping, et grenOS répond aux pings qu'on lui envoie.\n\
+               - Les noms sont résolus par le serveur que le réseau a indiqué.\n\
+               - Ce navigateur ouvre les pages en http. Essayez http://example.com\n\
                \n\
-               Chacun est une étape de la feuille de route, dans cet ordre. La carte est déjà visible : Paramètres, Matériel, la liste PCI la montre.\n\
+               ## Ce qui manque\n\
+               - https, qui demande TLS : la plupart des sites n'acceptent que lui, et le chiffrement reste à écrire.\n\
+               - Les images, les styles et le JavaScript : cette fenêtre ne montre que le texte.\n\
                \n\
+               [Essayer example.com](http://example.com)\n\
                [Retour à l'accueil](grenos:accueil)",
     },
     Page {
         url: "grenos:versions",
         title: "Versions",
         body: "# Ce qui a changé\n\
+               ## 0.6.0\n\
+               - Le réseau : carte 8254x, ARP, IPv4, ICMP, UDP, DHCP, DNS, TCP\n\
+               - Le navigateur ouvre les vraies pages en http\n\
+               - Paramètres, Réseau : adresse, passerelle, trames, ping\n\
                ## 0.5.0\n\
                - Explorateur de fichiers, navigateur, écran de connexion, animations\n\
                - Réduire ne ferme plus la fenêtre, et de vraies icônes remplacent les lettres\n\

@@ -240,19 +240,19 @@ const SECTIONS: [(&str, Icon); 7] = [
 
 /// What the current version brought, shown in Mise à jour.
 const CHANGES: [&str; 6] = [
-    "Explorateur de fichiers, navigateur, écran de connexion",
-    "Animations mesurées en millisecondes, indépendantes du nombre d'images",
+    "Le réseau : carte Intel 8254x, ARP, IPv4, ICMP, UDP, DHCP, DNS, TCP",
+    "Le navigateur ouvre les vraies pages en http",
+    "Paramètres, Réseau : adresse, passerelle, trames envoyées et reçues, ping",
+    "Explorateur de fichiers, navigateur, écran de connexion, animations",
     "Réduire ne ferme plus la fenêtre : elle reste dans le panneau",
-    "De vraies icônes à la place des lettres",
-    "Le terminal ne s'ouvre plus tout seul ; la bienvenue une seule fois",
     "Un système de fichiers en mémoire, où le bloc-notes enregistre",
 ];
 
 const NEXT: [&str; 4] = [
-    "Carte réseau e1000, IPv4, DHCP, DNS puis TCP : le web pour de vrai",
+    "TLS, sans quoi la plupart des sites refusent de répondre en http",
     "Disque SATA (AHCI) : garder les fichiers d'une fois sur l'autre",
+    "Protection : NX, SMEP, intégrité du noyau, analyse des fichiers",
     "Clavier USB pour les PC sans PS/2",
-    "Redimensionner les fenêtres, et plusieurs bureaux vivants",
 ];
 
 const ABOUT: [&str; 6] = [
@@ -356,6 +356,13 @@ pub struct Desktop {
     page: String,
     trail: Vec<String>,
     status: String,
+    /// What the network says about itself, refreshed every second by the
+    /// kernel: the desktop itself knows nothing about cards.
+    net_lines: Vec<String>,
+    /// A page the browser wants fetched from the network, taken by the kernel.
+    pending: Option<String>,
+    /// What came back for it.
+    fetched: Option<String>,
     section: usize,
     update: Update,
     password: Option<String>,
@@ -409,6 +416,9 @@ impl Desktop {
             page: web::HOME.to_string(),
             trail: Vec::new(),
             status: String::new(),
+            net_lines: Vec::new(),
+            pending: None,
+            fetched: None,
             section: 0,
             update: Update::Idle,
             password: None,
@@ -517,6 +527,36 @@ impl Desktop {
     /// first packet arrives, and the preview harness follows it.
     pub fn pointer(&self) -> (usize, usize) {
         self.pointer
+    }
+
+    /// The address the browser is waiting for, handed over once. The desktop
+    /// asks; the kernel, which owns the card, answers.
+    pub fn wants_page(&mut self) -> Option<String> {
+        self.pending.take()
+    }
+
+    /// What the network made of that address.
+    pub fn page_result(&mut self, status: String, text: Option<String>) {
+        self.status = status;
+        if let Some(text) = text {
+            self.fetched = Some(text);
+        }
+        if self.showing(App::Browser) {
+            let area = self.windows[App::Browser.index()].area;
+            self.damage(area);
+        }
+    }
+
+    /// What Paramètres shows under Réseau, from the kernel's own stack.
+    pub fn set_network(&mut self, lines: Vec<String>) {
+        if lines == self.net_lines {
+            return;
+        }
+        self.net_lines = lines;
+        if self.showing(App::Settings) && self.section == 4 {
+            let area = self.windows[App::Settings.index()].area;
+            self.damage(area);
+        }
     }
 
     /// Paints what changed, and puts the pointer back on top.
@@ -1169,6 +1209,23 @@ impl Desktop {
                 }
                 y = paint_block(screen, client.x + 24, y, width, block, self.line_h());
             }
+        } else if self.page.starts_with("http") {
+            // A page from the network: the text the kernel brought back, or
+            // where it has got to.
+            match self.fetched.as_deref() {
+                Some(text) if !text.is_empty() => {
+                    for line in text.lines().flat_map(|line| wrap(line, width)) {
+                        if y + self.line_h() > client.bottom() {
+                            break;
+                        }
+                        screen.text(client.x + 24, y, line, TEXT_DIM, Font::Body);
+                        y += self.line_h();
+                    }
+                }
+                _ => {
+                    screen.text(client.x + 24, y, &self.status, TEXT_DIM, Font::Body);
+                }
+            }
         } else {
             screen.text(client.x + 24, y, "Page introuvable.", TEXT_DIM, Font::Body);
             y += self.line_h();
@@ -1339,6 +1396,10 @@ impl Desktop {
     }
 
     fn network_lines(&self) -> Vec<String> {
+        // What the stack itself reports, once there is one.
+        if !self.net_lines.is_empty() {
+            return self.net_lines.clone();
+        }
         alloc::vec![
             format!("État : {}", self.machine.network),
             format!(
@@ -1499,10 +1560,15 @@ impl Desktop {
             screen.round(Rect::new(bar.x, bar.y, anim::mix(0, bar.w, done), bar.h), 2, ACCENT);
             y += 16;
         }
-        let note: &str = match self.update {
-            Update::Idle => "La vérification interroge la carte réseau ; il n'y en a pas encore.",
-            Update::Checking(_) => "Recherche d'une interface réseau...",
-            Update::Done => "Aucune interface réseau : impossible de joindre grenos-dev.vercel.app.",
+        // What the check can honestly say depends on whether the card got an
+        // address at all.
+        let online = self.net_lines.iter().any(|line| line.starts_with("Adresse : ") && !line.ends_with("0.0.0.0"));
+        let note: &str = match (self.update, online) {
+            (Update::Idle, true) => "Le réseau répond. Le site, lui, n'accepte que https, que grenOS ne parle pas encore.",
+            (Update::Idle, false) => "La vérification interroge la carte réseau ; elle n'a pas encore d'adresse.",
+            (Update::Checking(_), _) => "Recherche du serveur de mise à jour...",
+            (Update::Done, true) => "Réseau actif, mais grenos-dev.vercel.app n'accepte que https : TLS reste à écrire.",
+            (Update::Done, false) => "Aucune adresse réseau : impossible de joindre grenos-dev.vercel.app.",
         };
         screen.text(body.x, y, note, if self.update == Update::Done { AMBER } else { TEXT_FAINT }, Font::Small);
         y += self.line_h();
@@ -2010,11 +2076,13 @@ impl Desktop {
             return;
         }
         self.trail.push(self.page.clone());
-        self.status = if url.starts_with("http") {
-            "Le web demande une carte réseau : Paramètres, Réseau, pour la suite.".to_string()
+        self.fetched = None;
+        if url.starts_with("http") {
+            self.status = format!("chargement de {url}...");
+            self.pending = Some(url.clone());
         } else {
-            String::new()
-        };
+            self.status = String::new();
+        }
         self.page = url.clone();
         self.address = url;
         self.damage(self.windows[App::Browser.index()].area);
