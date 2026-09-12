@@ -3,11 +3,19 @@
 //! physical key; the layout is the human's own.
 
 /// What a key press means to the desktop.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Key {
     Char(char),
     Enter,
     Backspace,
+    Up,
+    Down,
+    Left,
+    Right,
+    Escape,
+    Tab,
+    /// F1 or the Windows key: the application menu.
+    Menu,
 }
 
 /// (scancode, alone, with Shift, with AltGr); '\0' where the key gives nothing.
@@ -92,9 +100,23 @@ impl Keyboard {
         if released {
             return None;
         }
+        if extended {
+            return match make {
+                0x48 => Some(Key::Up),
+                0x50 => Some(Key::Down),
+                0x4B => Some(Key::Left),
+                0x4D => Some(Key::Right),
+                0x5B | 0x5C => Some(Key::Menu),
+                0x1C => Some(Key::Enter),
+                _ => None,
+            };
+        }
         match make {
-            0x1C => Some(Key::Enter),
+            0x01 => Some(Key::Escape),
             0x0E => Some(Key::Backspace),
+            0x0F => Some(Key::Tab),
+            0x1C => Some(Key::Enter),
+            0x3B => Some(Key::Menu),
             _ => {
                 let &(_, alone, shifted, altgr) = AZERTY.iter().find(|entry| entry.0 == make)?;
                 let c = if self.altgr {

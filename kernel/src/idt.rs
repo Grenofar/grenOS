@@ -4,9 +4,9 @@
 
 use core::mem::size_of;
 
-use crate::events::{self, Event};
+use crate::events;
 use crate::pic;
-use crate::port::inb;
+use crate::ps2::{self, From};
 
 #[repr(C, packed)]
 pub struct DescriptorTablePointer {
@@ -101,22 +101,23 @@ extern "x86-interrupt" fn page_fault_handler(_frame: ExceptionStackFrame, error_
     halt()
 }
 
+/// The timer also sweeps the PS/2 controller: on a machine where IRQ12 never
+/// arrives — a firmware that routes it elsewhere, a controller that raises the
+/// wrong line — the mouse would otherwise sit still for good. A hundred sweeps
+/// a second keep it moving, and `ps2::counts` says which road the bytes took.
 extern "x86-interrupt" fn timer_handler(_frame: ExceptionStackFrame) {
     events::tick();
+    ps2::take(From::Timer);
     pic::end_of_interrupt(0);
 }
 
 extern "x86-interrupt" fn keyboard_handler(_frame: ExceptionStackFrame) {
-    // SAFETY: IRQ1 means the controller holds a keyboard byte on port 0x60.
-    let code = unsafe { inb(0x60) };
-    events::push(Event::Key(code));
+    ps2::take(From::Keyboard);
     pic::end_of_interrupt(1);
 }
 
 extern "x86-interrupt" fn mouse_handler(_frame: ExceptionStackFrame) {
-    // SAFETY: IRQ12 means the controller holds a mouse byte on port 0x60.
-    let byte = unsafe { inb(0x60) };
-    events::push(Event::Mouse(byte));
+    ps2::take(From::Mouse);
     pic::end_of_interrupt(12);
 }
 

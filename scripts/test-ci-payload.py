@@ -107,12 +107,18 @@ check("failure vide devient null", json.loads(run_payload()[1])["failure"] is No
 # Les étapes jugées : c'est d'elles que le worker déduit la branche la plus
 # avancée d'une mission (worker/src/lineage.ts).
 print("\nverdicts par etape :")
-os.environ.update({"PROBE": "true", "BUILD": "success", "CLIPPY": "failure", "QEMU": "skipped", "SCREEN": ""})
+os.environ.update(
+    {"PROBE": "true", "BUILD": "success", "CLIPPY": "failure", "QEMU": "skipped", "SCREEN": "", "INPUT": "success"}
+)
 steps = json.loads(run_payload()[1])["verdicts"]
-check("une entree par etape", [s.get("step") for s in steps] == ["build", "clippy", "boot", "screen"], str(steps))
+check(
+    "une entree par etape",
+    [s.get("step") for s in steps] == ["build", "clippy", "boot", "screen", "input"],
+    str(steps),
+)
 check(
     "success -> PASS, failure -> FAIL, sautee ou absente -> UNVERIFIABLE",
-    [s.get("verdict") for s in steps] == ["PASS", "FAIL", "UNVERIFIABLE", "UNVERIFIABLE"],
+    [s.get("verdict") for s in steps] == ["PASS", "FAIL", "UNVERIFIABLE", "UNVERIFIABLE", "PASS"],
     str(steps),
 )
 check(

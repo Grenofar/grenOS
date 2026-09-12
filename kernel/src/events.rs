@@ -14,17 +14,18 @@ pub enum Event {
     Mouse(u8),
 }
 
-const SIZE: usize = 256;
+const SIZE: usize = 512;
 static RING: [AtomicU32; SIZE] = [const { AtomicU32::new(0) }; SIZE];
 static HEAD: AtomicUsize = AtomicUsize::new(0);
 static TAIL: AtomicUsize = AtomicUsize::new(0);
 static TICKS: AtomicU64 = AtomicU64::new(0);
+static LOST: AtomicU32 = AtomicU32::new(0);
 
 fn encode(event: Event) -> u32 {
     match event {
         Event::Second => 1 << 8,
-        Event::Key(byte) => (2 << 8) | u32::from(byte),
-        Event::Mouse(byte) => (3 << 8) | u32::from(byte),
+        Event::Key(byte) => 2 << 8 | u32::from(byte),
+        Event::Mouse(byte) => 3 << 8 | u32::from(byte),
     }
 }
 
@@ -38,12 +39,13 @@ fn decode(word: u32) -> Option<Event> {
     }
 }
 
-/// Adds an event, from an interrupt handler. A full ring drops it: a
-/// handler never waits.
+/// Adds an event, from an interrupt handler. A full ring drops it and counts
+/// it: a handler never waits.
 pub fn push(event: Event) {
     let head = HEAD.load(Ordering::Relaxed);
     let next = (head + 1) % SIZE;
     if next == TAIL.load(Ordering::Acquire) {
+        LOST.fetch_add(1, Ordering::Relaxed);
         return;
     }
     RING[head].store(encode(event), Ordering::Relaxed);
@@ -63,6 +65,17 @@ pub fn pop() -> Option<Event> {
 
 pub fn is_empty() -> bool {
     TAIL.load(Ordering::Acquire) == HEAD.load(Ordering::Acquire)
+}
+
+/// Events dropped because the loop was too slow. Anything but zero means the
+/// mouse decoder lost its place at some point.
+pub fn lost() -> u32 {
+    LOST.load(Ordering::Relaxed)
+}
+
+/// Timer ticks since boot, at [`crate::pit::HZ`] a second.
+pub fn ticks() -> u64 {
+    TICKS.load(Ordering::Relaxed)
 }
 
 /// From the timer handler, HZ times a second.

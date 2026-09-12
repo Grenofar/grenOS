@@ -42,6 +42,12 @@ def vbox(iso_name: str, machine: str = "", disc: str = "") -> str:
         <LongMode enabled="true"/>
       </CPU>
       <Memory RAMSize="256"/>
+      <!-- Souris et clavier en PS/2, écrit noir sur blanc (D-035). VirtualBox
+           donne à plusieurs types d'OS une tablette USB en pointeur, qu'un
+           noyau sans pile USB ne voit pas du tout : le pointeur ne bougerait
+           jamais, et la fenêtre garderait la souris capturée pour rien. En
+           PS/2, le pilote du noyau la reçoit ; Ctrl droite la relâche. -->
+      <HID Pointing="PS2Mouse" Keyboard="PS2Keyboard"/>
       <Boot>
         <Order position="1" device="DVD"/>
         <Order position="2" device="None"/>

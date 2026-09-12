@@ -724,3 +724,59 @@ compile avec la nightly épinglée et fait le rendu du bureau sur l'hôte
 (`scratchpad/gui_preview`), jugé par `scripts/ci-screen.py`.
 → Les agents restent la fabrique : les tâches qui recoupent ce que Claude
 écrit sont annulées (`3bb077cc`), et le Maître en est prévenu dans le chat.
+
+---
+
+### D-035 — La CI juge les entrées, et le bureau devient sombre
+**2026-09-12 · actif · demandé par l'humain**
+
+L'humain a rapporté que « la souris ne fonctionne pas », que dans VirtualBox
+elle est « bloquée », et il a demandé une interface ressemblant à Kali Linux,
+sans logo Windows dans le menu, avec des Paramètres contenant un espace Mise à
+jour, et sans le menu de Limine au démarrage.
+
+**Pourquoi la souris ne bougeait pas.** Les gestionnaires IRQ1 et IRQ12
+lisaient le port 0x60 sans regarder le registre d'état. Une interruption qui
+arrive pour un octet déjà lu rendait alors un octet périmé, et le décodeur de
+paquets perdait le pas : à trois octets par paquet, un octet de décalage suffit
+pour que tous les suivants soient faux. Un contrôleur qui lève la mauvaise
+ligne produit la même panne.
+→ Un seul point d'entrée, `ps2::take`, qui vérifie le bit 0 (un octet attend)
+et trie sur le bit 5 (il vient de la souris), au lieu de croire la ligne.
+→ Le minuteur, à 100 Hz, ramasse ce qu'une interruption manquée a laissé : sur
+une machine où IRQ12 n'arrive jamais, la souris avance quand même.
+→ Des compteurs par appareil (octets, IRQ, ramassés, perdus) dans le panneau et
+dans Paramètres : sur une machine muette, ces nombres disent où ça casse.
+→ Le `.vbox` publié fixe `HID Pointing=PS2Mouse` : VirtualBox donne à plusieurs
+types d'OS une tablette USB, qu'un noyau sans pile USB ne voit pas du tout.
+
+**La CI ne pouvait pas voir cette panne.** Elle jugeait le boot et l'écran, et
+un bureau dessiné mais sourd passait au vert deux fois de suite.
+→ Nouvelle étape `input`, exigée : après la capture, le moniteur QEMU injecte
+un vrai mouvement, un vrai clic et de vraies touches (`mouse_move`,
+`mouse_button`, `sendkey` — `scripts/ci-screen.py send`), et le kernel doit
+imprimer `input: first mouse packet decoded` et `input: first key decoded`. Le
+verdict a désormais cinq étapes : build, clippy, boot, screen, input.
+
+**Le bureau.** Fond sombre en dégradé, panneau en haut (menu, lanceurs, quatre
+bureaux, fenêtres ouvertes, compteurs d'entrée, horloge à la seconde, bouton
+d'arrêt), menu d'applications avec recherche — et pas de drapeau Windows :
+l'ancien bureau en copiait un. Fenêtres à coins arrondis et ombre portée,
+déplaçables par leur barre de titre. Applications : Terminal (vraies commandes,
+dont `lspci`, `dmesg`, `grenfetch`), Bloc-notes, Paramètres (Système, Souris et
+clavier, Écran, Matériel, Mise à jour) et À propos.
+→ Police **Noto Sans Mono** pré-rastérisée (crate `noto-sans-mono-bitmap`), une
+intensité par pixel : le texte est lissé et les accents sont corrects, là où la
+police 8×8 rendait ô, ê et É illisibles.
+→ Dessin en **tampon arrière** : tout est peint en mémoire, puis une seule copie
+va vers la carte, sur la seule zone modifiée. Sans lui, le lissage devrait
+relire le framebuffer, et chaque redessin se verrait se faire.
+
+**Mise à jour**, l'espace que l'humain veut voir grandir : version, build (le
+commit, via `build.rs`), date de compilation, canal, bouton « Vérifier »
+(honnête : pas de réseau), nouveautés de la version et prochaines étapes.
+
+**Le reste des pilotes.** Mémoire physique, pagination, tas (étapes 4 à 6),
+énumération PCI (étape 8), extinction et redémarrage par ACPI — tables lues au
+boot, `_S5_` extrait du DSDT. `timeout: 0` et `quiet: yes` dans `limine.conf` :
+plus de menu au démarrage. Restent le disque (AHCI) et le réseau.

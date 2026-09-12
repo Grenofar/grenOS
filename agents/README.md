@@ -210,7 +210,13 @@ and you say so in your `summary` so the Master can have it corrected.
    bottom strip, the top strip and the centre, and a 48×16 map, one letter per
    cell for its dominant colour, with the legend. It is all you will ever see
    of the screen: draw so that it reads.
-8. **The verdict** lists each step — `build`, `clippy`, `boot`, `screen` — as
+8. **Input** (since the desktop answers the mouse; D-035). Two seconds after
+   the screenshot, the QEMU monitor injects a real mouse move, a click and two
+   keys (`mouse_move`, `mouse_button`, `sendkey`). The kernel must print
+   `input: first mouse packet decoded` and `input: first key decoded` on the
+   serial line. A desktop that is drawn but deaf passed every other step twice
+   before a human found it by hand.
+9. **The verdict** lists each step — `build`, `clippy`, `boot`, `screen`, `input` — as
    PASS, FAIL or UNVERIFIABLE (a step that did not run). A run replaced by a newer push
    on the same branch reports nothing: the newer run's verdict is the one
    that counts.
