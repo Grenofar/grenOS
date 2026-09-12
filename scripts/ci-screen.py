@@ -13,8 +13,14 @@ Un écran est jugé dessiné quand il a au moins trois couleurs et qu'aucune n'e
 couvre plus de 90 %. Un kernel qui ne dessine rien laisse du noir, ou le menu
 de Limine sur du noir : une couleur dépasse alors 90 %.
 
+Le même moniteur sert à *entrer* quelque chose (D-035) : `send` lui passe des
+commandes HMP, dont `mouse_move`, `mouse_button` et `sendkey`, qui arrivent au
+kernel comme une vraie souris PS/2 et un vrai clavier. C'est ainsi que la CI
+vérifie que la souris marche, et pas seulement que l'écran est dessiné.
+
     python3 scripts/ci-screen.py grab <socket du moniteur> <sortie.ppm>
     python3 scripts/ci-screen.py judge <capture.ppm> [<apercu.png>]
+    python3 scripts/ci-screen.py send <socket du moniteur> <commande HMP>...
 
 `judge` sort en 0 si l'écran est dessiné, 2 s'il ne l'est pas, 1 sans capture.
 """
@@ -157,7 +163,37 @@ def grab(monitor: str, out: str, wait: float = 10.0) -> bool:
     return os.path.exists(out) and os.path.getsize(out) > 0
 
 
+def send(monitor: str, commands: list) -> bool:
+    """Passe des commandes au moniteur de QEMU, une par une.
+
+    `mouse_move dx dy`, `mouse_button 1|0` et `sendkey <touche>` entrent par la
+    couche d'entrée de QEMU : le kernel reçoit des octets PS/2 comme d'une vraie
+    souris et d'un vrai clavier, IRQ comprises. Une pause entre deux commandes,
+    sinon QEMU les avale pendant que le kernel dort encore.
+    """
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(5)
+        s.connect(monitor)
+        try:
+            s.recv(4096)  # la bannière et l'invite « (qemu) »
+        except socket.timeout:
+            pass
+        for command in commands:
+            s.sendall(f"{command}\n".encode())
+            print(f"input: {command}")
+            time.sleep(0.4)
+    return True
+
+
 def main(argv) -> int:
+    if len(argv) >= 4 and argv[1] == "send":
+        try:
+            send(argv[2], argv[3:])
+        except OSError as exc:
+            print(f"input: the QEMU monitor did not answer ({exc})")
+            return 1
+        return 0
+
     if len(argv) == 4 and argv[1] == "grab":
         try:
             ok = grab(argv[2], argv[3])

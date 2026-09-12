@@ -132,6 +132,13 @@ jobs:
             -monitor "unix:$MONITOR,server,nowait" 2>&1 | tee "$RUNNER_TEMP/qemu.log" &
           sleep 25
           python3 scripts/ci-screen.py grab "$MONITOR" "$RUNNER_TEMP/screen.ppm" || true
+
+          # Et les entrees (D-035) : le meme moniteur injecte un vrai mouvement
+          # de souris, un vrai clic et de vraies touches. Le kernel doit le dire
+          # sur la sortie serie ; l'etape « entrees » le verifie. Un bureau
+          # dessine mais sourd est passe deux fois inapercu.
+          python3 scripts/ci-screen.py send "$MONITOR" "mouse_move 90 60" "mouse_move -40 25" "mouse_button 1" "mouse_button 0" "sendkey a" "sendkey b" || true
+          sleep 5
           wait || true
 
           # Un exit code propre ne prouve rien : on juge sur la sortie serie.
@@ -156,6 +163,32 @@ jobs:
         run: |
           set -o pipefail
           python3 scripts/ci-screen.py judge "$RUNNER_TEMP/screen.ppm" "$RUNNER_TEMP/screen.png" 2>&1 | tee "$RUNNER_TEMP/screen.log"
+
+      # La souris et le clavier (D-035). QEMU a bouge la souris, clique et tape
+      # pendant le boot ; le kernel imprime une ligne au premier paquet souris
+      # decode et une au premier code clavier. Sans elles, le pilote PS/2 est
+      # muet : c'est exactement la panne rapportee par l'humain le 2026-09-11,
+      # invisible pour les etapes precedentes.
+      - name: entrees souris et clavier
+        id: input
+        if: steps.qemu.outcome == 'success'
+        continue-on-error: true
+        run: |
+          grep -E 'input:' "$RUNNER_TEMP/qemu.log" > "$RUNNER_TEMP/input.log" || true
+          failed=0
+          if ! grep -q 'input: first mouse packet' "$RUNNER_TEMP/qemu.log"; then
+            echo "input: FAIL, aucun paquet souris decode alors que QEMU a bouge et clique" | tee -a "$RUNNER_TEMP/input.log"
+            failed=1
+          fi
+          if ! grep -q 'input: first key' "$RUNNER_TEMP/qemu.log"; then
+            echo "input: FAIL, aucune touche decodee alors que QEMU en a envoye deux" | tee -a "$RUNNER_TEMP/input.log"
+            failed=1
+          fi
+          if [ "$failed" = "0" ]; then
+            echo "input: PASS, la souris et le clavier arrivent au bureau" | tee -a "$RUNNER_TEMP/input.log"
+          fi
+          cat "$RUNNER_TEMP/input.log"
+          exit "$failed"
 
       # L'image qui vient de booter, telechargeable depuis la page du run
       # (section Artifacts) : c'est l'OS lui-meme, a lancer avec
@@ -189,6 +222,7 @@ jobs:
           CLIPPY: ${{ steps.clippy.outcome }}
           QEMU: ${{ steps.qemu.outcome }}
           SCREEN: ${{ steps.screen.outcome }}
+          INPUT: ${{ steps.input.outcome }}
           JOB_STATUS: ${{ job.status }}
         run: |
           # Une branche identique a main ne porte aucun travail d'agent. Juger
@@ -253,6 +287,9 @@ jobs:
           elif [ "$SCREEN" != "success" ]; then
             STATUS="failed"
             FAILURE="test_failure"
+          elif [ "$INPUT" != "success" ]; then
+            STATUS="failed"
+            FAILURE="test_failure"
           else
             STATUS="passed"
             FAILURE=""
@@ -261,7 +298,7 @@ jobs:
           # On garde la fin des logs : l'erreur qui compte est presque toujours
           # la derniere, et un dump complet noie le Codeur au retour.
           : > combined.log
-          for f in build clippy iso qemu screen; do
+          for f in build clippy iso qemu screen input; do
             if [ -f "$RUNNER_TEMP/$f.log" ]; then
               echo "--- $f ---" >> combined.log
               cat "$RUNNER_TEMP/$f.log" >> combined.log
@@ -315,3 +352,4 @@ jobs:
           [ "${{ steps.clippy.outcome }}" = "success" ] || exit 1
           [ "${{ steps.qemu.outcome }}" = "success" ] || exit 1
           [ "${{ steps.screen.outcome }}" = "success" ] || exit 1
+          [ "${{ steps.input.outcome }}" = "success" ] || exit 1

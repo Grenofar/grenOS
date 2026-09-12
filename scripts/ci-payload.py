@@ -37,6 +37,12 @@ STEPS = [
     ("boot", "QEMU", "the QEMU boot prints grenOS on the serial console, without panic or fault"),
     # D-033 : la capture prise à 25 s, jugée par scripts/ci-screen.py.
     ("screen", "SCREEN", "the screen is drawn: at least 3 colours, none on more than 90% of it"),
+    # D-035 : QEMU bouge la souris, clique et tape ; le kernel doit le dire.
+    (
+        "input",
+        "INPUT",
+        "the kernel decodes the mouse and the keyboard: QEMU injects a move, a click and a key, and the serial log reports the first packet and the first key",
+    ),
 ]
 OUTCOMES = {"success": "PASS", "failure": "FAIL"}
 

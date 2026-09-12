@@ -39,13 +39,13 @@ const FR = {
   none: "La première image est en cours de publication. Reviens dans quelques minutes.",
   checked: "Vérifié automatiquement dans QEMU. VirtualBox et les vrais PC ne sont pas testés par la CI.",
   nowTitle: "Ce qu'il fait aujourd'hui",
-  now: "Étape 3 sur 11, et interactive : il démarre avec le chargeur Limine, installe ses tables et ses interruptions, et affiche un bureau façon Windows 95 qui répond à la souris et au clavier. Le menu Démarrer ouvre le Bloc-notes, où l'on tape en AZERTY ; les fenêtres se ferment et passent devant ; l'horloge suit l'heure du PC ; Eteindre montre l'écran de fin de Windows 95.",
+  now: "Il démarre sans menu, directement sur un bureau sombre inspiré de Kali Linux : panneau en haut, menu d'applications avec recherche, fenêtres à ombre portée qu'on déplace à la souris. Le Terminal répond à de vraies commandes (aide, dmesg, lspci, grenfetch) ; le Bloc-notes écrit sur le tas du noyau ; Paramètres montre le processeur, la mémoire, la pagination, l'écran, les périphériques PCI, l'état de la souris et du clavier, et un espace Mise à jour. Éteindre et Redémarrer passent par l'ACPI. Le clavier est en AZERTY, F1 ouvre le menu.",
   vboxTitle: "VirtualBox",
   vbox: [
     "Télécharger le zip « pour VirtualBox » et l'extraire (clic droit → Extraire tout) : l'ISO et le fichier .vbox sont côte à côte.",
     "Double-cliquer sur le fichier .vbox, ou dans VirtualBox : Machine → Ajouter…, puis le choisir. La machine grenOS apparaît, déjà réglée : 64 bits, 256 Mo, l'ISO dans le lecteur optique.",
-    "La démarrer. Après le menu de Limine (3 secondes), le bureau de grenOS s'affiche. Cliquer dans la fenêtre de la machine pour que VirtualBox lui donne la souris ; la touche Ctrl de droite la reprend.",
-    "Ce qu'il écrit sur le port série est dans C:\\Users\\Public\\Documents\\grenos-serie.txt : grenOS, Breakpoint, puis desktop: drawn.",
+    "La démarrer : le bureau s'affiche tout de suite, sans menu de démarrage. Cliquer dans la fenêtre de la machine pour que VirtualBox lui donne la souris ; la touche Ctrl de droite la reprend. Si le pointeur ne bouge pas, ouvrir Paramètres → Souris et clavier : les compteurs disent si les octets arrivent.",
+    "Ce qu'il écrit sur le port série est dans C:\\Users\\Public\\Documents\\grenos-serie.txt : grenOS, la mémoire, la pagination, le tas, les périphériques PCI, l'ACPI, puis desktop: drawn.",
   ],
   vboxNote: "Une machine 64 bits demande la virtualisation matérielle (VT-x ou AMD-V) activée dans le BIOS du PC. Sans le fichier .vbox : nouvelle machine Other/Unknown (64-bit), 256 Mo, sans disque dur, l'ISO dans le lecteur optique, port série 1 en « Fichier brut ».",
   qemuTitle: "QEMU",
@@ -54,7 +54,7 @@ const FR = {
   usb: [
     "Écrire l'image sur une clé avec Rufus (mode image DD), balenaEtcher, ou sous Linux la commande ci-dessous. La clé est entièrement effacée.",
     "Démarrer le PC sur la clé, en mode Legacy / BIOS (CSM).",
-    "Le bureau s'affiche après le menu de Limine. Souris et clavier ne répondent que s'ils sont PS/2, ou si le BIOS émule le PS/2 pour l'USB.",
+    "Le bureau s'affiche directement. Souris et clavier ne répondent que s'ils sont PS/2, ou si le BIOS émule le PS/2 pour l'USB : le clavier USB viendra avec le pilote xHCI.",
   ],
   source: "Code source",
 };
@@ -77,13 +77,13 @@ const EN: typeof FR = {
   none: "The first image is being published. Come back in a few minutes.",
   checked: "Checked automatically in QEMU. VirtualBox and real PCs are not tested by CI.",
   nowTitle: "What it does today",
-  now: "Step 3 of 11, now interactive: it boots with the Limine bootloader, sets up its tables and interrupts, and shows a Windows 95 style desktop that answers the mouse and the keyboard. The Start menu opens the Notepad, where you type (French AZERTY layout); windows close and come to the front; the clock follows the PC's time; Eteindre shows Windows 95's last screen.",
+  now: "It boots with no menu, straight into a dark desktop in the spirit of Kali Linux: a top panel, an application menu with search, windows with a shadow that you drag with the mouse. The Terminal answers real commands (aide, dmesg, lspci, grenfetch); the Notepad writes on the kernel heap; Settings shows the processor, the memory, paging, the screen, the PCI devices, the state of the mouse and keyboard, and an Update section. Shutdown and restart go through ACPI. The keyboard is French AZERTY, and F1 opens the menu.",
   vboxTitle: "VirtualBox",
   vbox: [
     "Download the zip “for VirtualBox” and extract it (right-click → Extract All): the ISO and the .vbox file sit side by side.",
     "Double-click the .vbox file, or in VirtualBox: Machine → Add…, and pick it. The grenOS machine appears, already set up: 64-bit, 256 MB, the ISO in the optical drive.",
-    "Start it. After Limine's menu (3 seconds), the grenOS desktop appears. Click inside the machine's window so VirtualBox hands it the mouse; the right Ctrl key takes it back.",
-    "What it writes to the serial port is in C:\\Users\\Public\\Documents\\grenos-serie.txt: grenOS, Breakpoint, then desktop: drawn.",
+    "Start it: the desktop appears at once, with no boot menu. Click inside the machine's window so VirtualBox hands it the mouse; the right Ctrl key takes it back. If the pointer will not move, open Settings → Mouse and keyboard: the counters say whether the bytes arrive.",
+    "What it writes to the serial port is in C:\\Users\\Public\\Documents\\grenos-serie.txt: grenOS, the memory, paging, the heap, the PCI devices, ACPI, then desktop: drawn.",
   ],
   vboxNote: "A 64-bit machine needs hardware virtualisation (VT-x or AMD-V) enabled in the host PC's firmware. Without the .vbox file: new machine Other/Unknown (64-bit), 256 MB, no hard disk, the ISO in the optical drive, serial port 1 in Raw File mode.",
   qemuTitle: "QEMU",
@@ -92,7 +92,7 @@ const EN: typeof FR = {
   usb: [
     "Write the image to a stick with Rufus (DD image mode), balenaEtcher, or on Linux the command below. The stick is erased.",
     "Boot the PC from the stick in Legacy / BIOS (CSM) mode.",
-    "The desktop appears after Limine's menu. The mouse and the keyboard only answer if they are PS/2, or if the firmware emulates PS/2 for USB ones.",
+    "The desktop appears straight away. The mouse and the keyboard only answer if they are PS/2, or if the firmware emulates PS/2 for USB ones: USB keyboards wait for the xHCI driver.",
   ],
   source: "Source code",
 };

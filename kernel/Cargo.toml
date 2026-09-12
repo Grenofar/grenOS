@@ -1,14 +1,26 @@
 [package]
 name = "kernel"
-version = "0.1.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/Grenofar/grenOS"
 
 [dependencies]
 limine = "0.5"
-# The 8x8 font of the desktop; std is a default feature, and the kernel has none.
-font8x8 = { version = "0.3.1", default-features = false, features = ["unicode"] }
+# The kernel heap, behind alloc's Box, Vec and String.
+linked_list_allocator = "0.10.6"
+# The desktop's typeface, pre-rasterised with an intensity per pixel: no std,
+# no allocation and no floating point, which is what a kernel can use.
+noto-sans-mono-bitmap = { version = "0.3.2", default-features = false, features = [
+    "regular",
+    "bold",
+    "size_16",
+    "size_20",
+    "size_24",
+    "size_32",
+    "unicode-basic-latin",
+    "unicode-latin-1-supplement",
+] }
 
 [profile.dev]
 panic = "abort"

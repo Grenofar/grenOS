@@ -47,8 +47,21 @@ possibles, et le bureau rend l'OS visible.
 **Le bureau vient en 3** (demandé par l'humain le 2026-09-11, D-033) : il veut
 « un vrai UI type Windows, pas aussi bien pour l'instant mais ressemblant »,
 pas une console. Il ne dépend que du boot, et la CI le juge sur une capture
-d'écran. Il est d'abord immobile : la souris et le clavier viendront avec les
-interruptions (7) et le clavier (10), et une étape souris reste à ajouter.
+d'écran.
+
+## Où on en est le 2026-09-12
+
+Les étapes **1, 2, 3, 4, 5, 6, 7, 8 et 10 sont faites**, les six dernières
+écrites par Claude à la demande de l'humain (D-034, D-035) : mémoire physique
+et allocateur de frames, pagination vérifiée par une page neuve, tas et `alloc`,
+minuteur à 100 Hz, énumération PCI, clavier **et souris** PS/2. Le bureau est
+sombre, façon Kali, et répond aux deux. S'y ajoutent, hors feuille de route :
+extinction et redémarrage par ACPI, et une étape `input` de la CI qui injecte
+une vraie souris et de vraies touches dans QEMU.
+
+Restent **9** (disque : AHCI plutôt que VirtIO block, que VirtualBox n'a pas) et
+**11** (VFS en lecture seule), puis le réseau, hors périmètre jusqu'ici, dont
+dépend la vérification en ligne des mises à jour.
 
 ## Qui fait quoi
 
