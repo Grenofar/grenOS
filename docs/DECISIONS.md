@@ -780,3 +780,48 @@ commit, via `build.rs`), date de compilation, canal, bouton « Vérifier »
 énumération PCI (étape 8), extinction et redémarrage par ACPI — tables lues au
 boot, `_S5_` extrait du DSDT. `timeout: 0` et `quiet: yes` dans `limine.conf` :
 plus de menu au démarrage. Restent le disque (AHCI) et le réseau.
+
+---
+
+### D-036 — Le bureau devient un système : fichiers, navigateur, connexion, animations
+**2026-09-12 · actif · demandé par l'humain**
+
+Après la souris, l'humain a demandé une série de choses en une fois : enlever
+les compteurs du panneau, que « réduire » ne ferme plus, un explorateur de
+fichiers, un écran de connexion au démarrage, des animations, de vraies icônes
+à la place des lettres, que le terminal ne s'ouvre plus tout seul, que la
+bienvenue n'apparaisse qu'une fois, que ça marche à toute résolution et à tout
+nombre d'images par seconde, un navigateur, et un système de mise à jour actif.
+
+→ **Réduire n'est plus fermer.** Le bouton du milieu cachait la fenêtre en
+l'effaçant : le texte du bloc-notes était perdu. Une fenêtre réduite reste
+ouverte, grisée dans le panneau, et un clic la ramène.
+→ **Le temps, pas les images.** Toute animation lit l'horloge du minuteur
+(passé à 1000 Hz) et calcule sa progression en millisecondes ; le bureau se
+redessine au plus 60 fois par seconde. À 24, 60 ou 360 images par seconde, une
+fenêtre s'ouvre toujours en 170 ms. Compter en images aurait donné une vitesse
+différente sur chaque machine.
+→ **Un système de fichiers en mémoire** (`fs.rs`), parce qu'il n'y a pas encore
+de disque. Le bloc-notes y enregistre, l'explorateur le parcourt, le terminal
+aussi (`ls`, `cat`, `ecrire`, `mkdir`, `rm`), et le noyau y dépose ce qu'il sait
+de la machine. Chaque fenêtre qui écrit dit que tout disparaît à l'extinction :
+promettre le contraire ferait perdre du travail.
+→ **Un écran de connexion**, affiché quand un mot de passe existe — et il n'en
+existe pas tant qu'on n'en a pas mis un dans Paramètres, comme demandé. Sans
+disque, il ne survit pas au redémarrage : c'est écrit sous le champ.
+→ **Un navigateur** avec barre d'adresse, historique et liens, qui ouvre les
+pages portées par le noyau (`grenos:`) et les fichiers de la machine
+(`fichier:`). Le web réel demande un pilote de carte, ARP, DHCP, DNS, TCP puis
+TLS : la page `grenos:reseau` le dit au lieu d'afficher une page blanche.
+→ **De vraies icônes** (`icons.rs`), dessinées en rectangles et disques à
+n'importe quelle taille : une lettre dans un carré de couleur était un
+pense-bête, et ça se voyait.
+→ **La mise à jour est un vrai mécanisme** : états inactif / vérification avec
+barre de progression / résultat, et le résultat dit franchement qu'aucune
+interface réseau n'existe. Elle deviendra une vérification en ligne le jour du
+pilote réseau, sans changer l'écran.
+
+**Fait vérifié en chemin** : la police embarquée ne couvre que l'ASCII et le
+latin-1. Le tiret cadratin, les points de suspension, la puce et la flèche
+s'affichaient en `?` ; les textes n'utilisent plus que du latin-1, et les points
+du mot de passe sont dessinés en cercles plutôt que tapés.

@@ -5,12 +5,15 @@
 extern crate alloc;
 
 mod acpi;
+mod anim;
 mod desktop;
 mod events;
 mod fb;
 mod font;
+mod fs;
 mod gdt;
 mod heap;
+mod icons;
 mod idt;
 mod keyboard;
 mod memory;
@@ -27,6 +30,7 @@ mod serial;
 mod shell;
 mod sysinfo;
 mod time;
+mod web;
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -82,7 +86,7 @@ const PROBE_PAGE: u64 = 0xFFFF_9000_0000_0000;
 const MIB: u64 = 1024 * 1024;
 
 /// The boot log: every line goes to the serial port, where the CI reads it,
-/// and is kept for the terminal's `dmesg`.
+/// and is kept for the terminal and the file system.
 struct Log {
     lines: Vec<String>,
 }
@@ -175,6 +179,11 @@ extern "C" fn kmain() -> ! {
 
     let devices = pci::scan();
     log.say(format!("pci: {} devices", devices.len()));
+    let network = devices
+        .iter()
+        .find(|device| device.class == 0x02)
+        .map(|device| format!("carte {} détectée, pilote à écrire", device.vendor_name()))
+        .unwrap_or_else(|| "aucune carte réseau sur le bus".to_string());
 
     let acpi = RSDP_REQUEST
         .get_response()
@@ -224,8 +233,10 @@ extern "C" fn kmain() -> ! {
         log: log.lines.clone(),
         mouse: mouse_ok,
         can_power_off: off_switch.is_some(),
+        network,
     };
-    let mut desk = desktop::Desktop::new(&screen, rtc::now(), machine);
+    let files = files(&machine);
+    let mut desk = desktop::Desktop::new(&screen, rtc::now(), machine, files, true);
     desk.frame(&mut screen);
     serial::write_str("desktop: drawn\n");
 
@@ -270,15 +281,39 @@ extern "C" fn kmain() -> ! {
                         None => power::halt(),
                     }
                 }
-                None => {}
+                Some(desktop::Action::Lock) | None => {}
             }
         }
+        // Everything that moves is moved by the clock, then drawn once.
+        desk.advance(events::millis());
         desk.frame(&mut screen);
         idle();
     }
 }
 
-/// What the panel and Paramètres show about the input devices.
+/// What the file explorer finds at boot: the machine talking about itself.
+fn files(machine: &desktop::Machine) -> fs::Fs {
+    let mut files = fs::Fs::new();
+    files.add_system("/Système/demarrage.txt", &machine.log.join("\n"));
+    files.add_system("/Système/materiel.txt", &machine.devices.join("\n"));
+    files.add_system(
+        "/Système/version.txt",
+        &format!(
+            "grenOS {}\nbuild {}\ncompilée le {}\n{}\n",
+            machine.version,
+            machine.build,
+            machine.built_at,
+            machine.lines().join("\n")
+        ),
+    );
+    files.add_system(
+        "/Documents/lisez-moi.txt",
+        "Ce dossier vit en mémoire.\n\nLe bloc-notes enregistre ici : bouton Enregistrer.\nTout disparaît à l'extinction, tant que le pilote de disque n'existe pas.\n",
+    );
+    files
+}
+
+/// What Paramètres shows about the input devices.
 fn gauge(packets: u32, keys: u32) -> desktop::Input {
     let counts = ps2::counts();
     desktop::Input {
@@ -290,7 +325,7 @@ fn gauge(packets: u32, keys: u32) -> desktop::Input {
         lost: events::lost(),
         packets,
         keys,
-        uptime: (events::ticks() / u64::from(pit::HZ)) as u32,
+        uptime: (events::ticks_seconds()) as u32,
     }
 }
 
@@ -315,7 +350,9 @@ fn check_paging(frames: &mut memory::Frames) -> Result<(), &'static str> {
     }
 }
 
-/// Waits for the next interrupt, unless one has already left an event.
+/// Waits for the next interrupt, unless one has already left an event. The
+/// timer wakes the machine a thousand times a second, so an animation still
+/// advances while nothing else happens.
 fn idle() {
     // SAFETY: cli, check, then sti immediately followed by hlt: sti takes
     // effect after the next instruction, so an interrupt arriving after the
