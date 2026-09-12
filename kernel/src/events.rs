@@ -73,9 +73,16 @@ pub fn lost() -> u32 {
     LOST.load(Ordering::Relaxed)
 }
 
-/// Timer ticks since boot, at [`crate::pit::HZ`] a second.
-pub fn ticks() -> u64 {
-    TICKS.load(Ordering::Relaxed)
+/// Milliseconds since boot. Everything that moves on screen is measured
+/// against this and not against a number of frames: an animation lasts as
+/// long whether the desktop manages to draw it 24 times a second or 240.
+pub fn millis() -> u64 {
+    TICKS.load(Ordering::Relaxed) * 1000 / u64::from(crate::pit::HZ)
+}
+
+/// Seconds since boot.
+pub fn ticks_seconds() -> u64 {
+    TICKS.load(Ordering::Relaxed) / u64::from(crate::pit::HZ)
 }
 
 /// From the timer handler, HZ times a second.

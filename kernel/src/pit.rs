@@ -1,8 +1,13 @@
 //! The PIT's channel 0: the timer interrupt, HZ times a second.
+//!
+//! A thousand times a second, not a hundred: the desktop's animations are
+//! measured in milliseconds, and the mouse is swept on the same interrupt.
+//! The handler is a few instructions, so the cost is invisible even under
+//! emulation.
 
 use crate::port::outb;
 
-pub const HZ: u32 = 100;
+pub const HZ: u32 = 1000;
 
 /// The PIT's input clock, in hertz.
 const BASE: u32 = 1_193_182;
