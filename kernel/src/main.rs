@@ -30,6 +30,7 @@ mod port;
 mod power;
 mod ps2;
 mod rtc;
+mod security;
 mod serial;
 mod shell;
 mod sysinfo;
@@ -181,6 +182,25 @@ extern "C" fn kmain() -> ! {
     };
     log.say(heap_line);
 
+    // The processor's own defences, turned on and then read back, and the
+    // kernel's code measured while nothing has had a chance to touch it.
+    // SAFETY: called once, before interrupts are on, which is what it asks.
+    let mut guard = unsafe { security::arm(&frames) };
+    log.say(format!(
+        "security: NX {}, write protect {}, SMEP {}, SMAP {}",
+        on(guard.nx),
+        on(guard.write_protect),
+        on(guard.smep),
+        on(guard.smap)
+    ));
+    log.say(format!(
+        "security: kernel code {} KiB, fingerprint {:08x}, read-only {}, data non-executable {}",
+        (guard.text.1 - guard.text.0) / 1024,
+        guard.sum,
+        on(guard.text_read_only),
+        on(guard.data_no_execute)
+    ));
+
     let devices = pci::scan();
     log.say(format!("pci: {} devices", devices.len()));
 
@@ -270,7 +290,21 @@ extern "C" fn kmain() -> ! {
         can_power_off: off_switch.is_some(),
         network,
     };
-    let files = files(&machine);
+    let mut files = files(&machine);
+    // One pass over the files before the desktop opens, and one look at the
+    // code again now that the whole boot has run through it.
+    let scan = guard.scan(&mut files);
+    serial::write_str(&format!(
+        "security: scanned {} files, {} bytes, {} threats\n",
+        scan.files,
+        scan.bytes,
+        scan.threats.len()
+    ));
+    serial::write_str(if guard.verify() {
+        "security: integrity verified\n"
+    } else {
+        "security: the kernel code changed since boot\n"
+    });
     let mut desk = desktop::Desktop::new(&screen, rtc::now(), machine, files, true);
     desk.frame(&mut screen);
     serial::write_str("desktop: drawn\n");
@@ -288,6 +322,7 @@ extern "C" fn kmain() -> ! {
     // the card, the stack and the router all work, and the CI reads it.
     let mut next_ping = 0u64;
     let mut ponged = false;
+    let mut secured = 0u64;
     loop {
         while let Some(event) = events::pop() {
             let action = match event {
@@ -368,11 +403,30 @@ extern "C" fn kmain() -> ! {
             desk.page_result(format!("{url} : aucune carte réseau sur cette machine"), None);
         }
 
+        // The Sécurité window asks; the kernel answers, because it is the one
+        // that can read its own code and every file at once.
+        if let Some((scan, verify)) = desk.wants_security() {
+            if verify {
+                guard.verify();
+            }
+            let threats = if scan { guard.scan(desk.files_mut()).threats } else { guard.last.threats.clone() };
+            desk.set_security(guard.lines(), threats);
+            secured = ms + 2_000;
+        } else if ms >= secured {
+            secured = ms + 2_000;
+            desk.set_security(guard.lines(), guard.last.threats.clone());
+        }
+
         // Everything that moves is moved by the clock, then drawn once.
         desk.advance(ms);
         desk.frame(&mut screen);
         idle();
     }
+}
+
+/// A defence, in a word.
+fn on(state: bool) -> &'static str {
+    if state { "on" } else { "off" }
 }
 
 /// What Paramètres shows under Réseau: the state of the card and of the

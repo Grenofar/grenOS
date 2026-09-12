@@ -57,6 +57,32 @@ pub unsafe fn map_device(frames: &mut Frames, virt: u64, frame: u64) -> Result<(
     unsafe { put(frames, virt, frame, true, CACHE_DISABLE | WRITE_THROUGH) }
 }
 
+/// What the tables say about the page holding `virt`: the flags of its last
+/// entry, or None when nothing maps it. Reading only — this is how the
+/// security module checks that the code is not writable and the data not
+/// executable, rather than taking the program headers' word for it.
+pub fn flags_of(frames: &Frames, virt: u64) -> Option<u64> {
+    let hhdm = frames.hhdm();
+    let cr3: u64;
+    // SAFETY: reading CR3 has no effect.
+    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack, preserves_flags)) };
+    let mut table = cr3 & ADDRESS;
+    for level in [3, 2, 1] {
+        // SAFETY: `table` is a page table, which the HHDM maps.
+        let value = unsafe { entry(table, virt, level, hhdm).read_volatile() };
+        if value & PRESENT == 0 {
+            return None;
+        }
+        if value & HUGE != 0 {
+            return Some(value & !ADDRESS);
+        }
+        table = value & ADDRESS;
+    }
+    // SAFETY: the last table, which the HHDM maps.
+    let value = unsafe { entry(table, virt, 0, hhdm).read_volatile() };
+    (value & PRESENT != 0).then_some(value & !ADDRESS)
+}
+
 /// # Safety
 ///
 /// As [`map`]; `again` accepts a page already mapped to the same frame, and

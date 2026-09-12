@@ -130,9 +130,11 @@ pub enum App {
     Notes,
     Settings,
     About,
+    Security,
 }
 
-const APPS: [App; 7] = [App::Welcome, App::Terminal, App::Files, App::Browser, App::Notes, App::Settings, App::About];
+const APPS: [App; 8] =
+    [App::Welcome, App::Terminal, App::Files, App::Browser, App::Notes, App::Settings, App::About, App::Security];
 /// What the panel offers at a click, in order.
 const QUICK: [App; 5] = [App::Terminal, App::Files, App::Browser, App::Notes, App::Settings];
 
@@ -150,6 +152,7 @@ impl App {
             App::Notes => "Bloc-notes",
             App::Settings => "Paramètres",
             App::About => "À propos de grenOS",
+            App::Security => "Sécurité",
         }
     }
 
@@ -170,6 +173,7 @@ impl App {
             App::Notes => Icon::Notes,
             App::Settings => Icon::Settings,
             App::About => Icon::About,
+            App::Security => Icon::Lock,
         }
     }
 
@@ -182,6 +186,7 @@ impl App {
             App::Notes => Rgb(0xD8, 0xDE, 0xEA),
             App::Settings => Rgb(0x9C, 0xA7, 0xB9),
             App::About => Rgb(0x8A, 0xB4, 0xF8),
+            App::Security => GREEN,
         }
     }
 }
@@ -216,12 +221,13 @@ enum Item {
     Off,
 }
 
-const ITEMS: [(&str, &str, Item, Icon); 9] = [
+const ITEMS: [(&str, &str, Item, Icon); 10] = [
     ("Terminal", "La ligne de commande de grenOS", Item::Open(App::Terminal), Icon::Terminal),
     ("Fichiers", "Parcourir les fichiers de la machine", Item::Open(App::Files), Icon::Files),
     ("Navigateur", "Les pages du système, et le web à venir", Item::Open(App::Browser), Icon::Browser),
     ("Bloc-notes", "Écrire, et enregistrer", Item::Open(App::Notes), Icon::Notes),
     ("Paramètres", "Système, souris, écran, compte, mise à jour", Item::Open(App::Settings), Icon::Settings),
+    ("Sécurité", "Protection, intégrité du noyau, analyse", Item::Open(App::Security), Icon::Lock),
     ("À propos", "La version, et qui a écrit tout ça", Item::Open(App::About), Icon::About),
     ("Verrouiller", "Demander le mot de passe", Item::Lock, Icon::Lock),
     ("Redémarrer", "Relancer la machine", Item::Reboot, Icon::Restart),
@@ -336,9 +342,9 @@ pub struct Desktop {
     input: Input,
     machine: Machine,
     fs: Fs,
-    windows: [Window; 7],
+    windows: [Window; 8],
     /// Back to front.
-    order: [App; 7],
+    order: [App; 8],
     space: u8,
     menu: bool,
     menu_since: u64,
@@ -363,6 +369,11 @@ pub struct Desktop {
     pending: Option<String>,
     /// What came back for it.
     fetched: Option<String>,
+    /// What the protection has to say, and what it found; and what the
+    /// Sécurité window is asking the kernel to do (scan, verify).
+    sec_lines: Vec<String>,
+    sec_threats: Vec<String>,
+    sec_ask: Option<(bool, bool)>,
     section: usize,
     update: Update,
     password: Option<String>,
@@ -398,7 +409,16 @@ impl Desktop {
             machine,
             fs,
             windows,
-            order: [App::Settings, App::About, App::Notes, App::Browser, App::Files, App::Terminal, App::Welcome],
+            order: [
+                App::Security,
+                App::Settings,
+                App::About,
+                App::Notes,
+                App::Browser,
+                App::Files,
+                App::Terminal,
+                App::Welcome,
+            ],
             space: 1,
             menu: false,
             menu_since: 0,
@@ -419,6 +439,9 @@ impl Desktop {
             net_lines: Vec::new(),
             pending: None,
             fetched: None,
+            sec_lines: Vec::new(),
+            sec_threats: Vec::new(),
+            sec_ask: None,
             section: 0,
             update: Update::Idle,
             password: None,
@@ -557,6 +580,31 @@ impl Desktop {
             let area = self.windows[App::Settings.index()].area;
             self.damage(area);
         }
+    }
+
+    /// What the Sécurité window is asking for: (scan the files, measure the
+    /// kernel again). Handed over once, like the browser's page.
+    pub fn wants_security(&mut self) -> Option<(bool, bool)> {
+        self.sec_ask.take()
+    }
+
+    /// What the protection reports, and what it found.
+    pub fn set_security(&mut self, lines: Vec<String>, threats: Vec<String>) {
+        if lines == self.sec_lines && threats == self.sec_threats {
+            return;
+        }
+        self.sec_lines = lines;
+        self.sec_threats = threats;
+        if self.showing(App::Security) {
+            let area = self.windows[App::Security.index()].area;
+            self.damage(area);
+        }
+    }
+
+    /// The files, for the one thing that has to reach into them from outside:
+    /// the scanner, which lives in the kernel because it reads the kernel too.
+    pub fn files_mut(&mut self) -> &mut Fs {
+        &mut self.fs
     }
 
     /// Paints what changed, and puts the pointer back on top.
@@ -1064,6 +1112,7 @@ impl Desktop {
             App::Notes => self.paint_notes(screen, client),
             App::Settings => self.paint_settings(screen, client),
             App::About => self.paint_about(screen, client),
+            App::Security => self.paint_security(screen, client),
         }
         screen.set_clip(previous);
     }
@@ -1347,6 +1396,66 @@ impl Desktop {
         screen.fill(Rect::new(client.x + 20, y, client.w.saturating_sub(40), 1), LINE);
         y += 12;
         screen.text(client.x + 20, y, &format!("Compilé le {}", self.machine.built_at), TEXT_FAINT, Font::Small);
+    }
+
+    /// Where the two buttons of the Sécurité window are.
+    pub fn security_button(&self, index: usize) -> Rect {
+        let client = self.client_rect(App::Security);
+        let width = Screen::text_width("Analyser les fichiers", Font::Body) + 28;
+        let top = (client.y + 96 + 12 * self.line_h()).min(client.bottom().saturating_sub(2 * self.line_h() + 20));
+        Rect::new(client.x + 20 + index * (width + 10), top, width, self.line_h() + 8)
+    }
+
+    /// Protection: what the processor enforces, what the kernel measures of
+    /// itself, and what the scanner found in the files.
+    fn paint_security(&self, screen: &mut Screen, client: Rect) {
+        screen.fill(client, SURFACE);
+        let alarmed = !self.sec_threats.is_empty() || self.sec_lines.iter().any(|line| line.contains("MODIFIÉ"));
+        let colour = if alarmed { RED } else { GREEN };
+        let badge = Rect::new(client.x + 20, client.y + 18, 46, 46);
+        screen.round(badge, 10, colour);
+        icons::draw(screen, badge.inset(10), Icon::Lock, WHITE, colour);
+        let (title, under) = if alarmed {
+            ("Attention", "Une menace ou une modification a été trouvée.")
+        } else {
+            ("Protection active", "Le processeur, le noyau et les fichiers ont été vérifiés.")
+        };
+        screen.text(badge.right() + 16, client.y + 18, title, TEXT, Font::Title);
+        screen.text(badge.right() + 16, client.y + 22 + font::height(Font::Title), under, TEXT_DIM, Font::Small);
+
+        let body = Rect::new(client.x + 20, badge.bottom() + 16, client.w.saturating_sub(40), client.h);
+        let lines = if self.sec_lines.is_empty() {
+            alloc::vec!["Analyse en cours...".to_string()]
+        } else {
+            self.sec_lines.clone()
+        };
+        self.paint_rows(screen, body, body.y, &lines);
+
+        for (index, label) in ["Analyser les fichiers", "Vérifier l'intégrité"].into_iter().enumerate() {
+            let button = self.security_button(index);
+            screen.round(button, 6, if index == 0 { ACCENT } else { SUNKEN });
+            screen.text(
+                button.x + 14,
+                centre_y(button, Font::Body),
+                label,
+                if index == 0 { WHITE } else { TEXT_DIM },
+                Font::Body,
+            );
+        }
+
+        let mut y = self.security_button(0).bottom() + 12;
+        if self.sec_threats.is_empty() {
+            screen.text(client.x + 20, y, "Aucune menace dans les fichiers de la machine.", TEXT_FAINT, Font::Small);
+            return;
+        }
+        for line in &self.sec_threats {
+            if y + self.line_h() > client.bottom() {
+                return;
+            }
+            screen.fill(Rect::new(client.x + 20, y + font::height(Font::Small) / 2, 4, 4), RED);
+            screen.text(client.x + 32, y, line, RED, Font::Small);
+            y += self.line_h();
+        }
     }
 
     fn paint_settings(&self, screen: &mut Screen, client: Rect) {
@@ -1875,6 +1984,7 @@ impl Desktop {
                 App::Files => self.click_files(x, y),
                 App::Browser => self.click_browser(x, y),
                 App::Notes => self.click_notes(x, y),
+                App::Security => self.click_security(x, y),
                 _ => {}
             }
             return None;
@@ -2099,6 +2209,18 @@ impl Desktop {
             return;
         }
         self.damage(self.windows[App::Notes.index()].area);
+    }
+
+    fn click_security(&mut self, x: usize, y: usize) {
+        for index in 0..2 {
+            if self.security_button(index).contains(x, y) {
+                // The kernel does the work: it owns the guard, and the files
+                // are read by the same pass.
+                self.sec_ask = Some((index == 0, index == 1));
+                self.damage(self.windows[App::Security.index()].area);
+                return;
+            }
+        }
     }
 
     fn save_note(&mut self) {
@@ -2349,6 +2471,7 @@ fn default_rect(app: App, width: usize, height: usize, panel: usize) -> Rect {
         App::Notes => Rect::new(width / 4, top + height / 8, width * 2 / 5, height / 2),
         App::Settings => Rect::new(width / 6, top, width * 2 / 3, height * 2 / 3),
         App::About => Rect::new(width / 2, top, width * 4 / 9, height * 4 / 11),
+        App::Security => Rect::new(width / 5, top + height / 12, width * 3 / 5, height * 3 / 5),
     };
     // Nothing may be wider than the screen, or too small to hold its title;
     // and the arithmetic must hold at 640x480 as well as at 4K.
