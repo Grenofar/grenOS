@@ -70,3 +70,20 @@ pub fn is_current(latest: &Latest, running: &str) -> Option<bool> {
     }
     Some(latest.commit.starts_with(running))
 }
+
+/// Whether `running` is any of the images the index lists. Not being the
+/// newest is only "behind" when it is: a build the CI made from a branch was
+/// never published, and must not be told a newer one exists.
+pub fn is_listed(body: &[u8], running: &str) -> bool {
+    let Ok(mut text) = core::str::from_utf8(body) else {
+        return false;
+    };
+    let key = "\"commit\"";
+    while let Some(at) = text.find(key) {
+        if string_field(text, "commit").is_some_and(|commit| commit.starts_with(running)) {
+            return true;
+        }
+        text = &text[at + key.len()..];
+    }
+    false
+}

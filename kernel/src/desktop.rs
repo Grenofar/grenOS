@@ -331,13 +331,26 @@ enum Update {
     Done,
 }
 
+/// The running build against the published index.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Standing {
+    /// This build heads the index.
+    Current,
+    /// This build is in the index, below a newer one.
+    Behind,
+    /// This build is nowhere in the index: never published (a branch build
+    /// the CI made), or older than the ten images the index keeps.
+    Unlisted,
+    /// Built on a desktop: no commit to compare.
+    Local,
+}
+
 /// What the update check found, handed over by the kernel: the desktop never
 /// talks to a server itself.
 #[derive(Clone, PartialEq, Eq)]
 pub enum Found {
-    /// The newest published image; `current` says whether this machine runs
-    /// it, when that can be told at all.
-    Latest { build: String, when: String, size: u64, current: Option<bool> },
+    /// The newest published image, and where this machine stands against it.
+    Latest { build: String, when: String, size: u64, standing: Standing },
     /// Why the check could not be done.
     Failed(String),
 }
@@ -1957,16 +1970,21 @@ impl Desktop {
             (_, Update::Checking(_)) => {
                 ("Connexion chiffrée au serveur de mise à jour...".to_string(), String::new(), TEXT_FAINT)
             }
-            (Some(Found::Latest { build, when, size, current }), _) => {
+            (Some(Found::Latest { build, when, size, standing }), _) => {
                 let megabytes = format!("{},{} Mo", size / 1_000_000, size % 1_000_000 / 100_000);
-                match current {
-                    Some(true) => (format!("grenOS est à jour : {build}"), format!("publiée le {when}, {megabytes}"), GREEN),
-                    Some(false) => (
+                match standing {
+                    Standing::Current => (format!("grenOS est à jour : {build}"), format!("publiée le {when}, {megabytes}"), GREEN),
+                    Standing::Behind => (
                         format!("Nouvelle version disponible : {build}"),
                         format!("publiée le {when}, {megabytes} · à télécharger sur {UPDATE_SITE}"),
                         AMBER,
                     ),
-                    None => (
+                    Standing::Unlisted => (
+                        format!("Dernière version publiée : {build}"),
+                        format!("publiée le {when} · cette build n'est pas parmi les dix dernières publiées"),
+                        TEXT_DIM,
+                    ),
+                    Standing::Local => (
                         format!("Dernière version publiée : {build}"),
                         format!("publiée le {when} · cette machine tourne sur une build locale"),
                         TEXT_DIM,
