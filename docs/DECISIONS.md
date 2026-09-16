@@ -889,3 +889,36 @@ propre ISO en quarantaine par l'antivirus de la machine qui la télécharge.
 Ce que ça ne fait pas, et qui est dit dans la fenêtre : il n'y a pas encore
 d'espace utilisateur, donc SMEP et SMAP ne mordent sur rien ; et sans disque,
 la quarantaine ne survit pas à l'extinction.
+
+---
+
+### D-039 — Imiter une disposition, pas une marque
+**2026-09-12 · actif · demandé par l'humain (« copie lexplorer de windows, et chrome pour le navigateur, et ameliore les images »)**
+
+→ **Ce qui est copié : la disposition.** L'explorateur reprend ce qui rend
+celui de Windows lisible — une barre d'outils, un fil d'Ariane, une colonne de
+lieux à gauche, des colonnes Nom / Type / Taille avec leur en-tête, une barre
+d'état qui compte les éléments. Le navigateur reprend celle de Chrome — un
+onglet avec sa favicon et sa croix, un bouton « plus », quatre boutons ronds,
+une barre d'adresse en pilule avec un cadenas et une étoile, un menu à trois
+points, une barre de favoris.
+→ **Ce qui n'est pas copié : les marques.** Pas de logo Chrome, pas de logo
+Windows — l'humain avait justement demandé de retirer le second. Les icônes
+sont dessinées ici, à partir de rectangles et de disques.
+→ **Les icônes sont sur une grille de seizièmes** de leur carré, donc le même
+dessin tient de 14 pixels dans une liste à 52 dans une fenêtre. Deux tons (une
+face claire, un dos sombre) suffisent à rendre un dossier reconnaissable sans
+image.
+→ **Piège revu pour la troisième fois** : la police n'a que l'ASCII et le
+latin-1. Le chevron `›` du fil d'Ariane sortait en `?`, comme le tiret cadratin
+et la puce avant lui. Règle : dans un texte affiché, rien au-delà de U+00FF —
+`»` remplace `›`, `...` remplace `…`.
+
+**Au passage, la cryptographie de TLS est écrite et vérifiée** (SHA-256, HMAC,
+HKDF, ChaCha20, Poly1305, X25519) contre les vecteurs de RFC 4231, 5869, 8439
+et 7748, sur l'hôte (`scratchpad/crypto_test`), avant d'entrer dans le noyau.
+Les tests ont attrapé trois vraies fautes : deux tampons partiels écrasés (le
+hachage bouclait sans fin), une soustraction conditionnelle fausse dans
+Poly1305, et cinq destinations mélangées dans l'échelle de Montgomery. Aucune
+n'aurait été visible en relisant le code. Le noyau ne les embarque pas encore :
+il manque la poignée de main.

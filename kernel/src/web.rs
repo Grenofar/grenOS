@@ -86,6 +86,10 @@ pub const PAGES: [Page; 5] = [
         url: "grenos:versions",
         title: "Versions",
         body: "# Ce qui a changé\n\
+               ## 0.7.0\n\
+               - L'explorateur de fichiers prend la forme de celui de Windows\n\
+               - Le navigateur prend la forme de Chrome : onglet, omnibox, favoris\n\
+               - Icônes redessinées, nettes à toutes les tailles\n\
                ## 0.6.0\n\
                - Le réseau : carte 8254x, ARP, IPv4, ICMP, UDP, DHCP, DNS, TCP\n\
                - Le navigateur ouvre les vraies pages en http\n\
