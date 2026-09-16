@@ -68,8 +68,12 @@ parce que l'humain les a demandées (D-037, D-038) :
 - **Le réseau** (0.6.0) : pilote de carte Intel 8254x, ARP, IPv4, ICMP, UDP,
   DHCP, DNS, un client TCP et assez d'HTTP pour une page. La CI l'exige
   désormais : sixième étape `net`, qui vérifie que la machine obtient une
-  adresse par DHCP et que la passerelle répond à son ping. Manque TLS, donc
-  `https` et la vérification en ligne des mises à jour.
+  adresse par DHCP et que la passerelle répond à son ping.
+- **TLS 1.3 et la mise à jour automatique** (0.8.0, D-040) : X25519,
+  ChaCha20-Poly1305 et SHA-256 écrits dans le noyau et vérifiés contre les
+  vecteurs des RFC ; le navigateur ouvre les pages `https`, et grenOS vérifie
+  au démarrage s'il existe une image plus récente. Le certificat du serveur
+  n'est pas validé : la vérification *signale*, elle n'installe rien.
 - **La protection** (0.6.0) : NX, écriture du code interdite, SMEP et SMAP
   allumés puis relus, tables de pages inspectées, empreinte du code du noyau,
   analyse des fichiers avec quarantaine.
