@@ -475,11 +475,17 @@ fn checked(updater: &http::Fetch) -> desktop::Found {
         return desktop::Found::Failed("l'index des versions est illisible".to_string());
     };
     let running = env!("GRENOS_BUILD");
-    let current = update::is_current(&latest, running);
-    let verdict = match current {
-        Some(true) => "up to date",
-        Some(false) => "a newer build exists",
-        None => "local build, cannot compare",
+    let standing = match update::is_current(&latest, running) {
+        None => desktop::Standing::Local,
+        Some(true) => desktop::Standing::Current,
+        Some(false) if update::is_listed(&updater.body, running) => desktop::Standing::Behind,
+        Some(false) => desktop::Standing::Unlisted,
+    };
+    let verdict = match standing {
+        desktop::Standing::Current => "up to date",
+        desktop::Standing::Behind => "a newer build exists",
+        desktop::Standing::Unlisted => "this build is not among the ten published",
+        desktop::Standing::Local => "local build, cannot compare",
     };
     serial::write_str(&format!(
         "update: newest build {} published {}, running {}, {}\n",
@@ -488,7 +494,7 @@ fn checked(updater: &http::Fetch) -> desktop::Found {
         running,
         verdict
     ));
-    desktop::Found::Latest { build: latest.build.clone(), when: latest.when(), size: latest.size, current }
+    desktop::Found::Latest { build: latest.build.clone(), when: latest.when(), size: latest.size, standing }
 }
 
 /// A defence, in a word.
