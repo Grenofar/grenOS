@@ -186,3 +186,10 @@ test("propose_task can name the work it builds on", () => {
   const plain = parse(base);
   assert.ok(plain.type === "propose_task" && plain.continue_from === undefined);
 });
+
+test("the Master ends a mission only with evidence for it", async () => {
+  const { parseEnvelope: parse } = await import("../src/envelope.ts");
+  const ok = parse(JSON.stringify({ status: "done", summary: "s", actions: [{ type: "complete_mission", evidence: ["boots from disk -> agent/fde9b17f green"] }] }));
+  assert.equal(ok.actions[0]?.type, "complete_mission");
+  assert.throws(() => parse(JSON.stringify({ status: "done", summary: "s", actions: [{ type: "complete_mission", evidence: [] }] })));
+});

@@ -443,7 +443,8 @@ export async function runMasterCycle(
     await db.from("missions").update({ status: "running" }).eq("id", mission.id);
   }
 
-  if (!escalated && created === 0 && isMissionComplete(state)) {
+  const completion = envelope.actions.find((a) => a.type === "complete_mission");
+  if (!escalated && created === 0 && completion && isMissionComplete(state)) {
     await db
       .from("missions")
       .update({ status: "done", finished_at: new Date().toISOString() })
@@ -454,6 +455,7 @@ export async function runMasterCycle(
       level: "info",
       type: "mission_done",
       message: envelope.summary,
+      payload: { evidence: completion.type === "complete_mission" ? completion.evidence : [] },
     });
   }
 

@@ -33,6 +33,14 @@ export type AgentAction =
     }
   | { type: "escalate"; reason: string; options?: string[] }
   /**
+   * The Master says the mission is finished, with one line of evidence per
+   * acceptance criterion (the green run or merged branch that proves it).
+   * Without it a mission never closes: "no new task this cycle" used to mean
+   * "done", and on 2026-09-16 a four-task mission closed twice — after its
+   * plan, then after its first task.
+   */
+  | { type: "complete_mission"; evidence: string[] }
+  /**
    * Read a document before writing (consult.ts). The host allowlist is
    * enforced where the fetch happens, not here: a refused URL is answered
    * with the list of allowed hosts, not by failing the attempt.
@@ -193,6 +201,14 @@ function validateAction(value: unknown, index: number, raw: string): AgentAction
         reason: text("reason"),
         ...(Array.isArray(value["options"]) ? { options: value["options"].map(String) } : {}),
       };
+
+    case "complete_mission": {
+      const evidence = value["evidence"];
+      if (!Array.isArray(evidence) || evidence.length === 0) {
+        throw new EnvelopeError(`${at} : evidence vide (une ligne par critère d'acceptation)`, raw);
+      }
+      return { type, evidence: evidence.map(String) };
+    }
 
     case "consult":
       return {

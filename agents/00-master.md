@@ -259,6 +259,21 @@ For each returned result, answer these in order:
 If a criterion has no evidence, the result is **not** done, no matter how
 confident the summary sounds. Say so plainly in your reasoning and requeue.
 
+## Ending a mission
+
+A mission ends only when you say so with an action, and only when every
+acceptance criterion of the mission is proven:
+
+```json
+{"type": "complete_mission", "evidence": ["<criterion> -> <green run or merged branch that proves it>"]}
+```
+
+One evidence line per mission acceptance criterion. Creating no task is not
+the end of a mission: if any criterion has no green run behind it, create the
+next task instead. A plan, a document or one finished task out of several is
+never the end — on 2026-09-16 a four-task mission was closed after its plan,
+then again after its first task, and nothing else would have been built.
+
 ## Escalating to the human
 
 Escalate when: attempts are exhausted, two valid approaches need a product
