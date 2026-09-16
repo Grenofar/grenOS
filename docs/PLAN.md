@@ -1,187 +1,184 @@
-# grenOS Desktop on Limine Framebuffer Technical Plan
+# grenOS Disk Image and Updates Technical Plan
 
 ## 1. Problem
 
-The kernel initializes GDT, IDT, exception handling, and COM1 serial output, but has no graphical output. The display remains black or shows Limine's boot menu remnant. grenOS requires a Windows-like desktop graphical environment drawn to the screen via the Limine framebuffer (desktop background, bottom taskbar with start button, and window outlines/widgets) satisfying the CI screen verdict requiring at least 3 distinct colours with none exceeding 90% screen area.
+ grenOS currently runs from a read-only ISO. To install updates from within the OS we need a writable disk with two kernel slots, an AHCI driver to access SATA disks, MBR+FAT32 to locate our own partition and run a write test, and SHA-512/Ed25519 to verify signed kernels.
 
 ## 2. Constraints
 
-- **Limine Protocol & Crate**: Use `limine` crate version `0.5` (`limine::request::FramebufferRequest`). Requests are declared as static items placed in section `#[unsafe(link_section = ".requests")]` with `#[used]` between `RequestsStartMarker` and `RequestsEndMarker`.
-- **Bootloader Configuration**: `limine.conf` uses valid Limine syntax (`timeout: 3`, `/grenOS`, `protocol: limine`, `kernel_path: boot():/boot/kernel`).
-- **Target & Toolchain**: Built-in `x86_64-unknown-none` target with static relocation configured in `kernel/.cargo/config.toml`. Toolchain `nightly-2024-11-15` with `#![no_std]` and `#![no_main]`.
-- **Inline Assembly**: All port I/O and halt instructions use `core::arch::asm!` enclosed in `unsafe { ... }` blocks with `// SAFETY:` rationale. Neither `hlt`, `outb`, nor `inb` exist in `core::arch::x86_64`.
-- **Drawing Invariants**: Direct pixel writes to `Framebuffer::addr()` with `core::ptr::write_volatile` inside `unsafe` blocks. Pixel byte offset: `y * pitch + x * (bpp / 8)`.
-- **CI Screen Contract**: CI screenshot analysis checks that the screen holds at least three colours and no single colour occupies more than 90% of the screen. Serial boot must print `grenOS` and have no `panic`, `triple fault`, or `double fault`.
+- **Hardware**: x86_64, AHCI (SATA) controller, disk identified by Limine's MBR disk signature and FAT volume label `GRENOS`.
+- **Boot protocol**: Limine boots the kernel; we keep the existing `limine.conf` for ISO boot and add a `limine-disk.conf` for the disk image.
+- **File system**: MBR partition table, FAT32 boot sector and directory entries as defined by the mtools used in the script.
+- **Crypto**: SHA-512 (FIPS 180-4) and Ed25519 verification (RFC 8032) with test vectors from the RFC.
+- **Kernel**: `no_std`, built-in `x86_64-unknown-none` target, static relocation in `.cargo/config.toml`.
+- **CI**: The verification workflow builds the disk image when `make-disk.sh` exists and boots QEMU from it via AHCI; a task is green only when the kernel builds, passes clippy, and boots printing `grenOS` on serial.
 
 ## 3. Approach
 
-1. **Framebuffer Request**: Declare `limine::request::FramebufferRequest::new()` in `kernel/src/main.rs` in the `.requests` section.
-2. **Framebuffer Abstraction (`kernel/src/fb.rs`)**:
-   - Query `FRAMEBUFFER_REQUEST.get_response()` and retrieve the primary `Framebuffer` via `.framebuffers().next()`.
-   - Store framebuffer dimensions (`width`, `height`, `pitch`, `bpp`) and raw base address.
-   - Implement raw pixel plotting supporting 32-bpp RGB (using `red_mask_shift`, `green_mask_shift`, `blue_mask_shift` or standard 0x00RRGGBB format for 32-bit framebuffers).
-   - Implement primitive drawing: filled rectangles (`fill_rect`), horizontal/vertical lines, and borders.
-3. **Windows-like Desktop UI Layout (`kernel/src/desktop.rs`)**:
-   - **Desktop Background**: Classic teal/slate background (`0x00008080` or `0x003A6EA5`).
-   - **Taskbar**: Bottom strip of height 32 px with light gray background (`0x00C0C0C0`) and top 3D highlight line (`0x00FFFFFF`).
-   - **Start Button**: Bottom-left button (e.g. 60x24 px at offset x=4, y=height-28) with raised 3D borders (white top/left, dark gray bottom/right `0x00808080`) and green start emblem/text area (`0x00008000`).
-   - **Window**: A centered or top-left window canvas (e.g. 320x240 px) featuring a dark blue title bar (`0x00000080`), close button (`0x00C0C0C0` with red cross `0x00CC0000`), window background (`0x00FFFFFF` or `0x00C0C0C0`), and 3D borders.
-4. **Integration**: In `kmain()`, after serial and descriptor table initialization, initialize framebuffer, draw the desktop scene, and proceed to clean halt loop.
+Tasks are performed in the order A→B→C→D as specified in the mission description. Each task leaves the kernel booting and all CI steps green.
+
+**Task A – Disk image with two kernel slots**
+- Create `kernel/scripts/make-disk.sh` that builds a 64 MiB FAT32 disk image with an MBR partition, two 8 MiB kernel slots (`kernel-a`, `kernel-b`), and a test file `essai.bin`.
+- Create `kernel/limine-disk.conf` with two menu entries pointing to the slots and a 1-second timeout to allow menu access.
+- The script is run from the repository root, like `make-iso.sh`, and writes `kernel/grenos-disk.img`.
+
+**Task B – AHCI (SATA) driver**
+- Implement `kernel/src/ahci.rs` that finds the AHCI controller via PCI (class 0x01, subclass 0x06, prog-if 0x01), maps its registers, brings up ports with a device present, and issues ATA commands (IDENTIFY, READ/WRITE DMA EXT, FLUSH CACHE EXT) using command list and received FIS structures.
+- The driver exposes a `Disk` struct with `read`, `write`, and `flush` methods working on 512-byte sectors.
+- After `sti` in `main.rs`, scan for disks and print one line per disk: `disk: AHCI port <n>, <model>, <MiB> MiB`.
+
+**Task C – MBR + FAT32, find our own disk, write test**
+- Implement `kernel/src/fat.rs` that reads the MBR disk signature from Limine's `ExecutableFileRequest`, matches it to the AHCI disk, opens partition 1, checks the FAT volume label `GRENOS`, and provides a `Volume` interface to find, read, and overwrite files.
+- In `main.rs`, after the AHCI scan, find the matching disk, open the volume, locate `/grenos/essai.bin`, overwrite it with random data, read it back, compare, and print the two required lines.
+- On the ISO (no matching disk), print `disk: booted from the ISO, nothing to install to`.
+
+**Task D – SHA-512 and Ed25519**
+- Implement `kernel/src/sha512.rs` with `fn sha512(data: &[u8]) -> [u8; 64]` following FIPS 180-4.
+- Implement `kernel/src/ed25519.rs` with `fn verify(public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool` following RFC 8032 §5.1.7, using the field arithmetic from `x25519.rs` and rejecting non-canonical keys.
+- In `main.rs`, run the RFC 8032 test vectors and print `crypto: ed25519 verified against RFC 8032` on success.
 
 ## 4. Interfaces
 
-### Framebuffer Static Request
+### Task A
+- `kernel/scripts/make-disk.sh` (executable after `chmod +x`): creates `kernel/grenos-disk.img`.
+- `kernel/limine-disk.conf`:
+  ```
+  timeout: 1
+  quiet: yes
+  default_entry: 1
 
-```rust
-use limine::request::FramebufferRequest;
+  /grenOS slot a
+      protocol: limine
+      kernel_path: boot():/boot/kernel-a
 
-#[used]
-#[unsafe(link_section = ".requests")]
-static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
-```
+  /grenOS slot b
+      protocol: limine
+      kernel_path: boot():/boot/kernel-b
+  ```
 
-### Framebuffer Wrapper and Drawing Primitives
+### Task B
+- `kernel/src/ahci.rs`:
+  ```rust
+  pub const SECTOR: usize = 512;
+  pub struct Disk { /* private */ pub port: u32, pub model: String, pub sectors: u64 }
+  /// # Safety: once, after interrupts are enabled.
+  pub unsafe fn find(frames: &mut Frames, devices: &[pci::Device]) -> Vec<Disk>;
+  impl Disk {
+      pub fn read(&mut self, lba: u64, out: &mut [u8]) -> Result<(), &'static str>;
+      pub fn write(&mut self, lba: u64, data: &[u8]) -> Result<(), &'static str>;
+      pub fn flush(&mut self) -> Result<(), &'static str>;
+  }
+  ```
 
-```rust
-#[derive(Copy, Clone)]
-pub struct Color {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-}
+### Task C
+- `kernel/src/fat.rs`:
+  ```rust
+  pub trait Blocks { fn read(&mut self, lba: u64, out: &mut [u8]) -> Result<(), &'static str>;
+                       fn write(&mut self, lba: u64, data: &[u8]) -> Result<(), &'static str>; }
+  pub struct Volume { /* partition start, geometry, label */ }
+  pub struct Entry { pub cluster: u32, pub size: u32, pub directory: bool }
+  impl Volume {
+      pub fn open(disk: &mut impl Blocks, start_lba: u64) -> Result<Volume, &'static str>;
+      pub fn label(&self) -> &str;
+      pub fn find(&self, disk: &mut impl Blocks, path: &str) -> Result<Entry, &'static str>;
+      pub fn read(&self, disk: &mut impl Blocks, entry: &Entry) -> Result<Vec<u8>, &'static str>;
+      pub fn overwrite(&self, disk: &mut impl Blocks, entry: &Entry, data: &[u8]) -> Result<(), &'static str>;
+  }
+  ```
 
-impl Color {
-    pub const TEAL: Color = Color { r: 0, g: 128, b: 128 };
-    pub const GRAY: Color = Color { r: 192, g: 192, b: 192 };
-    pub const DARK_GRAY: Color = Color { r: 128, g: 128, b: 128 };
-    pub const WHITE: Color = Color { r: 255, g: 255, b: 255 };
-    pub const NAVY: Color = Color { r: 0, g: 0, b: 128 };
-    pub const BLACK: Color = Color { r: 0, g: 0, b: 0 };
-    pub const GREEN: Color = Color { r: 0, g: 160, b: 0 };
-}
+### Task D
+- `kernel/src/sha512.rs`:
+  ```rust
+  pub fn sha512(data: &[u8]) -> [u8; 64];
+  ```
+- `kernel/src/ed25519.rs`:
+  ```rust
+  pub fn verify(public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool;
+  ```
 
-pub struct Display {
-    addr: *mut u8,
-    width: usize,
-    height: usize,
-    pitch: usize,
-    bpp: usize,
-    red_shift: u8,
-    green_shift: u8,
-    blue_shift: u8,
-}
+## 5. Rejected alternatives
 
-impl Display {
-    pub fn from_limine(fb: &limine::framebuffer::Framebuffer) -> Self {
-        Self {
-            addr: fb.addr(),
-            width: fb.width() as usize,
-            height: fb.height() as usize,
-            pitch: fb.pitch() as usize,
-            bpp: fb.bpp() as usize,
-            red_shift: fb.red_mask_shift(),
-            green_shift: fb.green_mask_shift(),
-            blue_shift: fb.blue_mask_shift(),
-        }
-    }
-
-    pub fn draw_pixel(&mut self, x: usize, y: usize, color: Color) {
-        if x >= self.width || y >= self.height {
-            return;
-        }
-        let pixel_value: u32 = ((color.r as u32) << self.red_shift)
-            | ((color.g as u32) << self.green_shift)
-            | ((color.b as u32) << self.blue_shift);
-
-        let bytes_per_pixel = self.bpp / 8;
-        let offset = y * self.pitch + x * bytes_per_pixel;
-
-        // SAFETY: The calculated offset is strictly within the allocated framebuffer bounds checked against width and height.
-        unsafe {
-            let pixel_ptr = self.addr.add(offset);
-            if bytes_per_pixel == 4 {
-                core::ptr::write_volatile(pixel_ptr as *mut u32, pixel_value);
-            } else if bytes_per_pixel == 3 {
-                core::ptr::write_volatile(pixel_ptr, color.b);
-                core::ptr::write_volatile(pixel_ptr.add(1), color.g);
-                core::ptr::write_volatile(pixel_ptr.add(2), color.r);
-            }
-        }
-    }
-
-    pub fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Color) {
-        for cy in y..(y + h).min(self.height) {
-            for cx in x..(x + w).min(self.width) {
-                self.draw_pixel(cx, cy, color);
-            }
-        }
-    }
-}
-```
-
-### Desktop UI Drawer
-
-```rust
-pub fn render_desktop(display: &mut Display) {
-    // 1. Teal background
-    display.fill_rect(0, 0, display.width, display.height, Color::TEAL);
-
-    // 2. Taskbar at bottom (32px high)
-    let taskbar_height = 32;
-    let taskbar_y = display.height.saturating_sub(taskbar_height);
-    display.fill_rect(0, taskbar_y, display.width, taskbar_height, Color::GRAY);
-    display.fill_rect(0, taskbar_y, display.width, 1, Color::WHITE);
-
-    // 3. Start button
-    display.fill_rect(4, taskbar_y + 4, 56, 24, Color::GRAY);
-    display.fill_rect(6, taskbar_y + 6, 16, 20, Color::GREEN);
-
-    // 4. Sample window (top-left / center)
-    let win_x = 40;
-    let win_y = 40;
-    let win_w = 320;
-    let win_h = 200;
-    display.fill_rect(win_x, win_y, win_w, win_h, Color::GRAY);
-    display.fill_rect(win_x + 2, win_y + 2, win_w - 4, 22, Color::NAVY);
-    display.fill_rect(win_x + 2, win_y + 26, win_w - 4, win_h - 28, Color::WHITE);
-}
-```
-
-## 5. Rejected Alternatives
-
-- **Flanterm Text Console**: Rejected because the mission requires a Windows-like desktop graphical environment with distinct widgets, window frames, taskbar, and background colors.
-- **Direct Hardware GPU Drivers (Bochs VBE / Intel HD)**: Rejected as Limine provides a standard linear framebuffer mode pre-configured by UEFI/BIOS.
-- **Dynamic Font Rendering Engine**: Font glyph rendering can be added in a subsequent iteration; initial desktop widgets and layout meet CI screen multi-color requirements without external dependencies.
+- **Custom partition table (GPT only)**: Rejected because Limine's `mbr_disk_id()` comes from the protective MBR; we need an MBR that Limine can read.
+- **EXT2 file system**: Rejected because FAT32 is simpler, universally supported by mtools, and sufficient for our update workflow.
+- **RSA signatures**: Rejected because Ed25519 is faster, safer, and already used in the limine-rust-template for kernel authentication.
+- **AHCI with interrupts**: Rejected because polling is sufficient for the infrequent update check and keeps the driver simple.
 
 ## 6. Risks
 
-- **Framebuffer Request Returns None in Headless QEMU**: Mitigated by verifying that Limine default config and QEMU standard display device (`-display none` with default virtual GPU) instantiate a valid graphical framebuffer.
-- **Unsupported Pixel Format / BPP**: Limine standard framebuffer mode provides 32-bpp or 24-bpp RGB format. Mitigated by querying `bpp()`, `red_mask_shift()`, `green_mask_shift()`, `blue_mask_shift()` dynamically.
+- **AHCI controller not found**: Mitigated by printing `disk: no AHCI controller` and continuing; the ISO path remains usable for development.
+- **FAT32 long-name collisions**: Mitigated by using the FAT volume label `GRENOS` as a second match; the volume label is written by `mformat -v GRENOS`.
+- **SHA-512/Ed25519 side channels**: Mitigated by using constant-time field arithmetic from `x25519.rs`; the verify function branches only on input length and signature validity.
 
-## 7. Task Breakdown
+## 7. Task breakdown
 
-### Task 1: Framebuffer Driver and Basic Drawing Primitives
-**Goal**: Register Limine FramebufferRequest, implement `kernel/src/fb.rs` for pixel and rectangle drawing, and wire into `main.rs`.
-**Assigned to**: `coder`
+### Task A: Disk image with two kernel slots
+**Goal**: Create a bootable disk image with two kernel slots and a FAT32 file system.
+**Assigned to**: coder
 **Acceptance Criteria**:
-- `kernel/src/fb.rs` defines `Display` struct with `from_limine`, `draw_pixel`, and `fill_rect`.
-- `kernel/src/main.rs` contains `FRAMEBUFFER_REQUEST` static and calls `fb` initialization.
-- `cargo build --release` in `kernel/` succeeds.
-- `cargo clippy --release -- -D warnings` in `kernel/` passes with 0 warnings.
-- QEMU boot succeeds and prints `grenOS` on COM1.
+- `kernel/scripts/make-disk.sh` exists and is executable.
+- `kernel/limine-disk.conf` exists with the exact content above.
+- Running the script from the repository root produces `kernel/grenos-disk.img`.
+- `cargo build --release` succeeds in `kernel/`.
+- `cargo clippy --release -- -D warnings` reports zero warnings in `kernel/`.
+- QEMU boots the disk image via AHCI and prints `grenOS` on serial.
 
-### Task 2: Windows-like Desktop GUI Rendering
-**Goal**: Implement `kernel/src/desktop.rs` with desktop background, bottom taskbar, start button, and window outlines.
-**Assigned to**: `coder`
+### Task B: AHCI (SATA) driver
+**Goal**: Add an AHCI driver that detects SATA disks and prints their model and size.
+**Assigned to**: coder
 **Acceptance Criteria**:
-- `kernel/src/desktop.rs` draws a teal desktop background, gray bottom taskbar with white highlight, start button, and window with dark blue title bar and white body.
-- Screen output contains at least 3 distinct colours and no single colour exceeds 90% of screen pixels.
-- `cargo build --release` and `cargo clippy --release -- -D warnings` succeed in `kernel/`.
-- QEMU boot prints `grenOS` on COM1 and exits without panic, triple fault, or double fault.
+- `kernel/src/ahci.rs` implements the `Disk` interface and `unsafe fn find`.
+- `main.rs` calls the AHCI scan after `sti` and prints one line per disk.
+- `cargo build --release` succeeds in `kernel/`.
+- `cargo clippy --release -- -D warnings` reports zero warnings in `kernel/`.
+- QEMU boots the disk image via AHCI and prints `grenOS` on serial.
+- Serial output contains `disk: AHCI port <n>, <model>, <MiB> MiB` for each detected disk.
+
+### Task C: MBR + FAT32, find our own disk, write test
+**Goal**: Locate the boot disk by MBR signature and FAT label, then verify read/write access.
+**Assigned to**: coder
+**Acceptance Criteria**:
+- `kernel/src/fat.rs` implements the `Volume` interface over the `Blocks` trait.
+- `main.rs` uses `ExecutableFileRequest` to get the MBR disk signature, matches it to the AHCI disk, opens the FAT volume, overwrites `/grenos/essai.bin`, reads it back, and compares.
+- `cargo build --release` succeeds in `kernel/`.
+- `cargo clippy --release -- -D warnings` reports zero warnings in `kernel/`.
+- QEMU boots the disk image via AHCI and prints `grenOS` on serial.
+- Serial output contains the two lines: `disk: grenOS partition FAT32 GRENOS, booted from slot <a|b>` and `disk: write and read back verified`.
+
+### Task D: SHA-512 and Ed25519
+**Goal**: Add SHA-512 hashing and Ed25519 signature verification using RFC 8032 test vectors.
+**Assigned to**: coder
+**Acceptance Criteria**:
+- `kernel/src/sha512.rs` implements `fn sha512(data: &[u8]) -> [u8; 64]`.
+- `kernel/src/ed25519.rs` implements `fn verify(public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool`.
+- `main.rs` runs the three RFC 8032 test vectors and the negative case.
+- `cargo build --release` succeeds in `kernel/`.
+- `cargo clippy --release -- -D warnings` reports zero warnings in `kernel/`.
+- QEMU boots the disk image via AHCI and prints `grenOS` on serial.
+- Serial output contains `crypto: ed25519 verified against RFC 8032`.
 
 ## 8. Sources
 
-- `https://raw.githubusercontent.com/limine-bootloader/limine-protocol/trunk/PROTOCOL.md` — Limine boot protocol specification (Framebuffer feature, Request delimiters, Base revision).
-- `https://docs.rs/limine/0.5.0/limine/request/struct.FramebufferRequest.html` — `limine` crate 0.5 FramebufferRequest API.
-- `https://docs.rs/limine/0.5.0/limine/framebuffer/struct.Framebuffer.html` — `limine` crate 0.5 Framebuffer accessors (`addr`, `width`, `height`, `pitch`, `bpp`, mask shifts).
-- `https://docs.rs/limine/0.5.0/limine/response/struct.FramebufferResponse.html` — `limine` crate 0.5 FramebufferResponse structure and iterator.
+- `https://raw.githubusercontent.com/limine-bootloader/limine/trunk/CONFIG.md` — Limine configuration syntax (timeout, quiet, kernel_path).
+- `https://raw.githubusercontent.com/limine-bootloader/limine-protocol/trunk/PROTOCOL.md` — Limine boot protocol (ExecutableFileRequest, mbr_disk_id()).
+- `https://docs.rs/limine/0.5.0/limine/request/struct.ExecutableFileRequest.html` — ExecutableFileRequest API.
+- `https://www.mtools.org/mtools_1.html#mformat` — mformat `-F` for FAT32, `-v` for volume label.
+- `https://www.gnu.org/software/gdisk/manual/gdisk.html` — sgdisk `-n` for partition creation, `-t` for type code, `-m` to set MBR signature.
+- `https://raw.githubusercontent.com/limine-bootloader/limine/trunk/limine-bios.sys` — Limine BIOS binary copied by the script.
+- `https://raw.githubusercontent.com/limine-bootloader/limine/trunk/BOOTX64.EFI` — Limine UEFI binary copied by the script.
+- `https://github.com/torvalds/linux/blob/master/drivers/ata/ahci.h` — AHCI register offsets (CAP, GHC, PI, port registers).
+- `https://github.com/torvalds/linux/blob/master/include/linux/ata.h` — ATA command register FIS layout, PRDT entry layout.
+- `https://github.com/torvalds/linux/blob/master/drivers/ata/libata-sata.c` — `ata_tf_to_fis` for H2D register FIS.
+- `https://www.ata.org/ata/doc/ATA_ATAPI_Standards` — ATA command codes: IDENTIFY DEVICE 0xEC, READ DMA EXT 0x25, WRITE DMA EXT 0x35, FLUSH CACHE EXT 0xEA.
+- `https://www.uefi.org/sites/default/files/resources/UEFI_Spec_2_9_A.pdf` — MBR partition table layout (used for MBR offsets).
+- `https://www.microsoft.com/whdc/system/platform/firmware/fatgen.mspx` — FAT32 boot sector layout (bytes per sector, sectors/cluster, reserved sectors, FAT count, FAT size, root cluster, volume label).
+- `https://www.microsoft.com/whdc/system/platform/firmware/fatgen.mspx` — FAT directory entry layout (name, attributes, cluster high/low, file size).
+- `https://www.microsoft.com/whdc/system/platform/firmware/fatgen.mspx` — FAT long-name slot layout (sequence, UTF-16 chunks, checksum).
+- `https://csrc.nist.gov/publications/detail/fips/180/4/final` — FIPS 180-4 SHA-512 specification.
+- `https://www.rfc-editor.org/rfc/rfc8032.txt` — RFC 8032 Ed25519 signature scheme, test vectors in §7.1.
+- `https://github.com/Grenofar/grenOS/blob/main/kernel/src/x25519.rs` — Field arithmetic for Curve25519 used in Ed25519 verification.
+- `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/kernel/Cargo.toml` — Example of `limine` crate usage.
+- `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/kernel/build.rs` — Example of setting `GRENOS_BUILD` environment variable.
+- `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/kernel/.cargo/config.toml` — Example of static relocation for `x86_64-unknown-none`.
+- `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/kernel/linker-x86_64.ld` — Example linker script placing kernel in higher half.
+- `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/kernel/limine.conf` — Example Limine configuration for ISO boot.
+- `https://raw.githubusercontent.com/limine-bootloader/limine-rust-template/trunk/kernel/scripts/make-iso.sh` — Example script that builds the kernel and copies Limine binaries.
