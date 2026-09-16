@@ -334,3 +334,15 @@ test("the Master reads a CI run's verdict and its errors, not the whole log", as
   assert.ok(String(digest.errors).length <= 1500);
   assert.equal(ciDigest({ ...run, log_excerpt: null }).errors, null);
 });
+
+test("an agent works on several tasks of a mission at once, never two on the same files", async () => {
+  const { parallelRefusal } = await import("../src/master.ts");
+  const busy = [{ agent: "coder", paths: ["kernel/scripts/make-disk.sh"] }];
+  // 2026-09-16: the AHCI driver was refused while a shell script fix ran.
+  assert.equal(parallelRefusal(busy, "coder", ["kernel/src/ahci.rs", "kernel/src/main.rs"]), null);
+  assert.match(parallelRefusal(busy, "coder", ["kernel/scripts/**"])!, /mêmes fichiers/);
+  assert.match(parallelRefusal([{ agent: "coder", paths: [] }], "coder", ["kernel/src/x.rs"])!, /mêmes fichiers/);
+  assert.equal(parallelRefusal(busy, "architect", ["kernel/scripts/make-disk.sh"]), null);
+  const three = [1, 2, 3].map((i) => ({ agent: "coder", paths: [`kernel/src/f${i}.rs`] }));
+  assert.match(parallelRefusal(three, "coder", ["kernel/src/other.rs"])!, /3 tâches/);
+});

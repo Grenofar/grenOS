@@ -2,7 +2,7 @@ import { Router } from "@grenos/router";
 import { log } from "./config.ts";
 import { db, emit } from "./db.ts";
 import { parseEnvelope, EnvelopeError, type AgentEnvelope } from "./envelope.ts";
-import { authorize } from "./sandbox.ts";
+import { authorize, pathsOverlap } from "./sandbox.ts";
 import { baseFor } from "./lineage.ts";
 import { renderUnreadable } from "./preflight.ts";
 import type { GitHub } from "./github.ts";
@@ -252,10 +252,13 @@ export async function runMasterCycle(
   const OPEN = ["pending", "ready", "in_progress", "awaiting_verification"];
   const { data: openTasks } = await db
     .from("tasks")
-    .select("assigned_to")
+    .select("assigned_to,allowed_paths")
     .eq("mission_id", mission.id)
     .in("status", OPEN);
-  const busy = new Set((openTasks ?? []).map((t) => t.assigned_to));
+  const busy: OpenWork[] = (openTasks ?? []).map((t) => ({
+    agent: t.assigned_to as string,
+    paths: (t.allowed_paths as string[] | null) ?? [],
+  }));
 
   // Documents the Master writes in this decision, committed together at the
   // end: one commit per decision, not one per file.
@@ -264,21 +267,22 @@ export async function runMasterCycle(
   for (const action of envelope.actions) {
     switch (action.type) {
       case "propose_task": {
-        if (busy.has(action.assigned_to)) {
+        const assignee = agents.get(action.assigned_to);
+        const refusal = assignee
+          ? parallelRefusal(busy, assignee.id, action.allowed_paths ?? assignee.allowedPaths)
+          : null;
+        if (refusal) {
           await emit({
             missionId: mission.id,
             agentId: "master",
             level: "warn",
             type: "duplicate_task_refused",
-            message:
-              `Tâche refusée : ${action.assigned_to} a déjà une tâche ouverte sur cette mission. ` +
-              `Attends son résultat plutôt que d'en ouvrir une seconde.`,
+            message: refusal,
             payload: { goal: action.goal },
           });
           break;
         }
 
-        const assignee = agents.get(action.assigned_to);
         if (!assignee || assignee.status !== "active") {
           await emit({
             missionId: mission.id,
@@ -322,7 +326,7 @@ export async function runMasterCycle(
           created += 1;
           // Guard the rest of this same envelope too: a single reply can
           // legitimately propose two tasks for the same agent.
-          busy.add(assignee.id);
+          busy.push({ agent: assignee.id, paths: action.allowed_paths ?? assignee.allowedPaths });
         }
         break;
       }
@@ -607,6 +611,40 @@ export function supersededByNewWork(state: State): string[] {
  * it could never close on its own. A failed or blocked task still holds the
  * mission open — that one needs a decision, not a shrug.
  */
+/** A task already open on the mission: who does it, and which files it may write. */
+export interface OpenWork {
+  agent: string;
+  paths: string[];
+}
+
+/** How many tasks one agent may have open on one mission at the same time. */
+export const PARALLEL_PER_AGENT = 3;
+
+/**
+ * Why a new task for `agent` must wait, or null when it may start now. Pure.
+ *
+ * One open task per agent per mission prevented duplicates, but also made a
+ * mission strictly sequential: on 2026-09-16 the AHCI driver was refused while
+ * a one-file fix to a shell script ran. Now an agent may have up to
+ * PARALLEL_PER_AGENT tasks open, as long as no two of them may write the same
+ * file — which is also what keeps a re-proposed task from running twice, since
+ * a duplicate names the same files.
+ */
+export function parallelRefusal(busy: OpenWork[], agent: string, paths: string[]): string | null {
+  const mine = busy.filter((w) => w.agent === agent);
+  if (mine.length >= PARALLEL_PER_AGENT) {
+    return `Tâche refusée : ${agent} a déjà ${mine.length} tâches ouvertes sur cette mission. Attends un résultat.`;
+  }
+  const clash = mine.find((w) => w.paths.length === 0 || paths.length === 0 || pathsOverlap(w.paths, paths));
+  if (clash) {
+    return (
+      `Tâche refusée : ${agent} a déjà une tâche ouverte qui peut écrire les mêmes fichiers ` +
+      `(${clash.paths.join(", ") || "tous"}). Attends son résultat, ou donne à celle-ci des allowed_paths distincts.`
+    );
+  }
+  return null;
+}
+
 export function isMissionComplete(state: State): boolean {
   const counted = state.tasks.filter((t) => t.status !== "cancelled");
   // Only CI finishes work (D-009), and that holds for a mission too. On
