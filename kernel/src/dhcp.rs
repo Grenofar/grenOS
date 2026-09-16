@@ -228,7 +228,10 @@ impl Resolver {
     }
 
     pub fn ask(&mut self, stack: &mut Stack, nic: &mut Nic, name: &str, now: u64) {
-        self.xid = self.xid.wrapping_add(1);
+        // A fresh identifier for every question: two resolvers counting up
+        // from the same start would ask with the same one.
+        let fresh = crate::rand::bytes();
+        self.xid = u16::from_le_bytes([fresh[0], fresh[1]]);
         self.asking = Some(name.to_string());
         self.answer = None;
         self.failed = false;
@@ -264,11 +267,14 @@ impl Resolver {
         if self.asking.is_none() || self.answer.is_some() {
             return;
         }
-        let server = stack.dns;
+        let (server, xid) = (stack.dns, self.xid);
         let mut answers = Vec::new();
         stack.datagrams.retain(|datagram| {
-            // Only what the name server we asked actually sent back.
-            if datagram.from_port == DNS_PORT && datagram.from == server {
+            // Only the name server's answer to *our* question. The browser and
+            // the update check each have a resolver, on the same wire; taking
+            // every DNS answer made one swallow the other's.
+            let ours = datagram.data.get(..2) == Some(&xid.to_be_bytes()[..]);
+            if datagram.from_port == DNS_PORT && datagram.from == server && ours {
                 answers.push(datagram.data.clone());
                 return false;
             }

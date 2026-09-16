@@ -235,11 +235,13 @@ const ITEMS: [(&str, &str, Item, Icon); 10] = [
 ];
 
 /// The browser's bookmarks bar: the pages worth one click.
-const BOOKMARKS: [(&str, &str); 5] = [
+const BOOKMARKS: [(&str, &str); 6] = [
     ("Accueil", "grenos:accueil"),
     ("Aide", "grenos:aide"),
     ("Versions", "grenos:versions"),
     ("Fichiers", "fichier:/"),
+    // Our own site, over https: the page the kernel's TLS was tested against.
+    ("grenos-dev", "https://grenos-dev.vercel.app/download"),
     ("example.com", "http://example.com"),
 ];
 
@@ -255,18 +257,18 @@ const SECTIONS: [(&str, Icon); 7] = [
 
 /// What the current version brought, shown in Mise à jour.
 const CHANGES: [&str; 6] = [
-    "Explorateur de fichiers : accès rapide, fil d'Ariane, colonnes, barre d'état",
-    "Navigateur : onglet, boutons ronds, barre d'adresse en pilule, favoris",
-    "Icônes redessinées sur une grille fine, nettes de 14 à 52 pixels",
-    "Le réseau : carte Intel 8254x, ARP, IPv4, ICMP, UDP, DHCP, DNS, TCP",
+    "Mise à jour automatique : vérifiée au démarrage et à chaque clic, en https",
+    "TLS 1.3 dans le noyau : X25519, ChaCha20-Poly1305, SHA-256",
+    "Le navigateur ouvre aussi les pages https",
+    "Explorateur de fichiers et navigateur refaits, icônes redessinées",
+    "Le réseau : carte Intel 8254x, DHCP, DNS, ping, TCP",
     "Sécurité : NX, écriture du code interdite, intégrité, analyse des fichiers",
-    "Réduire ne ferme plus la fenêtre : elle reste dans le panneau",
 ];
 
 const NEXT: [&str; 4] = [
-    "TLS : les primitives sont écrites et vérifiées, reste la poignée de main",
-    "La mise à jour en ligne, qui attend exactement cela",
-    "Disque SATA (AHCI) : garder les fichiers d'une fois sur l'autre",
+    "Authentifier le serveur, ou signer les images publiées",
+    "Télécharger l'image elle-même, pas seulement la trouver",
+    "Disque SATA (AHCI) : garder les fichiers, et installer une mise à jour",
     "Clavier USB pour les PC sans PS/2",
 ];
 
@@ -316,6 +318,10 @@ const WINDOW_MS: u64 = 170;
 const MENU_MS: u64 = 130;
 const SPLASH_MS: u64 = 900;
 const CHECK_MS: u64 = 1400;
+/// How long the update check may take before the window stops waiting.
+const UPDATE_PATIENCE: u64 = 25_000;
+/// Where a human gets a new image, as long as nothing installs it.
+const UPDATE_SITE: &str = "grenos-dev.vercel.app/download";
 
 /// Where the update check has got to.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -323,6 +329,17 @@ enum Update {
     Idle,
     Checking(u64),
     Done,
+}
+
+/// What the update check found, handed over by the kernel: the desktop never
+/// talks to a server itself.
+#[derive(Clone, PartialEq, Eq)]
+pub enum Found {
+    /// The newest published image; `current` says whether this machine runs
+    /// it, when that can be told at all.
+    Latest { build: String, when: String, size: u64, current: Option<bool> },
+    /// Why the check could not be done.
+    Failed(String),
 }
 
 /// What the pointer is over, so it can light up.
@@ -387,6 +404,9 @@ pub struct Desktop {
     sec_ask: Option<(bool, bool)>,
     section: usize,
     update: Update,
+    /// The check asked for and not yet handed to the kernel, and its answer.
+    update_ask: bool,
+    found: Option<Found>,
     password: Option<String>,
     typed: String,
     locked: bool,
@@ -456,6 +476,8 @@ impl Desktop {
             sec_ask: None,
             section: 0,
             update: Update::Idle,
+            update_ask: false,
+            found: None,
             password: None,
             typed: String::new(),
             locked: false,
@@ -540,7 +562,9 @@ impl Desktop {
             self.damage(self.menu_rect().grow(10));
         }
         if let Update::Checking(start) = self.update {
-            if ms >= start + CHECK_MS {
+            // The answer comes from the kernel. This only stops waiting for it.
+            if ms >= start + UPDATE_PATIENCE {
+                self.found = Some(Found::Failed("pas de réponse du serveur de mise à jour".to_string()));
                 self.update = Update::Done;
             }
             if self.showing(App::Settings) {
@@ -617,6 +641,21 @@ impl Desktop {
     /// the scanner, which lives in the kernel because it reads the kernel too.
     pub fn files_mut(&mut self) -> &mut Fs {
         &mut self.fs
+    }
+
+    /// Whether the update check has been asked for — handed over once.
+    pub fn wants_update(&mut self) -> bool {
+        core::mem::take(&mut self.update_ask)
+    }
+
+    /// What the check found: asked for with the button, or at boot.
+    pub fn update_result(&mut self, found: Found) {
+        self.found = Some(found);
+        self.update = Update::Done;
+        if self.showing(App::Settings) {
+            let area = self.windows[App::Settings.index()].area;
+            self.damage(area);
+        }
     }
 
     /// Paints what changed, and puts the pointer back on top.
@@ -1904,29 +1943,57 @@ impl Desktop {
 
         let mut y = button.bottom() + 8;
         if let Update::Checking(start) = self.update {
-            // A bar that fills in step with the clock, not with the frames.
+            // A bar that sweeps in step with the clock while the kernel talks
+            // to the server: how long that takes is the network's business.
             let bar = Rect::new(body.x, y + 4, button.w, 4);
             screen.round(bar, 2, SURFACE_ALT);
-            let done = anim::progress(self.ms, start, CHECK_MS);
-            screen.round(Rect::new(bar.x, bar.y, anim::mix(0, bar.w, done), bar.h), 2, ACCENT);
+            let phase = anim::progress(self.ms.saturating_sub(start) % CHECK_MS, 0, CHECK_MS);
+            let width = bar.w / 3;
+            let left = bar.x + anim::mix(0, bar.w - width, phase);
+            screen.round(Rect::new(left, bar.y, width, bar.h), 2, ACCENT);
             y += 16;
         }
-        // What the check can honestly say depends on whether the card got an
-        // address at all.
-        let online = self.net_lines.iter().any(|line| line.starts_with("Adresse : ") && !line.ends_with("0.0.0.0"));
-        let note: &str = match (self.update, online) {
-            (Update::Idle, true) => "Le réseau répond. Le site, lui, n'accepte que https, que grenOS ne parle pas encore.",
-            (Update::Idle, false) => "La vérification interroge la carte réseau ; elle n'a pas encore d'adresse.",
-            (Update::Checking(_), _) => "Recherche du serveur de mise à jour...",
-            (Update::Done, true) => "Réseau actif, mais grenos-dev.vercel.app n'accepte que https : TLS reste à écrire.",
-            (Update::Done, false) => "Aucune adresse réseau : impossible de joindre grenos-dev.vercel.app.",
+        let (first, second, colour): (String, String, Rgb) = match (&self.found, self.update) {
+            (_, Update::Checking(_)) => {
+                ("Connexion chiffrée au serveur de mise à jour...".to_string(), String::new(), TEXT_FAINT)
+            }
+            (Some(Found::Latest { build, when, size, current }), _) => {
+                let megabytes = format!("{},{} Mo", size / 1_000_000, size % 1_000_000 / 100_000);
+                match current {
+                    Some(true) => (format!("grenOS est à jour : {build}"), format!("publiée le {when}, {megabytes}"), GREEN),
+                    Some(false) => (
+                        format!("Nouvelle version disponible : {build}"),
+                        format!("publiée le {when}, {megabytes} · à télécharger sur {UPDATE_SITE}"),
+                        AMBER,
+                    ),
+                    None => (
+                        format!("Dernière version publiée : {build}"),
+                        format!("publiée le {when} · cette machine tourne sur une build locale"),
+                        TEXT_DIM,
+                    ),
+                }
+            }
+            (Some(Found::Failed(why)), _) => (format!("Vérification impossible : {why}"), String::new(), AMBER),
+            (None, _) => (
+                "Vérifiée au démarrage dès que le réseau répond, puis à chaque clic.".to_string(),
+                String::new(),
+                TEXT_FAINT,
+            ),
         };
-        screen.text(body.x, y, note, if self.update == Update::Done { AMBER } else { TEXT_FAINT }, Font::Small);
+        screen.text(body.x, y, &first, colour, Font::Small);
         y += self.line_h();
-        if self.update == Update::Done {
-            screen.text(body.x, y, "En attendant, l'image se télécharge sur le site depuis un autre ordinateur.", TEXT_FAINT, Font::Small);
+        if !second.is_empty() {
+            screen.text(body.x, y, &second, TEXT_FAINT, Font::Small);
             y += self.line_h();
         }
+        screen.text(
+            body.x,
+            y,
+            "Transport chiffré (TLS 1.3), serveur non authentifié : rien ne s'installe tout seul.",
+            TEXT_FAINT,
+            Font::Small,
+        );
+        y += self.line_h();
         y += 6;
 
         for (title, list) in [("Nouveautés de cette version", &CHANGES[..]), ("Prochaines étapes", &NEXT[..])] {
@@ -2277,8 +2344,8 @@ impl Desktop {
     fn click_settings(&mut self, x: usize, y: usize) {
         for index in 0..SECTIONS.len() {
             if self.side_rect(index).contains(x, y) {
+                // The check's answer outlives a change of section.
                 self.section = index;
-                self.update = Update::Idle;
                 self.damage(self.windows[App::Settings.index()].area);
                 return;
             }
@@ -2297,9 +2364,18 @@ impl Desktop {
             return;
         }
         if self.section == SECTIONS.len() - 1 && self.update_button_rect().contains(x, y) {
-            self.update = Update::Checking(self.ms);
-            self.damage(self.windows[App::Settings.index()].area);
+            self.start_update();
         }
+    }
+
+    /// Asks the kernel for an update check, unless one is already running.
+    fn start_update(&mut self) {
+        if matches!(self.update, Update::Checking(_)) {
+            return;
+        }
+        self.update = Update::Checking(self.ms);
+        self.update_ask = true;
+        self.damage(self.windows[App::Settings.index()].area);
     }
 
     fn click_files(&mut self, x: usize, y: usize) {
@@ -2699,7 +2775,7 @@ impl Desktop {
                         self.password = (!self.typed.is_empty()).then(|| self.typed.clone());
                         self.typed.clear();
                     }
-                    Key::Enter if self.section == SECTIONS.len() - 1 => self.update = Update::Checking(self.ms),
+                    Key::Enter if self.section == SECTIONS.len() - 1 => self.start_update(),
                     _ => return None,
                 }
                 self.damage(self.windows[App::Settings.index()].area);

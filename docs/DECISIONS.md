@@ -922,3 +922,46 @@ hachage bouclait sans fin), une soustraction conditionnelle fausse dans
 Poly1305, et cinq destinations mélangées dans l'échelle de Montgomery. Aucune
 n'aurait été visible en relisant le code. Le noyau ne les embarque pas encore :
 il manque la poignée de main.
+
+---
+
+### D-040 — La mise à jour automatique : TLS 1.3 dans le noyau
+**2026-09-16 · actif · demandé par l'humain (« et l'auto mise a jour ? »)**
+
+**Mesuré avant d'écrire une ligne.** `http://…supabase.co` répond 301 vers
+https (Cloudflare devant) et `http://grenos-dev.vercel.app` 308 : aucune de nos
+infrastructures ne sert de http simple. Pas de raccourci possible — il fallait
+TLS dans le noyau. Sondé avec curl : le serveur accepte TLS 1.3 avec X25519 et
+ChaCha20-Poly1305, la combinaison la plus simple à écrire (pas de tables AES,
+pas d'arithmétique P-256). C'est la seule proposée par le client.
+
+→ **Primitives d'abord, prouvées sur l'hôte** contre les vecteurs de RFC 4231,
+5869, 8439 et 7748 (`scratchpad/crypto_test`) : trois vraies fautes attrapées,
+aucune visible à la relecture.
+→ **La poignée de main est une machine à états sans entrées-sorties**
+(`tls.rs`) : elle transforme des octets en octets. Le même fichier a donc été
+compilé pour l'hôte et branché sur une vraie socket (`scratchpad/tls_test`) :
+poignée de main réussie avec Supabase (200, `index.json` lu) et avec Vercel
+(200, 23 Ko). Le `Finished` du serveur ne se vérifie que si tout le calendrier
+de clés est juste : c'était le meilleur oracle disponible.
+→ **Ce qui n'est pas vérifié, et c'est écrit dans la fenêtre** : l'identité du
+serveur. Le certificat est lu et haché dans la transcription, pas validé (ni
+X.509 ni racines). Le canal est chiffré, pas authentifié. C'est acceptable pour
+*signaler* une version plus récente, pas pour *installer* quoi que ce soit : le
+jour où le disque permet d'installer, les images publiées seront signées
+(Ed25519) et la signature vérifiée par le noyau, indépendamment du transport.
+→ **L'aléa** (`rand.rs`) : RDRAND quand le processeur l'a, toujours mélangé au
+compteur de temps, à l'horloge et à un compteur par SHA-256. Le processeur par
+défaut de QEMU n'a pas RDRAND : l'aléa n'y vaut que l'horloge — assez pour que
+deux connexions n'aient jamais la même clé, pas contre quelqu'un qui observe le
+démarrage.
+→ **La vérification** (`update.rs`) lit le même `index.json` que la page de
+téléchargement, compare le commit de la première entrée au build qui tourne,
+et le dit : « à jour », « nouvelle version disponible », ou « build locale ».
+Au démarrage dès que DHCP répond, puis à chaque clic. Le noyau l'écrit aussi sur
+la sortie série (`update: newest build …`) ; ce n'est **pas** une étape de CI
+exigée, parce qu'elle dépendrait d'un serveur extérieur.
+→ **Faute évitée en chemin** : le navigateur et la vérification ont chacun un
+résolveur DNS, et chaque résolveur avalait toutes les réponses DNS. Chacun ne
+prend désormais que la réponse à sa propre question, avec un identifiant tiré
+au hasard.
