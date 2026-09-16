@@ -73,6 +73,26 @@ export const config = {
 
   maxConcurrentTasks: num("MAX_CONCURRENT_TASKS", 3),
 
+  /**
+   * How many models answer one task side by side, per model role (executor.ts,
+   * choose). The Coder writes what CI judges, so it gets the widest panel;
+   * the Architect two; the Master decides alone. NVIDIA allows 40 requests a
+   * minute, and a panel of three with its corrections stays well under it.
+   */
+  panels: {
+    coder: num("PANEL_CODER", 3),
+    architect: num("PANEL_ARCHITECT", 2),
+    tester: num("PANEL_TESTER", 1),
+    master: 1,
+  } as Record<"coder" | "architect" | "tester" | "master", number>,
+
+  /**
+   * Build and lint the kernel on this machine before committing (localcheck.ts).
+   * Off unless asked for: it needs the pinned Rust toolchain, which a small
+   * host does not have.
+   */
+  localCheck: (process.env.LOCAL_CHECK ?? "false").toLowerCase() === "true",
+
   // Volontairement absents d'ici :
   //   - le nombre de tentatives par tâche vient du frontmatter de chaque agent
   //     (agents/**/*.md), parce qu'un relecteur et un codeur n'ont pas les

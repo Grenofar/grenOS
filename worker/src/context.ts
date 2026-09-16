@@ -57,8 +57,17 @@ export function selectContext(files: RepoFile[], include: string[], maxBytesPerF
     .sort((a, b) => rank(a.path) - rank(b.path) || a.path.localeCompare(b.path));
 }
 
-const BUDGET_CHARS = 60_000;
-const MAX_FILE_BYTES = 30_000;
+// The kernel outgrew the first budget (60 000 characters, files of 30 KiB at
+// most): by 2026-09-16 it was 377 KiB, desktop.rs alone 150, and the files a
+// task most needed to patch were the ones never shown — patch_file has to
+// quote the file exactly. Now a task's writable files come whole, up to
+// 200 KiB each and 220 000 characters in all (about 65 000 tokens, inside
+// every model the cascades use); small read-only files follow whole; every
+// other Rust file is summed up by its signatures, so the APIs are still known.
+const BUDGET_CHARS = 220_000;
+const MAX_FILE_BYTES = 200_000;
+const READ_ONLY_WHOLE_BYTES = 30_000;
+const DOCS_BUDGET_CHARS = 70_000;
 // Four backticks: design documents contain their own triple-backtick blocks,
 // and a three-backtick fence would end at the first one.
 const FENCE = "````";
@@ -88,7 +97,19 @@ export async function repoContext(
       canWrite: agent.canWrite,
     }).ok;
 
+  // The design documents are read first, within a share of their own: the
+  // specifications a task is written against must never be the part that a
+  // large source file pushes out of the budget.
   let used = 0;
+  const shownDocs: string[] = [];
+  for (const f of docs) {
+    if (used + f.size > DOCS_BUDGET_CHARS) continue;
+    const content = await gh.readFile(f.path, baseTree ? base : readRef);
+    if (content === null) continue;
+    used += content.length;
+    shownDocs.push(`\n## ${f.path}\n${FENCE}\n${content}\n${FENCE}`);
+  }
+
   const parts: string[] = [];
 
   parts.push(`\n# Repository — what exists on \`${readRef}\`\n`);
@@ -106,29 +127,64 @@ export async function repoContext(
     for (const f of code) {
       parts.push(`- ${f.path}${writable(f.path) ? " (writable)" : ""} — ${f.size} B`);
     }
+    // Writable files first, whole; then small read-only ones, whole; what is
+    // left is outlined.
+    const whole = new Set<string>();
+    const passes: Array<(f: RepoFile) => boolean> = [
+      (f) => writable(f.path),
+      (f) => !writable(f.path) && f.size <= READ_ONLY_WHOLE_BYTES,
+    ];
+    for (const pass of passes) {
+      for (const f of code.filter(pass)) {
+        if (used + f.size > BUDGET_CHARS + DOCS_BUDGET_CHARS) continue;
+        const content = await gh.readFile(f.path, readRef);
+        if (content === null) continue;
+        used += content.length;
+        whole.add(f.path);
+        parts.push(
+          `\n## ${f.path}${writable(f.path) ? " (writable)" : ""}\n${FENCE}\n${content}\n${FENCE}`,
+        );
+      }
+    }
+    const outlined: string[] = [];
     for (const f of code) {
-      if (used + f.size > BUDGET_CHARS) continue;
+      if (whole.has(f.path) || !f.path.endsWith(".rs")) continue;
       const content = await gh.readFile(f.path, readRef);
       if (content === null) continue;
-      used += content.length;
+      const summary = outline(content);
+      if (used + summary.length > BUDGET_CHARS + DOCS_BUDGET_CHARS + 50_000) continue;
+      used += summary.length;
+      outlined.push(`\n## ${f.path} — outline only (${f.size} B)\n${FENCE}\n${summary}\n${FENCE}`);
+    }
+    if (outlined.length > 0) {
       parts.push(
-        `\n## ${f.path}${writable(f.path) ? " (writable)" : ""}\n${FENCE}\n${content}\n${FENCE}`,
+        "\n# Outlines\n\nThese files are too large to show whole next to your writable files: " +
+          "their items and signatures follow, bodies left out. Do not patch a file shown only " +
+          "as an outline; if the task needs one, return failed and name it, so the Master can " +
+          "give it to you.",
       );
+      parts.push(...outlined);
     }
   }
 
-  const shownDocs: string[] = [];
-  for (const f of docs) {
-    if (used + f.size > BUDGET_CHARS) continue;
-    const content = await gh.readFile(f.path, baseTree ? base : readRef);
-    if (content === null) continue;
-    used += content.length;
-    shownDocs.push(`\n## ${f.path}\n${FENCE}\n${content}\n${FENCE}`);
-  }
   if (shownDocs.length > 0) {
     parts.push(`\n# Design documents — \`${baseTree ? base : readRef}\`\n`);
     parts.push(...shownDocs);
   }
 
   return parts.join("\n");
+}
+
+/**
+ * A Rust file reduced to what another file can use: module docs, attributes,
+ * and the first line of every item — functions, types, traits, constants,
+ * impls and modules — with bodies left out. Pure.
+ */
+export function outline(source: string): string {
+  const keep = /^\s*(\/\/!|#\[|(pub(\([^)]*\))?\s+)?(unsafe\s+|const\s+|async\s+|extern\s+"[^"]*"\s+)*(fn|struct|enum|trait|type|const|static|mod|impl|macro_rules!|use)\b)/;
+  return source
+    .split(/\r?\n/)
+    .filter((line) => keep.test(line))
+    .map((line) => line.replace(/\s*\{\s*$/, "").replace(/\s+$/, ""))
+    .join("\n");
 }

@@ -72,7 +72,7 @@ jobs:
         if: steps.probe.outputs.present == 'true'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-x86 xorriso mtools
+          sudo apt-get install -y -qq qemu-system-x86 xorriso mtools gdisk
 
       - name: cargo build
         id: build
@@ -117,10 +117,28 @@ jobs:
             fi
           fi
 
-          IMAGE=$(find kernel -name '*.iso' -o -name '*.img' | head -n1)
-          if [ -z "$IMAGE" ]; then
-            echo "Aucune image bootable produite" | tee "$RUNNER_TEMP/qemu.log"
-            exit 1
+          # Le disque dur (docs/specs/disk-and-updates.md, tache A) : quand le
+          # script existe, la machine demarre sur ce disque, par un controleur
+          # AHCI, comme la machine VirtualBox qui pourra s'installer ses mises
+          # a jour. Sans lui, sur l'ISO, comme avant.
+          if [ -f kernel/scripts/make-disk.sh ]; then
+            echo "--- disk image ---" | tee -a "$RUNNER_TEMP/iso.log"
+            if ! bash kernel/scripts/make-disk.sh 2>&1 | tee -a "$RUNNER_TEMP/iso.log"; then
+              echo "error: kernel/scripts/make-disk.sh failed (it runs from the repository root, not from kernel/)" | tee -a "$RUNNER_TEMP/iso.log"
+              exit 1
+            fi
+            if [ ! -f kernel/grenos-disk.img ]; then
+              echo "error: kernel/scripts/make-disk.sh must write kernel/grenos-disk.img" | tee -a "$RUNNER_TEMP/iso.log"
+              exit 1
+            fi
+            BOOT=(-drive file=kernel/grenos-disk.img,format=raw,if=none,id=disk0 -device ahci,id=ahci0 -device ide-hd,drive=disk0,bus=ahci0.0,bootindex=1)
+          else
+            IMAGE=$(find kernel -name '*.iso' | head -n1)
+            if [ -z "$IMAGE" ]; then
+              echo "Aucune image bootable produite" | tee "$RUNNER_TEMP/qemu.log"
+              exit 1
+            fi
+            BOOT=(-cdrom "$IMAGE")
           fi
 
           # L'ecran aussi (D-033) : QEMU tourne sans fenetre mais garde sa carte
@@ -128,7 +146,7 @@ jobs:
           # de Limine (3 s) et le dessin du kernel. L'etape « ecran » la juge ;
           # la sortie serie reste jugee ici, comme avant.
           MONITOR="$RUNNER_TEMP/qemu-monitor.sock"
-          timeout 90 qemu-system-x86_64 -cdrom "$IMAGE" -serial stdio -display none -no-reboot -no-shutdown -m 256M \
+          timeout 90 qemu-system-x86_64 "${BOOT[@]}" -serial stdio -display none -no-reboot -no-shutdown -m 256M \
             -monitor "unix:$MONITOR,server,nowait" 2>&1 | tee "$RUNNER_TEMP/qemu.log" &
           sleep 25
           python3 scripts/ci-screen.py grab "$MONITOR" "$RUNNER_TEMP/screen.ppm" || true
@@ -216,6 +234,25 @@ jobs:
           cat "$RUNNER_TEMP/net.log"
           exit "$failed"
 
+      # Informatif, jamais exige tant qu'on ne l'a pas vu vert (la regle des
+      # etapes) : le disque, les signatures et l'installation des mises a jour
+      # (docs/specs/disk-and-updates.md). Ce qu'il imprime part dans le log du
+      # verdict, sous "--- disk ---", pour que le Codeur le lise.
+      - name: disque et mises a jour (informatif)
+        id: disk
+        if: steps.qemu.outcome == 'success'
+        continue-on-error: true
+        run: |
+          grep -E '^(disk|crypto|update):' "$RUNNER_TEMP/qemu.log" > "$RUNNER_TEMP/disk.log" || true
+          for line in 'disk: AHCI port' 'disk: grenOS partition' 'disk: write and read back verified' 'crypto: ed25519 verified against RFC 8032'; do
+            if grep -q "$line" "$RUNNER_TEMP/qemu.log"; then
+              echo "disk: seen, $line" | tee -a "$RUNNER_TEMP/disk.log"
+            else
+              echo "disk: not yet, $line" | tee -a "$RUNNER_TEMP/disk.log"
+            fi
+          done
+          cat "$RUNNER_TEMP/disk.log"
+
       # L'image qui vient de booter, telechargeable depuis la page du run
       # (section Artifacts) : c'est l'OS lui-meme, a lancer avec
       # qemu-system-x86_64 -cdrom <image> -serial stdio. Un souci d'artefact
@@ -226,7 +263,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: grenos-${{ github.sha }}
-          path: kernel/**/*.iso
+          path: |
+            kernel/**/*.iso
+            kernel/grenos-disk.img
           if-no-files-found: ignore
           retention-days: 30
 
@@ -328,7 +367,7 @@ jobs:
           # On garde la fin des logs : l'erreur qui compte est presque toujours
           # la derniere, et un dump complet noie le Codeur au retour.
           : > combined.log
-          for f in build clippy iso qemu screen input net; do
+          for f in build clippy iso qemu screen input net disk; do
             if [ -f "$RUNNER_TEMP/$f.log" ]; then
               echo "--- $f ---" >> combined.log
               cat "$RUNNER_TEMP/$f.log" >> combined.log

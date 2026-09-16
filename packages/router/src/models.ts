@@ -44,18 +44,35 @@ export interface ModelSpec {
   rpm: number;
   /** Measured round trip on a trivial prompt, for cascade ordering. */
   latencyMs: number;
+  /**
+   * Extra fields for the request body. On NIM, the models that reason before
+   * answering do so by default, and it is what made them slow: on 2026-09-16
+   * Nemotron 3 Super took two minutes for a function and ran out of tokens
+   * thinking, then answered the same prompt in 5 s with thinking off.
+   */
+  extra?: Record<string, unknown>;
+  /** A longer ceiling for a model that is slow but worth waiting for. */
+  timeoutMs?: number;
 }
+
+// Reasoning off: on NIM the reasoning models think before every answer by
+// default. Measured 2026-09-16 on the same Rust task: Nemotron 3 Super 125 s
+// and no code with it, 5 s with it off; DeepSeek V4 Flash 2.4 s with it off.
+const NO_THINKING = { chat_template_kwargs: { thinking: false, enable_thinking: false } };
 
 export const MODELS: Record<string, ModelSpec> = {
   // --- NVIDIA NIM ----------------------------------------------------------
-  "deepseek-ai/deepseek-v4-pro-0813": {
+  // DeepSeek V4 Pro led the Coder and the Architect until NVIDIA retired it on
+  // 2026-09-14 (HTTP 410). Its successor on the account is V4 Flash.
+  "deepseek-ai/deepseek-v4-flash-0731": {
     provider: "nvidia",
-    id: "deepseek-ai/deepseek-v4-pro-0813",
-    label: "DeepSeek V4 Pro",
+    id: "deepseek-ai/deepseek-v4-flash-0731",
+    label: "DeepSeek V4 Flash",
     contextTokens: 128_000,
     dailyRequests: null,
     rpm: 40,
-    latencyMs: 4900,
+    latencyMs: 2400,
+    extra: NO_THINKING,
   },
   "nvidia/nemotron-3-super-120b-a12b": {
     provider: "nvidia",
@@ -64,8 +81,12 @@ export const MODELS: Record<string, ModelSpec> = {
     contextTokens: 128_000,
     dailyRequests: null,
     rpm: 40,
-    latencyMs: 2500,
+    latencyMs: 5300,
+    extra: NO_THINKING,
   },
+  // Slow on 2026-09-16 (no answer within 180 s, reasoning off or not), but a
+  // strong model and a third opinion in a panel, whose grace period means it
+  // never holds a task back: a long ceiling, and never first.
   "moonshotai/kimi-k3": {
     provider: "nvidia",
     id: "moonshotai/kimi-k3",
@@ -73,7 +94,9 @@ export const MODELS: Record<string, ModelSpec> = {
     contextTokens: 200_000,
     dailyRequests: null,
     rpm: 40,
-    latencyMs: 14400,
+    latencyMs: 180_000,
+    extra: NO_THINKING,
+    timeoutMs: 600_000,
   },
 
   // --- Google Gemini -------------------------------------------------------
@@ -112,43 +135,45 @@ export type ModelRole = "master" | "architect" | "coder" | "tester";
 
 /**
  * Ordered preference per role. The router walks the list and takes the first
- * model that is neither out of quota nor rate-limited.
+ * model that is neither out of quota nor rate-limited; a panel (executor.ts)
+ * takes the first few NVIDIA ones side by side.
  *
- * Measured latency drove the ordering as much as capability. The Master runs
- * on every state change, so it gets the fast one; the Coder produces the diff
- * everything downstream depends on, so it gets the strongest; the Architect
- * runs rarely and thinks longest, so the 14-second model is fine there.
+ * Measured on 2026-09-16, when the old leader had been retired: only DeepSeek
+ * V4 Flash and Nemotron 3 Super answered a real coding prompt within three
+ * minutes (GLM 5.3, GLM 5.3 Flash, Nemotron 3 Ultra, Gemma 4 and Kimi K3 did
+ * not). Neither wrote the test function right on its first try, which is why
+ * writers work as a panel with a local build, rather than on one "best" model.
  *
  * The floor has two floors. On 2026-09-11 the NIM models timed out or answered
  * 503 while gemini-3.8-flash refused for "high demand", all at once, and every
  * cascade was down for most of an hour. Each Gemini model has its own
  * capacity and its own daily quota, so gemini-3.7-flash is a real second
- * floor; Nemotron, which answers when the big NIM models do not, is the
- * Architect's last resort. Both are only reached when everything above failed.
+ * floor.
  */
 export const CASCADES: Record<ModelRole, string[]> = {
   master: [
     "nvidia/nemotron-3-super-120b-a12b",
-    "deepseek-ai/deepseek-v4-pro-0813",
+    "deepseek-ai/deepseek-v4-flash-0731",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
   ],
   architect: [
-    "deepseek-ai/deepseek-v4-pro-0813",
+    "deepseek-ai/deepseek-v4-flash-0731",
+    "nvidia/nemotron-3-super-120b-a12b",
     "moonshotai/kimi-k3",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
-    "nvidia/nemotron-3-super-120b-a12b",
   ],
   coder: [
-    "deepseek-ai/deepseek-v4-pro-0813",
+    "deepseek-ai/deepseek-v4-flash-0731",
     "nvidia/nemotron-3-super-120b-a12b",
+    "moonshotai/kimi-k3",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
   ],
   tester: [
     "nvidia/nemotron-3-super-120b-a12b",
-    "deepseek-ai/deepseek-v4-pro-0813",
+    "deepseek-ai/deepseek-v4-flash-0731",
     "gemini-3.6-flash",
   ],
 };

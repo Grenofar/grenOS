@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { Router, RouterExhaustedError, type UsageStore } from "../src/index.ts";
+import { CASCADES, Router, RouterExhaustedError, type UsageStore } from "../src/index.ts";
 
 /**
  * The cascade only misbehaves under conditions that are inconvenient to
@@ -15,7 +15,7 @@ import { Router, RouterExhaustedError, type UsageStore } from "../src/index.ts";
 
 const realFetch = globalThis.fetch;
 
-const NV = "deepseek-ai/deepseek-v4-pro-0813";
+const NV = "deepseek-ai/deepseek-v4-flash-0731";
 const NEMO = "nvidia/nemotron-3-super-120b-a12b";
 const KIMI = "moonshotai/kimi-k3";
 
@@ -107,10 +107,13 @@ test("the master starts on the fastest model — it runs on every state change",
   assert.equal(res.model, NEMO);
 });
 
-test("the architect may use the slow model — it runs rarely", async () => {
+test("the architect falls back to Nemotron, then to the slow model", async () => {
   stubFetch((m) => (m === NV ? new Response("down", { status: 503 }) : anyOk(m)));
   const res = await new Router(both()).complete({ role: "architect", system: "s", messages: [] });
-  assert.equal(res.model, KIMI);
+  assert.equal(res.model, NEMO);
+  stubFetch((m) => (m === KIMI ? anyOk(m) : new Response("down", { status: 503 })));
+  const slow = await new Router(both()).complete({ role: "architect", system: "s", messages: [] });
+  assert.equal(slow.model, KIMI);
 });
 
 test("the cascade crosses providers when NVIDIA fails", async () => {
@@ -123,7 +126,7 @@ test("the cascade crosses providers when NVIDIA fails", async () => {
 
   assert.equal(res.provider, "gemini");
   assert.equal(res.model, "gemini-3.8-flash");
-  assert.deepEqual(calls, [NV, NEMO, "gemini-3.8-flash"]);
+  assert.deepEqual(calls, [NV, NEMO, KIMI, "gemini-3.8-flash"]);
 });
 
 test("a second Gemini floor answers when the first is at high demand", async () => {
@@ -135,15 +138,28 @@ test("a second Gemini floor answers when the first is at high demand", async () 
   const res = await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
 
   assert.equal(res.model, "gemini-3.7-flash");
-  assert.deepEqual(calls, [NV, NEMO, "gemini-3.8-flash", "gemini-3.7-flash"]);
+  assert.deepEqual(calls, [NV, NEMO, KIMI, "gemini-3.8-flash", "gemini-3.7-flash"]);
 });
 
-test("the architect's last resort is Nemotron, which answers when the big models do not", async () => {
-  const calls = stubFetch((m) => (m === NEMO ? nvidiaOk() : new Response("overloaded", { status: 503 })));
-  const res = await new Router(both()).complete({ role: "architect", system: "s", messages: [] });
+test("a retired model is set aside for a day, not retried every tick", async () => {
+  // DeepSeek V4 Pro answered 410 Gone from 2026-09-14, when it reached its
+  // end of life on NIM.
+  const calls = stubFetch((m) => (m === NV ? new Response("Gone", { status: 410 }) : anyOk(m)));
+  const router = new Router(both());
+  const first = await router.complete({ role: "coder", system: "s", messages: [] });
+  assert.equal(first.model, NEMO);
+  await router.complete({ role: "coder", system: "s", messages: [] });
+  assert.equal(calls.filter((m) => m === NV).length, 1);
+});
 
-  assert.equal(res.model, NEMO);
-  assert.deepEqual(calls, [NV, KIMI, "gemini-3.8-flash", "gemini-3.7-flash", NEMO]);
+test("a model's own request fields and timeout reach NVIDIA", async () => {
+  let body: Record<string, unknown> = {};
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body));
+    return nvidiaOk();
+  }) as typeof fetch;
+  await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
+  assert.deepEqual(body["chat_template_kwargs"], { thinking: false, enable_thinking: false });
 });
 
 test("without an NVIDIA key its models are skipped, not called", async () => {
@@ -295,7 +311,7 @@ test("only fails once every model is unusable", async () => {
     () => router.complete({ role: "coder", system: "s", messages: [] }),
     RouterExhaustedError,
   );
-  assert.equal(calls.length, 4, "un appel par modèle pour apprendre chaque limite");
+  assert.equal(calls.length, CASCADES.coder.length, "un appel par modèle pour apprendre chaque limite");
 
   calls.length = 0;
   await assert.rejects(
@@ -374,4 +390,15 @@ test("a refused NVIDIA key is reported as NVIDIA's, not Gemini's", async () => {
     () => router.complete({ role: "coder", system: "s", messages: [] }),
     (err: Error) => /NVIDIA refuse la clé/.test(err.message) && !/Gemini refuse/.test(err.message),
   );
+});
+
+test("a panel takes distinct NVIDIA models of the role, and a pinned request tries only its model", async () => {
+  const { Router, InMemoryUsageStore, CASCADES, MODELS } = await import("../src/index.ts");
+  const router = new Router({ geminiApiKey: "g", nvidiaApiKey: "n", usage: new InMemoryUsageStore() });
+  const members = router.panel("coder", 3);
+  assert.equal(new Set(members).size, members.length);
+  assert.ok(members.length >= 1 && members.length <= 3);
+  assert.ok(members.every((m: string) => CASCADES.coder.includes(m) && MODELS[m]?.provider === "nvidia"));
+  const noNvidia = new Router({ geminiApiKey: "g", usage: new InMemoryUsageStore() });
+  assert.ok(noNvidia.panel("coder", 3).every((m: string) => MODELS[m]?.provider === "gemini"));
 });

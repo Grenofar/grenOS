@@ -973,3 +973,58 @@ parmi les dix dernières publiées ».
 → **Panne vécue** : la première publication de 0.8.0 a reçu un 503 de Supabase
 Storage au dépôt. Le jeton du worker ne peut pas relancer un job GitHub (403) :
 c'est un nouveau push sous `kernel/` qui republie.
+
+---
+
+### D-041 — Les agents reprennent le noyau, en panel de modèles
+**2026-09-16 · actif · demandé par l'humain (« ne code pas directement, utilise
+des agents ai et aide les et code avec eux », « prends un maximum de modèles
+nvidia, tu peux mettre plusieurs modèles par tâche »)**
+
+D-034 est suspendu : le noyau est de nouveau écrit par la fabrique. Claude
+prépare les spécifications, relit, corrige avec les agents, et tient la CI.
+Avant de relancer quoi que ce soit, mesuré le jour même :
+
+→ **Le modèle de tête du Codeur et de l'Architecte n'existait plus.** DeepSeek V4
+Pro répond `410 Gone` depuis sa fin de vie le 2026-09-14 : la première tâche
+aurait échoué. Le routeur traite désormais un 410 comme un retrait (24 h de
+côté) et non comme une panne à retenter toutes les 15 s.
+→ **Les modèles lents l'étaient parce qu'ils raisonnaient.** Même tâche Rust
+(un décodeur HTTP « chunked » jugé par des tests compilés sur l'hôte) :
+Nemotron 3 Super, 125 s et 8 000 tokens de réflexion sans une ligne de code ;
+raisonnement coupé (`chat_template_kwargs`), 5 s. GLM 5.3 Flash réfléchit quoi
+qu'on lui dise (139 s, rien). Kimi K3, GLM 5.3 et Nemotron 3 Ultra dépassent
+180 s. Le catalogue porte donc, par modèle, ses champs de requête et son délai.
+→ **Aucun modèle n'a écrit juste du premier coup.** DeepSeek V4 Flash (2,4 s)
+compile mais consomme deux fois la ligne vide finale ; Nemotron (5 s) ne compile
+pas. D'où les deux mécanismes suivants, plutôt qu'un « meilleur modèle ».
+→ **Panel** (`executor.ts`) : une tâche d'écriture est donnée à plusieurs
+modèles en même temps (Codeur 3, Architecte 2, réglable par `PANEL_*`), chacun
+dans sa conversation avec ses consultations et ses corrections. On garde, dans
+l'ordre de la cascade, la première réponse qui a compilé, sinon la première qui
+a passé le pré-vol. Dès qu'un membre a une réponse valide, les autres ont 90 s,
+pas plus.
+→ **Build local** (`localcheck.ts`, `LOCAL_CHECK=true`) : sur la machine du
+worker, qui a la toolchain épinglée, le noyau est compilé et passé à clippy
+comme en CI, et les erreurs du compilateur reviennent au modèle dans la même
+tentative — des secondes au lieu de huit minutes par essai. **Sécurité** : compiler
+le code d'un modèle exécute du code sur ce PC. Refusé (laissé à la CI, qui tourne
+dans une VM jetable) dès qu'un `build.rs`, le manifeste, la config cargo ou la
+toolchain diffèrent de `main`, ou qu'un fichier est inclus à la compilation
+(`include_str!`, `include_bytes!`, `include!`, `#[path]`) ou qu'une variable
+d'environnement autre que les trois du noyau est lue : leur contenu pourrait
+sortir dans un message d'erreur, renvoyé au modèle. Cargo tourne hors du dépôt,
+avec un environnement sans aucun secret, et sa sortie est expurgée des valeurs
+secrètes.
+→ **Contexte** (`context.ts`) : le noyau fait 377 Kio et `desktop.rs` 150 ; le
+budget d'avant (60 000 caractères, fichiers de 30 Kio au plus) ne montrait
+jamais les fichiers à modifier. Désormais : les documents de conception d'abord
+(70 000 caractères réservés), puis les fichiers modifiables entiers, puis les
+petits fichiers en lecture seule, et un sommaire des signatures pour le reste.
+→ **Spécifications vérifiées** (`docs/specs/`) : ce que les agents ne savent pas
+et inventent — registres AHCI, FIS, FAT32, vecteurs RFC 8032, options de
+Limine — écrit par Claude avec la source de chaque fait (en anglais : lu par les
+modèles). Première : `docs/specs/disk-and-updates.md`.
+→ **CI** : `verify.yml` démarre sur le disque dur par AHCI dès que
+`kernel/scripts/make-disk.sh` existe, et une étape informative montre les lignes
+`disk:`, `crypto:` et `update:` sans jamais faire échouer un run.

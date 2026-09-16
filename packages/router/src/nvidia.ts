@@ -33,6 +33,8 @@ export interface NvidiaCallOptions {
   maxOutputTokens: number;
   temperature: number;
   timeoutMs: number;
+  /** Model-specific body fields (models.ts, `extra`). */
+  extra?: Record<string, unknown>;
 }
 
 export interface NvidiaCallResult {
@@ -55,6 +57,7 @@ export async function callNvidia(
     ],
     max_tokens: opts.maxOutputTokens,
     temperature: opts.temperature,
+    ...(opts.extra ?? {}),
     // Deliberately no response_format: support for JSON mode varies across an
     // 80-model catalogue, and a model that rejects it fails the whole call.
     // The envelope parser already recovers JSON from a code fence or a

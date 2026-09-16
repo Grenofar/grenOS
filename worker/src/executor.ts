@@ -14,6 +14,7 @@ import {
   PREFLIGHT_ROUNDS,
 } from "./preflight.ts";
 import { checkDependencies, checkEditions, crateReleases, crateVersions } from "./deps.ts";
+import { localCheck } from "./localcheck.ts";
 import type { GitHub } from "./github.ts";
 import type { AgentDefinition } from "./prompts.ts";
 
@@ -81,168 +82,58 @@ export async function executeTask(
   const allowedPaths =
     task.allowed_paths.length > 0 ? task.allowed_paths : agent.allowedPaths;
 
-  // ---- Answer: read if needed, fix what pre-flight finds -------------------
-  const conversation: Array<{ role: "user" | "assistant"; content: string }> = [
-    { role: "user", content: await buildPrompt(task, agent, allowedPaths, gh, branch, readRef) },
-  ];
+  const prompt = await buildPrompt(task, agent, allowedPaths, gh, branch, readRef);
 
-  let envelope: AgentEnvelope | null = null;
-  let changes: Change[] = [];
-  let modelUsed = "";
-  let usage = { tokensIn: 0, tokensOut: 0, latencyMs: 0 };
-  let consulted = 0;
-  let corrected = 0;
+  // ---- Answer: one model, or a panel of them side by side ------------------
+  // A panel gives the same task to several models at once, each in its own
+  // conversation, and keeps the best answer that survives the checks. One
+  // model's blind spot is rarely another's: on 2026-09-16 DeepSeek V4 Flash
+  // wrote a chunked-body decoder that compiled and failed on the simplest
+  // input.
+  const members = router.panel(agent.modelRole, panelSize(agent));
+  // The slowest member must not hold the task: once one answer is ready, the
+  // others get PANEL_GRACE_MS more, and whatever has not finished by then is
+  // told to stop at its next turn.
+  const stop = { stopped: false };
+  const answers =
+    members.length > 1
+      ? await gather(
+          members.map((model) => converse({ task, agent, router, gh, readRef, allowedPaths, prompt, model, stop })),
+          (answer) => answer.kind === "ready" && answer.envelope.status !== "failed",
+          PANEL_GRACE_MS,
+        )
+      : [await converse({ task, agent, router, gh, readRef, allowedPaths, prompt, model: undefined, stop })];
+  stop.stopped = true;
 
-  for (;;) {
-    let text = "";
-    try {
-      const result = await router.complete({
-        role: agent.modelRole,
-        system: agent.systemPrompt,
-        messages: conversation,
-        maxOutputTokens: 8192,
-        json: true,
-      });
-      modelUsed = result.model;
-      usage = {
-        tokensIn: usage.tokensIn + result.tokensIn,
-        tokensOut: usage.tokensOut + result.tokensOut,
-        latencyMs: usage.latencyMs + result.latencyMs,
-      };
-
-      await db.rpc("add_mission_tokens", {
-        p_mission_id: task.mission_id,
-        p_task_id: task.id,
-        p_tokens: result.tokensIn + result.tokensOut,
-      });
-
-      text = result.text;
-      envelope = parseEnvelope(text);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-
-      // An answer that cannot be read is a slip the model can fix at once,
-      // like a pre-flight problem. On 2026-09-11 a Coder answer finally came
-      // through an hour of provider outage and was lost to one misplaced
-      // character. It comes back with the parser's reason, within the same
-      // corrections budget.
-      if (err instanceof EnvelopeError && text && corrected < PREFLIGHT_ROUNDS) {
-        corrected += 1;
-        log.info(`  réponse illisible · renvoyée à l'agent (${detail.slice(0, 80)})`);
-        await emit({
-          missionId: task.mission_id,
-          taskId: task.id,
-          agentId: agent.id,
-          level: "info",
-          type: "unreadable_answer",
-          message: detail.slice(0, 500),
-        });
-        conversation.push(
-          { role: "assistant", content: text },
-          { role: "user", content: renderUnreadable(detail, PREFLIGHT_ROUNDS - corrected) },
-        );
-        continue;
-      }
-
-      // A malformed envelope is the agent's fault; a router exhaustion is not.
-      // Only the first should consume an attempt, otherwise a quiet afternoon of
-      // rate limits would burn every retry a task has.
-      const isProvider = !(err instanceof EnvelopeError);
-      await failTask(task, isProvider ? "provider_error" : "spec_gap", detail, !isProvider);
-      return;
-    }
-
-    // The agent asks to read before it writes.
-    const asks = envelope.actions.filter(isConsult);
-    if (asks.length > 0 && consulted < CONSULT_ROUNDS) {
-      consulted += 1;
-      log.info(`  consulte · ${asks.map((a) => a.url).join(" · ").slice(0, 200)}`);
-      conversation.push(
-        { role: "assistant", content: text },
-        { role: "user", content: await consult(asks, CONSULT_ROUNDS - consulted) },
-      );
-      continue;
-    }
-
-    const resolved = await resolveWrites(envelope, agent, allowedPaths, gh, readRef);
-
-    // The sandbox is the law: nothing outside the allowed paths is ever
-    // written, and every attempt is logged. But one stray path — deleting a
-    // junk file the task did not list, on mission 1 — used to throw away the
-    // whole answer and the attempt with it. The agent is told which paths it
-    // has, and answers again; only persisting fails the task.
-    for (const v of resolved.violations) {
-      await emit({
-        missionId: task.mission_id,
-        taskId: task.id,
-        agentId: agent.id,
-        level: "warn",
-        type: "policy_violation",
-        message: v.reason,
-        payload: { path: v.path },
-      });
-    }
-
-    // An agent reporting failure is not asked to polish its files first.
-    // Otherwise the rest of each crate it touches is read from the branch:
-    // whether a crate has a panic handler, or which toolchain builds it, can
-    // depend on files the answer leaves alone (D-027).
-    const crate =
-      envelope.status === "failed" ? null : await crateContext(gh, readRef, resolved.changes);
-    const problems =
-      envelope.status === "failed"
-        ? []
-        : [
-            ...resolved.violations.map(
-              (v) =>
-                `${v.path}: outside your allowed paths (${allowedPaths.join(", ")}). Remove that action. ` +
-                "If the task cannot be done without it, return failed and name the path you need.",
-            ),
-            ...resolved.problems,
-            ...preflight(resolved.changes, crate),
-            ...(await checkDependencies(resolved.changes, crateVersions)),
-            ...(await checkEditions(resolved.changes, crate, crateReleases)),
-          ];
-    if (asks.length > 0 && resolved.changes.length === 0 && envelope.status !== "failed") {
-      problems.push(
-        "you asked to consult again, but no consultation is left in this attempt: answer with your complete work now",
-      );
-    }
-
-    if (problems.length === 0) {
-      changes = resolved.changes;
-      break;
-    }
-
-    if (corrected < PREFLIGHT_ROUNDS) {
-      corrected += 1;
-      log.info(`  pré-vol · ${problems.length} problème(s) renvoyé(s) à l'agent`);
-      await emit({
-        missionId: task.mission_id,
-        taskId: task.id,
-        agentId: agent.id,
-        level: "info",
-        type: "preflight",
-        message: problems.join(" · ").slice(0, 500),
-      });
-      conversation.push(
-        { role: "assistant", content: text },
-        { role: "user", content: renderPreflight(problems, PREFLIGHT_ROUNDS - corrected) },
-      );
-      continue;
-    }
-
-    // Still wrong after every correction: the attempt is spent, a CI run is not.
-    await failTask(
-      task,
-      resolved.violations.length > 0 ? "policy_violation" : "compile_error",
-      `Pré-vol toujours en échec après ${PREFLIGHT_ROUNDS} corrections :\n- ${problems.join("\n- ")}`,
-      true,
-    );
-    return;
+  const chosen = choose(answers);
+  if (members.length > 1) {
+    const verdicts = answers.map(describeAnswer);
+    log.info(`  panel · ${verdicts.join(" · ")} → ${chosen.model || "aucun"}`);
+    await emit({
+      missionId: task.mission_id,
+      taskId: task.id,
+      agentId: agent.id,
+      level: "info",
+      type: "panel",
+      message: `${members.length} modèles · retenu : ${chosen.model || "aucun"}`,
+      payload: { members, verdicts, chosen: chosen.model },
+    });
   }
 
-  if (!envelope) return;
+  if (chosen.kind === "failed") {
+    await failTask(task, chosen.failure, chosen.detail, chosen.consumesAttempt);
+    return;
+  }
+  const { envelope, changes, consulted, corrected } = chosen;
+  const modelUsed = chosen.model;
+  const usage = answers.reduce(
+    (sum, a) => ({
+      tokensIn: sum.tokensIn + a.usage.tokensIn,
+      tokensOut: sum.tokensOut + a.usage.tokensOut,
+      latencyMs: Math.max(sum.latencyMs, a.usage.latencyMs),
+    }),
+    { tokensIn: 0, tokensOut: 0, latencyMs: 0 },
+  );
 
   await db.from("messages").insert({
     mission_id: task.mission_id,
@@ -399,6 +290,318 @@ export async function executeTask(
   });
 
   log.info(`  ${status} · ${changes.length} fichier(s) · ${modelUsed}`);
+}
+
+type Usage = { tokensIn: number; tokensOut: number; latencyMs: number };
+
+/** What one model's conversation came to. */
+export type Answer =
+  | {
+      kind: "ready";
+      model: string;
+      envelope: AgentEnvelope;
+      changes: Change[];
+      usage: Usage;
+      consulted: number;
+      corrected: number;
+      /** True when the kernel was built and linted locally with these changes. */
+      built: boolean;
+    }
+  | {
+      kind: "failed";
+      model: string;
+      failure: string;
+      detail: string;
+      consumesAttempt: boolean;
+      usage: Usage;
+    };
+
+/** How long the rest of a panel may still take once one member has a good answer. */
+export const PANEL_GRACE_MS = 90_000;
+
+/**
+ * Every result that arrives before the grace period ends, in the order of
+ * `pending` (the cascade's). The period starts with the first result `good`
+ * accepts; without one, everything is awaited. Results that come later are
+ * dropped. Pure apart from the timer.
+ */
+export async function gather<T>(pending: Array<Promise<T>>, good: (value: T) => boolean, graceMs: number): Promise<T[]> {
+  const results: Array<T | undefined> = new Array(pending.length).fill(undefined);
+  const done: boolean[] = new Array(pending.length).fill(false);
+  await new Promise<void>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let left = pending.length;
+    const finish = () => {
+      if (timer) clearTimeout(timer);
+      resolve();
+    };
+    pending.forEach((promise, index) => {
+      void promise.then(
+        (value) => {
+          results[index] = value;
+          done[index] = true;
+          left -= 1;
+          if (left === 0) finish();
+          else if (!timer && good(value)) timer = setTimeout(finish, graceMs);
+        },
+        () => {
+          left -= 1;
+          if (left === 0) finish();
+        },
+      );
+    });
+    if (left === 0) finish();
+  });
+  return results.filter((_, index) => done[index]) as T[];
+}
+
+/** How many models answer a task at once, by the agent's model role. */
+export function panelSize(agent: Pick<AgentDefinition, "modelRole" | "canWrite">): number {
+  if (!agent.canWrite) return 1;
+  return config.panels[agent.modelRole] ?? 1;
+}
+
+/**
+ * The answer a task keeps. Pure, so the order of preference is tested.
+ *
+ * Work beats no work, and work that built locally beats work that was not
+ * built; between equals, the cascade's order (the order of `answers`) decides.
+ * An agent saying the task cannot be done only wins when nobody did it. When
+ * every member failed, a failure the agents caused (and must hear about)
+ * outranks an outage, which consumes no attempt.
+ */
+export function choose(answers: Answer[]): Answer {
+  const ready = answers.filter((a): a is Extract<Answer, { kind: "ready" }> => a.kind === "ready");
+  const working = ready.filter((a) => a.envelope.status !== "failed");
+  const withWork = working.filter((a) => a.changes.length > 0);
+  const pool = withWork.length > 0 ? withWork : working;
+  const best = pool.find((a) => a.built) ?? pool[0] ?? ready[0];
+  if (best) return best;
+  const failed = answers.filter((a): a is Extract<Answer, { kind: "failed" }> => a.kind === "failed");
+  return failed.find((a) => a.consumesAttempt) ?? failed[0] ?? answers[0]!;
+}
+
+function describeAnswer(a: Answer): string {
+  if (a.kind === "failed") return `${a.model || "?"} : ${a.failure}`;
+  if (a.envelope.status === "failed") return `${a.model} : impossible selon lui`;
+  const built = a.built ? ", compilé" : "";
+  const fixes = a.corrected ? `, ${a.corrected} correction(s)` : "";
+  return `${a.model} : ${a.changes.length} fichier(s)${built}${fixes}`;
+}
+
+/**
+ * One model's conversation for a task: read if needed, answer, fix what
+ * pre-flight and the local build find. `model` pins it to one model (a panel
+ * member); undefined lets the router walk the role's cascade.
+ */
+async function converse(opts: {
+  task: TaskRow;
+  agent: AgentDefinition;
+  router: Router;
+  gh: GitHub;
+  readRef: string;
+  allowedPaths: string[];
+  prompt: string;
+  model: string | undefined;
+  /** Set when the panel has moved on: this conversation ends at its next turn. */
+  stop: { stopped: boolean };
+}): Promise<Answer> {
+  const { task, agent, router, gh, readRef, allowedPaths } = opts;
+  const conversation: Array<{ role: "user" | "assistant"; content: string }> = [
+    { role: "user", content: opts.prompt },
+  ];
+
+  let modelUsed = opts.model ?? "";
+  const usage: Usage = { tokensIn: 0, tokensOut: 0, latencyMs: 0 };
+  let consulted = 0;
+  let corrected = 0;
+
+  for (;;) {
+    if (opts.stop.stopped) {
+      return {
+        kind: "failed",
+        model: modelUsed,
+        failure: "provider_error",
+        detail: "the panel moved on before this member finished",
+        consumesAttempt: false,
+        usage,
+      };
+    }
+    let text = "";
+    let envelope: AgentEnvelope;
+    try {
+      const result = await router.complete({
+        role: agent.modelRole,
+        system: agent.systemPrompt,
+        messages: conversation,
+        maxOutputTokens: 8192,
+        json: true,
+        ...(opts.model ? { model: opts.model } : {}),
+      });
+      modelUsed = result.model;
+      usage.tokensIn += result.tokensIn;
+      usage.tokensOut += result.tokensOut;
+      usage.latencyMs += result.latencyMs;
+
+      await db.rpc("add_mission_tokens", {
+        p_mission_id: task.mission_id,
+        p_task_id: task.id,
+        p_tokens: result.tokensIn + result.tokensOut,
+      });
+
+      text = result.text;
+      envelope = parseEnvelope(text);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+
+      // An answer that cannot be read is a slip the model can fix at once,
+      // like a pre-flight problem. On 2026-09-11 a Coder answer finally came
+      // through an hour of provider outage and was lost to one misplaced
+      // character. It comes back with the parser's reason, within the same
+      // corrections budget.
+      if (err instanceof EnvelopeError && text && corrected < PREFLIGHT_ROUNDS) {
+        corrected += 1;
+        log.info(`  réponse illisible (${modelUsed}) · renvoyée à l'agent (${detail.slice(0, 80)})`);
+        await emit({
+          missionId: task.mission_id,
+          taskId: task.id,
+          agentId: agent.id,
+          level: "info",
+          type: "unreadable_answer",
+          message: `${modelUsed}: ${detail}`.slice(0, 500),
+        });
+        conversation.push(
+          { role: "assistant", content: text },
+          { role: "user", content: renderUnreadable(detail, PREFLIGHT_ROUNDS - corrected) },
+        );
+        continue;
+      }
+
+      // A malformed envelope is the agent's fault; a router exhaustion is not.
+      // Only the first should consume an attempt, otherwise a quiet afternoon of
+      // rate limits would burn every retry a task has.
+      const isProvider = !(err instanceof EnvelopeError);
+      return {
+        kind: "failed",
+        model: modelUsed,
+        failure: isProvider ? "provider_error" : "spec_gap",
+        detail,
+        consumesAttempt: !isProvider,
+        usage,
+      };
+    }
+
+    // The agent asks to read before it writes.
+    const asks = envelope.actions.filter(isConsult);
+    if (asks.length > 0 && consulted < CONSULT_ROUNDS) {
+      consulted += 1;
+      log.info(`  consulte (${modelUsed}) · ${asks.map((a) => a.url).join(" · ").slice(0, 200)}`);
+      conversation.push(
+        { role: "assistant", content: text },
+        { role: "user", content: await consult(asks, CONSULT_ROUNDS - consulted) },
+      );
+      continue;
+    }
+
+    const resolved = await resolveWrites(envelope, agent, allowedPaths, gh, readRef);
+
+    // The sandbox is the law: nothing outside the allowed paths is ever
+    // written, and every attempt is logged. But one stray path — deleting a
+    // junk file the task did not list, on mission 1 — used to throw away the
+    // whole answer and the attempt with it. The agent is told which paths it
+    // has, and answers again; only persisting fails the task.
+    for (const v of resolved.violations) {
+      await emit({
+        missionId: task.mission_id,
+        taskId: task.id,
+        agentId: agent.id,
+        level: "warn",
+        type: "policy_violation",
+        message: v.reason,
+        payload: { path: v.path, model: modelUsed },
+      });
+    }
+
+    // An agent reporting failure is not asked to polish its files first.
+    // Otherwise the rest of each crate it touches is read from the branch:
+    // whether a crate has a panic handler, or which toolchain builds it, can
+    // depend on files the answer leaves alone (D-027).
+    const crate =
+      envelope.status === "failed" ? null : await crateContext(gh, readRef, resolved.changes);
+    const problems =
+      envelope.status === "failed"
+        ? []
+        : [
+            ...resolved.violations.map(
+              (v) =>
+                `${v.path}: outside your allowed paths (${allowedPaths.join(", ")}). Remove that action. ` +
+                "If the task cannot be done without it, return failed and name the path you need.",
+            ),
+            ...resolved.problems,
+            ...preflight(resolved.changes, crate),
+            ...(await checkDependencies(resolved.changes, crateVersions)),
+            ...(await checkEditions(resolved.changes, crate, crateReleases)),
+          ];
+    if (asks.length > 0 && resolved.changes.length === 0 && envelope.status !== "failed") {
+      problems.push(
+        "you asked to consult again, but no consultation is left in this attempt: answer with your complete work now",
+      );
+    }
+
+    // Past the static checks, the kernel is built for real on this machine
+    // when it can be, with the same toolchain and lints as CI: the compiler's
+    // own errors come back to the model inside the attempt, instead of costing
+    // a CI run each (localcheck.ts, which also says when it declines to run).
+    let built = false;
+    if (problems.length === 0 && envelope.status !== "failed") {
+      const build = await localCheck(gh, readRef, resolved.changes);
+      if (build && !build.ok) problems.push(...build.errors);
+      built = build?.ok === true;
+    }
+
+    if (problems.length === 0) {
+      return {
+        kind: "ready",
+        model: modelUsed,
+        envelope,
+        changes: resolved.changes,
+        usage,
+        consulted,
+        corrected,
+        built,
+      };
+    }
+
+    if (corrected < PREFLIGHT_ROUNDS) {
+      corrected += 1;
+      log.info(`  pré-vol (${modelUsed}) · ${problems.length} problème(s) renvoyé(s) à l'agent`);
+      await emit({
+        missionId: task.mission_id,
+        taskId: task.id,
+        agentId: agent.id,
+        level: "info",
+        type: "preflight",
+        message: `${modelUsed}: ${problems.join(" · ")}`.slice(0, 500),
+      });
+      conversation.push(
+        { role: "assistant", content: text },
+        { role: "user", content: renderPreflight(problems, PREFLIGHT_ROUNDS - corrected) },
+      );
+      continue;
+    }
+
+    // Still wrong after every correction: the attempt is spent, a CI run is not.
+    return {
+      kind: "failed",
+      model: modelUsed,
+      failure: resolved.violations.length > 0 ? "policy_violation" : "compile_error",
+      detail:
+        `Pré-vol toujours en échec après ${PREFLIGHT_ROUNDS} corrections (${modelUsed}) :\n- ` +
+        problems.join("\n- "),
+      consumesAttempt: true,
+      usage,
+    };
+  }
 }
 
 /**
@@ -576,7 +779,7 @@ async function buildPrompt(
       parts.push(
         content === null
           ? `\n## ${path}\n(does not exist yet)`
-          : `\n## ${path}\n\`\`\`\n${content.slice(0, 40_000)}\n\`\`\``,
+          : `\n## ${path}\n\`\`\`\n${content.slice(0, 200_000)}\n\`\`\``,
       );
     }
   }

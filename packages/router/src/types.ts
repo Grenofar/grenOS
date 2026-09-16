@@ -20,6 +20,13 @@ export interface CompletionRequest {
   json?: boolean;
   /** Abort the whole cascade if it outlives this. */
   timeoutMs?: number;
+  /**
+   * One model only, instead of the role's cascade: a panel member (several
+   * models answering the same task side by side) keeps its own model for the
+   * whole conversation, or its corrections would land on another model's
+   * answer.
+   */
+  model?: string;
 }
 
 export interface CompletionResult {

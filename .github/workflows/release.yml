@@ -31,6 +31,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Une seule date pour tout le job : le nom de la version publiee et celle
+      # que le noyau porte en lui (GRENOS_STAMP, lue par build.rs). Une mise a
+      # jour n'est installee que si sa date est strictement plus recente que
+      # celle du noyau qui tourne (docs/specs/disk-and-updates.md, section 6).
+      - name: Date de la version
+        run: echo "GRENOS_STAMP=$(date -u +%Y%m%d-%H%M)" >> "$GITHUB_ENV"
+
       - name: Toolchain Rust
         working-directory: kernel
         run: |
@@ -87,7 +94,7 @@ jobs:
             echo "::error::Secret SUPABASE_SERVICE_ROLE_KEY absent : rien n'est publie."
             exit 1
           fi
-          BUILD="$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
+          BUILD="${GRENOS_STAMP}-${GITHUB_SHA::7}"
           OBJECT="builds/grenos-${BUILD}.iso"
           STORAGE="$SUPABASE_URL/storage/v1"
           AUTH=(-H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
@@ -115,6 +122,44 @@ jobs:
             -H "Content-Type: application/zip" -H "cache-control: max-age=31536000" \
             --data-binary @grenos-virtualbox.zip "$STORAGE/object/releases/$ZIP" > /dev/null
 
+          # Le noyau signe, pour les mises a jour installees depuis grenOS (D-042,
+          # docs/specs/disk-and-updates.md section 6) : le fichier tel que
+          # construit, un manifeste qui le decrit, et la signature Ed25519 du
+          # manifeste. La cle privee vit dans le bucket prive « signing », que
+          # seule la cle de service lit ; elle ne touche le disque du runner que
+          # le temps de signer. La cle publique est dans le noyau, et la
+          # signature est verifiee ici avant toute publication.
+          KERNEL=kernel/target/x86_64-unknown-none/release/kernel
+          KOBJ="builds/grenos-${BUILD}.kernel"
+          MOBJ="builds/grenos-${BUILD}.manifest"
+          SOBJ="builds/grenos-${BUILD}.sig"
+          printf 'grenos-update 1\nbuild %s\ncommit %s\nkernel %s\nsize %s\nsha256 %s\n' \
+            "$BUILD" "$GITHUB_SHA" "$KOBJ" "$(stat -c %s "$KERNEL")" "$(sha256sum "$KERNEL" | cut -d' ' -f1)" > grenos.manifest
+          KEY="$RUNNER_TEMP/release-ed25519.pem"
+          umask 077
+          curl -fsS "${AUTH[@]}" "$STORAGE/object/signing/release-ed25519.pem" -o "$KEY"
+          openssl pkey -in "$KEY" -pubout -out "$RUNNER_TEMP/release-public.pem"
+          openssl pkeyutl -sign -inkey "$KEY" -rawin -in grenos.manifest -out grenos.sig
+          rm -f "$KEY"
+          umask 022
+          PUBLIC=$(openssl pkey -pubin -in "$RUNNER_TEMP/release-public.pem" -outform DER | tail -c 32 | od -An -tx1 | tr -d ' \n')
+          if [ "$PUBLIC" != "4d2a2d3491057d2a64ab6959435fb61e288f5c2aa7e7e99afdc909d34873e914" ]; then
+            echo "::error::La cle de signature ne correspond plus a la cle publique du noyau : rien n'est publie."
+            exit 1
+          fi
+          openssl pkeyutl -verify -pubin -inkey "$RUNNER_TEMP/release-public.pem" -rawin -in grenos.manifest -sigfile grenos.sig
+          test "$(stat -c %s grenos.sig)" = 64
+          cat grenos.manifest
+          curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
+            -H "Content-Type: application/octet-stream" -H "cache-control: max-age=31536000" \
+            --data-binary @"$KERNEL" "$STORAGE/object/releases/$KOBJ" > /dev/null
+          curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
+            -H "Content-Type: text/plain" -H "cache-control: max-age=31536000" \
+            --data-binary @grenos.manifest "$STORAGE/object/releases/$MOBJ" > /dev/null
+          curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
+            -H "Content-Type: application/octet-stream" -H "cache-control: max-age=31536000" \
+            --data-binary @grenos.sig "$STORAGE/object/releases/$SOBJ" > /dev/null
+
           # L'apercu, quand le kernel dessine quelque chose (etape Boot QEMU).
           SCREEN=""
           if [ -f screen.png ]; then
@@ -130,11 +175,13 @@ jobs:
             echo '[]' > previous.json
           fi
           jq --arg build "$BUILD" --arg path "$OBJECT" --arg vbox "$VBOX" --arg screen "$SCREEN" \
+             --arg kernel "$KOBJ" --arg manifest "$MOBJ" --arg signature "$SOBJ" \
              --arg zip "$ZIP" --argjson zsize "$(stat -c %s grenos-virtualbox.zip)" \
              --arg commit "$GITHUB_SHA" --argjson size "$(stat -c %s grenos.iso)" \
              --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
              '[{build: $build, path: $path, vbox: $vbox, screen: (if $screen == "" then null else $screen end),
                 virtualbox: $zip, virtualbox_size: $zsize,
+                kernel: $kernel, manifest: $manifest, signature: $signature,
                 commit: $commit, size: $size, published_at: $at}] + .' \
              previous.json > all.json
           jq '.[:10]' all.json > index.json
@@ -143,7 +190,7 @@ jobs:
             -H "Content-Type: application/json" -H "cache-control: max-age=60" \
             --data-binary @index.json "$STORAGE/object/releases/index.json" > /dev/null
 
-          DROPPED=$(jq -c '[.[10:][] | .path, .vbox, .screen, .virtualbox | select(. != null)]' all.json)
+          DROPPED=$(jq -c '[.[10:][] | .path, .vbox, .screen, .virtualbox, .kernel, .manifest, .signature | select(. != null)]' all.json)
           if [ "$DROPPED" != "[]" ]; then
             curl -fsS -X DELETE "${AUTH[@]}" -H "Content-Type: application/json" \
               -d "{\"prefixes\": $DROPPED}" "$STORAGE/object/releases" > /dev/null

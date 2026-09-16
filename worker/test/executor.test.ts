@@ -64,3 +64,75 @@ test("failure_detail is bounded", () => {
   const patch = failurePatch({ attempt: 1, max_attempts: 3 }, "test_failure", "x".repeat(10_000), true);
   assert.equal((patch.failure_detail as string).length, 4000);
 });
+
+const { choose, panelSize } = await import("../src/executor.ts");
+
+const usage = { tokensIn: 0, tokensOut: 0, latencyMs: 0 };
+const ready = (model: string, files: number, built = false, status = "done") => ({
+  kind: "ready" as const,
+  model,
+  envelope: { status, summary: "", actions: [] } as never,
+  changes: Array.from({ length: files }, (_, i) => ({ path: `kernel/src/f${i}.rs`, content: "" })),
+  usage,
+  consulted: 0,
+  corrected: 0,
+  built,
+});
+const failed = (model: string, failure: string, consumesAttempt: boolean) => ({
+  kind: "failed" as const,
+  model,
+  failure,
+  detail: failure,
+  consumesAttempt,
+  usage,
+});
+
+test("a panel keeps the answer that built over one that only passed pre-flight", () => {
+  const chosen = choose([ready("a", 2), ready("b", 1, true), ready("c", 3, true)]);
+  assert.equal(chosen.model, "b");
+});
+
+test("between equals, the cascade order decides", () => {
+  assert.equal(choose([ready("a", 2), ready("b", 2)]).model, "a");
+});
+
+test("work beats an answer that wrote nothing, and both beat saying it cannot be done", () => {
+  assert.equal(choose([ready("a", 0), ready("b", 1)]).model, "b");
+  assert.equal(choose([ready("a", 0, false, "failed"), ready("b", 0)]).model, "b");
+  assert.equal(choose([failed("x", "provider_error", false), ready("a", 0, false, "failed")]).model, "a");
+});
+
+test("when every member failed, the agents' own failure outranks an outage", () => {
+  const chosen = choose([failed("a", "provider_error", false), failed("b", "compile_error", true)]);
+  assert.equal(chosen.kind, "failed");
+  assert.equal(chosen.model, "b");
+  const outage = choose([failed("a", "provider_error", false)]);
+  assert.equal(outage.kind === "failed" && outage.consumesAttempt, false);
+});
+
+test("an agent that cannot write answers alone", () => {
+  assert.equal(panelSize({ modelRole: "coder", canWrite: false }), 1);
+  assert.ok(panelSize({ modelRole: "coder", canWrite: true }) >= 1);
+  assert.equal(panelSize({ modelRole: "master", canWrite: true }), 1);
+});
+
+const { gather } = await import("../src/executor.ts");
+
+const after = <T,>(ms: number, value: T) => new Promise<T>((resolve) => setTimeout(() => resolve(value), ms));
+
+test("a panel waits for everyone when nobody has a good answer yet", async () => {
+  const out = await gather([after(5, "bad"), after(30, "bad")], (v) => v === "good", 10);
+  assert.deepEqual(out, ["bad", "bad"]);
+});
+
+test("once one member is good, the slow ones get the grace period and no more", async () => {
+  const started = Date.now();
+  const out = await gather([after(2_000, "late"), after(5, "good"), after(15, "also")], (v) => v !== "late", 40);
+  assert.deepEqual(out, ["good", "also"]);
+  assert.ok(Date.now() - started < 1_000);
+});
+
+test("a member that throws does not hold the panel", async () => {
+  const out = await gather([Promise.reject(new Error("boom")), after(5, "good")], () => true, 10);
+  assert.deepEqual(out, ["good"]);
+});

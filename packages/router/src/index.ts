@@ -99,7 +99,7 @@ export class Router {
   }
 
   async complete(req: CompletionRequest): Promise<CompletionResult> {
-    const cascade = CASCADES[req.role];
+    const cascade = req.model ? [req.model] : CASCADES[req.role];
     const attempts: AttemptRecord[] = [];
     // 240 s, not 120: DeepSeek V4 Pro took ~49 s on a real 4k-token prompt,
     // and a cold NIM instance plus a long reasoning pass pushed a coder call
@@ -244,7 +244,12 @@ export class Router {
 
         // A model that has vanished from the API must not stop the system.
         // Free-tier catalogues change without notice; the next model runs.
-        if (err instanceof ProviderError && err.status === 404) {
+        // 410 is the retired kind: DeepSeek V4 Pro, which led the Coder and
+        // the Architect, reached its end of life on 2026-09-14 and answered
+        // "Gone" to every call after that. It will not come back in a day.
+        if (err instanceof ProviderError && err.status === 410) {
+          this.cooldownUntil.set(modelId, Date.now() + 24 * 60 * 60 * 1000);
+        } else if (err instanceof ProviderError && err.status === 404) {
           this.cooldownUntil.set(modelId, Date.now() + 6 * 60 * 60 * 1000);
         } else if (
           err instanceof ProviderError &&
@@ -279,15 +284,30 @@ export class Router {
    * provider_error events about an outage the router already knows about.
    */
   available(role: ModelRole): boolean {
+    return CASCADES[role].some((modelId) => this.usable(modelId));
+  }
+
+  /**
+   * Up to `size` models of a role's cascade that can answer now, in cascade
+   * order: the members of a panel, which all answer the same task at once.
+   * Gemini is left out while any NVIDIA model can take the seat — twenty
+   * requests a day would be gone in one panel — and only fills a panel that
+   * would otherwise be empty.
+   */
+  panel(role: ModelRole, size: number): string[] {
+    const usable = CASCADES[role].filter((modelId) => this.usable(modelId));
+    const nvidia = usable.filter((modelId) => MODELS[modelId]?.provider === "nvidia");
+    return (nvidia.length > 0 ? nvidia : usable).slice(0, Math.max(1, size));
+  }
+
+  private usable(modelId: string): boolean {
     const now = Date.now();
-    return CASCADES[role].some((modelId) => {
-      const spec = MODELS[modelId];
-      if (!spec) return false;
-      if (spec.provider === "nvidia" && !this.nvidiaKey) return false;
-      if ((this.cooldownUntil.get(modelId) ?? 0) > now) return false;
-      if ((this.deniedUntil.get(spec.provider)?.until ?? 0) > now) return false;
-      return this.exhaustedOn.get(modelId) !== today();
-    });
+    const spec = MODELS[modelId];
+    if (!spec) return false;
+    if (spec.provider === "nvidia" && !this.nvidiaKey) return false;
+    if ((this.cooldownUntil.get(modelId) ?? 0) > now) return false;
+    if ((this.deniedUntil.get(spec.provider)?.until ?? 0) > now) return false;
+    return this.exhaustedOn.get(modelId) !== today();
   }
 
   /**
@@ -311,7 +331,8 @@ export class Router {
         messages: req.messages,
         maxOutputTokens,
         temperature: req.temperature ?? 0.2,
-        timeoutMs,
+        timeoutMs: Math.max(timeoutMs, spec.timeoutMs ?? 0),
+        ...(spec.extra ? { extra: spec.extra } : {}),
       });
     }
     return callGemini({

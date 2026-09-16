@@ -58,3 +58,42 @@ test("only the included paths are shown", () => {
     ["kernel/src/main.rs"],
   );
 });
+
+test("a file too large to show whole is outlined by its items, bodies left out", async () => {
+  const { outline } = await import("../src/context.ts");
+  const source = [
+    "//! The desktop.",
+    "use alloc::vec::Vec;",
+    "",
+    "pub struct Desktop {",
+    "    windows: Vec<Window>,",
+    "}",
+    "",
+    "impl Desktop {",
+    "    pub fn new(screen: &Screen) -> Self {",
+    "        let x = 1;",
+    "        Desktop { windows: Vec::new() }",
+    "    }",
+    "    fn paint(&self) {}",
+    "}",
+    "#[derive(Clone, Copy)]",
+    "pub enum Found {",
+    "const UPDATE_PATIENCE: u64 = 25_000;",
+    "pub unsafe fn start(frames: &mut Frames) -> Result<Nic, &'static str> {",
+  ].join("\n");
+  assert.equal(
+    outline(source),
+    [
+      "//! The desktop.",
+      "use alloc::vec::Vec;",
+      "pub struct Desktop",
+      "impl Desktop",
+      "    pub fn new(screen: &Screen) -> Self",
+      "    fn paint(&self) {}",
+      "#[derive(Clone, Copy)]",
+      "pub enum Found",
+      "const UPDATE_PATIENCE: u64 = 25_000;",
+      "pub unsafe fn start(frames: &mut Frames) -> Result<Nic, &'static str>",
+    ].join("\n"),
+  );
+});
