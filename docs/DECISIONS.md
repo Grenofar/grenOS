@@ -965,3 +965,11 @@ exigée, parce qu'elle dépendrait d'un serveur extérieur.
 résolveur DNS, et chaque résolveur avalait toutes les réponses DNS. Chacun ne
 prend désormais que la réponse à sa propre question, avec un identifiant tiré
 au hasard.
+→ **Corrigé après la première CI** : comparer à la seule tête de l'index
+faisait dire « une version plus récente existe » à une build de branche jamais
+publiée, sur une image plus vieille qu'elle. Le noyau cherche désormais son
+commit dans tout l'index : en tête, à jour ; plus bas, en retard ; absent, « pas
+parmi les dix dernières publiées ».
+→ **Panne vécue** : la première publication de 0.8.0 a reçu un 503 de Supabase
+Storage au dépôt. Le jeton du worker ne peut pas relancer un job GitHub (403) :
+c'est un nouveau push sous `kernel/` qui republie.
