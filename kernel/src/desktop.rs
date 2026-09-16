@@ -234,6 +234,15 @@ const ITEMS: [(&str, &str, Item, Icon); 10] = [
     ("Éteindre", "Arrêter la machine", Item::Off, Icon::Power),
 ];
 
+/// The browser's bookmarks bar: the pages worth one click.
+const BOOKMARKS: [(&str, &str); 5] = [
+    ("Accueil", "grenos:accueil"),
+    ("Aide", "grenos:aide"),
+    ("Versions", "grenos:versions"),
+    ("Fichiers", "fichier:/"),
+    ("example.com", "http://example.com"),
+];
+
 const SECTIONS: [(&str, Icon); 7] = [
     ("Système", Icon::About),
     ("Souris et clavier", Icon::Search),
@@ -246,18 +255,18 @@ const SECTIONS: [(&str, Icon); 7] = [
 
 /// What the current version brought, shown in Mise à jour.
 const CHANGES: [&str; 6] = [
+    "Explorateur de fichiers : accès rapide, fil d'Ariane, colonnes, barre d'état",
+    "Navigateur : onglet, boutons ronds, barre d'adresse en pilule, favoris",
+    "Icônes redessinées sur une grille fine, nettes de 14 à 52 pixels",
     "Le réseau : carte Intel 8254x, ARP, IPv4, ICMP, UDP, DHCP, DNS, TCP",
-    "Le navigateur ouvre les vraies pages en http",
-    "Paramètres, Réseau : adresse, passerelle, trames envoyées et reçues, ping",
-    "Explorateur de fichiers, navigateur, écran de connexion, animations",
+    "Sécurité : NX, écriture du code interdite, intégrité, analyse des fichiers",
     "Réduire ne ferme plus la fenêtre : elle reste dans le panneau",
-    "Un système de fichiers en mémoire, où le bloc-notes enregistre",
 ];
 
 const NEXT: [&str; 4] = [
-    "TLS, sans quoi la plupart des sites refusent de répondre en http",
+    "TLS : les primitives sont écrites et vérifiées, reste la poignée de main",
+    "La mise à jour en ligne, qui attend exactement cela",
     "Disque SATA (AHCI) : garder les fichiers d'une fois sur l'autre",
-    "Protection : NX, SMEP, intégrité du noyau, analyse des fichiers",
     "Clavier USB pour les PC sans PS/2",
 ];
 
@@ -360,7 +369,9 @@ pub struct Desktop {
     picked: Option<String>,
     address: String,
     page: String,
+    /// Where the browser has been, and where it came back from.
     trail: Vec<String>,
+    ahead: Vec<String>,
     status: String,
     /// What the network says about itself, refreshed every second by the
     /// kernel: the desktop itself knows nothing about cards.
@@ -435,6 +446,7 @@ impl Desktop {
             address: web::HOME.to_string(),
             page: web::HOME.to_string(),
             trail: Vec::new(),
+            ahead: Vec::new(),
             status: String::new(),
             net_lines: Vec::new(),
             pending: None,
@@ -875,16 +887,151 @@ impl Desktop {
     }
 
     /// Where a file sits in the explorer's list.
-    pub fn file_rect(&self, index: usize) -> Rect {
-        let client = self.client_rect(App::Files);
-        let top = self.bar_rect(App::Files).bottom() + 6 + index * self.line_h();
-        Rect::new(client.x + 6, top, client.w.saturating_sub(12), self.line_h())
+    /// The file explorer, laid out the way Windows lays one out: a toolbar, an
+    /// address bar under it, a list of places down the left, and the files in
+    /// columns on the right.
+    pub fn files_tool(&self, index: usize) -> Rect {
+        let bar = self.bar_rect(App::Files);
+        let side = bar.h.saturating_sub(12);
+        match index {
+            0 => Rect::new(bar.x + 8, bar.y + 6, side, side),
+            1 => Rect::new(bar.x + 12 + side, bar.y + 6, side, side),
+            _ => {
+                let width = Screen::text_width("Nouveau dossier", Font::Body) + 34;
+                Rect::new(bar.x + 22 + 2 * side + (index - 2) * (width + 6), bar.y + 6, width, side)
+            }
+        }
     }
 
+    fn files_address(&self) -> Rect {
+        let bar = self.bar_rect(App::Files);
+        Rect::new(bar.x + 8, bar.bottom() + 6, bar.w.saturating_sub(16), self.line_h() + 6)
+    }
+
+    fn files_side(&self) -> Rect {
+        let client = self.client_rect(App::Files);
+        let top = self.files_address().bottom() + 6;
+        let width = (Screen::text_width("Quarantaine", Font::Body) + 54).min(client.w / 3);
+        Rect::new(client.x, top, width, client.bottom().saturating_sub(top))
+    }
+
+    pub fn files_side_item(&self, index: usize) -> Rect {
+        let side = self.files_side();
+        let top = side.y + self.line_h() + 4 + index * self.line_h();
+        Rect::new(side.x + 6, top, side.w.saturating_sub(12), self.line_h())
+    }
+
+    fn files_list(&self) -> Rect {
+        let client = self.client_rect(App::Files);
+        let side = self.files_side();
+        Rect::new(side.right() + 1, side.y, client.right().saturating_sub(side.right() + 1), side.h)
+    }
+
+    /// The places down the left, in the order they are drawn and clicked.
+    fn files_places(&self) -> Vec<(&'static str, String, Icon)> {
+        let mut places = alloc::vec![
+            ("Ce PC", "/".to_string(), Icon::Drive),
+            ("Documents", "/Documents".to_string(), Icon::Folder),
+            ("Système", "/Système".to_string(), Icon::Folder),
+        ];
+        if self.fs.exists(fs::QUARANTINE) {
+            places.push(("Quarantaine", fs::QUARANTINE.to_string(), Icon::Shield));
+        }
+        places
+    }
+
+    pub fn file_rect(&self, index: usize) -> Rect {
+        let list = self.files_list();
+        let top = list.y + self.line_h() + 4 + index * self.line_h();
+        Rect::new(list.x + 4, top, list.w.saturating_sub(8), self.line_h())
+    }
+
+    // ---- The browser, laid out the way Chrome lays one out ----------------
+
+    /// The strip the tabs sit on.
+    fn browser_tabs(&self) -> Rect {
+        let client = self.client_rect(App::Browser);
+        Rect::new(client.x, client.y, client.w, self.line_h() + 8)
+    }
+
+    /// The one tab there is, for now.
+    fn browser_tab(&self) -> Rect {
+        let tabs = self.browser_tabs();
+        let width = (Screen::text_width("Navigateur . Accueil", Font::Small) + 60).min(tabs.w / 2);
+        Rect::new(tabs.x + 6, tabs.y + 4, width, tabs.h - 4)
+    }
+
+    pub fn browser_new_tab(&self) -> Rect {
+        let tab = self.browser_tab();
+        let side = tab.h.saturating_sub(8);
+        Rect::new(tab.right() + 6, tab.y + 4, side, side)
+    }
+
+    fn browser_bar(&self) -> Rect {
+        let tabs = self.browser_tabs();
+        let client = self.client_rect(App::Browser);
+        Rect::new(client.x, tabs.bottom(), client.w, self.line_h() + 14)
+    }
+
+    /// Back, forward, reload, home: round, in that order.
+    pub fn browser_tool(&self, index: usize) -> Rect {
+        let bar = self.browser_bar();
+        let side = bar.h.saturating_sub(12);
+        Rect::new(bar.x + 6 + index * (side + 2), bar.y + 6, side, side)
+    }
+
+    /// The address bar, as one long pill.
     fn address_rect(&self) -> Rect {
-        let bar = self.bar_rect(App::Browser);
-        let side = bar.h - 12;
-        Rect::new(bar.x + 2 * side + 16, bar.y + 6, bar.w.saturating_sub(3 * side + 30), side)
+        let bar = self.browser_bar();
+        let side = bar.h.saturating_sub(12);
+        let left = self.browser_tool(3).right() + 8;
+        let width = bar.right().saturating_sub(left + side + 14);
+        Rect::new(left, bar.y + 6, width, side)
+    }
+
+    fn browser_star(&self) -> Rect {
+        let address = self.address_rect();
+        Rect::new(address.right().saturating_sub(address.h + 2), address.y, address.h, address.h)
+    }
+
+    pub fn browser_dots(&self) -> Rect {
+        let bar = self.browser_bar();
+        let side = bar.h.saturating_sub(12);
+        Rect::new(bar.right().saturating_sub(side + 6), bar.y + 6, side, side)
+    }
+
+    fn browser_marks(&self) -> Rect {
+        let bar = self.browser_bar();
+        let client = self.client_rect(App::Browser);
+        Rect::new(client.x, bar.bottom(), client.w, font::height(Font::Small) + 10)
+    }
+
+    pub fn browser_mark(&self, index: usize) -> Rect {
+        let marks = self.browser_marks();
+        let mut left = marks.x + 8;
+        for (label, _) in BOOKMARKS.iter().take(index) {
+            left += Screen::text_width(label, Font::Small) + 34;
+        }
+        let width = Screen::text_width(BOOKMARKS[index.min(BOOKMARKS.len() - 1)].0, Font::Small) + 28;
+        Rect::new(left, marks.y + 3, width, marks.h.saturating_sub(6))
+    }
+
+    /// Where the page itself starts.
+    fn browser_page(&self) -> Rect {
+        let client = self.client_rect(App::Browser);
+        let top = self.browser_marks().bottom();
+        Rect::new(client.x, top, client.w, client.bottom().saturating_sub(top))
+    }
+
+    /// What the tab calls the page it is showing.
+    fn page_title(&self) -> String {
+        if let Some(rest) = self.page.strip_prefix("fichier:") {
+            return fs::name_of(rest).to_string();
+        }
+        if let Some(page) = web::find(&self.page) {
+            return page.title.to_string();
+        }
+        self.address.clone()
     }
 
     // ---- Painting ---------------------------------------------------------
@@ -1173,82 +1320,177 @@ impl Desktop {
 
     fn paint_files(&self, screen: &mut Screen, client: Rect) {
         screen.fill(client, SURFACE);
+
+        // The toolbar: two round buttons to move about, then what one can do.
         let bar = self.bar_rect(App::Files);
         screen.fill(bar, SURFACE_ALT);
-        screen.fill(Rect::new(bar.x, bar.bottom() - 1, bar.w, 1), LINE);
-        for (index, (label, icon)) in
-            [("Dossier parent", Icon::Back), ("Nouveau dossier", Icon::Plus), ("Effacer", Icon::Trash)]
-                .into_iter()
-                .enumerate()
+        for (index, icon) in [Icon::Back, Icon::Home].into_iter().enumerate() {
+            let button = self.files_tool(index);
+            icons::draw(screen, button.inset(3), icon, TEXT_DIM, SURFACE_ALT);
+        }
+        for (index, (label, icon)) in [("Nouveau dossier", Icon::Plus), ("Effacer", Icon::Trash)].into_iter().enumerate()
         {
-            let button = self.bar_button(App::Files, index, self.bar_width(App::Files, index));
+            let button = self.files_tool(index + 2);
             screen.round(button, 5, SUNKEN);
-            let mark = Rect::new(button.x + 8, button.y + (button.h - 14) / 2, 14, 14);
+            let mark = Rect::new(button.x + 8, button.y + (button.h.saturating_sub(14)) / 2, 14, 14);
             icons::draw(screen, mark, icon, TEXT_DIM, SUNKEN);
             screen.text(mark.right() + 6, centre_y(button, Font::Body), label, TEXT_DIM, Font::Body);
         }
-        let path = format!("  {}", self.dir);
-        screen.text(
-            self.bar_button(App::Files, 3, 0).x + 6,
-            centre_y(bar, Font::Small),
-            &path,
-            TEXT_FAINT,
-            Font::Small,
-        );
+
+        // The address bar, as a trail of names rather than a raw path.
+        let address = self.files_address();
+        screen.round(address, 4, SUNKEN);
+        let mut trail = String::from("Ce PC");
+        for part in self.dir.split('/').filter(|part| !part.is_empty()) {
+            // A guillemet, not a chevron: the font carries Latin-1 and no more,
+            // and anything outside it comes out as a question mark.
+            trail.push_str(" » ");
+            trail.push_str(part);
+        }
+        let mark = Rect::new(address.x + 8, address.y + (address.h - 14) / 2, 14, 14);
+        icons::draw(screen, mark, Icon::Drive, TEXT_FAINT, SUNKEN);
+        screen.text(mark.right() + 8, centre_y(address, Font::Body), &trail, TEXT_DIM, Font::Body);
+
+        // The places, down the left.
+        let side = self.files_side();
+        screen.fill(side, SURFACE_ALT);
+        screen.fill(Rect::new(side.right(), side.y, 1, side.h), LINE);
+        screen.text(side.x + 12, side.y + 4, "Accès rapide", TEXT_FAINT, Font::Small);
+        for (index, (label, path, icon)) in self.files_places().into_iter().enumerate() {
+            let row = self.files_side_item(index);
+            if row.bottom() > side.bottom() {
+                break;
+            }
+            let here = self.dir == path;
+            if here {
+                screen.round(row, 4, ACCENT_SOFT);
+            }
+            let mark = Rect::new(row.x + 8, row.y + (row.h - 14) / 2, 14, 14);
+            icons::draw(screen, mark, icon, if here { TEXT } else { AMBER }, if here { ACCENT_SOFT } else { SURFACE_ALT });
+            screen.text(mark.right() + 8, centre_y(row, Font::Body), label, if here { TEXT } else { TEXT_DIM }, Font::Body);
+        }
+
+        // The list, with a header over its columns.
+        let list = self.files_list();
+        let header = Rect::new(list.x, list.y, list.w, self.line_h());
+        let type_at = list.x + list.w * 55 / 100;
+        let size_at = list.x + list.w * 80 / 100;
+        screen.text(list.x + 34, header.y + 4, "Nom", TEXT_FAINT, Font::Small);
+        screen.text(type_at, header.y + 4, "Type", TEXT_FAINT, Font::Small);
+        screen.text(size_at, header.y + 4, "Taille", TEXT_FAINT, Font::Small);
+        screen.fill(Rect::new(list.x, header.bottom() - 1, list.w, 1), LINE);
 
         let entries = self.fs.list(&self.dir);
         if entries.is_empty() {
-            screen.text(client.x + 16, self.file_rect(0).y, "Ce dossier est vide.", TEXT_FAINT, Font::Body);
+            screen.text(list.x + 16, self.file_rect(0).y, "Ce dossier est vide.", TEXT_FAINT, Font::Body);
         }
+        let bottom = client.bottom().saturating_sub(self.line_h() + 6);
         for (index, entry) in entries.iter().enumerate() {
             let row = self.file_rect(index);
-            if row.bottom() > client.bottom() {
+            if row.bottom() > bottom {
                 break;
             }
             let picked = self.picked.as_deref() == Some(entry.path.as_str());
             if picked {
-                screen.round(row, 5, ACCENT_SOFT);
+                screen.round(row, 4, ACCENT_SOFT);
             }
+            let behind = if picked { ACCENT_SOFT } else { SURFACE };
             let icon = Rect::new(row.x + 6, row.y + (row.h - 16) / 2, 16, 16);
-            let (kind, tint) = match entry.kind {
-                Kind::Dir => (Icon::Folder, AMBER),
-                Kind::File => (Icon::File, Rgb(0xD8, 0xDE, 0xEA)),
+            let (kind, tint, what) = match entry.kind {
+                Kind::Dir => (Icon::Folder, AMBER, "Dossier de fichiers"),
+                Kind::File => (Icon::File, Rgb(0xD8, 0xDE, 0xEA), "Document texte"),
             };
-            icons::draw(screen, icon, kind, tint, if picked { ACCENT_SOFT } else { SURFACE });
+            icons::draw(screen, icon, kind, tint, behind);
             screen.text(icon.right() + 10, centre_y(row, Font::Body), entry.name(), TEXT, Font::Body);
-            let detail = match entry.kind {
-                Kind::Dir => "dossier".to_string(),
-                Kind::File => format!("{} octets", entry.size()),
+            screen.text(type_at, centre_y(row, Font::Small), what, TEXT_FAINT, Font::Small);
+            let size = match entry.kind {
+                Kind::Dir => String::new(),
+                Kind::File => format!("{} o", entry.size()),
             };
-            screen.text(
-                row.right().saturating_sub(Screen::text_width(&detail, Font::Small) + 12),
-                centre_y(row, Font::Small),
-                &detail,
-                TEXT_FAINT,
-                Font::Small,
-            );
+            screen.text(size_at, centre_y(row, Font::Small), &size, TEXT_FAINT, Font::Small);
         }
-        let note = "En mémoire : tout disparaît à l'extinction.";
-        screen.text(client.x + 12, client.bottom().saturating_sub(font::height(Font::Small) + 8), note, TEXT_FAINT, Font::Small);
+
+        // The status bar, which says the one thing that matters here.
+        let status = Rect::new(client.x, client.bottom().saturating_sub(self.line_h()), client.w, self.line_h());
+        screen.fill(status, SURFACE_ALT);
+        screen.fill(Rect::new(status.x, status.y, status.w, 1), LINE);
+        let count = format!("{} élément(s)", entries.len());
+        screen.text(status.x + 12, centre_y(status, Font::Small), &count, TEXT_FAINT, Font::Small);
+        let note = "En mémoire : tout disparaît à l'extinction";
+        screen.text(
+            status.right().saturating_sub(Screen::text_width(note, Font::Small) + 12),
+            centre_y(status, Font::Small),
+            note,
+            TEXT_FAINT,
+            Font::Small,
+        );
     }
 
     fn paint_browser(&self, screen: &mut Screen, client: Rect) {
         screen.fill(client, SURFACE);
-        let bar = self.bar_rect(App::Browser);
-        screen.fill(bar, SURFACE_ALT);
-        screen.fill(Rect::new(bar.x, bar.bottom() - 1, bar.w, 1), LINE);
-        let side = bar.h - 12;
-        icons::draw(screen, Rect::new(bar.x + 8, bar.y + 6, side, side), Icon::Back, if self.trail.is_empty() { TEXT_FAINT } else { TEXT_DIM }, SURFACE_ALT);
-        icons::draw(screen, Rect::new(bar.x + 12 + side, bar.y + 6, side, side), Icon::Home, TEXT_DIM, SURFACE_ALT);
-        let address = self.address_rect();
-        screen.round(address, 5, SUNKEN);
-        screen.text(address.x + 10, centre_y(address, Font::Body), &self.address, TEXT, Font::Body);
-        let go = Rect::new(address.right() + 8, address.y, address.h, address.h);
-        icons::draw(screen, go.inset(4), Icon::Forward, TEXT_DIM, SURFACE_ALT);
 
-        let page = client.y + bar.h + 10;
+        // The tab strip, on its own darker band, with the tab rising out of it.
+        let tabs = self.browser_tabs();
+        screen.fill(tabs, PANEL);
+        let tab = self.browser_tab();
+        let previous = screen.set_clip(tabs.intersect(screen.clip()));
+        screen.round(Rect::new(tab.x, tab.y, tab.w, tab.h + 10), 8, SURFACE);
+        screen.set_clip(previous);
+        let favicon = Rect::new(tab.x + 10, tab.y + (tab.h.saturating_sub(14)) / 2, 14, 14);
+        let mark = if self.page.starts_with("fichier:") { Icon::Folder } else { Icon::Browser };
+        icons::draw(screen, favicon, mark, ACCENT, SURFACE);
+        let title = self.page_title();
+        let room = tab.w.saturating_sub(58) / font::width(Font::Small);
+        let end = title.char_indices().nth(room).map_or(title.len(), |(at, _)| at);
+        screen.text(favicon.right() + 8, centre_y(tab, Font::Small), &title[..end], TEXT, Font::Small);
+        let close = Rect::new(tab.right().saturating_sub(22), tab.y + (tab.h.saturating_sub(12)) / 2, 12, 12);
+        for step in 0..6 {
+            screen.fill(Rect::new(close.x + 3 + step, close.y + 3 + step, 1, 1), TEXT_FAINT);
+            screen.fill(Rect::new(close.right().saturating_sub(4 + step), close.y + 3 + step, 1, 1), TEXT_FAINT);
+        }
+        icons::draw(screen, self.browser_new_tab().inset(2), Icon::Plus, TEXT_FAINT, PANEL);
+
+        // The toolbar: four round buttons, then the address as one pill.
+        let bar = self.browser_bar();
+        screen.fill(bar, SURFACE);
+        for (index, icon) in [Icon::Back, Icon::Forward, Icon::Reload, Icon::Home].into_iter().enumerate() {
+            let button = self.browser_tool(index);
+            let dim = (index == 0 && self.trail.is_empty()) || (index == 1 && self.ahead.is_empty());
+            icons::draw(screen, button.inset(4), icon, if dim { TEXT_FAINT } else { TEXT_DIM }, SURFACE);
+        }
+        let address = self.address_rect();
+        screen.round(address, address.h / 2, SUNKEN);
+        let lock = Rect::new(address.x + 10, address.y + (address.h.saturating_sub(14)) / 2, 14, 14);
+        let scheme = if self.page.starts_with("http") { Icon::Browser } else { Icon::Lock };
+        icons::draw(screen, lock, scheme, TEXT_FAINT, SUNKEN);
+        let room = (address.w.saturating_sub(70)) / font::width(Font::Body);
+        let shown = self.address.char_indices().nth(room).map_or(self.address.as_str(), |(at, _)| &self.address[..at]);
+        screen.text(lock.right() + 8, centre_y(address, Font::Body), shown, TEXT, Font::Body);
+        icons::draw(screen, self.browser_star().inset(4), Icon::Star, TEXT_FAINT, SUNKEN);
+        icons::draw(screen, self.browser_dots().inset(4), Icon::Dots, TEXT_DIM, SURFACE);
+
+        // The bookmarks bar.
+        let marks = self.browser_marks();
+        screen.fill(marks, SURFACE);
+        screen.fill(Rect::new(marks.x, marks.bottom() - 1, marks.w, 1), LINE);
+        for (index, (label, target)) in BOOKMARKS.iter().enumerate() {
+            let chip = self.browser_mark(index);
+            if chip.right() > marks.right() {
+                break;
+            }
+            let here = *target == self.page;
+            if here {
+                screen.round(chip, 4, ACCENT_SOFT);
+            }
+            let behind = if here { ACCENT_SOFT } else { SURFACE };
+            let icon = Rect::new(chip.x + 6, chip.y + (chip.h.saturating_sub(12)) / 2, 12, 12);
+            icons::draw(screen, icon, Icon::Star, if here { ACCENT } else { TEXT_FAINT }, behind);
+            screen.text(icon.right() + 6, centre_y(chip, Font::Small), label, TEXT_DIM, Font::Small);
+        }
+
+        let client = self.browser_page();
         let width = client.w.saturating_sub(48) / font::width(Font::Body);
-        let mut y = page;
+        let mut y = client.y + 10;
         if let Some(rest) = self.page.strip_prefix("fichier:") {
             self.paint_browser_files(screen, client, rest, &mut y);
         } else if let Some(found) = web::find(&self.page) {
@@ -2063,14 +2305,18 @@ impl Desktop {
     fn click_files(&mut self, x: usize, y: usize) {
         let bar = self.bar_rect(App::Files);
         if bar.contains(x, y) {
-            for index in 0..3 {
-                if self.bar_button(App::Files, index, self.bar_width(App::Files, index)).contains(x, y) {
+            for index in 0..4 {
+                if self.files_tool(index).contains(x, y) {
                     match index {
                         0 => {
                             self.dir = fs::parent_of(&self.dir).to_string();
                             self.picked = None;
                         }
                         1 => {
+                            self.dir = "/".to_string();
+                            self.picked = None;
+                        }
+                        2 => {
                             let name = self.fs.free_name(&self.dir, "Nouveau dossier", "");
                             let path = fs::join(&self.dir, &name);
                             self.fs.make_dir(&path);
@@ -2087,6 +2333,15 @@ impl Desktop {
                 }
             }
             return;
+        }
+        // A place down the left: one click is enough, as in Windows.
+        for (index, (_, path, _)) in self.files_places().into_iter().enumerate() {
+            if self.files_side_item(index).contains(x, y) {
+                self.dir = path;
+                self.picked = None;
+                self.damage(self.windows[App::Files.index()].area);
+                return;
+            }
         }
         let entries: Vec<(String, Kind)> =
             self.fs.list(&self.dir).iter().map(|entry| (entry.path.clone(), entry.kind)).collect();
@@ -2121,29 +2376,67 @@ impl Desktop {
     }
 
     fn click_browser(&mut self, x: usize, y: usize) {
-        let bar = self.bar_rect(App::Browser);
-        let side = bar.h - 12;
-        if Rect::new(bar.x + 8, bar.y + 6, side, side).contains(x, y) {
-            if let Some(previous) = self.trail.pop() {
-                self.page = previous.clone();
-                self.address = previous;
-                self.damage(self.windows[App::Browser.index()].area);
-            }
+        // The tab: its cross closes the window, the plus goes home.
+        let tab = self.browser_tab();
+        if Rect::new(tab.right().saturating_sub(24), tab.y, 20, tab.h).contains(x, y) {
+            self.close(App::Browser);
             return;
         }
-        if Rect::new(bar.x + 12 + side, bar.y + 6, side, side).contains(x, y) {
+        if self.browser_new_tab().contains(x, y) {
             self.go(web::HOME.to_string());
             return;
         }
-        let address = self.address_rect();
-        if Rect::new(address.right() + 8, address.y, address.h, address.h).contains(x, y) {
-            let target = self.address.clone();
-            self.go(target);
+        // Back, forward, reload, home.
+        for index in 0..4 {
+            if !self.browser_tool(index).contains(x, y) {
+                continue;
+            }
+            match index {
+                0 => {
+                    if let Some(previous) = self.trail.pop() {
+                        self.ahead.push(self.page.clone());
+                        self.page = previous.clone();
+                        self.address = previous;
+                        self.fetched = None;
+                        if self.page.starts_with("http") {
+                            self.pending = Some(self.page.clone());
+                        }
+                    }
+                }
+                1 => {
+                    if let Some(next) = self.ahead.pop() {
+                        self.trail.push(self.page.clone());
+                        self.page = next.clone();
+                        self.address = next;
+                        self.fetched = None;
+                        if self.page.starts_with("http") {
+                            self.pending = Some(self.page.clone());
+                        }
+                    }
+                }
+                2 => {
+                    self.fetched = None;
+                    if self.page.starts_with("http") {
+                        self.status = format!("chargement de {}...", self.page);
+                        self.pending = Some(self.page.clone());
+                    }
+                }
+                _ => self.go(web::HOME.to_string()),
+            }
+            self.damage(self.windows[App::Browser.index()].area);
             return;
         }
+        // A bookmark.
+        for (index, (_, target)) in BOOKMARKS.iter().enumerate() {
+            if self.browser_mark(index).contains(x, y) {
+                let target = (*target).to_string();
+                self.go(target);
+                return;
+            }
+        }
         // A link on the page.
-        let client = self.client_rect(App::Browser);
-        let mut cursor = client.y + bar.h + 10;
+        let client = self.browser_page();
+        let mut cursor = client.y + 10;
         let width = client.w.saturating_sub(48) / font::width(Font::Body);
         if let Some(rest) = self.page.clone().strip_prefix("fichier:") {
             cursor += font::height(Font::Title) + 10;
@@ -2186,6 +2479,9 @@ impl Desktop {
             return;
         }
         self.trail.push(self.page.clone());
+        // Going somewhere new ends whatever was ahead: the forward button
+        // must not offer a page this visit never came back from.
+        self.ahead.clear();
         self.fetched = None;
         if url.starts_with("http") {
             self.status = format!("chargement de {url}...");

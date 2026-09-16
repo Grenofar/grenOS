@@ -36,9 +36,6 @@ unsafe extern "C" {
 const WRITABLE: u64 = 1 << 1;
 const NO_EXECUTE: u64 = 1 << 63;
 
-/// Where a file goes when it matches.
-pub const QUARANTINE: &str = "/Système/Quarantaine";
-
 /// One thing worth refusing, with the name shown to the human. The pattern is
 /// stored scrambled: see the note at the top of this file.
 struct Signature {
@@ -264,7 +261,7 @@ impl Guard {
             let Some(entry) = files.get(&path) else {
                 continue;
             };
-            if entry.kind != Kind::File || path.starts_with(QUARANTINE) {
+            if entry.kind != Kind::File || path.starts_with(fs::QUARANTINE) {
                 continue;
             }
             scan.files += 1;
@@ -275,8 +272,8 @@ impl Guard {
         }
         for (path, name) in caught {
             let text = files.read(&path).unwrap_or_default().to_string();
-            let kept = fs::join(QUARANTINE, fs::name_of(&path));
-            files.make_dir(QUARANTINE);
+            let kept = fs::join(fs::QUARANTINE, fs::name_of(&path));
+            files.make_dir(fs::QUARANTINE);
             if files.write(&kept, &text) && files.remove(&path) {
                 scan.quarantined += 1;
                 scan.threats.push(format!("{name} dans {path}, mis en quarantaine"));

@@ -37,6 +37,11 @@ impl Entry {
     }
 }
 
+/// Where the scanner puts what it refuses to leave lying about. It lives here
+/// rather than with the scanner because the explorer shows it too, and the
+/// explorer knows nothing about scanning.
+pub const QUARANTINE: &str = "/Système/Quarantaine";
+
 pub struct Fs {
     entries: Vec<Entry>,
 }
