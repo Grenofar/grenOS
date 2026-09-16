@@ -20,7 +20,7 @@ IMG=grenos-disk.img
 
 rm -f "$IMG"
 dd if=/dev/zero bs=1M count=0 seek=$SIZE_MIB of="$IMG"
-sgdisk "$IMG" -n 1:$START:$END -t 1:ef00 -m 1   # GPT laid out, converted to an MBR partition 1
+gdisk "$IMG" -n 1:$START:$END -t 1:ef00 -m 1   # GPT laid out, converted to an MBR partition 1
 
 # Prepare the kernel slots, padded to exactly 8 MiB
 if [ ! -f "target/x86_64-unknown-none/release/kernel" ]; then
