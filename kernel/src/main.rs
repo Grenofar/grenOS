@@ -6,6 +6,7 @@ extern crate alloc;
 
 mod acpi;
 mod anim;
+mod chacha;
 mod desktop;
 mod dhcp;
 mod e1000;
@@ -29,13 +30,18 @@ mod pit;
 mod port;
 mod power;
 mod ps2;
+mod rand;
 mod rtc;
 mod security;
 mod serial;
+mod sha256;
 mod shell;
 mod sysinfo;
 mod time;
+mod tls;
+mod update;
 mod web;
+mod x25519;
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -323,6 +329,14 @@ extern "C" fn kmain() -> ! {
     let mut next_ping = 0u64;
     let mut ponged = false;
     let mut secured = 0u64;
+    // The update check: a fetch and a resolver of its own, so it never waits
+    // on the browser. Asked for once at boot as soon as the network answers,
+    // and again at every click.
+    let mut updater = http::Fetch::new();
+    let mut update_resolver = dhcp::Resolver::new();
+    let mut update_wanted = false;
+    let mut update_delivered = true;
+    let mut auto_checked = false;
     loop {
         while let Some(event) = events::pop() {
             let action = match event {
@@ -399,8 +413,33 @@ extern "C" fn kmain() -> ! {
                 reported = ms + 1000;
                 desk.set_network(report(stack, nic, &dhcp));
             }
+
+            if desk.wants_update() {
+                update_wanted = true;
+            }
+            if dhcp.state == dhcp::State::Bound && !auto_checked {
+                auto_checked = true;
+                update_wanted = true;
+            }
+            if update_wanted && !updater.busy() {
+                update_wanted = false;
+                update_delivered = false;
+                if !updater.start(stack, nic, &mut update_resolver, update::INDEX, ms) {
+                    desk.update_result(checked(&updater));
+                    update_delivered = true;
+                }
+            }
+            update_resolver.poll(stack, nic, ms);
+            updater.poll(stack, nic, &mut update_resolver, ms);
+            if !update_delivered && matches!(updater.phase, http::Phase::Done | http::Phase::Failed) {
+                update_delivered = true;
+                desk.update_result(checked(&updater));
+            }
         } else if let Some(url) = desk.wants_page() {
             desk.page_result(format!("{url} : aucune carte réseau sur cette machine"), None);
+        }
+        if card.is_none() && desk.wants_update() {
+            desk.update_result(desktop::Found::Failed("aucune carte réseau sur cette machine".to_string()));
         }
 
         // The Sécurité window asks; the kernel answers, because it is the one
@@ -422,6 +461,34 @@ extern "C" fn kmain() -> ! {
         desk.frame(&mut screen);
         idle();
     }
+}
+
+/// What the update check found, in the desktop's terms — and on the serial
+/// line, where the CI can read it.
+fn checked(updater: &http::Fetch) -> desktop::Found {
+    if updater.phase != http::Phase::Done {
+        serial::write_str(&format!("update: check failed ({})\n", updater.status));
+        return desktop::Found::Failed(updater.status.clone());
+    }
+    let Some(latest) = update::latest(&updater.body) else {
+        serial::write_str("update: the release index could not be read\n");
+        return desktop::Found::Failed("l'index des versions est illisible".to_string());
+    };
+    let running = env!("GRENOS_BUILD");
+    let current = update::is_current(&latest, running);
+    let verdict = match current {
+        Some(true) => "up to date",
+        Some(false) => "a newer build exists",
+        None => "local build, cannot compare",
+    };
+    serial::write_str(&format!(
+        "update: newest build {} published {}, running {}, {}\n",
+        latest.build,
+        latest.when(),
+        running,
+        verdict
+    ));
+    desktop::Found::Latest { build: latest.build.clone(), when: latest.when(), size: latest.size, current }
 }
 
 /// A defence, in a word.

@@ -1,11 +1,6 @@
-//! What the browser can reach today: pages carried inside the kernel, and the
-//! files of the machine.
-//!
-//! There is no network driver yet, so nothing outside this machine is
-//! reachable, and the browser says so instead of hanging on a blank page. The
-//! address bar already speaks two schemes — `grenos:` for the pages below,
-//! `fichier:` for the file system — and a third, `http:`, will make sense the
-//! day a card answers.
+//! The pages carried inside the kernel. The address bar speaks four schemes:
+//! `grenos:` for the pages below, `fichier:` for the file system, and `http:`
+//! and `https:`, which go out through the network card (`http.rs`).
 
 use alloc::vec::Vec;
 
@@ -67,18 +62,20 @@ pub const PAGES: [Page; 5] = [
         url: "grenos:reseau",
         title: "Le réseau",
         body: "# Le réseau\n\
-               grenOS parle au réseau : pilote de carte Intel 8254x, ARP, IPv4, ICMP, UDP, DHCP, DNS, et un client TCP écrit pour ce navigateur.\n\
+               grenOS parle au réseau : pilote de carte Intel 8254x, ARP, IPv4, ICMP, UDP, DHCP, DNS, un client TCP, et TLS 1.3 écrit dans le noyau.\n\
                \n\
                ## Ce qui marche\n\
                - La machine obtient son adresse toute seule, par DHCP. Paramètres, Réseau, la montre.\n\
                - La passerelle répond au ping, et grenOS répond aux pings qu'on lui envoie.\n\
                - Les noms sont résolus par le serveur que le réseau a indiqué.\n\
-               - Ce navigateur ouvre les pages en http. Essayez http://example.com\n\
+               - Ce navigateur ouvre les pages http et https.\n\
+               - grenOS vérifie tout seul, au démarrage, s'il existe une version plus récente.\n\
                \n\
                ## Ce qui manque\n\
-               - https, qui demande TLS : la plupart des sites n'acceptent que lui, et le chiffrement reste à écrire.\n\
+               - L'identité du serveur : la connexion est chiffrée, mais le certificat n'est pas vérifié. Rien ne s'installe donc tout seul.\n\
                - Les images, les styles et le JavaScript : cette fenêtre ne montre que le texte.\n\
                \n\
+               [Notre site, en https](https://grenos-dev.vercel.app/download)\n\
                [Essayer example.com](http://example.com)\n\
                [Retour à l'accueil](grenos:accueil)",
     },
@@ -86,6 +83,9 @@ pub const PAGES: [Page; 5] = [
         url: "grenos:versions",
         title: "Versions",
         body: "# Ce qui a changé\n\
+               ## 0.8.0\n\
+               - Mise à jour automatique : vérifiée au démarrage, et d'un clic dans Paramètres\n\
+               - TLS 1.3 dans le noyau, et les pages https dans le navigateur\n\
                ## 0.7.0\n\
                - L'explorateur de fichiers prend la forme de celui de Windows\n\
                - Le navigateur prend la forme de Chrome : onglet, omnibox, favoris\n\
