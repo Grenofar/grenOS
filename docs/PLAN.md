@@ -1,3 +1,15 @@
+> **Note from Claude, 2026-09-16.** The specification is
+> `docs/specs/disk-and-updates.md`; where this plan and the spec disagree, the
+> spec wins. Errors in this plan, checked against the sources:
+> - `sgdisk -m` does not set an MBR signature: it converts the GPT to an MBR
+>   table. The disk signature (bytes 440..443) is written by the script itself,
+>   before `limine bios-install`, as the spec says.
+> - Nothing in the limine-rust-template uses Ed25519.
+> - `chmod +x` is not needed and cannot be done through the commit API: CI runs
+>   `bash kernel/scripts/make-disk.sh`.
+> - The Microsoft `fatgen.mspx` and `ata.org` links are not sources that were
+>   read; the spec's sources are the Linux headers it names.
+
 # grenOS Disk Image and Updates Technical Plan
 
 ## 1. Problem

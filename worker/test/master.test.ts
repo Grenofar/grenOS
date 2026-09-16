@@ -123,8 +123,22 @@ test("superseded tasks do not stop a mission from completing", () => {
   const board = state({
     tasks: [task({ id: "a", status: "cancelled" }), task({ id: "b", status: "done" })],
     activeCount: 0,
+    runs: [{ branch: "agent/b", status: "passed", failure: null, verdicts: [], log_excerpt: null }],
   });
   assert.equal(isMissionComplete(board as never), true);
+});
+
+test("a finished plan is not a finished mission: only a green CI run is", () => {
+  // 2026-09-16: the Architect's plan was the only task, it was done, and the
+  // mission closed without a single line of kernel written.
+  const planOnly = state({ tasks: [task({ id: "plan", status: "done" })], activeCount: 0, runs: [] });
+  assert.equal(isMissionComplete(planOnly as never), false);
+  const red = state({
+    tasks: [task({ id: "code", status: "done" })],
+    activeCount: 0,
+    runs: [{ branch: "agent/code", status: "failed", failure: "compile_error", verdicts: [], log_excerpt: null }],
+  });
+  assert.equal(isMissionComplete(red as never), false);
 });
 
 test("a mission is not complete while work is open, failed or absent", () => {

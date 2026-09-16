@@ -607,8 +607,16 @@ export function supersededByNewWork(state: State): string[] {
  */
 export function isMissionComplete(state: State): boolean {
   const counted = state.tasks.filter((t) => t.status !== "cancelled");
+  // Only CI finishes work (D-009), and that holds for a mission too. On
+  // 2026-09-16 the Architect wrote a plan, the Master created nothing after it,
+  // and the mission closed as done with its only task — a document — finished
+  // and not one line of kernel written.
+  const verified = state.runs.some((r) => r.status === "passed");
   return (
-    state.activeCount === 0 && counted.length > 0 && counted.every((t) => t.status === "done")
+    state.activeCount === 0 &&
+    counted.length > 0 &&
+    counted.every((t) => t.status === "done") &&
+    verified
   );
 }
 
