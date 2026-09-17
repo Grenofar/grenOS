@@ -23,7 +23,16 @@ export interface Lineage {
   assigned_to: string;
   branch: string | null;
   created_at: string;
+  status?: string | null;
 }
+
+/**
+ * A branch nobody will finish must never be the ground a new task stands on.
+ * On 2026-09-17 a wallpaper task was based on a cancelled branch that still
+ * held a whole, older `desktop.rs`: applied over main, it undid the browser
+ * merged an hour earlier, and the coder then "fixed" main.rs to match.
+ */
+const DEAD = new Set(["cancelled", "blocked", "failed"]);
 
 export interface RunProgress {
   branch: string;
@@ -90,7 +99,7 @@ export function pickBase(
   };
 
   const best = tasks
-    .filter((t) => WRITERS.has(t.assigned_to) && t.branch)
+    .filter((t) => WRITERS.has(t.assigned_to) && t.branch && !DEAD.has(t.status ?? ""))
     .sort((a, b) => score(b) - score(a) || b.created_at.localeCompare(a.created_at))[0];
   return best?.branch ?? null;
 }
@@ -103,7 +112,7 @@ export async function baseFor(
   if (!WRITERS.has(assignee)) return null;
 
   const [{ data: tasks }, { data: runs }] = await Promise.all([
-    db.from("tasks").select("id,assigned_to,branch,created_at").eq("mission_id", missionId),
+    db.from("tasks").select("id,assigned_to,branch,created_at,status").eq("mission_id", missionId),
     db
       .from("runs")
       .select("branch,status,failure,verdicts,log_excerpt,started_at")
