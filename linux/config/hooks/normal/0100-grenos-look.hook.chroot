@@ -205,6 +205,18 @@ if [ -f /usr/share/applications/grenos-bienvenue.desktop ]; then
     cp /usr/share/applications/grenos-bienvenue.desktop /etc/skel/.config/autostart/
 fi
 
+# ---- Le magasin : Flathub branché d'avance ----------------------------------
+# Discover sait installer des paquets Debian et des Flatpak. Flathub est ajouté
+# ici pour que Steam et les applications grand public soient là dès le premier
+# démarrage, sans rien configurer. L'ajout ne télécharge rien.
+if command -v flatpak >/dev/null 2>&1; then
+    flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || true
+fi
+if [ -f /usr/share/applications/org.kde.discover.desktop ]; then
+    sed -i 's/^Name=.*/Name=Magasin grenOS/; s/^Name\[fr\]=.*/Name[fr]=Magasin grenOS/'         /usr/share/applications/org.kde.discover.desktop || true
+    cp /usr/share/applications/org.kde.discover.desktop /etc/skel/Bureau/ 2>/dev/null || true
+fi
+
 # ---- Ce que l'on ne veut pas voir -------------------------------------------
 # Les entrées de menu qui n'ont pas de sens pour l'utilisateur de grenOS.
 for junk in /usr/share/applications/org.kde.plasma-welcome.desktop \

@@ -25,6 +25,14 @@ kde-spectacle
 kcalc
 firefox-esr
 
+## Le magasin : Discover, la boutique de KDE, avec Flatpak et Flathub. C'est
+## par là que Steam s'installe en un clic, en version Flatpak — donc sans
+## activer l'architecture i386 ni toucher au systeme.
+plasma-discover
+plasma-discover-backend-flatpak
+flatpak
+packagekit
+
 ## L'installation sur le disque, en un clic depuis le live.
 calamares
 calamares-settings-debian
