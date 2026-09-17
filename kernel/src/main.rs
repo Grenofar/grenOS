@@ -39,6 +39,7 @@ mod rtc;
 mod security;
 mod serial;
 mod sha256;
+mod splash;
 mod sha512;
 mod shell;
 mod storage;
@@ -181,6 +182,17 @@ extern "C" fn kmain() -> ! {
     // SAFETY: that range is usable RAM, which the HHDM maps, given to the heap alone.
     unsafe { heap::init(start + hhdm) };
 
+    // The screen is ready from here: the back buffer lives just after the
+    // heap, in the region reserved above. The loading screen goes up before
+    // each stage of the boot, so the machine never sits black while it works.
+    font::tune(mode.height);
+    // SAFETY: Limine maps the framebuffer it describes, height rows of pitch
+    // bytes; the back buffer is the region reserved above, which the HHDM
+    // maps and nothing else uses.
+    let mut screen = unsafe { fb::Screen::new(frame.addr(), (start + heap_size + hhdm) as *mut u32, mode) };
+    splash::draw(&mut screen, "Mémoire", 0, 7);
+    serial::write_str("splash: shown\n");
+
     // The heap works from here: the boot log can hold its own lines.
     let mut log = Log { lines: Vec::new() };
     log.lines.push("grenOS démarre".to_string());
@@ -195,6 +207,7 @@ extern "C" fn kmain() -> ! {
         log.say(format!("frames: {} free, {} with one taken, {} once given back", before, during, frames.free()));
     }
 
+    splash::draw(&mut screen, "Mémoire", 1, 7);
     let paging = check_paging(&mut frames);
     match paging {
         Ok(()) => log.say("paging: a fresh page mapped at 0xFFFF900000000000, written and read back".to_string()),
@@ -210,6 +223,7 @@ extern "C" fn kmain() -> ! {
     // The processor's own defences, turned on and then read back, and the
     // kernel's code measured while nothing has had a chance to touch it.
     // SAFETY: called once, before interrupts are on, which is what it asks.
+    splash::draw(&mut screen, "Sécurité du processeur", 2, 7);
     let mut guard = unsafe { security::arm(&frames) };
     log.say(format!(
         "security: NX {}, write protect {}, SMEP {}, SMAP {}",
@@ -226,11 +240,13 @@ extern "C" fn kmain() -> ! {
         on(guard.data_no_execute)
     ));
 
+    splash::draw(&mut screen, "Périphériques", 4, 7);
     let devices = pci::scan();
     log.say(format!("pci: {} devices", devices.len()));
 
     // The signature check every installed update will go through
     // (docs/specs/disk-and-updates.md §5), proven here on RFC 8032's vectors.
+    splash::draw(&mut screen, "Vérification des signatures", 3, 7);
     log.say(if ed25519::self_test() {
         "crypto: ed25519 verified against RFC 8032".to_string()
     } else {
@@ -246,6 +262,7 @@ extern "C" fn kmain() -> ! {
     // an 8254x by default, and VirtualBox calls the same chip the 82540EM.
     // SAFETY: called once, before the desktop starts; it maps the card's
     // registers and hands it pages of our own.
+    splash::draw(&mut screen, "Réseau", 5, 7);
     let mut card = match unsafe { e1000::start(&mut frames) } {
         Ok(nic) => {
             log.say(format!("net: 8254x card, address {}", nic.mac_text()));
@@ -294,6 +311,7 @@ extern "C" fn kmain() -> ! {
     // §3). The first sector of each is read back as a proof: a disk with a
     // partition table ends it with 55 AA.
     // SAFETY: called once, with interrupts on, which the driver's timeouts count on.
+    splash::draw(&mut screen, "Disques", 6, 7);
     let mut disks = match unsafe { ahci::find(&mut frames, &devices) } {
         Ok(found) => {
             for (port, why) in &found.failed {
@@ -359,11 +377,7 @@ extern "C" fn kmain() -> ! {
         dhcp.start(stack, nic, events::millis());
     }
 
-    font::tune(mode.height);
-    // SAFETY: Limine maps the framebuffer it describes, height rows of pitch
-    // bytes; the back buffer is the region reserved above, which the HHDM
-    // maps and nothing else uses.
-    let mut screen = unsafe { fb::Screen::new(frame.addr(), (start + heap_size + hhdm) as *mut u32, mode) };
+    splash::draw(&mut screen, "Bureau", 7, 7);
 
     let machine = desktop::Machine {
         version: env!("CARGO_PKG_VERSION"),
