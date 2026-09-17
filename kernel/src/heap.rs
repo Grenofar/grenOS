@@ -6,7 +6,7 @@ use linked_list_allocator::LockedHeap;
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
-pub const SIZE: usize = 4 * 1024 * 1024;
+pub const SIZE: usize = 32 * 1024 * 1024;
 
 /// Hands `start`, the virtual address of SIZE bytes, to the allocator.
 ///

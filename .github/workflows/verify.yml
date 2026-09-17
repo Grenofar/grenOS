@@ -98,6 +98,14 @@ jobs:
         id: qemu
         if: steps.probe.outputs.present == 'true' && steps.build.outcome == 'success'
         continue-on-error: true
+        env:
+          # Le test de bout en bout des mises a jour (docs/specs/disk-and-updates.md
+          # section 8) : l'image disque demande au noyau de s'installer tout seul
+          # la derniere version signee, puis de redemarrer. Une date de build
+          # ancienne rend la version publiee « plus recente ». Le noyau attend
+          # 45 s, apres la capture d'ecran et les entrees.
+          GRENOS_STAMP: "20000101-0000"
+          GRENOS_CMDLINE: "grenos.selftest=update"
         run: |
           set -o pipefail
 
@@ -244,13 +252,26 @@ jobs:
         continue-on-error: true
         run: |
           grep -E '^(disk|crypto|update):' "$RUNNER_TEMP/qemu.log" > "$RUNNER_TEMP/disk.log" || true
-          for line in 'disk: AHCI port' 'disk: grenOS partition' 'disk: write and read back verified' 'crypto: ed25519 verified against RFC 8032'; do
+          for line in 'disk: AHCI port' 'disk: grenOS partition' 'disk: write and read back verified' 'crypto: ed25519 verified against RFC 8032' 'update: installed'; do
             if grep -q "$line" "$RUNNER_TEMP/qemu.log"; then
               echo "disk: seen, $line" | tee -a "$RUNNER_TEMP/disk.log"
             else
               echo "disk: not yet, $line" | tee -a "$RUNNER_TEMP/disk.log"
             fi
           done
+          # Le second demarrage, sur la meme image : le noyau installe doit
+          # demarrer depuis l'emplacement b.
+          if grep -q 'update: installed' "$RUNNER_TEMP/qemu.log" && [ -f kernel/grenos-disk.img ]; then
+            timeout 60 qemu-system-x86_64 -drive file=kernel/grenos-disk.img,format=raw,if=none,id=disk0 \
+              -device ahci,id=ahci0 -device ide-hd,drive=disk0,bus=ahci0.0,bootindex=1 \
+              -serial stdio -display none -no-reboot -no-shutdown -m 256M > "$RUNNER_TEMP/second.log" 2>&1 || true
+            grep -E '^(grenOS|disk|crypto|update):?' "$RUNNER_TEMP/second.log" | sed 's/^/second boot: /' >> "$RUNNER_TEMP/disk.log" || true
+            if grep -q 'booted from slot b' "$RUNNER_TEMP/second.log"; then
+              echo "update: PASS, the installed kernel booted from slot b" | tee -a "$RUNNER_TEMP/disk.log"
+            else
+              echo "update: not yet, the second boot did not report slot b" | tee -a "$RUNNER_TEMP/disk.log"
+            fi
+          fi
           cat "$RUNNER_TEMP/disk.log"
 
       # L'image qui vient de booter, telechargeable depuis la page du run

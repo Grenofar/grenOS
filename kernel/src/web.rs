@@ -85,6 +85,10 @@ pub const PAGES: [Page; 5] = [
         url: "grenos:versions",
         title: "Versions",
         body: "# Ce qui a changé\n\
+               ## 0.9.0\n\
+               - Les mises à jour s'installent depuis Paramètres : manifeste signé, noyau vérifié, écrit dans l'autre emplacement\n\
+               - Pilote de disque SATA (AHCI) et système de fichiers FAT32\n\
+               - Signatures Ed25519 et SHA-512, vérifiées à chaque démarrage\n\
                ## 0.8.0\n\
                - Mise à jour automatique : vérifiée au démarrage, et d'un clic dans Paramètres\n\
                - TLS 1.3 dans le noyau, et les pages https dans le navigateur\n\

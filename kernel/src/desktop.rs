@@ -257,19 +257,19 @@ const SECTIONS: [(&str, Icon); 7] = [
 
 /// What the current version brought, shown in Mise à jour.
 const CHANGES: [&str; 6] = [
-    "Mise à jour automatique : vérifiée au démarrage et à chaque clic, en https",
-    "TLS 1.3 dans le noyau : X25519, ChaCha20-Poly1305, SHA-256",
-    "Le navigateur ouvre aussi les pages https",
-    "Explorateur de fichiers et navigateur refaits, icônes redessinées",
-    "Le réseau : carte Intel 8254x, DHCP, DNS, ping, TCP",
-    "Sécurité : NX, écriture du code interdite, intégrité, analyse des fichiers",
+    "Mises à jour installées depuis grenOS : téléchargées, signées, vérifiées",
+    "Disque SATA (AHCI) et FAT32 : grenOS démarre et écrit sur son propre disque",
+    "Deux emplacements de noyau : le précédent reste là si le nouveau échoue",
+    "Signatures Ed25519 et SHA-512, vérifiées à chaque démarrage",
+    "Vérification des mises à jour au démarrage et à chaque clic, en https",
+    "TLS 1.3 dans le noyau, et les pages https dans le navigateur",
 ];
 
 const NEXT: [&str; 4] = [
-    "Authentifier le serveur, ou signer les images publiées",
-    "Télécharger l'image elle-même, pas seulement la trouver",
-    "Disque SATA (AHCI) : garder les fichiers, et installer une mise à jour",
-    "Clavier USB pour les PC sans PS/2",
+    "Google et la recherche web dans le navigateur",
+    "Mot de passe haché (PBKDF2) et essais limités à la connexion",
+    "Garder les fichiers et les réglages sur le disque",
+    "Explorateur façon Windows et programmes exécutables",
 ];
 
 const ABOUT: [&str; 6] = [
@@ -343,6 +343,15 @@ pub enum Standing {
     Unlisted,
     /// Built on a desktop: no commit to compare.
     Local,
+}
+
+/// How an installation is going, handed over by the kernel, which does the
+/// work (install.rs): the desktop only asks and shows.
+#[derive(Clone, PartialEq, Eq)]
+pub enum Install {
+    Working(String),
+    Installed { build: String, slot: char },
+    Failed(String),
 }
 
 /// What the update check found, handed over by the kernel: the desktop never
@@ -420,6 +429,8 @@ pub struct Desktop {
     /// The check asked for and not yet handed to the kernel, and its answer.
     update_ask: bool,
     found: Option<Found>,
+    install_ask: bool,
+    install: Option<Install>,
     password: Option<String>,
     typed: String,
     locked: bool,
@@ -491,6 +502,8 @@ impl Desktop {
             update: Update::Idle,
             update_ask: false,
             found: None,
+            install_ask: false,
+            install: None,
             password: None,
             typed: String::new(),
             locked: false,
@@ -659,6 +672,25 @@ impl Desktop {
     /// Whether the update check has been asked for — handed over once.
     pub fn wants_update(&mut self) -> bool {
         core::mem::take(&mut self.update_ask)
+    }
+
+    /// Whether the person asked to install the newest image since last asked.
+    pub fn wants_install(&mut self) -> bool {
+        core::mem::take(&mut self.install_ask)
+    }
+
+    /// Where the installation has got to.
+    pub fn install_progress(&mut self, state: Install) {
+        if self.install.as_ref() != Some(&state) {
+            self.install = Some(state);
+            self.damage(self.windows[App::Settings.index()].area);
+        }
+    }
+
+    /// Whether the newest image can be installed from here: it is not the one
+    /// running, and it is known.
+    fn installable(&self) -> bool {
+        matches!(self.found, Some(Found::Latest { standing: Standing::Behind | Standing::Unlisted, .. }))
     }
 
     /// What the check found: asked for with the button, or at boot.
@@ -936,6 +968,13 @@ impl Desktop {
         let body = self.settings_body();
         let width = Screen::text_width("Vérifier les mises à jour", Font::Body) + 28;
         Rect::new(body.x, body.y + font::height(Font::Title) + 12 + 4 * self.line_h(), width, self.line_h() + 8)
+    }
+
+    /// The button beside it: install the newest image, then restart into it.
+    pub fn install_button_rect(&self) -> Rect {
+        let check = self.update_button_rect();
+        let width = Screen::text_width("Installer la mise à jour", Font::Body) + 28;
+        Rect::new(check.right() + 12, check.y, width, check.h)
     }
 
     /// Where a file sits in the explorer's list.
@@ -1954,6 +1993,19 @@ impl Desktop {
         let label = if checking { "Vérification..." } else { "Vérifier les mises à jour" };
         screen.text(button.x + 14, centre_y(button, Font::Body), label, if checking { TEXT_DIM } else { WHITE }, Font::Body);
 
+        if self.installable() || self.install.is_some() {
+            let install = self.install_button_rect();
+            let (label, fill, ink) = match &self.install {
+                Some(Install::Working(_)) => ("Installation...", SURFACE_ALT, TEXT_DIM),
+                Some(Install::Installed { .. }) => ("Redémarrer maintenant", GREEN, WHITE),
+                Some(Install::Failed(_)) => ("Réessayer l'installation", ACCENT, WHITE),
+                None => ("Installer la mise à jour", ACCENT, WHITE),
+            };
+            let install = Rect::new(install.x, install.y, Screen::text_width(label, Font::Body) + 28, install.h);
+            screen.round(install, 6, fill);
+            screen.text(install.x + 14, centre_y(install, Font::Body), label, ink, Font::Body);
+        }
+
         let mut y = button.bottom() + 8;
         if let Update::Checking(start) = self.update {
             // A bar that sweeps in step with the clock while the kernel talks
@@ -1976,7 +2028,7 @@ impl Desktop {
                     Standing::Current => (format!("grenOS est à jour : {build}"), format!("publiée le {when}, {megabytes}"), GREEN),
                     Standing::Behind => (
                         format!("Nouvelle version disponible : {build}"),
-                        format!("publiée le {when}, {megabytes} · à télécharger sur {UPDATE_SITE}"),
+                        format!("publiée le {when}, {megabytes} · installable d'ici, ou sur {UPDATE_SITE}"),
                         AMBER,
                     ),
                     Standing::Unlisted => (
@@ -2004,10 +2056,21 @@ impl Desktop {
             screen.text(body.x, y, &second, TEXT_FAINT, Font::Small);
             y += self.line_h();
         }
+        if let Some(state) = &self.install {
+            let (line, colour) = match state {
+                Install::Working(step) => (step.clone(), TEXT_DIM),
+                Install::Installed { build, slot } => {
+                    (format!("Installée dans l'emplacement {slot} : redémarrez pour utiliser {build}"), GREEN)
+                }
+                Install::Failed(why) => (format!("Installation impossible : {why}"), AMBER),
+            };
+            screen.text(body.x, y, &line, colour, Font::Small);
+            y += self.line_h();
+        }
         screen.text(
             body.x,
             y,
-            "Transport chiffré (TLS 1.3), serveur non authentifié : rien ne s'installe tout seul.",
+            "Rien n'est écrit sans la signature Ed25519 de la version, vérifiée ici avant tout.",
             TEXT_FAINT,
             Font::Small,
         );
@@ -2307,7 +2370,11 @@ impl Desktop {
                 return None;
             }
             match app {
-                App::Settings => self.click_settings(x, y),
+                App::Settings => {
+                    if let Some(action) = self.click_settings(x, y) {
+                        return Some(action);
+                    }
+                }
                 App::Files => self.click_files(x, y),
                 App::Browser => self.click_browser(x, y),
                 App::Notes => self.click_notes(x, y),
@@ -2359,13 +2426,13 @@ impl Desktop {
         None
     }
 
-    fn click_settings(&mut self, x: usize, y: usize) {
+    fn click_settings(&mut self, x: usize, y: usize) -> Option<Action> {
         for index in 0..SECTIONS.len() {
             if self.side_rect(index).contains(x, y) {
                 // The check's answer outlives a change of section.
                 self.section = index;
                 self.damage(self.windows[App::Settings.index()].area);
-                return;
+                return None;
             }
         }
         if self.section == 5 {
@@ -2379,11 +2446,26 @@ impl Desktop {
                 self.typed.clear();
                 self.damage_all();
             }
-            return;
+            return None;
         }
-        if self.section == SECTIONS.len() - 1 && self.update_button_rect().contains(x, y) {
+        if self.section != SECTIONS.len() - 1 {
+            return None;
+        }
+        if self.update_button_rect().contains(x, y) {
             self.start_update();
+        } else if self.install_button_rect().contains(x, y) {
+            match self.install {
+                Some(Install::Installed { .. }) => return Some(Action::Reboot),
+                Some(Install::Working(_)) => {}
+                _ if self.installable() => {
+                    self.install = Some(Install::Working("Préparation de l'installation...".to_string()));
+                    self.install_ask = true;
+                    self.damage(self.windows[App::Settings.index()].area);
+                }
+                _ => {}
+            }
         }
+        None
     }
 
     /// Asks the kernel for an update check, unless one is already running.
