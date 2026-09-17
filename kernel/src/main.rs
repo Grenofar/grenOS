@@ -261,7 +261,7 @@ extern "C" fn kmain() -> ! {
     });
     // The session password, proven on a fixed input: a wrong password must
     // fail, the right one must pass, and the comparison must be constant-time.
-    let fixed_salt = *b"grenOS-fixed-salt!";
+    let fixed_salt = *b"grenOS-fixed-salt";
     let credential = security::Credential::new(b"correct horse battery staple", fixed_salt);
     let right = credential.matches(b"correct horse battery staple");
     let wrong = credential.matches(b"wrong password");
