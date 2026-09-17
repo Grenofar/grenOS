@@ -100,6 +100,8 @@ test("work beats an answer that wrote nothing, and both beat saying it cannot be
   assert.equal(choose([ready("a", 0), ready("b", 1)]).model, "b");
   assert.equal(choose([ready("a", 0, false, "failed"), ready("b", 0)]).model, "b");
   assert.equal(choose([failed("x", "provider_error", false), ready("a", 0, false, "failed")]).model, "a");
+  // A member that tried and did not compile outranks one saying it cannot be done.
+  assert.equal(choose([ready("n", 0, false, "failed"), failed("d", "compile_error", true)]).model, "d");
 });
 
 test("when every member failed, the agents' own failure outranks an outage", () => {

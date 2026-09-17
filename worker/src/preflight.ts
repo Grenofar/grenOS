@@ -14,8 +14,13 @@
 
 type Change = { path: string; content: string | null };
 
-/** Corrections offered per attempt before a pre-flight problem costs it. */
-export const PREFLIGHT_ROUNDS = 2;
+/**
+ * Corrections offered per attempt before a pre-flight problem costs it.
+ * Four since the local build (localcheck.ts) sends the compiler's own errors:
+ * on 2026-09-16 DeepSeek V4 Flash fixed the AHCI driver's clippy errors one
+ * round after another and ran out of rounds with one unused import left.
+ */
+export const PREFLIGHT_ROUNDS = 4;
 
 /** Names a tool looks up exactly; a near miss is silently ignored. */
 const EXACT_NAMES = [

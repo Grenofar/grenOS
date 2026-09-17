@@ -366,19 +366,20 @@ export function panelSize(agent: Pick<AgentDefinition, "modelRole" | "canWrite">
  *
  * Work beats no work, and work that built locally beats work that was not
  * built; between equals, the cascade's order (the order of `answers`) decides.
- * An agent saying the task cannot be done only wins when nobody did it. When
- * every member failed, a failure the agents caused (and must hear about)
- * outranks an outage, which consumes no attempt.
+ * When nobody finished, a member that tried and still failed to compile beats
+ * a member saying the task cannot be done: on 2026-09-16 Nemotron's "I cannot
+ * implement the AHCI driver" parked a task that DeepSeek had left one unused
+ * import away from building. An outage, which consumes no attempt, comes last.
  */
 export function choose(answers: Answer[]): Answer {
   const ready = answers.filter((a): a is Extract<Answer, { kind: "ready" }> => a.kind === "ready");
   const working = ready.filter((a) => a.envelope.status !== "failed");
   const withWork = working.filter((a) => a.changes.length > 0);
   const pool = withWork.length > 0 ? withWork : working;
-  const best = pool.find((a) => a.built) ?? pool[0] ?? ready[0];
+  const best = pool.find((a) => a.built) ?? pool[0];
   if (best) return best;
   const failed = answers.filter((a): a is Extract<Answer, { kind: "failed" }> => a.kind === "failed");
-  return failed.find((a) => a.consumesAttempt) ?? failed[0] ?? answers[0]!;
+  return failed.find((a) => a.consumesAttempt) ?? ready[0] ?? failed[0] ?? answers[0]!;
 }
 
 function describeAnswer(a: Answer): string {
