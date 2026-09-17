@@ -95,25 +95,21 @@ Placement=Centered
 RollOverDesktops=true
 EOF
 
-# ---- Le raccourci que l'humain a demandé : Ctrl+Maj+Échap -------------------
+# ---- Les raccourcis ajoutés : seulement ceux qui manquent -------------------
+# Alt+Tab, Alt+F4, Meta et Meta+D sont déjà les raccourcis de KDE. Une ligne
+# vaut : raccourci actuel, raccourci par défaut, libellé.
 cat > "$SKEL/kglobalshortcutsrc" <<'EOF'
 [services][org.kde.plasma-systemmonitor.desktop]
 _k_friendly_name=Gestionnaire de tâches
-_launch=Ctrl+Shift+Esc
+_launch=Ctrl+Shift+Esc,none,Gestionnaire de tâches
 
 [services][plasma-systemmonitor.desktop]
 _k_friendly_name=Gestionnaire de tâches
-_launch=Ctrl+Shift+Esc
+_launch=Ctrl+Shift+Esc,none,Gestionnaire de tâches
 
 [services][grenos-theme.desktop]
 _k_friendly_name=Thème jour et nuit
-_launch=Meta+T
-
-[kwin]
-Window Close=Alt+F4\tAlt+F4
-Walk Through Windows=Alt+Tab
-Walk Through Windows (Reverse)=Alt+Shift+Tab
-Show Desktop=Meta+D
+_launch=Meta+T,none,Thème jour et nuit
 EOF
 
 # ---- Le fond d'écran, comme paquet de fonds d'écran KDE ---------------------
