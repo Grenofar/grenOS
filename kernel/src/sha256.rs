@@ -197,3 +197,85 @@ pub fn derive(secret: &[u8; 32], label: &str, transcript: &[u8]) -> [u8; 32] {
     expand_label(secret, label, transcript, &mut out);
     out
 }
+
+/// PBKDF2 with HMAC-SHA-256 (RFC 2898 §5.2). Writes `out.len()` bytes.
+///
+/// `T_i = U_1 xor U_2 xor ... xor U_c`, `U_1 = HMAC(P, S || INT(i))` with
+/// `INT(i)` the block index as a 4-byte big-endian integer starting at 1,
+/// `U_j = HMAC(P, U_{j-1})`; the output is `T_1 || T_2 || ...` cut to
+/// `out.len()`. The HMAC key pads are computed once per call, not once per
+/// iteration, so 80 000 iterations stay well under a second in QEMU.
+pub fn pbkdf2(password: &[u8], salt: &[u8], iterations: u32, out: &mut [u8]) {
+    let mut block = [0u8; 64];
+    if password.len() > 64 {
+        block[..32].copy_from_slice(&sha256(password));
+    } else {
+        block[..password.len()].copy_from_slice(password);
+    }
+    let mut inner_pad = [0u8; 64];
+    let mut outer_pad = [0u8; 64];
+    for (slot, byte) in inner_pad.iter_mut().zip(block) {
+        *slot = byte ^ 0x36;
+    }
+    for (slot, byte) in outer_pad.iter_mut().zip(block) {
+        *slot = byte ^ 0x5c;
+    }
+
+    let mut index = 1u32;
+    let mut done = 0;
+    while done < out.len() {
+        let mut u;
+        let mut first = alloc::vec::Vec::with_capacity(4 + salt.len());
+        first.extend_from_slice(&index.to_be_bytes());
+        first.extend_from_slice(salt);
+        let mut inner = Sha256::default();
+        inner.update(&inner_pad);
+        inner.update(&first);
+        u = inner.finish();
+        let mut outer = Sha256::default();
+        outer.update(&outer_pad);
+        outer.update(&u);
+        u = outer.finish();
+        let mut t = u;
+        for _ in 1..iterations {
+            let mut inner = Sha256::default();
+            inner.update(&inner_pad);
+            inner.update(&u);
+            u = inner.finish();
+            let mut outer = Sha256::default();
+            outer.update(&outer_pad);
+            outer.update(&u);
+            u = outer.finish();
+            for (slot, byte) in t.iter_mut().zip(u) {
+                *slot ^= byte;
+            }
+        }
+        let take = (out.len() - done).min(32);
+        out[done..done + take].copy_from_slice(&t[..take]);
+        done += take;
+        index += 1;
+    }
+}
+
+/// Checks PBKDF2 against the two RFC 7914 §11 test vectors.
+pub fn pbkdf2_self_test() -> bool {
+    let mut out = [0u8; 64];
+    pbkdf2(b"passwd", b"salt", 1, &mut out);
+    let expected1: [u8; 64] = [
+        0x55, 0xac, 0x04, 0x6e, 0x56, 0xe3, 0x08, 0x9f, 0xec, 0x16, 0x91, 0xc2, 0x25, 0x44, 0xb6, 0x05,
+        0xf9, 0x41, 0x85, 0x21, 0x6d, 0xde, 0x04, 0x65, 0xe6, 0x8b, 0x9d, 0x57, 0xc2, 0x0d, 0xac, 0xbc,
+        0x49, 0xca, 0x9c, 0xcf, 0xf1, 0x79, 0xb6, 0x45, 0x99, 0x16, 0x64, 0xb3, 0x9d, 0x77, 0xef, 0x31,
+        0x7c, 0x71, 0xb8, 0x45, 0xb1, 0xe3, 0x0b, 0xd5, 0x09, 0x11, 0x20, 0x41, 0xd3, 0xa1, 0x97, 0x83,
+    ];
+    if out != expected1 {
+        return false;
+    }
+    pbkdf2(b"Password", b"NaCl", 80_000, &mut out);
+    let expected2: [u8; 64] = [
+        0x4d, 0xdc, 0xd8, 0xf6, 0x0b, 0x98, 0xbe, 0x21, 0x83, 0x0c, 0xee, 0x5e, 0xf2, 0x27, 0x01, 0xf9,
+        0x64, 0x1a, 0x44, 0x18, 0xd0, 0x4c, 0x04, 0x14, 0xae, 0xff, 0x08, 0x87, 0x6b, 0x34, 0xab, 0x56,
+        0xa1, 0xd4, 0x25, 0xa1, 0x22, 0x58, 0x33, 0x54, 0x9a, 0xdb, 0x84, 0x1b, 0x51, 0xc9, 0xb3, 0x17,
+        0x6a, 0x27, 0x2b, 0xde, 0xbb, 0xa1, 0xd0, 0x78, 0x47, 0x8f, 0x62, 0xb3, 0x97, 0xf3, 0x3c, 0x8d,
+    ];
+    out == expected2
+}
