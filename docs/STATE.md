@@ -1,29 +1,31 @@
-# Mission State
+# grenOS Agent System State
 
-## Current Mission (2026-09-17 20:55 UTC)
-- Title: Security hardening: password hashing, login throttling, non-executable memory map
-- Status: cancelled (per human decision 2026-09-17 20:50 UTC)
-- Tokens used: 2993623 / 20000000 budget
-- Decision: grenOS becomes a Linux distribution on a Debian base; Rust kernel set aside
+**Now**: 2026-09-17 20:56 UTC
 
-## What was achieved
-- PBKDF2 implementation and self-test added to kernel/src/sha256.rs
-- main.rs logs verification: "security: pbkdf2 verified against RFC 7914"
-- CI run agent/465b9035 passed build, clippy, boot, screen, input, net (green)
+## Current Mission
+- **Title**: Security hardening: password hashing, login throttling, non-executable memory map
+- **Status**: cancelled (per human decision)
+- **Tokens used**: 3011268 / 20000000
 
-## What remains unfinished
-- S2: password handling (Credential struct, desktop.rs integration)
-- S3: login throttling mechanism
-- S4: physical memory map marked non-executable
-- All tasks requiring kernel/ modifications are blocked per pivot to linux/
+## What Was Achieved
+- PBKDF2 implementation added to kernel/src/sha256.rs
+- PBKDF2 self-test added (kernel/src/sha256.rs) and verified against RFC 7914 vectors
+- Boot log updated to print "security: pbkdf2 verified against RFC 7914" (kernel/src/main.rs)
+- CI run on branch agent/465b9035 passed all steps (build, clippy, boot, screen, input, net)
 
-## Blocked Tasks
-- c620e9e2: blocked awaiting visibility of sha256.rs/rand.rs (now moot)
-- db2a8017: cancelled (spec_gap due to pre-existing errors outside allowed_paths)
-- 2b2a0165: cancelled (compile_error: salt length mismatch)
-- 28a19741: blocked (attempt to document pivot outside allowed_paths)
+## What Remains Unfinished
+- S2: Password handling (Credential struct, salted PBKDF2 hash in desktop.rs)
+- S3: Login throttling
+- S4: Physical memory map non-executable
 
-## Budget Consumed
-- Tokens: 2,993,623 / 20,000,000 (15%)
-- Attempts used across tasks: 7
-- No further kernel work will be undertaken
+## Blocked Work
+- All kernel/ tasks are blocked due to the pivot to Linux distribution.
+- No further kernel work will be done.
+
+## Next Steps
+- Await new missions for the Linux edition under linux/
+- No kernel tasks to route or execute.
+
+## Budget
+- Tokens consumed in this mission: 3011268
+- Tokens remaining: 16988732
