@@ -72,7 +72,7 @@ jobs:
         if: steps.probe.outputs.present == 'true'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-x86 xorriso mtools gdisk
+          sudo apt-get install -y -qq qemu-system-x86 xorriso mtools gdisk dosfstools
 
       - name: cargo build
         id: build
@@ -278,6 +278,23 @@ jobs:
             else
               echo "update: not yet, the second boot did not report slot b" | tee -a "$RUNNER_TEMP/disk.log"
             fi
+            # Ce que le noyau garde d'un demarrage a l'autre : le compteur du
+            # fichier de reglages, qu'il cree lui-meme (fat.rs write_file).
+            if grep -q 'boot 2 of this disk' "$RUNNER_TEMP/second.log"; then
+              echo "disk: PASS, the settings file survived the restart" | tee -a "$RUNNER_TEMP/disk.log"
+            else
+              echo "disk: not yet, the second boot did not count itself" | tee -a "$RUNNER_TEMP/disk.log"
+            fi
+          fi
+          # Le juge independant du systeme de fichiers apres tout ce que le
+          # noyau y a ecrit : fsck.fat sur la partition extraite, et mdir.
+          if [ -f kernel/grenos-disk.img ]; then
+            dd if=kernel/grenos-disk.img of="$RUNNER_TEMP/part.img" bs=512 skip=2048 status=none
+            fsck.fat -n -v "$RUNNER_TEMP/part.img" > "$RUNNER_TEMP/fsck.log" 2>&1
+            echo "fsck.fat: exit $?" | tee -a "$RUNNER_TEMP/disk.log"
+            tail -20 "$RUNNER_TEMP/fsck.log" | tee -a "$RUNNER_TEMP/disk.log"
+            mdir -i kernel/grenos-disk.img@@1048576 ::/grenos | tee -a "$RUNNER_TEMP/disk.log" || true
+            mtype -i kernel/grenos-disk.img@@1048576 ::/grenos/reglages.txt | tee -a "$RUNNER_TEMP/disk.log" || true
           fi
           cat "$RUNNER_TEMP/disk.log"
 

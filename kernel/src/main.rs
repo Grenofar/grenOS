@@ -39,6 +39,7 @@ mod rand;
 mod rtc;
 mod security;
 mod serial;
+mod settings;
 mod sha256;
 mod sha512;
 mod shell;
@@ -264,6 +265,10 @@ extern "C" fn kmain() -> ! {
         Ok(()) => "web: decoders verified".to_string(),
         Err(case) => format!("web: decoders FAILED its {case} case"),
     });
+    log.say(match settings::self_test() {
+        Ok(()) => "settings: format verified".to_string(),
+        Err(case) => format!("settings: FAILED its {case} case"),
+    });
 
     // The network card, if this machine has one this kernel knows: QEMU gives
     // an 8254x by default, and VirtualBox calls the same chip the 82540EM.
@@ -363,6 +368,18 @@ extern "C" fn kmain() -> ! {
             match storage::write_test(&store, &mut disks) {
                 Ok(()) => log.say("disk: write and read back verified".to_string()),
                 Err(why) => log.say(format!("disk: write test failed ({why})")),
+            }
+            // What the person keeps lives in a file grenOS creates itself, so
+            // a disk made by an older version gains it on its next start.
+            let clock = rtc::now();
+            let stamp = fat::Stamp::new(clock.year, clock.month, clock.day, clock.hour, clock.minute, clock.second);
+            match storage::count_boot(&store, &mut disks, stamp) {
+                Ok(count) => log.say(format!("disk: settings file written, boot {count} of this disk")),
+                Err(why) => log.say(format!("disk: the settings file could not be written ({why})")),
+            }
+            match storage::create_and_remove(&store, &mut disks, stamp) {
+                Ok(()) => log.say("disk: a directory and a file created, read back and removed".to_string()),
+                Err(why) => log.say(format!("disk: creating a file FAILED its own check ({why})")),
             }
             Some(store)
         }
