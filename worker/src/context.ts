@@ -136,21 +136,24 @@ export async function repoContext(
     for (const f of code) {
       parts.push(`- ${f.path}${writable(f.path) ? " (writable)" : ""} — ${f.size} B`);
     }
-    // Writable files first, whole; then small read-only ones, whole; what is
-    // left is outlined.
+    // Writable files first, whole; then small read-only ones, whole — the
+    // modules the task actually uses first; what is left is outlined.
     const whole = new Set<string>();
+    const shownText: string[] = [mentioned, ...shownDocs];
     const passes: Array<(f: RepoFile) => boolean> = [
       (f) => writable(f.path),
       (f) => !writable(f.path) && f.size <= READ_ONLY_WHOLE_BYTES,
     ];
     for (const [index, pass] of passes.entries()) {
-      for (const f of code.filter(pass)) {
+      const files = index === 0 ? code.filter(pass) : rankByUse(code.filter(pass), shownText.join("\n"));
+      for (const f of files) {
         // Writable files are never left out: a patch needs the file.
         if (index > 0 && used + f.size > BUDGET_CHARS + DOCS_BUDGET_CHARS) continue;
         const content = await gh.readFile(f.path, readRef);
         if (content === null) continue;
         used += content.length;
         whole.add(f.path);
+        if (index === 0) shownText.push(content);
         parts.push(
           `\n## ${f.path}${writable(f.path) ? " (writable)" : ""}\n${FENCE}\n${content}\n${FENCE}`,
         );
@@ -193,7 +196,10 @@ export async function repoContext(
  * impls and modules — with bodies left out. Pure.
  */
 export function outline(source: string): string {
-  const keep = /^\s*(\/\/!|#\[|(pub(\([^)]*\))?\s+)?(unsafe\s+|const\s+|async\s+|extern\s+"[^"]*"\s+)*(fn|struct|enum|trait|type|const|static|mod|impl|macro_rules!|use)\b)/;
+  // Public fields too: on 2026-09-16 the AHCI driver was written four times
+  // against a `prog_if` field that pci::Device does not have — its fields
+  // (`pub interface: u8`) were exactly what the outline left out.
+  const keep = /^\s*(\/\/!|#\[|(pub(\([^)]*\))?\s+)?(unsafe\s+|const\s+|async\s+|extern\s+"[^"]*"\s+)*(fn|struct|enum|trait|type|const|static|mod|impl|macro_rules!|use)\b|pub(\([^)]*\))?\s+[a-z_][a-z0-9_]*\s*:)/;
   return source
     .split(/\r?\n/)
     .filter((line) => keep.test(line))
@@ -215,5 +221,22 @@ export function rankDocs(docs: RepoFile[], mentioned: string): RepoFile[] {
   return docs
     .map((f, index) => ({ f, index }))
     .sort((a, b) => score(a.f) - score(b.f) || a.index - b.index)
+    .map(({ f }) => f);
+}
+
+/**
+ * Rust files ordered so that the modules a task uses come first: those whose
+ * name appears as `name::` or `name.rs` in `text` (the task, the documents
+ * shown, the writable files). Stable otherwise. Pure.
+ */
+export function rankByUse(files: RepoFile[], text: string): RepoFile[] {
+  const used = (f: RepoFile): boolean => {
+    const stem = f.path.split("/").pop()?.replace(/\.rs$/, "") ?? "";
+    if (!stem || stem === "main" || stem === "lib" || stem === "mod") return false;
+    return text.includes(`${stem}::`) || text.includes(`${stem}.rs`);
+  };
+  return files
+    .map((f, index) => ({ f, index, rank: used(f) ? 0 : 1 }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
     .map(({ f }) => f);
 }

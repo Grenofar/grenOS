@@ -105,3 +105,12 @@ test("the documents a task names come first, then the Master's notebook", async 
   assert.deepEqual(order, ["docs/specs/disk-and-updates.md", "docs/MASTER.md", "docs/PLAN.md", "docs/specs/browser-search.md"]);
   assert.deepEqual(rankDocs(docs, "").map((d) => d.path), ["docs/MASTER.md", "docs/PLAN.md", "docs/specs/browser-search.md", "docs/specs/disk-and-updates.md"]);
 });
+
+test("an outline keeps a struct's public fields, and the modules a task uses are read first", async () => {
+  const { outline, rankByUse } = await import("../src/context.ts");
+  const pci = ["pub struct Device {", "    pub bus: u8,", "    pub interface: u8,", "    hidden: u8,", "}"].join("\n");
+  assert.equal(outline(pci), ["pub struct Device", "    pub bus: u8,", "    pub interface: u8,"].join("\n"));
+  const files = [f("kernel/src/acpi.rs"), f("kernel/src/anim.rs"), f("kernel/src/pci.rs"), f("kernel/src/paging.rs")];
+  const order = rankByUse(files, "call pci::bar(device, 5) then paging::map_device").map((x) => x.path);
+  assert.deepEqual(order, ["kernel/src/pci.rs", "kernel/src/paging.rs", "kernel/src/acpi.rs", "kernel/src/anim.rs"]);
+});
