@@ -215,10 +215,10 @@ fi
 
 # ---- Ce que l'on ne veut pas voir -------------------------------------------
 # Les entrées de menu qui n'ont pas de sens pour l'utilisateur de grenOS.
-for junk in /usr/share/applications/org.kde.plasma-welcome.desktop \
-            /usr/share/applications/debian-uxterm.desktop \
-            /usr/share/applications/debian-xterm.desktop; do
-    [ -f "$junk" ] && rm -f "$junk"
-done
+# `rm -f` ne se plaint pas d'un fichier absent : pas de test, donc pas de
+# commande qui rend un code non nul et fait sortir le script (set -e).
+rm -f /usr/share/applications/org.kde.plasma-welcome.desktop \
+      /usr/share/applications/debian-uxterm.desktop \
+      /usr/share/applications/debian-xterm.desktop
 
 echo "grenos: look installed"
