@@ -38,6 +38,9 @@ let running = true;
 let ticking = false;
 let wakeUp: (() => void) | null = null;
 
+/** How long one tick may run before the watchdog restarts the worker. */
+const WATCHDOG_MS = 60 * 60 * 1000;
+
 async function main(): Promise<void> {
   log.info("grenOS worker — démarrage");
   const startedAt = new Date();
@@ -83,8 +86,25 @@ async function main(): Promise<void> {
   subscribe();
   installShutdown();
 
+  // The watchdog. On 2026-09-17 the loop hung inside a tick from 07:07 to
+  // 15:21 — the heartbeat kept the lock alive, so nothing looked wrong, and a
+  // new mission waited eight hours. A tick that runs longer than
+  // WATCHDOG_MS ends the process, after giving the lock back; the launcher
+  // starts it again.
+  let tickStartedAt = 0;
+  const watchdog = setInterval(() => {
+    if (tickStartedAt > 0 && Date.now() - tickStartedAt > WATCHDOG_MS) {
+      log.warn(`tick bloqué depuis ${Math.round((Date.now() - tickStartedAt) / 60_000)} min : arrêt pour redémarrage`);
+      void Promise.race([releaseLock(), new Promise((resolve) => setTimeout(resolve, 10_000))]).finally(() =>
+        process.exit(3),
+      );
+    }
+  }, 60_000);
+  watchdog.unref();
+
   while (running) {
     try {
+      tickStartedAt = Date.now();
       await tick(agents, master, intake, router, gh);
     } catch (err) {
       // The loop must survive anything. A crash here on a free tier means the
@@ -96,6 +116,7 @@ async function main(): Promise<void> {
         message: err instanceof Error ? err.message : String(err),
       });
     }
+    tickStartedAt = 0;
     await waitForWork();
   }
 
