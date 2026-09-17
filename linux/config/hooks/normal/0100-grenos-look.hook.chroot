@@ -101,6 +101,10 @@ cat > "$SKEL/kglobalshortcutsrc" <<'EOF'
 _k_friendly_name=Gestionnaire de tâches
 _launch=Ctrl+Shift+Esc
 
+[services][plasma-systemmonitor.desktop]
+_k_friendly_name=Gestionnaire de tâches
+_launch=Ctrl+Shift+Esc
+
 [services][grenos-theme.desktop]
 _k_friendly_name=Thème jour et nuit
 _launch=Meta+T
