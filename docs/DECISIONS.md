@@ -1028,3 +1028,51 @@ modèles). Première : `docs/specs/disk-and-updates.md`.
 → **CI** : `verify.yml` démarre sur le disque dur par AHCI dès que
 `kernel/scripts/make-disk.sh` existe, et une étape informative montre les lignes
 `disk:`, `crypto:` et `update:` sans jamais faire échouer un run.
+
+---
+
+### D-042 — Les mises à jour s'installent depuis grenOS, en duo Claude + agents
+**2026-09-17 · actif · demandé par l'humain (« fais en sorte que les maj sont
+possibles depuis l'os », puis le choix « Duo Claude + agents »)**
+
+Après une journée où les panels de modèles n'ont réussi que les tâches simples
+(le script d'image disque, sa correction, la barre d'adresse) et ont échoué
+sur le pilote AHCI (quatre tâches), le décodage HTTP et Ed25519, l'humain a
+choisi le duo : Claude écrit les cœurs difficiles, sur des branches jugées par
+la CI ; les agents font l'intégration, l'interface et les tâches plus petites
+(mission sécurité en cours : PBKDF2).
+
+→ **Ce qui est livré, dans l'ordre de docs/specs/disk-and-updates.md** :
+pilote AHCI (`ahci.rs`), SHA-512 et Ed25519 (`sha512.rs`, `ed25519.rs`,
+constantes recalculées exactement plutôt que recopiées), FAT32 (`fat.rs`),
+notre propre disque (`storage.rs` : signature MBR donnée par Limine **et**
+étiquette GRENOS, sinon rien n'est écrit), l'installateur (`install.rs`) et
+son interface (Paramètres → Mise à jour). Version **0.9.0**.
+→ **Vérifié avant chaque commit sur l'hôte** : Ed25519 contre la RFC 8032 et
+contre la vraie version publiée signée par la clé de release ; FAT32 contre
+l'image disque que la CI construit avec mtools (19 contrôles, dont une chaîne
+de clusters en boucle refusée) ; le manifeste réellement publié et sept
+falsifications refusées.
+→ **Vérifié de bout en bout en CI** (run `35241030589`) : l'image disque
+démarre avec `grenos.selftest=update` et une date de build ancienne ; le noyau
+télécharge en TLS la dernière version publiée, vérifie sa signature, l'écrit
+dans l'emplacement b, relit, bascule `limine.conf` et redémarre ; au second
+démarrage : `booted from slot b`, puis `running 2bd97ce, up to date`.
+→ **Publication** : `release.yml` construit l'image disque, ne la publie que si
+elle démarre depuis l'emplacement a, la convertit en `.vdi` (UUID d'en-tête
+écrit à 0x188, ordre mixte, d'après `block/vdi.c` de QEMU) et la met dans le zip
+VirtualBox avec un `.vbox` qui démarre sur un disque SATA. **Non testé dans
+VirtualBox lui-même** : à confirmer par l'humain.
+→ **Limite connue** : le serveur n'est toujours pas authentifié (TLS sans
+validation de certificat) ; la sécurité des mises à jour repose sur la
+signature Ed25519, et un attaquant réseau peut seulement empêcher une mise à
+jour, pas en imposer une. Il peut aussi rejouer une ancienne version signée :
+refusée, la date de build devant être strictement plus récente.
+→ **Correction d'une affirmation de D-041** : le test « chunked » qui a jugé les
+modèles contenait un cas faux (l'exemple de Wikipédia mal recopié). DeepSeek V4
+Flash échouait aussi les cas simples, la conclusion tient ; le test est corrigé.
+→ **Fabrique, en chemin** : chien de garde du worker (une boucle figée 8 h le
+17), erreurs complètes du compilateur renvoyées aux modèles, plus de tours de
+correction tant qu'ils progressent, champs publics dans les sommaires de code,
+tâches parallèles sur fichiers distincts, fin de mission explicite
+(`complete_mission`), refus des tâches déjà faites.

@@ -47,10 +47,25 @@ jobs:
       - name: Outils image
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-x86 xorriso mtools
+          sudo apt-get install -y -qq qemu-system-x86 xorriso mtools gdisk qemu-utils
 
       - name: Image
         run: bash kernel/scripts/make-iso.sh
+
+      # Le disque dur de la machine VirtualBox (D-042) : deux emplacements de
+      # noyau, et c'est sur lui que grenOS installe ses mises a jour. Il n'est
+      # publie que s'il demarre, depuis l'emplacement a.
+      - name: Disque
+        run: |
+          set -o pipefail
+          bash kernel/scripts/make-disk.sh
+          timeout 45 qemu-system-x86_64 -drive file=kernel/grenos-disk.img,format=raw,if=none,id=disk0 \
+            -device ahci,id=ahci0 -device ide-hd,drive=disk0,bus=ahci0.0,bootindex=1 \
+            -serial stdio -display none -no-reboot -no-shutdown -m 256M 2>&1 | tee disk-boot.log || true
+          if ! grep -q 'booted from slot a' disk-boot.log; then
+            echo "::error::L'image disque ne demarre pas depuis l'emplacement a : rien n'est publie."
+            exit 1
+          fi
 
       # On ne publie que ce qui boote, avec le meme critere que verify.yml.
       - name: Boot QEMU
@@ -106,18 +121,20 @@ jobs:
           # La machine VirtualBox qui va avec (D-033) : un .vbox a garder dans le
           # meme dossier que l'ISO, qu'il designe par son nom.
           VBOX="builds/grenos-${BUILD}.vbox"
-          python3 scripts/make-vbox.py "grenos-${BUILD}.iso" grenos.vbox
+          qemu-img convert -f raw -O vdi kernel/grenos-disk.img "grenos-${BUILD}.vdi"
+          python3 scripts/make-vbox.py "grenos-${BUILD}.iso" grenos.vbox --disk "grenos-${BUILD}.vdi" "grenos-${BUILD}.vdi"
           curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
             -H "Content-Type: application/x-virtualbox-vbox" -H "cache-control: max-age=31536000" \
             --data-binary @grenos.vbox "$STORAGE/object/releases/$VBOX" > /dev/null
 
-          # Le choix « VirtualBox » de /download : l'ISO et sa machine dans un
-          # seul zip, a extraire puis ouvrir ; le .vbox designe l'ISO par ce nom.
+          # Le choix « VirtualBox » de /download : la machine, son disque dur et
+          # l'ISO dans un seul zip, a extraire puis ouvrir ; le .vbox designe le
+          # .vdi et l'ISO par ces noms.
           ZIP="builds/grenos-${BUILD}-virtualbox.zip"
           cp grenos.iso "grenos-${BUILD}.iso"
           cp grenos.vbox "grenos-${BUILD}.vbox"
           python3 -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED, compresslevel=9); [z.write(f) for f in sys.argv[2:]]; z.close()' \
-            grenos-virtualbox.zip "grenos-${BUILD}.iso" "grenos-${BUILD}.vbox"
+            grenos-virtualbox.zip "grenos-${BUILD}.iso" "grenos-${BUILD}.vbox" "grenos-${BUILD}.vdi"
           curl -fsS -X POST "${AUTH[@]}" -H "x-upsert: true" \
             -H "Content-Type: application/zip" -H "cache-control: max-age=31536000" \
             --data-binary @grenos-virtualbox.zip "$STORAGE/object/releases/$ZIP" > /dev/null
