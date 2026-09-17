@@ -3,7 +3,7 @@
 //! by the timer, and the status register — not the line it came in on — says
 //! which device sent it.
 
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use crate::events::{self, Event};
 use crate::port::{inb, outb};
@@ -27,6 +27,8 @@ pub enum From {
 }
 
 static KEY_IRQ: AtomicU32 = AtomicU32::new(0);
+/// Whether the mouse answered as an IntelliMouse, and so sends its wheel.
+static WHEEL: AtomicBool = AtomicBool::new(false);
 static MOUSE_IRQ: AtomicU32 = AtomicU32::new(0);
 static SWEPT: AtomicU32 = AtomicU32::new(0);
 static KEY_BYTES: AtomicU32 = AtomicU32::new(0);
@@ -111,8 +113,33 @@ fn to_mouse(byte: u8) -> bool {
     false
 }
 
+/// The byte the mouse sends after a command's acknowledgement, if any.
+fn from_mouse() -> Option<u8> {
+    for _ in 0..4 {
+        if !wait_output_full() {
+            return None;
+        }
+        let state = status();
+        // SAFETY: a byte waits in the output buffer.
+        let answer = unsafe { inb(DATA) };
+        if state & FROM_MOUSE != 0 {
+            return Some(answer);
+        }
+    }
+    None
+}
+
+/// Whether the mouse sends its wheel (four-byte packets).
+pub fn wheel() -> bool {
+    WHEEL.load(Ordering::Relaxed)
+}
+
 /// Turns both ports on with their interrupts, and asks the mouse to report
 /// what it does. True when the mouse answered. Call with interrupts off.
+///
+/// On the way, the IntelliMouse knock: sample rates 200, 100 then 80, and a
+/// mouse with a wheel says so by answering 3 to "identify", after which its
+/// packets carry a fourth byte. QEMU's and VirtualBox's PS/2 mice both do.
 pub fn init() -> bool {
     // Whatever the firmware left in the output buffer.
     while status() & OUTPUT_FULL != 0 {
@@ -124,7 +151,11 @@ pub fn init() -> bool {
     let config = read().unwrap_or(0x47);
     command(0x60); // write it back: IRQ1 and IRQ12 on, both clocks running
     write((config | 0x03) & !0x30);
-    let ok = to_mouse(0xF6) && to_mouse(0xF4); // defaults, then report movement
+    let ok = to_mouse(0xF6); // defaults
+    let knocked = ok && [200u8, 100, 80].iter().all(|&rate| to_mouse(0xF3) && to_mouse(rate));
+    let wheel = knocked && to_mouse(0xF2) && from_mouse() == Some(3);
+    WHEEL.store(wheel, Ordering::Relaxed);
+    let ok = ok && to_mouse(0xF4); // report movement
     // Whatever the two commands left behind, so the first real packet starts
     // on its first byte.
     while status() & OUTPUT_FULL != 0 {

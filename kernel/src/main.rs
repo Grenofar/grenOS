@@ -19,6 +19,7 @@ mod font;
 mod fs;
 mod gdt;
 mod heap;
+mod html;
 mod http;
 mod icons;
 mod idt;
@@ -39,9 +40,9 @@ mod rtc;
 mod security;
 mod serial;
 mod sha256;
-mod splash;
 mod sha512;
 mod shell;
+mod splash;
 mod storage;
 mod sysinfo;
 mod time;
@@ -240,13 +241,13 @@ extern "C" fn kmain() -> ! {
         on(guard.data_no_execute)
     ));
 
-    splash::draw(&mut screen, "Périphériques", 4, 7);
+    splash::draw(&mut screen, "Périphériques", 3, 7);
     let devices = pci::scan();
     log.say(format!("pci: {} devices", devices.len()));
 
     // The signature check every installed update will go through
     // (docs/specs/disk-and-updates.md §5), proven here on RFC 8032's vectors.
-    splash::draw(&mut screen, "Vérification des signatures", 3, 7);
+    splash::draw(&mut screen, "Vérification des signatures", 4, 7);
     log.say(if ed25519::self_test() {
         "crypto: ed25519 verified against RFC 8032".to_string()
     } else {
@@ -256,6 +257,12 @@ extern "C" fn kmain() -> ! {
         "security: pbkdf2 verified against RFC 7914".to_string()
     } else {
         "security: pbkdf2 FAILED its RFC 7914 vectors".to_string()
+    });
+    // The browser's decoders (docs/specs/browser-search.md §5): CI has no
+    // business depending on outside servers, so fixed inputs prove them.
+    log.say(match http::self_test().and_then(|()| html::self_test()) {
+        Ok(()) => "web: decoders verified".to_string(),
+        Err(case) => format!("web: decoders FAILED its {case} case"),
     });
 
     // The network card, if this machine has one this kernel knows: QEMU gives
@@ -305,7 +312,11 @@ extern "C" fn kmain() -> ! {
     let mouse_ok = ps2::init();
     // SAFETY: every vector the PIC can now raise has its handler in the IDT.
     unsafe { core::arch::asm!("sti", options(nomem, nostack)) };
-    log.say(if mouse_ok { "input: keyboard and mouse".to_string() } else { "input: keyboard, no mouse".to_string() });
+    log.say(match (mouse_ok, ps2::wheel()) {
+        (true, true) => "input: keyboard and mouse with a wheel".to_string(),
+        (true, false) => "input: keyboard and mouse".to_string(),
+        _ => "input: keyboard, no mouse".to_string(),
+    });
 
     // The SATA disks, through the AHCI controller (docs/specs/disk-and-updates.md
     // §3). The first sector of each is read back as a proof: a disk with a
@@ -415,7 +426,7 @@ extern "C" fn kmain() -> ! {
     serial::write_str("desktop: drawn\n");
 
     let mut keyboard = keyboard::Keyboard::default();
-    let mut decoder = mouse::Decoder::default();
+    let mut decoder = mouse::Decoder::new(ps2::wheel());
     let mut packets: u32 = 0;
     let mut keys: u32 = 0;
     // The browser's page: whether its outcome has been handed over, what the
@@ -432,6 +443,7 @@ extern "C" fn kmain() -> ! {
     // on the browser. Asked for once at boot as soon as the network answers,
     // and again at every click.
     let mut updater = http::Fetch::new();
+    updater.wants_text = false;
     let mut update_resolver = dhcp::Resolver::new();
     let mut update_wanted = false;
     let mut update_delivered = true;
@@ -500,13 +512,27 @@ extern "C" fn kmain() -> ! {
                 said.clear();
             }
             if !delivered {
-                if matches!(fetch.phase, http::Phase::Done | http::Phase::Failed) {
-                    let text = (fetch.phase == http::Phase::Done).then(|| fetch.text.clone());
-                    desk.page_result(fetch.status.clone(), text);
-                    delivered = true;
-                } else if fetch.status != said {
-                    said = fetch.status.clone();
-                    desk.page_result(said.clone(), None);
+                match fetch.phase {
+                    http::Phase::Done => {
+                        desk.page_result(desktop::PageNews::Loaded {
+                            url: fetch.url.clone(),
+                            title: core::mem::take(&mut fetch.title),
+                            lines: core::mem::take(&mut fetch.text),
+                            status: fetch.status.clone(),
+                        });
+                        // The page is the desktop's now; the raw body is not needed.
+                        fetch.body = Vec::new();
+                        delivered = true;
+                    }
+                    http::Phase::Failed => {
+                        desk.page_result(desktop::PageNews::Failed(fetch.status.clone()));
+                        delivered = true;
+                    }
+                    _ if fetch.status != said => {
+                        said = fetch.status.clone();
+                        desk.page_result(desktop::PageNews::Progress(said.clone()));
+                    }
+                    _ => {}
                 }
             }
             if dhcp.state == dhcp::State::Bound && ms >= next_ping && stack.gateway != [0, 0, 0, 0] {
@@ -588,7 +614,7 @@ extern "C" fn kmain() -> ! {
                 }
             }
         } else if let Some(url) = desk.wants_page() {
-            desk.page_result(format!("{url} : aucune carte réseau sur cette machine"), None);
+            desk.page_result(desktop::PageNews::Failed(format!("{url} : aucune carte réseau sur cette machine")));
         }
         if card.is_none() && desk.wants_update() {
             desk.update_result(desktop::Found::Failed("aucune carte réseau sur cette machine".to_string()));
