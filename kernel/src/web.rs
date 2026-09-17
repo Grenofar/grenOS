@@ -33,9 +33,14 @@ pub const PAGES: [Page; 5] = [
         body: "# grenOS\n\
                Un système d'exploitation x86_64 écrit en Rust, sans rien dessous : pas de Linux, pas de Windows, pas de bibliothèque C. Il démarre avec Limine, parle au matériel lui-même, et dessine ce bureau dans le framebuffer.\n\
                \n\
+               ## Chercher sur le web\n\
+               Tapez une adresse ou des mots dans la barre du haut, puis Entrée : une adresse s'ouvre, des mots sont cherchés.\n\
+               [Google](https://www.google.com/webhp?hl=fr)\n\
+               [Wikipédia en français](https://fr.wikipedia.org/)\n\
+               \n\
                ## Où aller\n\
                [Aide et raccourcis](grenos:aide)\n\
-               [Pourquoi le web n'est pas encore là](grenos:reseau)\n\
+               [Le réseau et le web](grenos:reseau)\n\
                [Ce qui a changé](grenos:versions)\n\
                [Les fichiers de la machine](fichier:/)\n\
                \n\
@@ -54,6 +59,10 @@ pub const PAGES: [Page; 5] = [
                - F1 ou la touche Windows ouvre le menu.\n\
                - Tab passe d'une fenêtre à l'autre, Échap ferme un menu.\n\
                - Le clavier est en français (AZERTY).\n\
+               ## Dans le navigateur\n\
+               - La molette, les flèches, Page précédente et Page suivante font défiler la page ; Début et Fin vont aux deux bouts.\n\
+               - La barre à droite de la page se tire à la souris.\n\
+               - Au survol d'un lien, son adresse s'affiche en bas.\n\
                ## Dans VirtualBox\n\
                - Cliquez dans la fenêtre pour que la machine reçoive la souris. La touche Ctrl de droite vous la rend.\n\
                - Si le pointeur ne bouge pas, ouvrez Paramètres, Souris et clavier : les compteurs disent si les octets arrivent.\n\
@@ -70,12 +79,13 @@ pub const PAGES: [Page; 5] = [
                - La machine obtient son adresse toute seule, par DHCP. Paramètres, Réseau, la montre.\n\
                - La passerelle répond au ping, et grenOS répond aux pings qu'on lui envoie.\n\
                - Les noms sont résolus par le serveur que le réseau a indiqué.\n\
-               - Ce navigateur ouvre les pages http et https.\n\
+               - Ce navigateur ouvre les pages http et https, suit les redirections et lit le français quel que soit l'encodage.\n\
+               - La barre d'adresse cherche sur le web : Google refuse les navigateurs sans JavaScript, la recherche passe donc par DuckDuckGo.\n\
                - grenOS vérifie tout seul, au démarrage, s'il existe une version plus récente.\n\
                \n\
                ## Ce qui manque\n\
                - L'identité du serveur : la connexion est chiffrée, mais le certificat n'est pas vérifié. Rien ne s'installe donc tout seul.\n\
-               - Les images, les styles et le JavaScript : cette fenêtre ne montre que le texte.\n\
+               - Les images, les styles et le JavaScript : cette fenêtre montre le texte et les liens, sans les menus des sites.\n\
                \n\
                [Notre site, en https](https://grenos-dev.vercel.app/download)\n\
                [Essayer example.com](http://example.com)\n\
@@ -153,13 +163,158 @@ pub fn parse(body: &str) -> Vec<Block<'_>> {
             if let Some(rest) = line.strip_prefix('[') {
                 if let Some((text, target)) = rest.split_once("](") {
                     if let Some(url) = target.strip_suffix(')') {
-                        return Block::Link(text, url);
+                        if !url.contains([')', ' ']) {
+                            return Block::Link(text, url);
+                        }
                     }
                 }
             }
             Block::Text(line)
         })
         .collect()
+}
+
+/// How a row of a laid-out page is drawn.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Style {
+    Title,
+    Head,
+    Body,
+    Item,
+    Rule,
+    Space,
+}
+
+/// Words on a row, starting at a character column; a link when they lead
+/// somewhere.
+pub struct Span {
+    pub column: usize,
+    pub text: String,
+    pub link: Option<String>,
+}
+
+/// One row of a page on screen. `bullet` marks the first row of an item.
+pub struct Row {
+    pub style: Style,
+    pub bullet: bool,
+    pub spans: Vec<Span>,
+}
+
+/// How many characters fit on a row in each font.
+pub struct Columns {
+    pub title: usize,
+    pub head: usize,
+    pub body: usize,
+}
+
+/// A page laid out in rows: every paragraph wrapped at spaces, and links —
+/// on a line of their own or inside a sentence, written `[words](address)` —
+/// kept as spans that a click can find.
+pub fn layout(body: &str, columns: &Columns) -> Vec<Row> {
+    let mut rows = Vec::new();
+    for block in parse(body) {
+        match block {
+            Block::Title(text) => wrap_into(&mut rows, Style::Title, &segments(text), columns.title),
+            Block::Head(text) => wrap_into(&mut rows, Style::Head, &segments(text), columns.head),
+            Block::Text(text) => wrap_into(&mut rows, Style::Body, &segments(text), columns.body),
+            Block::Item(text) => {
+                let first = rows.len();
+                wrap_into(&mut rows, Style::Item, &segments(text), columns.body.saturating_sub(2));
+                if let Some(row) = rows.get_mut(first) {
+                    row.bullet = true;
+                }
+            }
+            Block::Link(text, url) => wrap_into(&mut rows, Style::Body, &[(text, Some(url))], columns.body),
+            Block::Rule => rows.push(Row { style: Style::Rule, bullet: false, spans: Vec::new() }),
+            Block::Space => rows.push(Row { style: Style::Space, bullet: false, spans: Vec::new() }),
+        }
+    }
+    rows
+}
+
+/// The link under a character column of a row, if any.
+pub fn link_at(row: &Row, column: usize) -> Option<&str> {
+    row.spans
+        .iter()
+        .find(|span| column >= span.column && column < span.column + span.text.chars().count())
+        .and_then(|span| span.link.as_deref())
+}
+
+/// A line split into plain runs and `[words](address)` links.
+fn segments(text: &str) -> Vec<(&str, Option<&str>)> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        let after = &rest[open + 1..];
+        let Some(middle) = after.find("](") else {
+            break;
+        };
+        let words = &after[..middle];
+        let target = &after[middle + 2..];
+        let Some(end) = target.find(')') else {
+            break;
+        };
+        let url = &target[..end];
+        let address = ["http://", "https://", "grenos:", "fichier:"].iter().any(|scheme| url.starts_with(scheme));
+        if words.contains('[') || url.contains(' ') || !address {
+            // Not a link: the bracket is text, and the search goes on after it.
+            out.push((&rest[..=open], None));
+            rest = after;
+            continue;
+        }
+        if open > 0 {
+            out.push((&rest[..open], None));
+        }
+        out.push((words, Some(url)));
+        rest = &target[end + 1..];
+    }
+    if !rest.is_empty() {
+        out.push((rest, None));
+    }
+    out
+}
+
+/// Lays runs of words out in rows of at most `width` characters, cutting at
+/// spaces, and a word longer than a row wherever it must.
+fn wrap_into(rows: &mut Vec<Row>, style: Style, segments: &[(&str, Option<&str>)], width: usize) {
+    let width = width.max(8);
+    let mut row = Row { style, bullet: false, spans: Vec::new() };
+    let mut used = 0;
+    let mut space = false;
+    for &(text, link) in segments {
+        for (index, piece) in text.split(' ').enumerate() {
+            space |= index > 0;
+            let mut word = piece;
+            while !word.is_empty() {
+                let length = word.chars().count();
+                let gap = usize::from(space && used > 0);
+                if used > 0 && used + gap + length > width {
+                    rows.push(core::mem::replace(&mut row, Row { style, bullet: false, spans: Vec::new() }));
+                    used = 0;
+                    continue;
+                }
+                let cut = word.char_indices().nth(width).map_or(word.len(), |(at, _)| at);
+                let (head, tail) = word.split_at(cut);
+                match row.spans.last_mut() {
+                    Some(last) if last.link.as_deref() == link => {
+                        if gap > 0 {
+                            last.text.push(' ');
+                        }
+                        last.text.push_str(head);
+                    }
+                    _ => row.spans.push(Span {
+                        column: used + gap,
+                        text: head.to_string(),
+                        link: link.map(ToString::to_string),
+                    }),
+                }
+                used += gap + head.chars().count();
+                space = false;
+                word = tail;
+            }
+        }
+    }
+    rows.push(row);
 }
 
 /// Turns what the human typed into a URL to open.
@@ -169,7 +324,6 @@ pub fn parse(body: &str) -> Vec<Block<'_>> {
 /// - Anything else is a search on DuckDuckGo's HTML page, which answers text
 ///   browsers, with the query percent-encoded (space as `+`, every byte
 ///   outside `A-Za-z0-9-._~` as `%XX` of its UTF-8 bytes).
-#[allow(dead_code)]
 pub fn parse_address(input: &str) -> Option<String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -200,7 +354,6 @@ pub fn parse_address(input: &str) -> Option<String> {
     Some(format!("https://html.duckduckgo.com/html/?q={encoded}"))
 }
 
-#[allow(dead_code)]
 fn hex(nibble: u8) -> char {
     if nibble < 10 {
         (b'0' + nibble) as char

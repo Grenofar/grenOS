@@ -100,3 +100,24 @@ flaky tests). Instead, at boot, `main.rs` runs the pure decoders on fixed
 inputs — the chunked cases above, an ISO-8859-1 body with `é`, a small HTML page
 with a relative link and an entity, and a DuckDuckGo result block — and prints
 `web: decoders verified` or which case failed.
+
+## 6. Status (2026-09-17)
+Implemented by Claude on `agent/claude-browser`, from §1 to §5:
+- `kernel/src/html.rs`: `page(body, content_type, url) -> Page { title, lines }`,
+  charset decoding, Latin-1 folding, entities, links resolved and kept inside
+  sentences as `[words](address)`, DuckDuckGo results, `self_test()`. Page
+  furniture (`nav`, `footer`, `aside`, dropdowns, navboxes) is skipped, and
+  `>` inside quoted attribute values does not end a tag.
+- `kernel/src/http.rs`: redirects (at most 5), `Cookie: SOCS=CAI` for
+  google.com only, bodies up to 1 MB, `self_test()` for the chunked cases.
+- `kernel/src/web.rs`: `layout(body, columns) -> Vec<Row>` and `link_at`: rows
+  with link spans, which the desktop paints, scrolls and clicks.
+- `kernel/src/desktop.rs`: `PageNews` from the kernel, scrolling (wheel, arrows,
+  Page Up/Down, Home/End, a draggable scroll bar), the link under the pointer in
+  the status strip, a Google bookmark, the address bar through `parse_address`.
+- `kernel/src/ps2.rs`, `mouse.rs`: the IntelliMouse wheel (four-byte packets).
+- Boot proof: `web: decoders verified`.
+
+Checked on the host against pages saved from the real servers: Google's home,
+DuckDuckGo results, Hacker News, and a 550 KB French Wikipedia article
+(18 ms to convert on the host).

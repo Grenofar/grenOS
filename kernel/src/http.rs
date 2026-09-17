@@ -14,6 +14,7 @@ use alloc::vec::Vec;
 
 use crate::dhcp::Resolver;
 use crate::e1000::Nic;
+use crate::html;
 use crate::net::{ANY, Ipv4, Stack, address_text, parse_address};
 use crate::tls;
 
@@ -26,10 +27,12 @@ const ACK: u8 = 1 << 4;
 /// How long each step may take, how much of a page is kept, and how much data
 /// goes into one segment.
 const PATIENCE: u64 = 8_000;
-const BODY_CAP: usize = 120_000;
+const BODY_CAP: usize = 1_000_000;
 const SEGMENT: usize = 1_400;
 /// Room for the status line and the headers, on top of a body's limit.
 const HEAD_ROOM: usize = 16_000;
+/// How many redirects are followed before giving up (docs/specs/browser-search.md §2.2).
+const MAX_REDIRECTS: u8 = 5;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -49,8 +52,11 @@ pub struct Fetch {
     pub address: Ipv4,
     /// True when the conversation is wrapped in TLS.
     pub secure: bool,
-    /// The body, headers taken off and tags stripped, for a text window.
+    /// Where the answer finally came from, redirects followed.
+    pub url: String,
+    /// The body as browser lines (`html::page`), and the page's title.
     pub text: String,
+    pub title: String,
     /// The body exactly as it came, for a program that reads it (the update
     /// check reads JSON).
     pub body: Vec<u8>,
@@ -66,6 +72,9 @@ pub struct Fetch {
     raw: Vec<u8>,
     tls: Option<tls::Client>,
     asked: bool,
+    /// Redirects followed so far, and the next address to follow.
+    redirects: u8,
+    follow: Option<String>,
     local_port: u16,
     sequence: u32,
     acknowledged: u32,
@@ -81,7 +90,9 @@ impl Fetch {
             port: 80,
             address: ANY,
             secure: false,
+            url: String::new(),
             text: String::new(),
+            title: String::new(),
             body: Vec::new(),
             status: String::new(),
             code: 0,
@@ -90,6 +101,8 @@ impl Fetch {
             raw: Vec::new(),
             tls: None,
             asked: false,
+            redirects: 0,
+            follow: None,
             local_port: 49152,
             sequence: 0,
             acknowledged: 0,
@@ -110,6 +123,12 @@ impl Fetch {
     /// Starts fetching `http://` or `https://host[:port]/path`. False when the
     /// address cannot be reached from here.
     pub fn start(&mut self, stack: &mut Stack, nic: &mut Nic, resolver: &mut Resolver, url: &str, now: u64) -> bool {
+        self.redirects = 0;
+        self.follow = None;
+        self.begin(stack, nic, resolver, url, now)
+    }
+
+    fn begin(&mut self, stack: &mut Stack, nic: &mut Nic, resolver: &mut Resolver, url: &str, now: u64) -> bool {
         let (secure, rest) = if let Some(rest) = url.strip_prefix("https://") {
             (true, rest)
         } else if let Some(rest) = url.strip_prefix("http://") {
@@ -132,13 +151,23 @@ impl Fetch {
         self.path = format!("/{path}");
         self.port = port;
         self.secure = secure;
+        let default_port = if secure { 443 } else { 80 };
+        let scheme = if secure { "https" } else { "http" };
+        self.url = if port == default_port {
+            format!("{scheme}://{host}{}", self.path)
+        } else {
+            format!("{scheme}://{host}:{port}{}", self.path)
+        };
         self.text.clear();
+        self.title.clear();
         self.body.clear();
         self.raw.clear();
         self.code = 0;
         self.asked = false;
         self.since = now;
-        self.local_port = 49152 + (now % 8000) as u16;
+        // A new port for each redirect: the last connection may still be
+        // closing on the server's side.
+        self.local_port = 49152 + ((now + u64::from(self.redirects) * 997) % 8000) as u16;
         self.sequence = u32::from_le_bytes(crate::rand::bytes()[..4].try_into().unwrap_or([0; 4]));
         self.tls = secure.then(|| tls::Client::new(host, crate::rand::bytes(), crate::rand::bytes(), crate::rand::bytes()));
         if !stack.ready() {
@@ -186,17 +215,31 @@ impl Fetch {
         }
     }
 
+    /// The request. No `Accept-Encoding`: nothing compressed can be read here.
+    /// Google alone gets `SOCS=CAI`, the cookie its consent page sets for
+    /// "Reject all" — this browser keeps no cookies, so that is its true state.
     fn request(&self) -> String {
+        let host = self.host.to_ascii_lowercase();
+        let google = host == "google.com" || host.ends_with(".google.com");
         format!(
-            "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: grenOS/{}\r\nConnection: close\r\nAccept: */*\r\n\r\n",
+            "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: grenOS/{}\r\nConnection: close\r\nAccept: */*\r\n{}\r\n",
             self.path,
             self.host,
-            env!("CARGO_PKG_VERSION")
+            env!("CARGO_PKG_VERSION"),
+            if google { "Cookie: SOCS=CAI\r\n" } else { "" }
         )
     }
 
     /// Moves the conversation along. Called every time round the main loop.
     pub fn poll(&mut self, stack: &mut Stack, nic: &mut Nic, resolver: &mut Resolver, now: u64) {
+        self.step(stack, nic, resolver, now);
+        if let Some(next) = self.follow.take() {
+            self.redirects += 1;
+            self.begin(stack, nic, resolver, &next, now);
+        }
+    }
+
+    fn step(&mut self, stack: &mut Stack, nic: &mut Nic, resolver: &mut Resolver, now: u64) {
         if !self.busy() {
             return;
         }
@@ -339,6 +382,20 @@ impl Fetch {
         let head = String::from_utf8_lossy(&raw[..split]).into_owned();
         let mut body = raw[split + 4..].to_vec();
         self.code = head.split_whitespace().nth(1).and_then(|code| code.parse().ok()).unwrap_or(0);
+        if matches!(self.code, 301 | 302 | 303 | 307 | 308) {
+            if let Some(location) = header(&head, "location") {
+                if self.redirects >= MAX_REDIRECTS {
+                    self.give_up("trop de redirections, arrêté après 5");
+                    return;
+                }
+                if let Some(next) = html::resolve(&self.url, &location) {
+                    self.status = format!("redirigé vers {}...", html::host_of(&next));
+                    self.follow = Some(next);
+                    self.phase = Phase::Done;
+                    return;
+                }
+            }
+        }
         if header(&head, "transfer-encoding").is_some_and(|value| value.to_ascii_lowercase().contains("chunked")) {
             match dechunk(&body) {
                 Some(decoded) => body = decoded,
@@ -358,7 +415,11 @@ impl Fetch {
             self.give_up("la réponse dépasse la taille permise");
             return;
         }
-        self.text = if self.wants_text { to_text(&String::from_utf8_lossy(&body)) } else { String::new() };
+        if self.wants_text {
+            let page = html::page(&body, header(&head, "content-type").as_deref(), &self.url);
+            self.text = page.lines;
+            self.title = page.title;
+        }
         let lock = if self.secure { "https, chiffré" } else { "http" };
         self.status = format!("{} · {} · {} · {} octets", self.host, lock, self.code, body.len());
         self.body = body;
@@ -369,6 +430,30 @@ impl Fetch {
         self.phase = Phase::Failed;
         self.status = format!("{} : {why}", self.host);
     }
+}
+
+/// Checks the body decoders on fixed inputs (docs/specs/browser-search.md
+/// §2.1): `Ok`, or the name of the case that failed.
+pub fn self_test() -> Result<(), &'static str> {
+    // Input, what it decodes to (None: refused), and the case's name.
+    type Case = (&'static [u8], Option<&'static [u8]>, &'static str);
+    let cases: [Case; 5] = [
+        (b"5\r\nhello\r\n0\r\n\r\n", Some(b"hello"), "chunked"),
+        (b"5;ext=1\r\nhello\r\n6\r\n world\r\n0\r\nTrailer: x\r\n\r\n", Some(b"hello world"), "chunked trailer"),
+        (b"0A\r\n0123456789\r\n0\r\n\r\n", Some(b"0123456789"), "chunked hex"),
+        (b"5\r\nhel", None, "chunked truncated"),
+        (b"FFFFFFFFFFFFFFFFFF\r\n", None, "chunked overflow"),
+    ];
+    for (input, expected, name) in cases {
+        if dechunk(input).as_deref() != expected {
+            return Err(name);
+        }
+    }
+    let head = "HTTP/1.1 302 Found\r\nlocation: /ailleurs\r\nContent-Type: text/html";
+    if header(head, "Location").as_deref() != Some("/ailleurs") {
+        return Err("header case");
+    }
+    Ok(())
 }
 
 /// The value of header `name` in a response head, whatever its case (RFC 9110
@@ -430,87 +515,4 @@ pub fn dechunk(body: &[u8]) -> Option<Vec<u8>> {
 /// The index of the next CRLF at or after `from`.
 fn find_crlf(bytes: &[u8], from: usize) -> Option<usize> {
     bytes.get(from..)?.windows(2).position(|pair| pair == b"\r\n").map(|offset| from + offset)
-}
-
-/// HTML turned into something a text window can show: tags dropped, the head
-/// left out, entities decoded, runs of space collapsed.
-pub fn to_text(html: &str) -> String {
-    let mut out = String::with_capacity(html.len() / 2);
-    let mut inside_tag = false;
-    let mut skipping: Option<&str> = None;
-    let bytes: Vec<char> = html.chars().collect();
-    let mut at = 0;
-    while at < bytes.len() {
-        let rest: String = bytes[at..(at + 16).min(bytes.len())].iter().collect();
-        let lower = rest.to_ascii_lowercase();
-        if let Some(tag) = skipping {
-            if lower.starts_with(&format!("</{tag}")) {
-                skipping = None;
-            }
-            at += 1;
-            continue;
-        }
-        let c = bytes[at];
-        if c == '<' {
-            for tag in ["script", "style", "head"] {
-                if lower.starts_with(&format!("<{tag}")) {
-                    skipping = Some(tag);
-                }
-            }
-            if lower.starts_with("<br") || lower.starts_with("</p") || lower.starts_with("</div") || lower.starts_with("</h") {
-                out.push('\n');
-            }
-            inside_tag = true;
-            at += 1;
-            continue;
-        }
-        if c == '>' {
-            inside_tag = false;
-            at += 1;
-            continue;
-        }
-        if !inside_tag {
-            if c == '&' {
-                let entity: String = bytes[at..(at + 8).min(bytes.len())].iter().collect();
-                let (text, length) = entity_of(&entity);
-                out.push_str(text);
-                at += length;
-                continue;
-            }
-            // Runs of space, tab and newline become one space: HTML is
-            // written with line breaks that mean nothing on screen.
-            if c.is_whitespace() {
-                if !out.ends_with(' ') && !out.ends_with('\n') {
-                    out.push(' ');
-                }
-            } else {
-                out.push(c);
-            }
-        }
-        at += 1;
-    }
-    out.trim().to_string()
-}
-
-/// The handful of HTML entities worth decoding, and how many characters each
-/// one takes up.
-fn entity_of(text: &str) -> (&'static str, usize) {
-    for (entity, plain) in [
-        ("&amp;", "&"),
-        ("&lt;", "<"),
-        ("&gt;", ">"),
-        ("&quot;", "\""),
-        ("&apos;", "'"),
-        ("&#39;", "'"),
-        ("&nbsp;", " "),
-        ("&eacute;", "é"),
-        ("&egrave;", "è"),
-        ("&agrave;", "à"),
-        ("&ccedil;", "ç"),
-    ] {
-        if text.starts_with(entity) {
-            return (plain, entity.len());
-        }
-    }
-    ("&", 1)
 }

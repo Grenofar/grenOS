@@ -16,6 +16,10 @@ pub enum Key {
     Tab,
     /// F1 or the Windows key: the application menu.
     Menu,
+    PageUp,
+    PageDown,
+    Home,
+    End,
 }
 
 /// (scancode, alone, with Shift, with AltGr); '\0' where the key gives nothing.
@@ -106,6 +110,10 @@ impl Keyboard {
                 0x50 => Some(Key::Down),
                 0x4B => Some(Key::Left),
                 0x4D => Some(Key::Right),
+                0x49 => Some(Key::PageUp),
+                0x51 => Some(Key::PageDown),
+                0x47 => Some(Key::Home),
+                0x4F => Some(Key::End),
                 0x5B | 0x5C => Some(Key::Menu),
                 0x1C => Some(Key::Enter),
                 _ => None,

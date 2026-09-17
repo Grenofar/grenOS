@@ -242,8 +242,27 @@ const BOOKMARKS: [(&str, &str); 6] = [
     ("Fichiers", "fichier:/"),
     // Our own site, over https: the page the kernel's TLS was tested against.
     ("grenos-dev", "https://grenos-dev.vercel.app/download"),
-    ("example.com", "http://example.com"),
+    // Google's home works without JavaScript; its search does not, so the
+    // address bar searches through DuckDuckGo (docs/specs/browser-search.md §1).
+    ("Google", GOOGLE),
 ];
+
+/// Google's home page, in French.
+pub const GOOGLE: &str = "https://www.google.com/webhp?hl=fr";
+/// Room kept at the right of a page for its scroll bar.
+const SCROLLBAR: usize = 14;
+/// How many rows one notch of the wheel, or one arrow key, moves a page.
+const SCROLL_STEP: usize = 3;
+
+/// What the kernel says about the page the browser asked for.
+pub enum PageNews {
+    /// Still on its way: where it has got to.
+    Progress(String),
+    /// Arrived, from `url` once redirects are followed.
+    Loaded { url: String, title: String, lines: String, status: String },
+    /// Could not be fetched, and why.
+    Failed(String),
+}
 
 const SECTIONS: [(&str, Icon); 7] = [
     ("Système", Icon::About),
@@ -417,8 +436,20 @@ pub struct Desktop {
     net_lines: Vec<String>,
     /// A page the browser wants fetched from the network, taken by the kernel.
     pending: Option<String>,
-    /// What came back for it.
+    /// What came back for it: the page's lines and title, or that it failed.
     fetched: Option<String>,
+    fetched_title: String,
+    failed: bool,
+    /// The page laid out in rows, for which page and width, and how far down
+    /// it is scrolled (the first row shown).
+    rows: Vec<web::Row>,
+    rows_for: (u64, usize),
+    generation: u64,
+    scroll: usize,
+    /// The link under the pointer, shown at the bottom as Chrome does.
+    hover_link: Option<String>,
+    /// Where the scroll bar's thumb was caught, while it is dragged.
+    thumb_grab: Option<usize>,
     /// What the protection has to say, and what it found; and what the
     /// Sécurité window is asking the kernel to do (scan, verify).
     sec_lines: Vec<String>,
@@ -495,6 +526,14 @@ impl Desktop {
             net_lines: Vec::new(),
             pending: None,
             fetched: None,
+            fetched_title: String::new(),
+            failed: false,
+            rows: Vec::new(),
+            rows_for: (u64::MAX, 0),
+            generation: 0,
+            scroll: 0,
+            hover_link: None,
+            thumb_grab: None,
             sec_lines: Vec::new(),
             sec_threats: Vec::new(),
             sec_ask: None,
@@ -621,10 +660,36 @@ impl Desktop {
     }
 
     /// What the network made of that address.
-    pub fn page_result(&mut self, status: String, text: Option<String>) {
-        self.status = status;
-        if let Some(text) = text {
-            self.fetched = Some(text);
+    pub fn page_result(&mut self, news: PageNews) {
+        // The person may have gone to one of the system's own pages meanwhile.
+        if !self.page.starts_with("http") {
+            return;
+        }
+        match news {
+            PageNews::Progress(status) => {
+                self.status = status;
+                if self.fetched.is_none() {
+                    self.generation += 1;
+                }
+            }
+            PageNews::Loaded { url, title, lines, status } => {
+                if url != self.page {
+                    self.page = url.clone();
+                    self.address = url;
+                }
+                self.fetched = Some(lines);
+                self.fetched_title = title;
+                self.failed = false;
+                self.status = status;
+                self.scroll = 0;
+                self.generation += 1;
+            }
+            PageNews::Failed(status) => {
+                self.fetched = None;
+                self.failed = true;
+                self.status = status;
+                self.generation += 1;
+            }
         }
         if self.showing(App::Browser) {
             let area = self.windows[App::Browser.index()].area;
@@ -705,6 +770,9 @@ impl Desktop {
 
     /// Paints what changed, and puts the pointer back on top.
     pub fn frame(&mut self, screen: &mut Screen) {
+        if self.windows[App::Browser.index()].open {
+            self.refresh_rows();
+        }
         let dirty = core::mem::replace(&mut self.dirty, Rect::empty());
         let moved = self.shown != Some(self.pointer);
         if dirty.is_empty() && !moved {
@@ -1122,7 +1190,166 @@ impl Desktop {
         if let Some(page) = web::find(&self.page) {
             return page.title.to_string();
         }
+        if !self.fetched_title.is_empty() {
+            return self.fetched_title.clone();
+        }
         self.address.clone()
+    }
+
+    /// Where the rows of a page are drawn: the page area without its margins,
+    /// its scroll bar and the status strip at the bottom.
+    pub fn browser_view(&self) -> Rect {
+        let page = self.browser_page();
+        let strip = font::height(Font::Small) + 10;
+        Rect::new(
+            page.x + 24,
+            page.y + 10,
+            page.w.saturating_sub(24 + 12 + SCROLLBAR),
+            page.h.saturating_sub(10 + strip),
+        )
+    }
+
+    fn browser_scrollbar(&self) -> Rect {
+        let page = self.browser_page();
+        let view = self.browser_view();
+        Rect::new(page.right().saturating_sub(SCROLLBAR), view.y, 8, view.h)
+    }
+
+    fn browser_strip(&self) -> Rect {
+        let page = self.browser_page();
+        let height = font::height(Font::Small) + 10;
+        Rect::new(page.x, page.bottom().saturating_sub(height), page.w, height)
+    }
+
+    /// The thumb of the scroll bar, None when the whole page fits.
+    fn browser_thumb(&self) -> Option<Rect> {
+        let bar = self.browser_scrollbar();
+        let shown = self.rows_shown(self.scroll);
+        if self.scroll == 0 && shown >= self.rows.len() {
+            return None;
+        }
+        let total = self.rows.len().max(1);
+        let height = (bar.h * shown / total).max(24).min(bar.h);
+        let top = bar.y + (bar.h - height) * self.scroll / self.max_scroll().max(1);
+        Some(Rect::new(bar.x, top.min(bar.bottom().saturating_sub(height)), bar.w, height))
+    }
+
+    fn row_height(&self, style: web::Style) -> usize {
+        match style {
+            web::Style::Title => font::height(Font::Title) + 10,
+            web::Style::Head => font::height(Font::Head) + 8,
+            web::Style::Body | web::Style::Item => self.line_h(),
+            web::Style::Rule => 14,
+            web::Style::Space => self.line_h() / 2,
+        }
+    }
+
+    /// How many rows fit on screen, starting from row `from`.
+    fn rows_shown(&self, from: usize) -> usize {
+        let room = self.browser_view().h;
+        let mut used = 0;
+        let mut count = 0;
+        for row in self.rows.iter().skip(from) {
+            used += self.row_height(row.style);
+            if used > room {
+                break;
+            }
+            count += 1;
+        }
+        count
+    }
+
+    /// The furthest the page scrolls: its last screenful.
+    fn max_scroll(&self) -> usize {
+        let room = self.browser_view().h;
+        let mut used = 0;
+        let mut first = self.rows.len();
+        while first > 0 {
+            used += self.row_height(self.rows[first - 1].style);
+            if used > room {
+                break;
+            }
+            first -= 1;
+        }
+        first
+    }
+
+    /// The text the page is laid out from: a system page, what the network
+    /// brought back, or what is happening to it. None for the file pages,
+    /// which are drawn on their own.
+    fn page_source(&self) -> Option<String> {
+        if self.page.starts_with("fichier:") {
+            return None;
+        }
+        if let Some(found) = web::find(&self.page) {
+            return Some(found.body.to_string());
+        }
+        if !self.page.starts_with("http") {
+            return Some(format!(
+                "# Page introuvable\nIl n'existe pas de page {} dans ce navigateur.\n\n[Retour à l'accueil](grenos:accueil)",
+                self.page
+            ));
+        }
+        if let Some(lines) = &self.fetched {
+            return Some(lines.clone());
+        }
+        if self.failed {
+            return Some(format!(
+                "# Impossible d'ouvrir la page\n{}\n\n[Réessayer]({})\n[Retour à l'accueil](grenos:accueil)",
+                self.status, self.page
+            ));
+        }
+        Some(format!("## Chargement\n{}", self.status))
+    }
+
+    /// Lays the page out again when it, or the window's width, changed.
+    fn refresh_rows(&mut self) {
+        let view = self.browser_view();
+        let key = (self.generation, view.w);
+        if self.rows_for == key {
+            return;
+        }
+        self.rows_for = key;
+        let columns = web::Columns {
+            title: view.w / font::width(Font::Title),
+            head: view.w / font::width(Font::Head),
+            body: view.w / font::width(Font::Body),
+        };
+        self.rows = self.page_source().map_or_else(Vec::new, |text| web::layout(&text, &columns));
+        self.scroll = self.scroll.min(self.max_scroll());
+    }
+
+    /// Moves the page `delta` rows down, or up when negative.
+    fn scroll_by(&mut self, delta: isize) {
+        self.refresh_rows();
+        let target = self.scroll.saturating_add_signed(delta).min(self.max_scroll());
+        if target != self.scroll {
+            self.scroll = target;
+            self.hover_link = None;
+            self.damage(self.windows[App::Browser.index()].area);
+        }
+    }
+
+    /// The address of the link under a point of the page, if there is one.
+    pub fn link_under(&self, x: usize, y: usize) -> Option<String> {
+        let view = self.browser_view();
+        if !view.contains(x, y) || self.page.starts_with("fichier:") {
+            return None;
+        }
+        let mut top = view.y;
+        for row in self.rows.iter().skip(self.scroll) {
+            let height = self.row_height(row.style);
+            if top + height > view.bottom() {
+                return None;
+            }
+            if y < top + height {
+                let indent = if row.style == web::Style::Item { 14 } else { 0 };
+                let column = x.checked_sub(view.x + indent)? / font::width(row_font(row.style));
+                return web::link_at(row, column).map(ToString::to_string);
+            }
+            top += height;
+        }
+        None
     }
 
     // ---- Painting ---------------------------------------------------------
@@ -1313,9 +1540,15 @@ impl Desktop {
         icons::draw(screen, icon, app.icon(), app.tint(), if active { SURFACE_ALT } else { PANEL });
         // The browser names the page it is on, the way a tab would.
         let heading = match app {
-            App::Browser => web::find(&self.page)
-                .map_or_else(|| app.title().to_string(), |page| format!("{} · {}", app.title(), page.title)),
+            App::Browser => format!("{} · {}", app.title(), self.page_title()),
             other => other.title().to_string(),
+        };
+        // Cut short before the buttons: a page's title can be long.
+        let buttons = (0..3).map(|index| self.button_rect(app, index).x).min().unwrap_or(title.right());
+        let room = buttons.saturating_sub(icon.right() + 20) / font::width(Font::Head);
+        let heading = match heading.char_indices().nth(room) {
+            Some((cut, _)) => format!("{}...", &heading[..heading.char_indices().nth(room.saturating_sub(3)).map_or(cut, |(at, _)| at)]),
+            None => heading,
         };
         screen.text(icon.right() + 10, centre_y(title, Font::Head), &heading, if active { TEXT } else { TEXT_DIM }, Font::Head);
 
@@ -1580,42 +1813,43 @@ impl Desktop {
         }
 
         let client = self.browser_page();
-        let width = client.w.saturating_sub(48) / font::width(Font::Body);
-        let mut y = client.y + 10;
         if let Some(rest) = self.page.strip_prefix("fichier:") {
+            let mut y = client.y + 10;
             self.paint_browser_files(screen, client, rest, &mut y);
-        } else if let Some(found) = web::find(&self.page) {
-            for block in web::parse(found.body) {
-                if y + self.line_h() > client.bottom() {
-                    break;
-                }
-                y = paint_block(screen, client.x + 24, y, width, block, self.line_h());
-            }
-        } else if self.page.starts_with("http") {
-            // A page from the network: the text the kernel brought back, or
-            // where it has got to.
-            match self.fetched.as_deref() {
-                Some(text) if !text.is_empty() => {
-                    for line in text.lines().flat_map(|line| wrap(line, width)) {
-                        if y + self.line_h() > client.bottom() {
-                            break;
-                        }
-                        screen.text(client.x + 24, y, line, TEXT_DIM, Font::Body);
-                        y += self.line_h();
-                    }
-                }
-                _ => {
-                    screen.text(client.x + 24, y, &self.status, TEXT_DIM, Font::Body);
-                }
-            }
         } else {
-            screen.text(client.x + 24, y, "Page introuvable.", TEXT_DIM, Font::Body);
-            y += self.line_h();
-            screen.text(client.x + 24, y, &self.status, AMBER, Font::Small);
+            self.paint_page_rows(screen);
         }
-        if !self.status.is_empty() {
-            let bottom = client.bottom().saturating_sub(font::height(Font::Small) + 8);
-            screen.text(client.x + 12, bottom, &self.status, TEXT_FAINT, Font::Small);
+
+        // The status strip: the link under the pointer, or where the page is.
+        let strip = self.browser_strip();
+        screen.fill(strip, SURFACE);
+        let said = self.hover_link.as_deref().unwrap_or(&self.status);
+        if !said.is_empty() {
+            let room = strip.w.saturating_sub(24) / font::width(Font::Small);
+            let end = said.char_indices().nth(room).map_or(said.len(), |(at, _)| at);
+            let colour = if self.hover_link.is_some() { TEXT_DIM } else { TEXT_FAINT };
+            screen.text(strip.x + 12, centre_y(strip, Font::Small), &said[..end], colour, Font::Small);
+        }
+    }
+
+    /// The rows of the page from the first one scrolled to, and the scroll bar.
+    fn paint_page_rows(&self, screen: &mut Screen) {
+        let view = self.browser_view();
+        let previous = screen.set_clip(view.grow(4).intersect(screen.clip()));
+        let mut y = view.y;
+        for row in self.rows.iter().skip(self.scroll) {
+            let height = self.row_height(row.style);
+            if y + height > view.bottom() {
+                break;
+            }
+            paint_row(screen, view.x, y, view.w, row, self.hover_link.as_deref());
+            y += height;
+        }
+        screen.set_clip(previous);
+        if let Some(thumb) = self.browser_thumb() {
+            let bar = self.browser_scrollbar();
+            screen.round(bar, bar.w / 2, SUNKEN);
+            screen.round(thumb, thumb.w / 2, LINE);
         }
     }
 
@@ -2226,7 +2460,14 @@ impl Desktop {
             let x = (self.pointer.0 as i64 + i64::from(packet.dx)).clamp(0, self.width as i64 - 1);
             let y = (self.pointer.1 as i64 + i64::from(packet.dy)).clamp(0, self.height as i64 - 1);
             self.pointer = (x as usize, y as usize);
-            if let Some((app, offset_x, offset_y)) = self.grab {
+            if let (Some(offset), Some(thumb)) = (self.thumb_grab, self.browser_thumb()) {
+                // The thumb follows the pointer, and the page follows the thumb.
+                let bar = self.browser_scrollbar();
+                let travel = bar.h.saturating_sub(thumb.h).max(1);
+                let top = self.pointer.1.saturating_sub(offset).clamp(bar.y, bar.y + travel) - bar.y;
+                let target = (top * self.max_scroll() + travel / 2) / travel;
+                self.scroll_by(target as isize - self.scroll as isize);
+            } else if let Some((app, offset_x, offset_y)) = self.grab {
                 let area = self.windows[app.index()].area;
                 let left = self.pointer.0.saturating_sub(offset_x).min(self.width.saturating_sub(60));
                 let top = self.pointer.1.saturating_sub(offset_y).clamp(self.panel, self.height.saturating_sub(40));
@@ -2238,11 +2479,18 @@ impl Desktop {
                 self.follow();
             }
         }
+        if packet.wheel != 0 && self.front() == Some(App::Browser) {
+            let area = self.windows[App::Browser.index()].area;
+            if area.contains(self.pointer.0, self.pointer.1) {
+                self.scroll_by(packet.wheel as isize * SCROLL_STEP as isize);
+            }
+        }
         let pressed = packet.left && !self.left_down;
         let released = !packet.left && self.left_down;
         self.left_down = packet.left;
         if released {
             self.grab = None;
+            self.thumb_grab = None;
         }
         if pressed {
             return self.click();
@@ -2253,6 +2501,13 @@ impl Desktop {
     /// Lights up whatever the pointer is over.
     fn follow(&mut self) {
         let (x, y) = self.pointer;
+        if self.front() == Some(App::Browser) {
+            let link = self.link_under(x, y);
+            if link != self.hover_link {
+                self.hover_link = link;
+                self.damage(self.browser_page());
+            }
+        }
         let hit = |area: Rect| area.contains(x, y);
         let mut found = Hover::None;
         if self.menu {
@@ -2571,32 +2826,16 @@ impl Desktop {
                 0 => {
                     if let Some(previous) = self.trail.pop() {
                         self.ahead.push(self.page.clone());
-                        self.page = previous.clone();
-                        self.address = previous;
-                        self.fetched = None;
-                        if self.page.starts_with("http") {
-                            self.pending = Some(self.page.clone());
-                        }
+                        self.show(previous);
                     }
                 }
                 1 => {
                     if let Some(next) = self.ahead.pop() {
                         self.trail.push(self.page.clone());
-                        self.page = next.clone();
-                        self.address = next;
-                        self.fetched = None;
-                        if self.page.starts_with("http") {
-                            self.pending = Some(self.page.clone());
-                        }
+                        self.show(next);
                     }
                 }
-                2 => {
-                    self.fetched = None;
-                    if self.page.starts_with("http") {
-                        self.status = format!("chargement de {}...", self.page);
-                        self.pending = Some(self.page.clone());
-                    }
-                }
+                2 => self.show(self.page.clone()),
                 _ => self.go(web::HOME.to_string()),
             }
             self.damage(self.windows[App::Browser.index()].area);
@@ -2610,10 +2849,23 @@ impl Desktop {
                 return;
             }
         }
+        // The scroll bar: above the thumb a screenful up, below it one down.
+        if let Some(thumb) = self.browser_thumb() {
+            if self.browser_scrollbar().grow(3).contains(x, y) {
+                let screenful = self.rows_shown(self.scroll).max(1) as isize;
+                if y < thumb.y {
+                    self.scroll_by(-screenful);
+                } else if y >= thumb.bottom() {
+                    self.scroll_by(screenful);
+                } else {
+                    self.thumb_grab = Some(y - thumb.y);
+                }
+                return;
+            }
+        }
         // A link on the page.
         let client = self.browser_page();
         let mut cursor = client.y + 10;
-        let width = client.w.saturating_sub(48) / font::width(Font::Body);
         if let Some(rest) = self.page.clone().strip_prefix("fichier:") {
             cursor += font::height(Font::Title) + 10;
             let entries: Vec<String> = self.fs.list(rest).iter().map(|entry| entry.path.clone()).collect();
@@ -2626,39 +2878,32 @@ impl Desktop {
             }
             return;
         }
-        let Some(found) = web::find(&self.page) else {
-            return;
-        };
-        let targets: Vec<(usize, String)> = {
-            let mut out = Vec::new();
-            let mut y_at = cursor;
-            for block in web::parse(found.body) {
-                let next = block_height(&block, width, self.line_h());
-                if let web::Block::Link(_, url) = block {
-                    out.push((y_at, url.to_string()));
-                }
-                y_at += next;
-            }
-            out
-        };
-        for (top, url) in targets {
-            if Rect::new(client.x, top, client.w, self.line_h()).contains(x, y) {
-                self.go(url);
-                return;
-            }
+        self.refresh_rows();
+        if let Some(url) = self.link_under(x, y) {
+            self.go(url);
         }
     }
 
-    /// Goes to an address, remembering where it came from.
+    /// Goes to an address, remembering where it came from. The page already
+    /// shown is loaded again.
     fn go(&mut self, url: String) {
-        if url == self.page {
-            return;
+        if url != self.page {
+            self.trail.push(self.page.clone());
+            // Going somewhere new ends whatever was ahead: the forward button
+            // must not offer a page this visit never came back from.
+            self.ahead.clear();
         }
-        self.trail.push(self.page.clone());
-        // Going somewhere new ends whatever was ahead: the forward button
-        // must not offer a page this visit never came back from.
-        self.ahead.clear();
+        self.show(url);
+    }
+
+    /// Shows an address, asking the kernel for it when it is on the network.
+    fn show(&mut self, url: String) {
         self.fetched = None;
+        self.fetched_title.clear();
+        self.failed = false;
+        self.scroll = 0;
+        self.hover_link = None;
+        self.generation += 1;
         if url.starts_with("http") {
             self.status = format!("chargement de {url}...");
             self.pending = Some(url.clone());
@@ -2854,10 +3099,18 @@ impl Desktop {
                     Key::Backspace => {
                         self.address.pop();
                     }
+                    // An address, or words to search for.
                     Key::Enter => {
-                        let target = self.address.clone();
-                        self.go(target);
+                        if let Some(target) = web::parse_address(&self.address) {
+                            self.go(target);
+                        }
                     }
+                    Key::Up => self.scroll_by(-(SCROLL_STEP as isize)),
+                    Key::Down => self.scroll_by(SCROLL_STEP as isize),
+                    Key::PageUp => self.scroll_by(-(self.rows_shown(self.scroll).max(1) as isize)),
+                    Key::PageDown => self.scroll_by(self.rows_shown(self.scroll).max(1) as isize),
+                    Key::Home => self.scroll_by(-(self.scroll as isize)),
+                    Key::End => self.scroll_by(self.rows.len() as isize),
                     _ => return None,
                 }
                 self.damage(self.windows[App::Browser.index()].area);
@@ -2986,42 +3239,6 @@ fn prompt(screen: &mut Screen, x: usize, y: usize, cwd: &str) -> usize {
     screen.text(x, y, "# ", TEXT_FAINT, Font::Body)
 }
 
-/// How tall a page block is, so a click can find the link it landed on.
-fn block_height(block: &web::Block, width: usize, line: usize) -> usize {
-    match block {
-        web::Block::Title(_) => font::height(Font::Title) + 12,
-        web::Block::Head(_) => font::height(Font::Head) + 10,
-        web::Block::Rule => 14,
-        web::Block::Space => line / 2,
-        web::Block::Text(text) => wrap(text, width).len() * line,
-        web::Block::Item(text) => wrap(text, width.saturating_sub(3)).len() * line,
-        web::Block::Link(_, _) => line,
-    }
-}
-
-/// Splits a paragraph into lines of at most `width` characters, at spaces. A
-/// page wider than its window used to be cut off mid-sentence.
-fn wrap(text: &str, width: usize) -> Vec<&str> {
-    let width = width.max(8);
-    let mut lines = Vec::new();
-    let mut rest = text;
-    while !rest.is_empty() {
-        if rest.chars().count() <= width {
-            lines.push(rest);
-            break;
-        }
-        let end = rest.char_indices().nth(width).map_or(rest.len(), |(at, _)| at);
-        let cut = rest[..end].rfind(' ').unwrap_or(end);
-        let (line, tail) = rest.split_at(cut);
-        lines.push(line);
-        rest = tail.trim_start();
-    }
-    if lines.is_empty() {
-        lines.push("");
-    }
-    lines
-}
-
 /// A row of filled circles: what a password field shows instead of the
 /// letters. Drawn rather than typed, the font having no such character.
 fn dots(screen: &mut Screen, x: usize, middle: usize, count: usize, colour: Rgb) -> usize {
@@ -3033,35 +3250,46 @@ fn dots(screen: &mut Screen, x: usize, middle: usize, count: usize, colour: Rgb)
     x + count.min(40) * (size + 4)
 }
 
-/// Draws one block of a page and returns the y of the next.
-fn paint_block(screen: &mut Screen, x: usize, y: usize, width: usize, block: web::Block, line: usize) -> usize {
-    let height = block_height(&block, width, line);
-    match block {
-        web::Block::Title(text) => {
-            screen.text(x, y, text, TEXT, Font::Title);
-        }
-        web::Block::Head(text) => {
-            screen.text(x, y, text, TEXT, Font::Head);
-        }
-        web::Block::Text(text) => {
-            for (row, part) in wrap(text, width).into_iter().enumerate() {
-                screen.text(x, y + row * line, part, TEXT_DIM, Font::Body);
-            }
-        }
-        web::Block::Item(text) => {
-            screen.fill(Rect::new(x + 3, y + font::height(Font::Body) / 2, 3, 3), ACCENT);
-            for (row, part) in wrap(text, width.saturating_sub(3)).into_iter().enumerate() {
-                screen.text(x + 14, y + row * line, part, TEXT_DIM, Font::Body);
-            }
-        }
-        web::Block::Link(text, _) => {
-            let end = screen.text(x, y, text, ACCENT, Font::Body);
-            screen.fill(Rect::new(x, y + font::height(Font::Body) - 2, end - x, 1), ACCENT);
-        }
-        web::Block::Rule => {
-            screen.fill(Rect::new(x, y + 6, width * font::width(Font::Body), 1), LINE);
-        }
-        web::Block::Space => {}
+/// The font a row of a page is written in.
+fn row_font(style: web::Style) -> Font {
+    match style {
+        web::Style::Title => Font::Title,
+        web::Style::Head => Font::Head,
+        _ => Font::Body,
     }
-    y + height
+}
+
+/// Draws one row of a page: its words, its links underlined, the one under
+/// the pointer on a tinted ground.
+fn paint_row(screen: &mut Screen, x: usize, y: usize, width: usize, row: &web::Row, hovered: Option<&str>) {
+    let font = row_font(row.style);
+    match row.style {
+        web::Style::Rule => {
+            screen.fill(Rect::new(x, y + 6, width, 1), LINE);
+            return;
+        }
+        web::Style::Space => return,
+        _ => {}
+    }
+    if row.bullet {
+        screen.fill(Rect::new(x + 3, y + font::height(Font::Body) / 2, 3, 3), ACCENT);
+    }
+    let indent = if row.style == web::Style::Item { 14 } else { 0 };
+    let plain = if matches!(row.style, web::Style::Title | web::Style::Head) { TEXT } else { TEXT_DIM };
+    for span in &row.spans {
+        let left = x + indent + span.column * font::width(font);
+        match span.link.as_deref() {
+            Some(url) => {
+                let length = span.text.chars().count() * font::width(font);
+                if hovered == Some(url) {
+                    screen.round(Rect::new(left.saturating_sub(3), y, length + 6, font::height(font)), 4, ACCENT_SOFT);
+                }
+                screen.text(left, y, &span.text, ACCENT, font);
+                screen.fill(Rect::new(left, y + font::height(font) - 2, length, 1), ACCENT);
+            }
+            None => {
+                screen.text(left, y, &span.text, plain, font);
+            }
+        }
+    }
 }
