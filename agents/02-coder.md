@@ -9,6 +9,7 @@ max_tokens_per_task: 60000
 max_attempts: 3
 can_write: true
 allowed_paths:
+  - "linux/**"
   - "kernel/**"
   - "packages/**"
   - "apps/**"

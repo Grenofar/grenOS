@@ -92,7 +92,11 @@ export async function repoContext(
     readRef === base ? Promise.resolve(null) : gh.listTree(base),
   ]);
 
-  const code = selectContext(branchTree, [...allowedPaths, "kernel/**"], MAX_FILE_BYTES);
+  // Ce que l'agent doit voir autour de ses fichiers : l'arbre de son domaine.
+  // Une tache de l'edition Linux n'a rien a faire du noyau, et l'inverse est
+  // vrai aussi : montrer les deux noyait le fichier a changer.
+  const domain = allowedPaths.some((p) => p.startsWith("linux/")) ? "linux/**" : "kernel/**";
+  const code = selectContext(branchTree, [...allowedPaths, domain], MAX_FILE_BYTES);
   const codePaths = new Set(code.map((f) => f.path));
   const docs = rankDocs(
     selectContext(baseTree ?? branchTree, ["docs/**"], MAX_FILE_BYTES).filter((f) => !codePaths.has(f.path)),
