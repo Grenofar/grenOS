@@ -23,11 +23,13 @@ const RST: u8 = 1 << 2;
 const PSH: u8 = 1 << 3;
 const ACK: u8 = 1 << 4;
 
-/// How long each step may take, how much of an answer is kept, and how much
-/// data goes into one segment.
+/// How long each step may take, how much of a page is kept, and how much data
+/// goes into one segment.
 const PATIENCE: u64 = 8_000;
 const BODY_CAP: usize = 120_000;
 const SEGMENT: usize = 1_400;
+/// Room for the status line and the headers, on top of a body's limit.
+const HEAD_ROOM: usize = 16_000;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -54,6 +56,13 @@ pub struct Fetch {
     pub body: Vec<u8>,
     /// One line for the window to show while it works.
     pub status: String,
+    /// The HTTP status code of the answer, 0 until there is one.
+    pub code: u16,
+    /// The largest body kept. Pages stay small; the installer raises it for a
+    /// kernel.
+    pub limit: usize,
+    /// Whether the body is turned into text for a window. A kernel is not.
+    pub wants_text: bool,
     raw: Vec<u8>,
     tls: Option<tls::Client>,
     asked: bool,
@@ -75,6 +84,9 @@ impl Fetch {
             text: String::new(),
             body: Vec::new(),
             status: String::new(),
+            code: 0,
+            limit: BODY_CAP,
+            wants_text: true,
             raw: Vec::new(),
             tls: None,
             asked: false,
@@ -87,6 +99,12 @@ impl Fetch {
 
     pub fn busy(&self) -> bool {
         matches!(self.phase, Phase::Resolving | Phase::Connecting | Phase::Reading)
+    }
+
+    /// Bytes of the answer received so far, headers included: progress for a
+    /// long download.
+    pub fn received(&self) -> usize {
+        self.answer().len()
     }
 
     /// Starts fetching `http://` or `https://host[:port]/path`. False when the
@@ -117,6 +135,7 @@ impl Fetch {
         self.text.clear();
         self.body.clear();
         self.raw.clear();
+        self.code = 0;
         self.asked = false;
         self.since = now;
         self.local_port = 49152 + (now % 8000) as u16;
@@ -272,12 +291,17 @@ impl Fetch {
     /// soon as the handshake allows it.
     fn take_in(&mut self, stack: &mut Stack, nic: &mut Nic, data: &[u8], now: u64) -> Result<(), String> {
         let Some(mut client) = self.tls.take() else {
-            if self.raw.len() < BODY_CAP {
-                self.raw.extend_from_slice(data);
+            if self.raw.len() + data.len() > self.limit + HEAD_ROOM {
+                return Err("la réponse dépasse la taille permise".to_string());
             }
+            self.raw.extend_from_slice(data);
             return Ok(());
         };
         let reply = client.feed(data);
+        if client.received.len() > self.limit + HEAD_ROOM {
+            self.tls = Some(client);
+            return Err("la réponse dépasse la taille permise".to_string());
+        }
         let ready = client.connected();
         let request = (ready && !self.asked).then(|| client.seal(self.request().as_bytes()));
         self.tls = Some(client);
@@ -304,21 +328,108 @@ impl Fetch {
 
     fn finish(&mut self) {
         let raw = self.answer().to_vec();
-        let answer = String::from_utf8_lossy(&raw).into_owned();
-        let (head, body) = answer.split_once("\r\n\r\n").unwrap_or(("", answer.as_str()));
-        let code = head.split_whitespace().nth(1).unwrap_or("?").to_string();
-        let start = raw.len() - body.len();
-        self.body = raw[start..].to_vec();
-        self.text = to_text(body);
+        if raw.is_empty() {
+            self.give_up("réponse vide");
+            return;
+        }
+        let Some(split) = raw.windows(4).position(|window| window == b"\r\n\r\n") else {
+            self.give_up("réponse sans en-têtes");
+            return;
+        };
+        let head = String::from_utf8_lossy(&raw[..split]).into_owned();
+        let mut body = raw[split + 4..].to_vec();
+        self.code = head.split_whitespace().nth(1).and_then(|code| code.parse().ok()).unwrap_or(0);
+        if header(&head, "transfer-encoding").is_some_and(|value| value.to_ascii_lowercase().contains("chunked")) {
+            match dechunk(&body) {
+                Some(decoded) => body = decoded,
+                None => {
+                    self.give_up("corps en morceaux (chunked) illisible ou incomplet");
+                    return;
+                }
+            }
+        } else if let Some(length) = header(&head, "content-length").and_then(|value| value.parse::<usize>().ok()) {
+            if body.len() < length {
+                self.give_up("réponse incomplète");
+                return;
+            }
+            body.truncate(length);
+        }
+        if body.len() > self.limit {
+            self.give_up("la réponse dépasse la taille permise");
+            return;
+        }
+        self.text = if self.wants_text { to_text(&String::from_utf8_lossy(&body)) } else { String::new() };
         let lock = if self.secure { "https, chiffré" } else { "http" };
-        self.status = format!("{} · {} · {} · {} octets", self.host, lock, code, raw.len());
-        self.phase = if raw.is_empty() { Phase::Failed } else { Phase::Done };
+        self.status = format!("{} · {} · {} · {} octets", self.host, lock, self.code, body.len());
+        self.body = body;
+        self.phase = Phase::Done;
     }
 
     fn give_up(&mut self, why: &str) {
         self.phase = Phase::Failed;
         self.status = format!("{} : {why}", self.host);
     }
+}
+
+/// The value of header `name` in a response head, whatever its case (RFC 9110
+/// §5.1: field names are case-insensitive). Pure.
+pub fn header(head: &str, name: &str) -> Option<String> {
+    head.lines()
+        .skip(1)
+        .filter_map(|line| line.split_once(':'))
+        .find(|(key, _)| key.trim().eq_ignore_ascii_case(name))
+        .map(|(_, value)| value.trim().to_string())
+}
+
+/// Decodes a body sent with `Transfer-Encoding: chunked` (RFC 9112 §7.1):
+/// `chunked-body = *chunk last-chunk trailer-section CRLF`. None when the
+/// input is malformed or cut short. Never panics. Pure.
+///
+/// The CRLF right after the zero size ends the last-chunk line; the trailer
+/// section, zero or more header lines, ends with its own CRLF. Two models out
+/// of two got exactly that wrong when asked (docs/specs/browser-search.md).
+pub fn dechunk(body: &[u8]) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    loop {
+        let line_end = find_crlf(body, at)?;
+        let line = &body[at..line_end];
+        let digits = line.split(|&b| b == b';').next()?;
+        if digits.is_empty() {
+            return None;
+        }
+        let mut size: usize = 0;
+        for &digit in digits {
+            let value = match digit {
+                b'0'..=b'9' => digit - b'0',
+                b'a'..=b'f' => digit - b'a' + 10,
+                b'A'..=b'F' => digit - b'A' + 10,
+                _ => return None,
+            };
+            size = size.checked_mul(16)?.checked_add(usize::from(value))?;
+        }
+        at = line_end + 2;
+        if size == 0 {
+            loop {
+                let end = find_crlf(body, at)?;
+                if end == at {
+                    return Some(out);
+                }
+                at = end + 2;
+            }
+        }
+        let data_end = at.checked_add(size)?;
+        if data_end.checked_add(2)? > body.len() || &body[data_end..data_end + 2] != b"\r\n" {
+            return None;
+        }
+        out.extend_from_slice(&body[at..data_end]);
+        at = data_end + 2;
+    }
+}
+
+/// The index of the next CRLF at or after `from`.
+fn find_crlf(bytes: &[u8], from: usize) -> Option<usize> {
+    bytes.get(from..)?.windows(2).position(|pair| pair == b"\r\n").map(|offset| from + offset)
 }
 
 /// HTML turned into something a text window can show: tags dropped, the head

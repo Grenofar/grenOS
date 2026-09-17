@@ -22,6 +22,7 @@ mod heap;
 mod http;
 mod icons;
 mod idt;
+mod install;
 mod keyboard;
 mod memory;
 mod mouse;
@@ -55,8 +56,8 @@ use core::panic::PanicInfo;
 
 use limine::BaseRevision;
 use limine::request::{
-    ExecutableFileRequest, FramebufferRequest, HhdmRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker,
-    RsdpRequest, StackSizeRequest,
+    ExecutableCmdlineRequest, ExecutableFileRequest, FramebufferRequest, HhdmRequest, MemoryMapRequest,
+    RequestsEndMarker, RequestsStartMarker, RsdpRequest, StackSizeRequest,
 };
 
 #[used]
@@ -87,6 +88,13 @@ static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 #[used]
 #[unsafe(link_section = ".requests")]
 static EXECUTABLE_FILE_REQUEST: ExecutableFileRequest = ExecutableFileRequest::new();
+
+/// The command line limine.conf gives the kernel. `grenos.selftest=update` makes
+/// the CI's disk image install the newest signed kernel on its own and restart
+/// (docs/specs/disk-and-updates.md §8).
+#[used]
+#[unsafe(link_section = ".requests")]
+static EXECUTABLE_CMDLINE_REQUEST: ExecutableCmdlineRequest = ExecutableCmdlineRequest::new();
 
 /// The firmware's ACPI tables, for turning the machine off.
 #[used]
@@ -315,7 +323,7 @@ extern "C" fn kmain() -> ! {
     let boot_path = boot_file.and_then(|file| file.path().to_str().ok()).unwrap_or("");
     let boot_signature = boot_file.and_then(|file| file.mbr_disk_id()).map(|id| id.get());
     // Kept for the installer (docs/specs/disk-and-updates.md §7), which writes the other slot.
-    let _store = match storage::locate(&mut disks, boot_path, boot_signature) {
+    let store = match storage::locate(&mut disks, boot_path, boot_signature) {
         Ok(store) => {
             log.say(format!("disk: grenOS partition FAT32 {}, booted from slot {}", store.volume.label(), store.slot));
             match storage::write_test(&store, &mut disks) {
@@ -409,6 +417,16 @@ extern "C" fn kmain() -> ! {
     let mut update_wanted = false;
     let mut update_delivered = true;
     let mut auto_checked = false;
+    // Installing the newest image: what the check last found, the installer,
+    // and whether its outcome has gone to the serial line.
+    let mut newest: Option<update::Latest> = None;
+    let mut installer = install::Installer::new();
+    let mut install_reported = true;
+    let selftest = EXECUTABLE_CMDLINE_REQUEST
+        .get_response()
+        .and_then(|response| response.cmdline().to_str().ok())
+        .is_some_and(|line| line.split_whitespace().any(|word| word == "grenos.selftest=update"));
+    let mut selftest_started = false;
     loop {
         while let Some(event) = events::pop() {
             let action = match event {
@@ -497,7 +515,9 @@ extern "C" fn kmain() -> ! {
                 update_wanted = false;
                 update_delivered = false;
                 if !updater.start(stack, nic, &mut update_resolver, update::INDEX, ms) {
-                    desk.update_result(checked(&updater));
+                    let (found, latest) = checked(&updater);
+                    desk.update_result(found);
+                    newest = latest.or(newest);
                     update_delivered = true;
                 }
             }
@@ -505,7 +525,48 @@ extern "C" fn kmain() -> ! {
             updater.poll(stack, nic, &mut update_resolver, ms);
             if !update_delivered && matches!(updater.phase, http::Phase::Done | http::Phase::Failed) {
                 update_delivered = true;
-                desk.update_result(checked(&updater));
+                let (found, latest) = checked(&updater);
+                desk.update_result(found);
+                newest = latest.or(newest);
+            }
+
+            // Installing: asked for from Paramètres, or on its own on the
+            // CI's self-test image, once the screen and input checks are over.
+            let mut start_install = desk.wants_install();
+            if selftest && !selftest_started && newest.is_some() && events::ticks_seconds() >= 45 {
+                selftest_started = true;
+                start_install = true;
+                serial::write_str("update: self-test install starting\n");
+            }
+            if start_install {
+                match &newest {
+                    Some(latest) => {
+                        install_reported = false;
+                        installer.start(latest, stack, nic, ms);
+                    }
+                    None => desk.install_progress(desktop::Install::Failed(
+                        "aucune version connue : vérifiez d'abord les mises à jour".to_string(),
+                    )),
+                }
+            }
+            installer.poll(stack, nic, ms, &mut disks, store.as_ref(), env!("GRENOS_STAMP"));
+            if let Some(state) = installer.state.clone() {
+                desk.install_progress(state.clone());
+                if !installer.busy() && !install_reported {
+                    install_reported = true;
+                    match state {
+                        desktop::Install::Installed { build, slot } => {
+                            serial::write_str(&format!("update: installed {build} into slot {slot}\n"));
+                            if selftest {
+                                power::reboot();
+                            }
+                        }
+                        desktop::Install::Failed(why) => {
+                            serial::write_str(&format!("update: install failed ({why})\n"));
+                        }
+                        desktop::Install::Working(_) => {}
+                    }
+                }
             }
         } else if let Some(url) = desk.wants_page() {
             desk.page_result(format!("{url} : aucune carte réseau sur cette machine"), None);
@@ -537,14 +598,14 @@ extern "C" fn kmain() -> ! {
 
 /// What the update check found, in the desktop's terms — and on the serial
 /// line, where the CI can read it.
-fn checked(updater: &http::Fetch) -> desktop::Found {
+fn checked(updater: &http::Fetch) -> (desktop::Found, Option<update::Latest>) {
     if updater.phase != http::Phase::Done {
         serial::write_str(&format!("update: check failed ({})\n", updater.status));
-        return desktop::Found::Failed(updater.status.clone());
+        return (desktop::Found::Failed(updater.status.clone()), None);
     }
     let Some(latest) = update::latest(&updater.body) else {
         serial::write_str("update: the release index could not be read\n");
-        return desktop::Found::Failed("l'index des versions est illisible".to_string());
+        return (desktop::Found::Failed("l'index des versions est illisible".to_string()), None);
     };
     let running = env!("GRENOS_BUILD");
     let standing = match update::is_current(&latest, running) {
@@ -566,7 +627,8 @@ fn checked(updater: &http::Fetch) -> desktop::Found {
         running,
         verdict
     ));
-    desktop::Found::Latest { build: latest.build.clone(), when: latest.when(), size: latest.size, standing }
+    let found = desktop::Found::Latest { build: latest.build.clone(), when: latest.when(), size: latest.size, standing };
+    (found, Some(latest))
 }
 
 /// A defence, in a word.

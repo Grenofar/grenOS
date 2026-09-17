@@ -15,6 +15,23 @@ fn main() {
     println!("cargo:rustc-env=GRENOS_BUILD={build}");
     println!("cargo:rustc-env=GRENOS_BUILT_AT={}", today());
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
+
+    // The build's date to the minute, YYYYMMDD-HHMM, which an update must
+    // beat (docs/specs/disk-and-updates.md §6). release.yml sets GRENOS_STAMP
+    // so the kernel and the name it is published under agree.
+    let stamp = std::env::var("GRENOS_STAMP")
+        .ok()
+        .filter(|stamp| stamp.len() == 13 && stamp.as_bytes()[8] == b'-')
+        .unwrap_or_else(now_stamp);
+    println!("cargo:rustc-env=GRENOS_STAMP={stamp}");
+    println!("cargo:rerun-if-env-changed=GRENOS_STAMP");
+}
+
+/// Now in UTC, as YYYYMMDD-HHMM.
+fn now_stamp() -> String {
+    let seconds = SystemTime::now().duration_since(UNIX_EPOCH).map(|since| since.as_secs()).unwrap_or(0);
+    let date = today().replace('-', "");
+    format!("{date}-{:02}{:02}", seconds / 3600 % 24, seconds / 60 % 60)
 }
 
 /// Today's date in UTC, as YYYY-MM-DD, without pulling in a date crate.
