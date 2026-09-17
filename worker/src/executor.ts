@@ -120,6 +120,22 @@ export async function executeTask(
     });
   }
 
+  // A task can be cancelled while its models answer: by the Master replacing
+  // it, or by a person who saw its criteria were wrong. Its work is dropped
+  // before any commit, and the cancellation stands (2026-09-17: a wallpaper
+  // task built on invented criteria could otherwise have been merged).
+  if (await wasCancelled(task.id)) {
+    await emit({
+      missionId: task.mission_id,
+      taskId: task.id,
+      agentId: agent.id,
+      level: "warn",
+      type: "cancelled_midway",
+      message: "Tâche annulée pendant sa tentative : rien n'est commité.",
+    });
+    return;
+  }
+
   if (chosen.kind === "failed") {
     await failTask(task, chosen.failure, chosen.detail, chosen.consumesAttempt);
     return;
@@ -251,7 +267,9 @@ export async function executeTask(
         ? { finished_at: new Date().toISOString() }
         : {}),
     })
-    .eq("id", task.id);
+    .eq("id", task.id)
+    // Cancelled during the commit: it stays cancelled, so no verdict applies.
+    .neq("status", "cancelled");
 
   // Proposals from a worker are just proposals. Only the Master turns them
   // into real tasks (agents/README.md §4), so they are recorded and left for
@@ -834,6 +852,11 @@ async function buildPrompt(
   );
 
   return parts.join("\n");
+}
+
+async function wasCancelled(taskId: string): Promise<boolean> {
+  const { data } = await db.from("tasks").select("status").eq("id", taskId).maybeSingle();
+  return data?.status === "cancelled";
 }
 
 async function failTask(
