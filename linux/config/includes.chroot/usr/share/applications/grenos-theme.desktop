@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Thème jour et nuit
+Comment=Basculer grenOS en clair ou en sombre
+Exec=grenos-theme
+Icon=preferences-desktop-theme
+Terminal=false
+Categories=Settings;DesktopSettings;
+StartupNotify=false

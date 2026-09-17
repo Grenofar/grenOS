@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Les fichiers qui partent dans une image Linux gardent des fins de ligne LF :
+# un script shell en CRLF ne demarre pas.
+linux/** text eol=lf
+*.sh text eol=lf
+kernel/scripts/* text eol=lf

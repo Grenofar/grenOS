@@ -1,0 +1,212 @@
+#!/bin/sh
+# Le visage de grenOS : ce que l'utilisateur voit au démarrage, dans le bureau
+# et dans les fenêtres. Tout est écrit dans /etc/skel, donc chaque compte créé
+# ensuite — y compris celui de l'installation sur disque — hérite des mêmes
+# réglages, sans rien figer : l'utilisateur peut tout changer après.
+
+set -e
+
+VERSION="1.0"
+SKEL=/etc/skel/.config
+
+mkdir -p "$SKEL" /etc/sddm.conf.d /etc/skel/Bureau /etc/skel/Documents /etc/skel/Images
+
+# ---- L'identité du système ---------------------------------------------------
+cat > /etc/os-release <<EOF
+PRETTY_NAME="grenOS ${VERSION}"
+NAME="grenOS"
+VERSION_ID="${VERSION}"
+VERSION="${VERSION} (trixie)"
+VERSION_CODENAME=trixie
+ID=grenos
+ID_LIKE=debian
+HOME_URL="https://grenos-dev.vercel.app"
+SUPPORT_URL="https://grenos-dev.vercel.app"
+BUG_REPORT_URL="https://github.com/Grenofar/grenOS/issues"
+EOF
+cat > /etc/lsb-release <<EOF
+DISTRIB_ID=grenOS
+DISTRIB_RELEASE=${VERSION}
+DISTRIB_CODENAME=trixie
+DISTRIB_DESCRIPTION="grenOS ${VERSION}"
+EOF
+printf 'grenOS %s \\n \\l\n\n' "${VERSION}" > /etc/issue
+
+# ---- Le thème : sombre par défaut, clair d'un clic --------------------------
+cat > "$SKEL/kdeglobals" <<'EOF'
+[General]
+ColorScheme=BreezeDark
+Name=Breeze Dark
+font=Noto Sans,10,-1,5,50,0,0,0,0,0
+fixed=Hack,10,-1,5,50,0,0,0,0,0
+menuFont=Noto Sans,10,-1,5,50,0,0,0,0,0
+smallestReadableFont=Noto Sans,8,-1,5,50,0,0,0,0,0
+toolBarFont=Noto Sans,10,-1,5,50,0,0,0,0,0
+AccentColor=47,125,246
+LastUsedCustomAccentColor=47,125,246
+
+[Icons]
+Theme=breeze-dark
+
+[KDE]
+LookAndFeelPackage=org.kde.breezedark.desktop
+widgetStyle=Breeze
+AnimationDurationFactor=1
+SingleClick=false
+ShowDeleteCommand=true
+
+[General][ColorEffects:Disabled]
+ChangeSelectionColor=
+
+[WM]
+activeBackground=27,32,43
+activeForeground=228,233,241
+inactiveBackground=19,23,33
+inactiveForeground=156,167,185
+EOF
+
+# ---- Les fenêtres : animations douces, coins arrondis, ombres ---------------
+cat > "$SKEL/kwinrc" <<'EOF'
+[Compositing]
+Enabled=true
+AnimationSpeed=3
+WindowsBlockCompositing=true
+
+[Effect-blur]
+BlurStrength=8
+NoiseStrength=2
+
+[Plugins]
+blurEnabled=true
+contrastEnabled=true
+slideEnabled=true
+translucencyEnabled=true
+wobblywindowsEnabled=false
+magiclampEnabled=true
+kwin4_effect_squashEnabled=false
+kwin4_effect_fadeEnabled=true
+
+[TabBox]
+LayoutName=thumbnail_grid
+HighlightWindows=true
+
+[Windows]
+Placement=Centered
+RollOverDesktops=true
+EOF
+
+# ---- Le raccourci que l'humain a demandé : Ctrl+Maj+Échap -------------------
+cat > "$SKEL/kglobalshortcutsrc" <<'EOF'
+[services][org.kde.plasma-systemmonitor.desktop]
+_k_friendly_name=Gestionnaire de tâches
+_launch=Ctrl+Shift+Esc
+
+[services][grenos-theme.desktop]
+_k_friendly_name=Thème jour et nuit
+_launch=Meta+T
+
+[kwin]
+Window Close=Alt+F4\tAlt+F4
+Walk Through Windows=Alt+Tab
+Walk Through Windows (Reverse)=Alt+Shift+Tab
+Show Desktop=Meta+D
+EOF
+
+# ---- Le fond d'écran, comme paquet de fonds d'écran KDE ---------------------
+install -d /usr/share/wallpapers/grenOS/contents/images
+install -d /usr/share/wallpapers/grenOS-Jour/contents/images
+mv /usr/share/grenos/grenos-nuit.png /usr/share/wallpapers/grenOS/contents/images/2560x1440.png
+mv /usr/share/grenos/grenos-jour.png /usr/share/wallpapers/grenOS-Jour/contents/images/2560x1440.png
+for name in grenOS grenOS-Jour; do
+  moment="Nuit"
+  [ "$name" = "grenOS-Jour" ] && moment="Jour"
+  cat > "/usr/share/wallpapers/$name/metadata.json" <<EOF
+{
+    "KPlugin": {
+        "Authors": [{"Name": "grenOS"}],
+        "Id": "$name",
+        "License": "CC-BY-SA-4.0",
+        "Name": "grenOS $moment"
+    }
+}
+EOF
+done
+
+cat > "$SKEL/plasma-org.kde.plasma.desktop-appletsrc" <<'EOF'
+[Containments][1]
+activityId=
+formfactor=0
+immutability=1
+lastScreen=0
+location=0
+plugin=org.kde.plasma.folder
+wallpaperplugin=org.kde.image
+
+[Containments][1][Wallpaper][org.kde.image][General]
+Image=file:///usr/share/wallpapers/grenOS/
+SlidePaths=/usr/share/wallpapers/
+FillMode=2
+EOF
+
+# ---- L'écran de connexion et l'écran de démarrage ---------------------------
+cat > /etc/sddm.conf.d/grenos.conf <<'EOF'
+[Theme]
+Current=breeze
+CursorTheme=breeze_cursors
+
+[General]
+Numlock=on
+EOF
+install -d /usr/share/sddm/themes/breeze
+cat > /usr/share/sddm/themes/breeze/theme.conf.user <<'EOF'
+[General]
+background=/usr/share/wallpapers/grenOS/contents/images/2560x1440.png
+type=image
+EOF
+
+if [ -x /usr/sbin/plymouth-set-default-theme ]; then
+    plymouth-set-default-theme spinner || true
+fi
+if [ -f /usr/share/grenos/logo.png ]; then
+    install -D -m 0644 /usr/share/grenos/logo.png /usr/share/plymouth/themes/spinner/watermark.png
+    sed -i 's/^WatermarkHorizontalAlignment=.*/WatermarkHorizontalAlignment=.5/; s/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.75/' \
+        /usr/share/plymouth/themes/spinner/spinner.plymouth || true
+fi
+update-initramfs -u || true
+
+# ---- Le français partout -----------------------------------------------------
+echo "fr_FR.UTF-8 UTF-8" > /etc/locale.gen
+locale-gen || true
+update-locale LANG=fr_FR.UTF-8 || true
+cat > /etc/default/keyboard <<'EOF'
+XKBMODEL="pc105"
+XKBLAYOUT="fr"
+XKBVARIANT=""
+XKBOPTIONS=""
+BACKSPACE="guess"
+EOF
+
+# ---- Ce que l'on trouve dans le menu et sur le bureau -----------------------
+install -d /etc/skel/Bureau
+for entry in grenos-bienvenue grenos-maj io.calamares.calamares; do
+    if [ -f "/usr/share/applications/$entry.desktop" ]; then
+        cp "/usr/share/applications/$entry.desktop" /etc/skel/Bureau/
+        chmod +x "/etc/skel/Bureau/$entry.desktop"
+    fi
+done
+
+# L'accueil s'ouvre une fois, au premier démarrage de la session.
+install -d /etc/skel/.config/autostart
+if [ -f /usr/share/applications/grenos-bienvenue.desktop ]; then
+    cp /usr/share/applications/grenos-bienvenue.desktop /etc/skel/.config/autostart/
+fi
+
+# ---- Ce que l'on ne veut pas voir -------------------------------------------
+# Les entrées de menu qui n'ont pas de sens pour l'utilisateur de grenOS.
+for junk in /usr/share/applications/org.kde.plasma-welcome.desktop \
+            /usr/share/applications/debian-uxterm.desktop \
+            /usr/share/applications/debian-xterm.desktop; do
+    [ -f "$junk" ] && rm -f "$junk"
+done
+
+echo "grenos: look installed"

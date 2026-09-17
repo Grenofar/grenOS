@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mise à jour de grenOS
+Comment=Installer les nouvelles versions et les correctifs de sécurité
+Exec=grenos-maj
+Icon=system-software-update
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true

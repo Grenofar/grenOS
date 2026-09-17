@@ -1,0 +1,139 @@
+# grenOS, édition Linux : construire l'image, la démarrer pour de vrai, et ne
+# publier que ce qui a montré un bureau.
+#
+# L'image fait plus d'un gigaoctet : Supabase est plafonné à 1 Go, donc la
+# publication passe par les Releases GitHub (2 Go par fichier).
+name: linux
+
+on:
+  push:
+    branches: [main, "agent/linux-**", "claude/linux-**"]
+    paths:
+      - "linux/**"
+      - ".github/workflows/linux.yml"
+      - "scripts/ci-screen.py"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publier une Release avec l'image"
+        type: boolean
+        default: false
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      # Le runner a une douzaine de gigaoctets libres, et une image KDE en
+      # demande le double le temps de la construire.
+      - name: Faire de la place
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/powershell /usr/share/swift /opt/hostedtoolcache || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Outils de l'hôte
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 qemu-utils zip python3
+          ls -l /dev/kvm || echo "pas de KVM : QEMU emulera, c'est plus lent"
+
+      # live-build monte des systèmes de fichiers et fait un debootstrap : cela
+      # se passe dans un conteneur Debian privilégié, jamais sur le runner.
+      - name: Construire l'image
+        id: build
+        run: |
+          docker run --privileged --rm \
+            -v "$PWD:/work" -w /work \
+            -e LB_PARENT_MIRROR_BOOTSTRAP=http://deb.debian.org/debian \
+            debian:trixie /work/linux/build.sh 2>&1 | tail -n 200
+          ISO=$(ls linux/*.iso | head -1)
+          echo "iso=$ISO" >> "$GITHUB_OUTPUT"
+          echo "size=$(stat -c %s "$ISO")" >> "$GITHUB_OUTPUT"
+          ls -la linux/*.iso
+
+      - name: L'image démarre-t-elle vraiment
+        id: boot
+        continue-on-error: true
+        run: |
+          ISO="${{ steps.build.outputs.iso }}"
+          ACCEL=""
+          [ -e /dev/kvm ] && ACCEL="-enable-kvm -cpu host"
+          qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
+            -cdrom "$ISO" -boot d \
+            -display none -vga std \
+            -serial file:"$RUNNER_TEMP/serial.log" \
+            -monitor unix:"$RUNNER_TEMP/monitor.sock",server,nowait \
+            -no-reboot &
+          QEMU=$!
+          # Le bureau met du temps à venir : on regarde à intervalles, et on
+          # garde chaque capture pour pouvoir les lire ensuite.
+          for minute in 1 2 3 4 5; do
+            sleep 60
+            python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-${minute}min.ppm" || true
+          done
+          cp "$RUNNER_TEMP/ecran-5min.ppm" "$RUNNER_TEMP/final.ppm" 2>/dev/null ||             python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/final.ppm" || true
+          python3 scripts/ci-screen.py judge "$RUNNER_TEMP/final.ppm" "$RUNNER_TEMP/final.png" | tee "$RUNNER_TEMP/ecran.log"
+          kill $QEMU 2>/dev/null || true
+          tail -n 40 "$RUNNER_TEMP/serial.log" || true
+
+      - name: Garder les captures
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: grenos-linux-captures
+          path: |
+            ${{ runner.temp }}/*.ppm
+            ${{ runner.temp }}/*.png
+            ${{ runner.temp }}/ecran.log
+            ${{ runner.temp }}/serial.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # La machine VirtualBox toute prête : l'image, un disque vide où
+      # l'installer, et le fichier .vbox à double-cliquer.
+      - name: La machine VirtualBox
+        id: vbox
+        run: |
+          ISO="${{ steps.build.outputs.iso }}"
+          STAMP=$(date -u +%Y%m%d-%H%M)
+          NAME="grenos-linux-$STAMP"
+          mkdir -p dist
+          # Un lien, pas une copie : l'image fait plus d'un gigaoctet.
+          ln "$ISO" "dist/$NAME.iso"
+          qemu-img create -f vdi "dist/$NAME.vdi" 25G
+          python3 scripts/make-vbox.py "$NAME.iso" "dist/$NAME.vbox" --linux --disk "dist/$NAME.vdi" "$NAME.vdi"
+          (cd dist && zip -q -9 "$NAME-virtualbox.zip" "$NAME.iso" "$NAME.vbox" "$NAME.vdi")
+          ls -la dist
+          echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publier la Release
+        if: github.ref == 'refs/heads/main' || inputs.publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NAME="${{ steps.vbox.outputs.name }}"
+          TAG="linux-${{ steps.vbox.outputs.stamp }}"
+          cat > notes.md <<NOTES
+          grenOS sur Debian trixie, bureau KDE Plasma, installateur Calamares.
+
+          - \`$NAME.iso\` : l'image a graver, a copier sur une cle USB ou a monter dans une machine virtuelle.
+          - \`$NAME-virtualbox.zip\` : la machine VirtualBox deja reglee, son disque et l'image.
+
+          Construit par la CI a partir de \`linux/\`, demarre dans QEMU avant publication.
+          NOTES
+          sed -i 's/^          //' notes.md
+          gh release create "$TAG" --title "grenOS Linux ${{ steps.vbox.outputs.stamp }}"             --notes-file notes.md "dist/$NAME.iso" "dist/$NAME-virtualbox.zip"

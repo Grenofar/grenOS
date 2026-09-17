@@ -1,0 +1,39 @@
+#!/bin/sh
+# La mise à jour de grenOS, depuis grenOS : les paquets du système et ceux de
+# grenOS, dans une fenêtre, avec ce qui se passe sous les yeux.
+#
+# Rien n'est installé sans mot de passe : la fenêtre en demande un, comme toute
+# opération d'administration.
+
+set -e
+
+TITRE="Mise à jour de grenOS"
+SCRIPT=$(mktemp)
+cat > "$SCRIPT" <<'EOF'
+#!/bin/sh
+set -e
+echo "Lecture des dépôts..."
+apt-get update
+echo
+echo "Ce qui va être installé :"
+apt-get -s upgrade | grep -E '^Inst' | sed 's/^Inst /  - /' || echo "  (rien : le système est à jour)"
+echo
+echo "Installation..."
+DEBIAN_FRONTEND=noninteractive apt-get -y upgrade
+echo
+echo "Terminé. Les applications ouvertes utiliseront la nouvelle version après leur redémarrage."
+EOF
+chmod +x "$SCRIPT"
+
+if [ "$(id -u)" = 0 ]; then
+    "$SCRIPT"
+    rm -f "$SCRIPT"
+    exit 0
+fi
+
+if command -v konsole >/dev/null 2>&1; then
+    konsole --title "$TITRE" --hold -e pkexec "$SCRIPT"
+else
+    pkexec "$SCRIPT"
+fi
+rm -f "$SCRIPT"

@@ -56,8 +56,22 @@ def safe_name(name: str, what: str) -> str:
     return name
 
 
-def vbox(iso_name: str, machine: str = "", disc: str = "", disk_name: str = "", disk_uuid: str = "") -> str:
-    """Le .vbox d'une machine grenOS : sur `disk_name` quand il est donné, sinon sur `iso_name`."""
+def vbox(
+    iso_name: str,
+    machine: str = "",
+    disc: str = "",
+    disk_name: str = "",
+    disk_uuid: str = "",
+    linux: bool = False,
+) -> str:
+    """Le .vbox d'une machine grenOS : sur `disk_name` quand il est donné, sinon sur `iso_name`.
+
+    `linux=True` décrit l'édition Linux, qui n'a pas les mêmes besoins que le
+    noyau maison : quatre gigaoctets de mémoire et deux cœurs pour KDE, une
+    carte graphique VMSVGA avec assez de mémoire vidéo pour du 1080p, le
+    pointeur USB que Linux gère très bien (et qui évite de capturer la souris),
+    et pas de port série puisque tout s'affiche à l'écran.
+    """
     safe_name(iso_name, "ISO")
     if disk_name:
         safe_name(disk_name, "disk")
@@ -93,30 +107,48 @@ def vbox(iso_name: str, machine: str = "", disc: str = "", disk_name: str = "", 
         if disk_name
         else ""
     )
+    system = "Debian_64" if linux else "Other_64"
+    cpus = 2 if linux else 1
+    memory = 4096 if linux else 256
+    pointing = "USBTablet" if linux else "PS2Mouse"
+    display = (
+        '<Display controller="VMSVGA" VRAMSize="128"/>'
+        if linux
+        else '<Display controller="VBoxVGA" VRAMSize="32"/>'
+    )
+    serial = (
+        ""
+        if linux
+        else f"""      <UART>
+        <Port slot="0" enabled="true" IOBase="0x3f8" IRQ="4" hostMode="RawFile" path="{SERIAL}"/>
+      </UART>
+"""
+    )
     text = f"""<?xml version="1.0"?>
 <VirtualBox xmlns="http://www.virtualbox.org/" version="1.16-windows">
-  <Machine uuid="{{{machine}}}" name="grenOS" OSType="Other_64" snapshotFolder="Snapshots">
+  <Machine uuid="{{{machine}}}" name="grenOS" OSType="{system}" snapshotFolder="Snapshots">
     <MediaRegistry>
 {hard_disks}      <DVDImages>
         <Image uuid="{{{disc}}}" location="{iso_name}"/>
       </DVDImages>
     </MediaRegistry>
     <Hardware>
-      <CPU count="1">
+      <CPU count="{cpus}">
         <PAE enabled="true"/>
         <LongMode enabled="true"/>
+        <HardwareVirtExLargePages enabled="true"/>
       </CPU>
-      <Memory RAMSize="256"/>
+      <Memory RAMSize="{memory}"/>
       <!-- Souris et clavier en PS/2, écrit noir sur blanc (D-035). VirtualBox
            donne à plusieurs types d'OS une tablette USB en pointeur, qu'un
            noyau sans pile USB ne voit pas du tout : le pointeur ne bougerait
            jamais, et la fenêtre garderait la souris capturée pour rien. En
            PS/2, le pilote du noyau la reçoit ; Ctrl droite la relâche. -->
-      <HID Pointing="PS2Mouse" Keyboard="PS2Keyboard"/>
+      <HID Pointing="{pointing}" Keyboard="PS2Keyboard"/>
       <Boot>
 {boot}
       </Boot>
-      <Display controller="VBoxVGA" VRAMSize="32"/>
+      {display}
       <BIOS>
         <IOAPIC enabled="true"/>
       </BIOS>
@@ -129,10 +161,7 @@ def vbox(iso_name: str, machine: str = "", disc: str = "", disk_name: str = "", 
           <NAT/>
         </Adapter>
       </Network>
-      <UART>
-        <Port slot="0" enabled="true" IOBase="0x3f8" IRQ="4" hostMode="RawFile" path="{SERIAL}"/>
-      </UART>
-    </Hardware>
+{serial}    </Hardware>
     <StorageControllers>
 {sata}      <StorageController name="IDE" type="PIIX4" PortCount="2" useHostIOCache="true" Bootable="true">
         <AttachedDevice passthrough="false" type="DVD" hotpluggable="false" port="1" device="0">
@@ -148,15 +177,17 @@ def vbox(iso_name: str, machine: str = "", disc: str = "", disk_name: str = "", 
 
 
 def main(argv) -> int:
+    linux = "--linux" in argv
+    argv = [a for a in argv if a != "--linux"]
     if len(argv) == 3:
         with open(argv[2], "w", encoding="utf-8", newline="\n") as f:
-            f.write(vbox(argv[1]))
+            f.write(vbox(argv[1], linux=linux))
         print(f"{argv[2]} : machine grenOS sur {argv[1]}")
         return 0
     if len(argv) == 6 and argv[3] == "--disk":
         disk_uuid = stamp_vdi(argv[4])
         with open(argv[2], "w", encoding="utf-8", newline="\n") as f:
-            f.write(vbox(argv[1], disk_name=argv[5], disk_uuid=disk_uuid))
+            f.write(vbox(argv[1], disk_name=argv[5], disk_uuid=disk_uuid, linux=linux))
         print(f"{argv[2]} : machine grenOS sur {argv[5]} ({disk_uuid}), {argv[1]} en second")
         return 0
     print(__doc__, file=sys.stderr)

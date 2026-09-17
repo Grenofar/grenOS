@@ -1,0 +1,33 @@
+#!/bin/sh
+# Le thème de grenOS, jour ou nuit, sans rien rouvrir : le bureau, les fenêtres
+# et le fond d'écran changent ensemble. Sans argument, il bascule.
+
+set -e
+
+current() {
+    if grep -qs 'breezedark' "$HOME/.config/kdeglobals"; then echo nuit; else echo jour; fi
+}
+
+wanted="${1:-}"
+case "$wanted" in
+    jour|day|clair) wanted=jour ;;
+    nuit|night|sombre) wanted=nuit ;;
+    "") [ "$(current)" = nuit ] && wanted=jour || wanted=nuit ;;
+    *) echo "usage: grenos-theme [jour|nuit]" >&2; exit 2 ;;
+esac
+
+if [ "$wanted" = nuit ]; then
+    look=org.kde.breezedark.desktop
+    paper=/usr/share/wallpapers/grenOS/
+else
+    look=org.kde.breeze.desktop
+    paper=/usr/share/wallpapers/grenOS-Jour/
+fi
+
+plasma-apply-lookandfeel -a "$look" >/dev/null 2>&1 || true
+plasma-apply-wallpaperimage "$paper" >/dev/null 2>&1 || true
+
+if command -v kdialog >/dev/null 2>&1; then
+    kdialog --title grenOS --passivepopup "Thème $wanted" 3 >/dev/null 2>&1 || true
+fi
+echo "grenOS: thème $wanted"

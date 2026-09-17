@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bienvenue dans grenOS</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --fond: #080c18;
+    --carte: #121826;
+    --trait: #232c40;
+    --texte: #e6ebf5;
+    --doux: #9aa7bd;
+    --accent: #2f7df6;
+    --violet: #7c4df0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 24px 72px;
+    font: 16px/1.6 "Noto Sans", system-ui, sans-serif;
+    color: var(--texte);
+    background:
+      radial-gradient(900px 600px at 18% 12%, rgba(47,125,246,.28), transparent 60%),
+      radial-gradient(800px 600px at 85% 85%, rgba(124,77,240,.22), transparent 60%),
+      var(--fond);
+    min-height: 100vh;
+  }
+  main { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 40px; margin: 0 0 8px; letter-spacing: -0.02em; }
+  h1 span { background: linear-gradient(90deg, var(--accent), var(--violet)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  p.sous { color: var(--doux); margin: 0 0 32px; font-size: 18px; }
+  .cartes { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  a.carte, div.carte {
+    display: block; padding: 20px; border: 1px solid var(--trait); border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0)) , var(--carte);
+    color: inherit; text-decoration: none; transition: transform .18s ease, border-color .18s ease, background .18s ease;
+  }
+  a.carte:hover { transform: translateY(-3px); border-color: var(--accent); background: #16203a; }
+  .carte h2 { margin: 0 0 6px; font-size: 18px; }
+  .carte p { margin: 0; color: var(--doux); font-size: 14px; }
+  h3 { margin: 40px 0 12px; font-size: 20px; }
+  ul { margin: 0; padding-left: 20px; color: var(--doux); }
+  li { margin: 6px 0; }
+  kbd {
+    background: #1b2438; border: 1px solid var(--trait); border-bottom-width: 2px;
+    border-radius: 6px; padding: 1px 7px; font: 13px/1 "Hack", monospace; color: var(--texte);
+  }
+  footer { margin-top: 48px; color: #63708a; font-size: 13px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bienvenue dans <span>grenOS</span></h1>
+  <p class="sous">Un système complet, construit sur Debian, écrit et assemblé par une équipe d'agents.</p>
+
+  <div class="cartes">
+    <a class="carte" href="applications:io.calamares.calamares.desktop">
+      <h2>Installer grenOS</h2>
+      <p>Poser le système sur le disque, garder ses fichiers et ses comptes d'un démarrage à l'autre.</p>
+    </a>
+    <a class="carte" href="applications:grenos-theme.desktop">
+      <h2>Jour ou nuit</h2>
+      <p>Basculer le thème clair et sombre, avec le fond d'écran qui suit. Raccourci : <kbd>Meta</kbd>+<kbd>T</kbd>.</p>
+    </a>
+    <a class="carte" href="applications:grenos-maj.desktop">
+      <h2>Mettre à jour</h2>
+      <p>Les paquets de grenOS et les correctifs de sécurité, depuis le système lui-même.</p>
+    </a>
+  </div>
+
+  <h3>Les gestes qui servent</h3>
+  <ul>
+    <li><kbd>Alt</kbd>+<kbd>Tab</kbd> passe d'une fenêtre à l'autre, <kbd>Alt</kbd>+<kbd>F4</kbd> ferme celle du dessus.</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>Échap</kbd> ouvre le gestionnaire de tâches : ce qui tourne, ce que ça coûte.</li>
+    <li><kbd>Meta</kbd> ouvre le menu, <kbd>Meta</kbd>+<kbd>D</kbd> montre le bureau.</li>
+    <li>Dans les fichiers : <kbd>F2</kbd> renomme, <kbd>Ctrl</kbd>+<kbd>C</kbd> et <kbd>Ctrl</kbd>+<kbd>V</kbd> copient, clic droit crée.</li>
+  </ul>
+
+  <h3>Astuces</h3>
+  <ul>
+    <li>Dans une machine virtuelle, la fenêtre se redimensionne toute seule : les additions invité sont déjà là (VirtualBox, QEMU, VMware).</li>
+    <li>Sous VirtualBox, donner au moins 4 Go de mémoire et 128 Mo de mémoire vidéo rend le bureau nettement plus fluide.</li>
+    <li>La session en direct ne garde rien : installez grenOS pour conserver vos fichiers, vos comptes et vos réglages.</li>
+  </ul>
+
+  <h3>Ce qui arrive</h3>
+  <ul>
+    <li>Un magasin grenOS, pour installer des applications en un clic — Steam compris.</li>
+    <li>Un thème complet aux couleurs de grenOS : icônes, curseurs, écran de connexion.</li>
+  </ul>
+
+  <footer>grenOS, sur Debian trixie — <a href="https://grenos-dev.vercel.app">grenos-dev.vercel.app</a></footer>
+</main>
+</body>
+</html>

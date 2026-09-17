@@ -1,0 +1,28 @@
+#!/bin/sh
+# La description de l'image grenOS, lue par live-build (lb config).
+#
+# Debian trixie, bureau KDE Plasma, session live en français avec clavier
+# AZERTY, et l'installateur Calamares pour poser le système sur le disque.
+# Tout ce qui fait grenOS — thème, fond d'écran, réglages, accueil — est
+# ajouté par config/includes.chroot et config/hooks.
+
+set -e
+
+lb config noauto \
+    --distribution trixie \
+    --archive-areas "main contrib non-free non-free-firmware" \
+    --architectures amd64 \
+    --linux-flavours amd64 \
+    --binary-images iso-hybrid \
+    --debian-installer none \
+    --apt-indices false \
+    --apt-source-archives false \
+    --memtest none \
+    --win32-loader false \
+    --iso-application "grenOS" \
+    --iso-publisher "grenOS; https://grenos-dev.vercel.app" \
+    --iso-volume "grenOS" \
+    --image-name "grenos" \
+    --compression xz \
+    --bootappend-live "boot=live components locales=fr_FR.UTF-8 keyboard-layouts=fr keyboard-model=pc105 timezone=Europe/Paris username=grenos user-fullname=grenOS hostname=grenos quiet splash" \
+    "${@}"
