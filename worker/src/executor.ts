@@ -316,6 +316,40 @@ export type Answer =
       usage: Usage;
     };
 
+/** Correction rounds a conversation may reach while the build keeps improving. */
+export const IMPROVING_ROUNDS = 8;
+
+/**
+ * How many correction rounds the conversation may use, given what is wrong
+ * now. Pure. The base allowance is PREFLIGHT_ROUNDS; when every problem is a
+ * local build error and there are fewer of them than after the previous
+ * round, the model is getting there, and it may go on up to IMPROVING_ROUNDS.
+ * On 2026-09-17 DeepSeek took the HTTP task from a dozen clippy errors down to
+ * one unused constant and was stopped there.
+ */
+export function roundsAllowed(problems: number, buildErrors: number, previousBuildErrors: number): number {
+  const onlyBuild = problems > 0 && buildErrors === problems;
+  return onlyBuild && buildErrors < previousBuildErrors ? IMPROVING_ROUNDS : PREFLIGHT_ROUNDS;
+}
+
+/**
+ * A source file without the Markdown fence a model copied around it. Pure.
+ * The context shows files between ```` lines, and on 2026-09-17 Nemotron wrote
+ * one into kernel/src/http.rs, where rustc stopped at "unknown start of token".
+ */
+export function withoutFences(path: string, content: string): string {
+  if (!/\.(rs|toml|ld|sh|conf)$/.test(path)) return content;
+  const lines = content.split("\n");
+  const fence = (line: string | undefined) => line !== undefined && /^\s*`{3,}[A-Za-z]*\s*$/.test(line);
+  while (fence(lines[0])) lines.shift();
+  while (lines.length > 0 && (lines[lines.length - 1]!.trim() === "" || fence(lines[lines.length - 1]))) {
+    if (fence(lines[lines.length - 1])) lines.pop();
+    else if (lines.length > 1 && fence(lines[lines.length - 2])) lines.splice(lines.length - 2, 1);
+    else break;
+  }
+  return lines.join("\n");
+}
+
 /** How long the rest of a panel may still take once one member has a good answer. */
 export const PANEL_GRACE_MS = 90_000;
 
@@ -416,6 +450,9 @@ async function converse(opts: {
   const usage: Usage = { tokensIn: 0, tokensOut: 0, latencyMs: 0 };
   let consulted = 0;
   let corrected = 0;
+  // Build errors left after the previous round, to see whether the model is
+  // getting there (roundsAllowed).
+  let previousBuildErrors = Number.POSITIVE_INFINITY;
 
   for (;;) {
     if (opts.stop.stopped) {
@@ -573,7 +610,10 @@ async function converse(opts: {
       };
     }
 
-    if (corrected < PREFLIGHT_ROUNDS) {
+    const buildErrors = problems.filter((p) => p.startsWith("local build")).length;
+    const allowed = roundsAllowed(problems.length, buildErrors, previousBuildErrors);
+    previousBuildErrors = buildErrors > 0 ? buildErrors : previousBuildErrors;
+    if (corrected < allowed) {
       corrected += 1;
       log.info(`  pré-vol (${modelUsed}) · ${problems.length} problème(s) renvoyé(s) à l'agent`);
       await emit({
@@ -586,7 +626,7 @@ async function converse(opts: {
       });
       conversation.push(
         { role: "assistant", content: text },
-        { role: "user", content: renderPreflight(problems, PREFLIGHT_ROUNDS - corrected) },
+        { role: "user", content: renderPreflight(problems, allowed - corrected) },
       );
       continue;
     }
@@ -638,7 +678,7 @@ async function resolveWrites(
     const earlier = changes.find((c) => c.path === verdict.path);
 
     if (action.type === "write_file" || action.type === "delete_file") {
-      const content = action.type === "write_file" ? action.content : null;
+      const content = action.type === "write_file" ? withoutFences(verdict.path, action.content) : null;
       if (earlier) earlier.content = content;
       else changes.push({ path: verdict.path, content });
       continue;

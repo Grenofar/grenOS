@@ -138,3 +138,21 @@ test("a member that throws does not hold the panel", async () => {
   const out = await gather([Promise.reject(new Error("boom")), after(5, "good")], () => true, 10);
   assert.deepEqual(out, ["good"]);
 });
+
+test("a model that keeps reducing its build errors gets more rounds", async () => {
+  const { roundsAllowed, IMPROVING_ROUNDS } = await import("../src/executor.ts");
+  const { PREFLIGHT_ROUNDS } = await import("../src/preflight.ts");
+  assert.equal(roundsAllowed(3, 3, 7), IMPROVING_ROUNDS);
+  assert.equal(roundsAllowed(3, 3, 3), PREFLIGHT_ROUNDS);
+  // Not only build errors: the static checks keep their usual allowance.
+  assert.equal(roundsAllowed(3, 2, 7), PREFLIGHT_ROUNDS);
+  assert.equal(roundsAllowed(1, 1, Number.POSITIVE_INFINITY), IMPROVING_ROUNDS);
+});
+
+test("a Markdown fence copied around a source file is taken off", async () => {
+  const { withoutFences } = await import("../src/executor.ts");
+  assert.equal(withoutFences("kernel/src/http.rs", "````\nfn a() {}\n````\n"), "fn a() {}\n");
+  assert.equal(withoutFences("kernel/src/http.rs", "```rust\nfn a() {}\n```"), "fn a() {}");
+  assert.equal(withoutFences("kernel/src/http.rs", "fn a() {}\n"), "fn a() {}\n");
+  assert.equal(withoutFences("docs/PLAN.md", "```\ncode\n```\n"), "```\ncode\n```\n");
+});
