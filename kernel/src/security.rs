@@ -23,6 +23,8 @@ use alloc::vec::Vec;
 use crate::fs::{self, Fs, Kind};
 use crate::memory::Frames;
 use crate::paging;
+use crate::rand;
+use crate::sha256;
 
 unsafe extern "C" {
     static __text_start: u8;
@@ -75,6 +77,46 @@ const SIGNATURES: [Signature; 3] = [
         ],
     },
 ];
+
+/// A password credential: a salt and a PBKDF2 hash of the password.
+///
+/// The salt is 16 random bytes, the hash is 32 bytes (SHA-256), and the
+/// iteration count is fixed at 100000. The comparison is constant-time: all
+/// 32 bytes are OR-ed together with no early exit.
+#[derive(Clone)]
+pub struct Credential {
+    pub salt: [u8; 16],
+    pub iterations: u32,
+    pub hash: [u8; 32],
+}
+
+impl Credential {
+    /// Creates a new credential from a password, with a fresh random salt.
+    pub fn new(password: &[u8]) -> Self {
+        let mut salt = [0u8; 16];
+        rand::bytes(&mut salt);
+        let mut hash = [0u8; 32];
+        sha256::pbkdf2(password, &salt, 100000, &mut hash);
+        Credential { salt, iterations: 100000, hash }
+    }
+
+    /// Hashes a password with this credential's salt and iterations.
+    pub fn hash(&self, password: &[u8]) -> [u8; 32] {
+        let mut out = [0u8; 32];
+        sha256::pbkdf2(password, &self.salt, self.iterations, &mut out);
+        out
+    }
+
+    /// Checks a password against this credential, in constant time.
+    pub fn verify(&self, password: &[u8]) -> bool {
+        let candidate = self.hash(password);
+        let mut diff = 0u8;
+        for i in 0..32 {
+            diff |= self.hash[i] ^ candidate[i];
+        }
+        diff == 0
+    }
+}
 
 /// What one pass of the scanner found.
 #[derive(Clone, Default)]

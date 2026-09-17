@@ -19,11 +19,9 @@ mod font;
 mod fs;
 mod gdt;
 mod heap;
-mod html;
 mod http;
 mod icons;
 mod idt;
-mod install;
 mod keyboard;
 mod memory;
 mod mouse;
@@ -42,7 +40,6 @@ mod serial;
 mod sha256;
 mod sha512;
 mod shell;
-mod splash;
 mod storage;
 mod sysinfo;
 mod time;
@@ -58,8 +55,8 @@ use core::panic::PanicInfo;
 
 use limine::BaseRevision;
 use limine::request::{
-    ExecutableCmdlineRequest, ExecutableFileRequest, FramebufferRequest, HhdmRequest, MemoryMapRequest,
-    RequestsEndMarker, RequestsStartMarker, RsdpRequest, StackSizeRequest,
+    ExecutableFileRequest, FramebufferRequest, HhdmRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker,
+    RsdpRequest, StackSizeRequest,
 };
 
 #[used]
@@ -90,13 +87,6 @@ static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 #[used]
 #[unsafe(link_section = ".requests")]
 static EXECUTABLE_FILE_REQUEST: ExecutableFileRequest = ExecutableFileRequest::new();
-
-/// The command line limine.conf gives the kernel. `grenos.selftest=update` makes
-/// the CI's disk image install the newest signed kernel on its own and restart
-/// (docs/specs/disk-and-updates.md §8).
-#[used]
-#[unsafe(link_section = ".requests")]
-static EXECUTABLE_CMDLINE_REQUEST: ExecutableCmdlineRequest = ExecutableCmdlineRequest::new();
 
 /// The firmware's ACPI tables, for turning the machine off.
 #[used]
@@ -183,17 +173,6 @@ extern "C" fn kmain() -> ! {
     // SAFETY: that range is usable RAM, which the HHDM maps, given to the heap alone.
     unsafe { heap::init(start + hhdm) };
 
-    // The screen is ready from here: the back buffer lives just after the
-    // heap, in the region reserved above. The loading screen goes up before
-    // each stage of the boot, so the machine never sits black while it works.
-    font::tune(mode.height);
-    // SAFETY: Limine maps the framebuffer it describes, height rows of pitch
-    // bytes; the back buffer is the region reserved above, which the HHDM
-    // maps and nothing else uses.
-    let mut screen = unsafe { fb::Screen::new(frame.addr(), (start + heap_size + hhdm) as *mut u32, mode) };
-    splash::draw(&mut screen, "Mémoire", 0, 7);
-    serial::write_str("splash: shown\n");
-
     // The heap works from here: the boot log can hold its own lines.
     let mut log = Log { lines: Vec::new() };
     log.lines.push("grenOS démarre".to_string());
@@ -208,7 +187,6 @@ extern "C" fn kmain() -> ! {
         log.say(format!("frames: {} free, {} with one taken, {} once given back", before, during, frames.free()));
     }
 
-    splash::draw(&mut screen, "Mémoire", 1, 7);
     let paging = check_paging(&mut frames);
     match paging {
         Ok(()) => log.say("paging: a fresh page mapped at 0xFFFF900000000000, written and read back".to_string()),
@@ -224,7 +202,6 @@ extern "C" fn kmain() -> ! {
     // The processor's own defences, turned on and then read back, and the
     // kernel's code measured while nothing has had a chance to touch it.
     // SAFETY: called once, before interrupts are on, which is what it asks.
-    splash::draw(&mut screen, "Sécurité du processeur", 2, 7);
     let mut guard = unsafe { security::arm(&frames) };
     log.say(format!(
         "security: NX {}, write protect {}, SMEP {}, SMAP {}",
@@ -241,13 +218,11 @@ extern "C" fn kmain() -> ! {
         on(guard.data_no_execute)
     ));
 
-    splash::draw(&mut screen, "Périphériques", 3, 7);
     let devices = pci::scan();
     log.say(format!("pci: {} devices", devices.len()));
 
     // The signature check every installed update will go through
     // (docs/specs/disk-and-updates.md §5), proven here on RFC 8032's vectors.
-    splash::draw(&mut screen, "Vérification des signatures", 4, 7);
     log.say(if ed25519::self_test() {
         "crypto: ed25519 verified against RFC 8032".to_string()
     } else {
@@ -258,18 +233,11 @@ extern "C" fn kmain() -> ! {
     } else {
         "security: pbkdf2 FAILED its RFC 7914 vectors".to_string()
     });
-    // The browser's decoders (docs/specs/browser-search.md §5): CI has no
-    // business depending on outside servers, so fixed inputs prove them.
-    log.say(match http::self_test().and_then(|()| html::self_test()) {
-        Ok(()) => "web: decoders verified".to_string(),
-        Err(case) => format!("web: decoders FAILED its {case} case"),
-    });
 
     // The network card, if this machine has one this kernel knows: QEMU gives
     // an 8254x by default, and VirtualBox calls the same chip the 82540EM.
     // SAFETY: called once, before the desktop starts; it maps the card's
     // registers and hands it pages of our own.
-    splash::draw(&mut screen, "Réseau", 5, 7);
     let mut card = match unsafe { e1000::start(&mut frames) } {
         Ok(nic) => {
             log.say(format!("net: 8254x card, address {}", nic.mac_text()));
@@ -312,17 +280,12 @@ extern "C" fn kmain() -> ! {
     let mouse_ok = ps2::init();
     // SAFETY: every vector the PIC can now raise has its handler in the IDT.
     unsafe { core::arch::asm!("sti", options(nomem, nostack)) };
-    log.say(match (mouse_ok, ps2::wheel()) {
-        (true, true) => "input: keyboard and mouse with a wheel".to_string(),
-        (true, false) => "input: keyboard and mouse".to_string(),
-        _ => "input: keyboard, no mouse".to_string(),
-    });
+    log.say(if mouse_ok { "input: keyboard and mouse".to_string() } else { "input: keyboard, no mouse".to_string() });
 
     // The SATA disks, through the AHCI controller (docs/specs/disk-and-updates.md
     // §3). The first sector of each is read back as a proof: a disk with a
     // partition table ends it with 55 AA.
     // SAFETY: called once, with interrupts on, which the driver's timeouts count on.
-    splash::draw(&mut screen, "Disques", 6, 7);
     let mut disks = match unsafe { ahci::find(&mut frames, &devices) } {
         Ok(found) => {
             for (port, why) in &found.failed {
@@ -357,7 +320,7 @@ extern "C" fn kmain() -> ! {
     let boot_path = boot_file.and_then(|file| file.path().to_str().ok()).unwrap_or("");
     let boot_signature = boot_file.and_then(|file| file.mbr_disk_id()).map(|id| id.get());
     // Kept for the installer (docs/specs/disk-and-updates.md §7), which writes the other slot.
-    let store = match storage::locate(&mut disks, boot_path, boot_signature) {
+    let _store = match storage::locate(&mut disks, boot_path, boot_signature) {
         Ok(store) => {
             log.say(format!("disk: grenOS partition FAT32 {}, booted from slot {}", store.volume.label(), store.slot));
             match storage::write_test(&store, &mut disks) {
@@ -388,7 +351,11 @@ extern "C" fn kmain() -> ! {
         dhcp.start(stack, nic, events::millis());
     }
 
-    splash::draw(&mut screen, "Bureau", 7, 7);
+    font::tune(mode.height);
+    // SAFETY: Limine maps the framebuffer it describes, height rows of pitch
+    // bytes; the back buffer is the region reserved above, which the HHDM
+    // maps and nothing else uses.
+    let mut screen = unsafe { fb::Screen::new(frame.addr(), (start + heap_size + hhdm) as *mut u32, mode) };
 
     let machine = desktop::Machine {
         version: env!("CARGO_PKG_VERSION"),
@@ -426,7 +393,7 @@ extern "C" fn kmain() -> ! {
     serial::write_str("desktop: drawn\n");
 
     let mut keyboard = keyboard::Keyboard::default();
-    let mut decoder = mouse::Decoder::new(ps2::wheel());
+    let mut decoder = mouse::Decoder::default();
     let mut packets: u32 = 0;
     let mut keys: u32 = 0;
     // The browser's page: whether its outcome has been handed over, what the
@@ -443,21 +410,10 @@ extern "C" fn kmain() -> ! {
     // on the browser. Asked for once at boot as soon as the network answers,
     // and again at every click.
     let mut updater = http::Fetch::new();
-    updater.wants_text = false;
     let mut update_resolver = dhcp::Resolver::new();
     let mut update_wanted = false;
     let mut update_delivered = true;
     let mut auto_checked = false;
-    // Installing the newest image: what the check last found, the installer,
-    // and whether its outcome has gone to the serial line.
-    let mut newest: Option<update::Latest> = None;
-    let mut installer = install::Installer::new();
-    let mut install_reported = true;
-    let selftest = EXECUTABLE_CMDLINE_REQUEST
-        .get_response()
-        .and_then(|response| response.cmdline().to_str().ok())
-        .is_some_and(|line| line.split_whitespace().any(|word| word == "grenos.selftest=update"));
-    let mut selftest_started = false;
     loop {
         while let Some(event) = events::pop() {
             let action = match event {
@@ -512,27 +468,13 @@ extern "C" fn kmain() -> ! {
                 said.clear();
             }
             if !delivered {
-                match fetch.phase {
-                    http::Phase::Done => {
-                        desk.page_result(desktop::PageNews::Loaded {
-                            url: fetch.url.clone(),
-                            title: core::mem::take(&mut fetch.title),
-                            lines: core::mem::take(&mut fetch.text),
-                            status: fetch.status.clone(),
-                        });
-                        // The page is the desktop's now; the raw body is not needed.
-                        fetch.body = Vec::new();
-                        delivered = true;
-                    }
-                    http::Phase::Failed => {
-                        desk.page_result(desktop::PageNews::Failed(fetch.status.clone()));
-                        delivered = true;
-                    }
-                    _ if fetch.status != said => {
-                        said = fetch.status.clone();
-                        desk.page_result(desktop::PageNews::Progress(said.clone()));
-                    }
-                    _ => {}
+                if matches!(fetch.phase, http::Phase::Done | http::Phase::Failed) {
+                    let text = (fetch.phase == http::Phase::Done).then(|| fetch.text.clone());
+                    desk.page_result(fetch.status.clone(), text);
+                    delivered = true;
+                } else if fetch.status != said {
+                    said = fetch.status.clone();
+                    desk.page_result(said.clone(), None);
                 }
             }
             if dhcp.state == dhcp::State::Bound && ms >= next_ping && stack.gateway != [0, 0, 0, 0] {
@@ -560,9 +502,7 @@ extern "C" fn kmain() -> ! {
                 update_wanted = false;
                 update_delivered = false;
                 if !updater.start(stack, nic, &mut update_resolver, update::INDEX, ms) {
-                    let (found, latest) = checked(&updater);
-                    desk.update_result(found);
-                    newest = latest.or(newest);
+                    desk.update_result(checked(&updater));
                     update_delivered = true;
                 }
             }
@@ -570,51 +510,10 @@ extern "C" fn kmain() -> ! {
             updater.poll(stack, nic, &mut update_resolver, ms);
             if !update_delivered && matches!(updater.phase, http::Phase::Done | http::Phase::Failed) {
                 update_delivered = true;
-                let (found, latest) = checked(&updater);
-                desk.update_result(found);
-                newest = latest.or(newest);
-            }
-
-            // Installing: asked for from Paramètres, or on its own on the
-            // CI's self-test image, once the screen and input checks are over.
-            let mut start_install = desk.wants_install();
-            if selftest && !selftest_started && newest.is_some() && events::ticks_seconds() >= 45 {
-                selftest_started = true;
-                start_install = true;
-                serial::write_str("update: self-test install starting\n");
-            }
-            if start_install {
-                match &newest {
-                    Some(latest) => {
-                        install_reported = false;
-                        installer.start(latest, stack, nic, ms);
-                    }
-                    None => desk.install_progress(desktop::Install::Failed(
-                        "aucune version connue : vérifiez d'abord les mises à jour".to_string(),
-                    )),
-                }
-            }
-            installer.poll(stack, nic, ms, &mut disks, store.as_ref(), env!("GRENOS_STAMP"));
-            if let Some(state) = installer.state.clone() {
-                desk.install_progress(state.clone());
-                if !installer.busy() && !install_reported {
-                    install_reported = true;
-                    match state {
-                        desktop::Install::Installed { build, slot } => {
-                            serial::write_str(&format!("update: installed {build} into slot {slot}\n"));
-                            if selftest {
-                                power::reboot();
-                            }
-                        }
-                        desktop::Install::Failed(why) => {
-                            serial::write_str(&format!("update: install failed ({why})\n"));
-                        }
-                        desktop::Install::Working(_) => {}
-                    }
-                }
+                desk.update_result(checked(&updater));
             }
         } else if let Some(url) = desk.wants_page() {
-            desk.page_result(desktop::PageNews::Failed(format!("{url} : aucune carte réseau sur cette machine")));
+            desk.page_result(format!("{url} : aucune carte réseau sur cette machine"), None);
         }
         if card.is_none() && desk.wants_update() {
             desk.update_result(desktop::Found::Failed("aucune carte réseau sur cette machine".to_string()));
@@ -634,6 +533,14 @@ extern "C" fn kmain() -> ! {
             desk.set_security(guard.lines(), guard.last.threats.clone());
         }
 
+        // The login screen asks; the kernel checks the password against the
+        // stored credential.
+        if let Some(password) = desk.wants_password() {
+            let ok = desk_credential.as_ref().map_or(false, |credential| credential.verify(password.as_bytes()));
+            serial::write_str(if ok { "security: login verified\n" } else { "security: login failed\n" });
+            desk.password_result(ok);
+        }
+
         // Everything that moves is moved by the clock, then drawn once.
         desk.advance(ms);
         desk.frame(&mut screen);
@@ -643,14 +550,14 @@ extern "C" fn kmain() -> ! {
 
 /// What the update check found, in the desktop's terms — and on the serial
 /// line, where the CI can read it.
-fn checked(updater: &http::Fetch) -> (desktop::Found, Option<update::Latest>) {
+fn checked(updater: &http::Fetch) -> desktop::Found {
     if updater.phase != http::Phase::Done {
         serial::write_str(&format!("update: check failed ({})\n", updater.status));
-        return (desktop::Found::Failed(updater.status.clone()), None);
+        return desktop::Found::Failed(updater.status.clone());
     }
     let Some(latest) = update::latest(&updater.body) else {
         serial::write_str("update: the release index could not be read\n");
-        return (desktop::Found::Failed("l'index des versions est illisible".to_string()), None);
+        return desktop::Found::Failed("l'index des versions est illisible".to_string());
     };
     let running = env!("GRENOS_BUILD");
     let standing = match update::is_current(&latest, running) {
@@ -672,8 +579,7 @@ fn checked(updater: &http::Fetch) -> (desktop::Found, Option<update::Latest>) {
         running,
         verdict
     ));
-    let found = desktop::Found::Latest { build: latest.build.clone(), when: latest.when(), size: latest.size, standing };
-    (found, Some(latest))
+    desktop::Found::Latest { build: latest.build.clone(), when: latest.when(), size: latest.size, standing }
 }
 
 /// A defence, in a word.
