@@ -139,7 +139,15 @@ const EN: typeof FR = {
 
 const TEXT: Record<Lang, typeof FR> = { fr: FR, en: EN };
 
-export function DownloadView({ builds, repo }: { builds: Build[]; repo: string }) {
+export function DownloadView({
+  builds,
+  linux = null,
+  repo,
+}: {
+  builds: Build[];
+  linux?: LinuxRelease | null;
+  repo: string;
+}) {
   const { lang } = useLang();
   const c = TEXT[lang];
   const build = builds[0] ?? null;
@@ -151,6 +159,53 @@ export function DownloadView({ builds, repo }: { builds: Build[]; repo: string }
         <h1>{c.title}</h1>
         <p>{c.lead}</p>
       </div>
+
+      <section>
+        <div className="card" style={{ borderColor: "#2f7df6" }}>
+          <h2 style={{ marginTop: 0 }}>{c.linuxTitle}</h2>
+          <p className="muted">{c.linuxLead}</p>
+          {linux ? (
+            <>
+              <p className="faint" style={{ marginTop: 0 }}>
+                <span className="dot ok" /> <span className="mono">{linux.tag}</span> · {c.published}{" "}
+                {linux.publishedAt.slice(0, 10)}
+              </p>
+              <div className="grid cols-2">
+                <div>
+                  <a className="dl-button" href={linux.isoUrl}>
+                    {c.linuxIso}
+                  </a>
+                  <div className="faint mono" style={{ marginTop: 8 }}>
+                    iso · {go(linux.isoSize)} {c.go}
+                  </div>
+                </div>
+                {linux.zipUrl && (
+                  <div>
+                    <a className="dl-button" href={linux.zipUrl}>
+                      {c.linuxZip}
+                    </a>
+                    <div className="faint mono" style={{ marginTop: 8 }}>
+                      zip · {go(linux.zipSize ?? 0)} {c.go}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <ol className="muted" style={{ marginBottom: 0 }}>
+                {c.linuxSteps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+              <p className="faint" style={{ marginBottom: 0 }}>
+                {c.linuxNote} <a href={linux.pageUrl}>{linux.tag}</a>
+              </p>
+            </>
+          ) : (
+            <p className="faint" style={{ marginBottom: 0 }}>
+              {c.linuxNone}
+            </p>
+          )}
+        </div>
+      </section>
 
       <section>
         {build ? (
