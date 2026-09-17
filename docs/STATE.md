@@ -1,29 +1,29 @@
-# grenOS Agent System State
+# Mission State
 
-## Now
-2026-09-17 20:55 UTC
+## Current Mission (2026-09-17 20:55 UTC)
+- Title: Security hardening: password hashing, login throttling, non-executable memory map
+- Status: cancelled (per human decision 2026-09-17 20:50 UTC)
+- Tokens used: 2993623 / 20000000 budget
+- Decision: grenOS becomes a Linux distribution on a Debian base; Rust kernel set aside
 
-## Mission
-- Title: grenOS self-update from disk
-- Status: blocked (mission complete via pivot)
-- Tokens used: 5,736,728 / 20,000,000 budget
+## What was achieved
+- PBKDF2 implementation and self-test added to kernel/src/sha256.rs
+- main.rs logs verification: "security: pbkdf2 verified against RFC 7914"
+- CI run agent/465b9035 passed build, clippy, boot, screen, input, net (green)
 
-## Achieved
-- Task fde9b17f: created kernel/scripts/make-disk.sh and kernel/limine-disk.conf (green)
-- Task 208a797f: fixed three bugs in make-disk.sh (green, merged)
+## What remains unfinished
+- S2: password handling (Credential struct, desktop.rs integration)
+- S3: login throttling mechanism
+- S4: physical memory map marked non-executable
+- All tasks requiring kernel/ modifications are blocked per pivot to linux/
 
-## Unfinished
-- Task e776c272: technical plan for A-D (done but superseded by pivot)
-- Tasks for AHCI driver (a23db1f5, 7163e856, 4d612577, a0c11c6d): all cancelled
-- Tasks for MBR/FAT32: none created
-- Tasks for SHA-512/Ed25519 (b88ccbb0): cancelled
+## Blocked Tasks
+- c620e9e2: blocked awaiting visibility of sha256.rs/rand.rs (now moot)
+- db2a8017: cancelled (spec_gap due to pre-existing errors outside allowed_paths)
+- 2b2a0165: cancelled (compile_error: salt length mismatch)
+- 28a19741: blocked (attempt to document pivot outside allowed_paths)
 
-## Blocked
-- No kernel tasks active; all cancelled per human decision
-
-## Next
-- Await linux/ mission tasks after first Debian live image builds and boots
-
-## Budget
-- Tokens remaining: 14,263,272
-- No further kernel tasks will consume budget
+## Budget Consumed
+- Tokens: 2,993,623 / 20,000,000 (15%)
+- Attempts used across tasks: 7
+- No further kernel work will be undertaken
