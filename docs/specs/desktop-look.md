@@ -94,7 +94,7 @@ Three small tasks, in this order, each one commit:
   happens on a click today). A command bar under the title: "Nouveau dossier",
   "Renommer", "Supprimer", "Copier", "Coller", drawn with `screen.round` and
   greyed out (`TEXT_FAINT`) when they do not apply. The status bar says
-  "N éléments" and, when one is selected, "1 élément sélectionné".
+  "N éléments" et, when one is selected, "1 élément sélectionné".
 - **E2 — the commands.** "Nouveau dossier" makes `free_name(dir, "Nouveau
   dossier", "")` and selects it; "Supprimer" removes the selection (system files
   under `/Système` are refused, with a one-line message in the status bar);
