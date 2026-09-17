@@ -13,6 +13,7 @@ mod dhcp;
 mod ed25519;
 mod e1000;
 mod events;
+mod fat;
 mod fb;
 mod font;
 mod fs;
@@ -39,6 +40,7 @@ mod serial;
 mod sha256;
 mod sha512;
 mod shell;
+mod storage;
 mod sysinfo;
 mod time;
 mod tls;
@@ -53,8 +55,8 @@ use core::panic::PanicInfo;
 
 use limine::BaseRevision;
 use limine::request::{
-    FramebufferRequest, HhdmRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker, RsdpRequest,
-    StackSizeRequest,
+    ExecutableFileRequest, FramebufferRequest, HhdmRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker,
+    RsdpRequest, StackSizeRequest,
 };
 
 #[used]
@@ -79,6 +81,12 @@ static MEMORY_MAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
 #[used]
 #[unsafe(link_section = ".requests")]
 static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
+
+/// The kernel file Limine loaded: its path says which slot booted, and its
+/// disk's MBR signature says which disk is ours (docs/specs/disk-and-updates.md §4.1).
+#[used]
+#[unsafe(link_section = ".requests")]
+static EXECUTABLE_FILE_REQUEST: ExecutableFileRequest = ExecutableFileRequest::new();
 
 /// The firmware's ACPI tables, for turning the machine off.
 #[used]
@@ -299,6 +307,28 @@ extern "C" fn kmain() -> ! {
             proof
         ));
     }
+
+    // Our own disk, and the proof it can be written: only the disk Limine
+    // booted from, and only its FAT32 partition labelled GRENOS
+    // (storage.rs, rule 1 of the spec).
+    let boot_file = EXECUTABLE_FILE_REQUEST.get_response().map(|response| response.file());
+    let boot_path = boot_file.and_then(|file| file.path().to_str().ok()).unwrap_or("");
+    let boot_signature = boot_file.and_then(|file| file.mbr_disk_id()).map(|id| id.get());
+    // Kept for the installer (docs/specs/disk-and-updates.md §7), which writes the other slot.
+    let _store = match storage::locate(&mut disks, boot_path, boot_signature) {
+        Ok(store) => {
+            log.say(format!("disk: grenOS partition FAT32 {}, booted from slot {}", store.volume.label(), store.slot));
+            match storage::write_test(&store, &mut disks) {
+                Ok(()) => log.say("disk: write and read back verified".to_string()),
+                Err(why) => log.say(format!("disk: write test failed ({why})")),
+            }
+            Some(store)
+        }
+        Err(why) => {
+            log.say(format!("disk: {why}"));
+            None
+        }
+    };
 
     // The address comes from the network itself: ask for one as soon as the
     // link is up, so the desktop opens with the answer already in hand.

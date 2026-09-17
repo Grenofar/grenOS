@@ -395,3 +395,14 @@ impl Disk {
         self.command(FLUSH_EXT, 0, 0, false)
     }
 }
+
+/// The file system code reads and writes through this, and knows nothing of AHCI.
+impl crate::fat::Blocks for Disk {
+    fn read(&mut self, lba: u64, out: &mut [u8]) -> Result<(), &'static str> {
+        Disk::read(self, lba, out)
+    }
+
+    fn write(&mut self, lba: u64, data: &[u8]) -> Result<(), &'static str> {
+        Disk::write(self, lba, data)
+    }
+}
