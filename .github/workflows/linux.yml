@@ -57,7 +57,7 @@ jobs:
           docker run --privileged --rm \
             -v "$PWD:/work" -w /work \
             -e LB_PARENT_MIRROR_BOOTSTRAP=http://deb.debian.org/debian \
-            debian:trixie /work/linux/build.sh 2>&1 | tail -n 200
+            debian:trixie sh /work/linux/build.sh 2>&1 | tail -n 200
           ISO=$(ls linux/*.iso | head -1)
           echo "iso=$ISO" >> "$GITHUB_OUTPUT"
           echo "size=$(stat -c %s "$ISO")" >> "$GITHUB_OUTPUT"

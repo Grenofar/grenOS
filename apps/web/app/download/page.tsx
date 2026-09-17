@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DownloadView, type Build } from "@/components/DownloadView";
+import { DownloadView, type Build, type LinuxRelease } from "@/components/DownloadView";
 
 /**
  * The public download page (D-030, D-032): the images CI built and booted,
@@ -66,6 +66,46 @@ async function publishedBuilds(): Promise<Build[]> {
   }
 }
 
+/**
+ * L'edition Linux : une image de plus d'un gigaoctet, donc publiee en Release
+ * GitHub (Supabase est plafonne a 1 Go) par .github/workflows/linux.yml. On
+ * prend la derniere release dont l'etiquette commence par "linux-".
+ */
+async function linuxRelease(): Promise<LinuxRelease | null> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`, {
+      headers: { accept: "application/vnd.github+json" },
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return null;
+    const releases: unknown = await res.json();
+    if (!Array.isArray(releases)) return null;
+    for (const release of releases as Array<Record<string, unknown>>) {
+      const tag = typeof release.tag_name === "string" ? release.tag_name : "";
+      if (!tag.startsWith("linux-")) continue;
+      const assets = Array.isArray(release.assets) ? (release.assets as Array<Record<string, unknown>>) : [];
+      const pick = (end: string) =>
+        assets.find((a) => typeof a.name === "string" && (a.name as string).endsWith(end));
+      const iso = pick(".iso");
+      const zip = pick("-virtualbox.zip");
+      if (!iso) continue;
+      return {
+        tag,
+        publishedAt: typeof release.published_at === "string" ? release.published_at : "",
+        isoUrl: String(iso.browser_download_url ?? ""),
+        isoSize: Number(iso.size ?? 0),
+        zipUrl: zip ? String(zip.browser_download_url ?? "") : undefined,
+        zipSize: zip ? Number(zip.size ?? 0) : undefined,
+        pageUrl: typeof release.html_url === "string" ? release.html_url : "",
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function DownloadPage() {
-  return <DownloadView builds={await publishedBuilds()} repo={REPO} />;
+  const [builds, linux] = await Promise.all([publishedBuilds(), linuxRelease()]);
+  return <DownloadView builds={builds} linux={linux} repo={REPO} />;
 }

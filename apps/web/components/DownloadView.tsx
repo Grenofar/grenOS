@@ -14,7 +14,19 @@ export interface Build {
   virtualboxSize?: number;
 }
 
+/** Une image publiee en Release GitHub : l'edition Linux. */
+export interface LinuxRelease {
+  tag: string;
+  publishedAt: string;
+  isoUrl: string;
+  isoSize: number;
+  zipUrl?: string;
+  zipSize?: number;
+  pageUrl: string;
+}
+
 const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+const go = (bytes: number) => (bytes / 1024 / 1024 / 1024).toFixed(2);
 
 /*
  * The page's copy lives here rather than in the shared dictionary: it is read
@@ -58,6 +70,19 @@ const FR = {
     "Le bureau s'affiche directement. Souris et clavier ne répondent que s'ils sont PS/2, ou si le BIOS émule le PS/2 pour l'USB : le clavier USB viendra avec le pilote xHCI.",
   ],
   source: "Code source",
+  linuxTitle: "grenOS Linux",
+  linuxLead:
+    "L'edition complete : un bureau KDE Plasma habille aux couleurs de grenOS, sur une base Debian. Francais et clavier AZERTY, navigateur, fichiers, editeur, terminal, gestionnaire de taches, theme jour et nuit, et l'installateur pour la poser sur un disque. Les mises a jour se font depuis le systeme.",
+  linuxIso: "Telecharger l'ISO",
+  linuxZip: "Telecharger pour VirtualBox",
+  linuxSteps: [
+    "VirtualBox : extraire le zip, double-cliquer sur le fichier .vbox, demarrer. Le bureau arrive tout seul, sans mot de passe.",
+    "Un vrai PC ou une cle USB : ecrire l'ISO avec Rufus en mode image, ou balenaEtcher, puis demarrer dessus.",
+    "Pour garder ses fichiers et ses comptes : l'icone Installer grenOS, sur le bureau.",
+  ],
+  linuxNote: "Image construite et demarree par la CI avant publication. Steam et le magasin grenOS arrivent dans une prochaine version.",
+  linuxNone: "La premiere image Linux est en cours de construction. Elle arrive.",
+  go: "Go",
 };
 
 const EN: typeof FR = {
@@ -97,6 +122,19 @@ const EN: typeof FR = {
     "The desktop appears straight away. The mouse and the keyboard only answer if they are PS/2, or if the firmware emulates PS/2 for USB ones: USB keyboards wait for the xHCI driver.",
   ],
   source: "Source code",
+  linuxTitle: "grenOS Linux",
+  linuxLead:
+    "The full edition: a KDE Plasma desktop dressed in grenOS colours, on a Debian base. French and AZERTY, browser, files, editor, terminal, task manager, day and night theme, and the installer to put it on a disk. Updates are done from inside the system.",
+  linuxIso: "Download the ISO",
+  linuxZip: "Download for VirtualBox",
+  linuxSteps: [
+    "VirtualBox: extract the zip, double-click the .vbox file, start it. The desktop comes up on its own, with no password.",
+    "A real PC or a USB stick: write the ISO with Rufus in image mode, or balenaEtcher, then boot from it.",
+    "To keep your files and accounts: the Install grenOS icon, on the desktop.",
+  ],
+  linuxNote: "Image built and booted by CI before publication. Steam and the grenOS store come in a later version.",
+  linuxNone: "The first Linux image is being built. It is on its way.",
+  go: "GB",
 };
 
 const TEXT: Record<Lang, typeof FR> = { fr: FR, en: EN };
