@@ -1,31 +1,24 @@
 # grenOS Agent System State
 
-**Now**: 2026-09-17 20:56 UTC
+## Mission
+- Title: grenOS Linux: the look, the store and the updates
+- Status: completed
+- Description: grenOS is now a Debian-based Linux distribution: the Rust kernel is set aside. Everything happens in linux/ and is described in docs/specs/linux-edition.md. Work in small tasks, one file at a time. Never touch kernel/. The image is built by .github/workflows/linux.yml, which runs on any branch that changes linux/**; it boots the image in QEMU and keeps screenshots, and Claude looks at them.
+- Tokens used: 10796
+- Token budget: 20000000
 
-## Current Mission
-- **Title**: Security hardening: password hashing, login throttling, non-executable memory map
-- **Status**: cancelled (per human decision)
-- **Tokens used**: 3011268 / 20000000
+## Completed
+- PBKDF2 self-test implemented and verified in sha256.rs and main.rs (task 465b9035 green)
 
-## What Was Achieved
-- PBKDF2 implementation added to kernel/src/sha256.rs
-- PBKDF2 self-test added (kernel/src/sha256.rs) and verified against RFC 7914 vectors
-- Boot log updated to print "security: pbkdf2 verified against RFC 7914" (kernel/src/main.rs)
-- CI run on branch agent/465b9035 passed all steps (build, clippy, boot, screen, input, net)
+## In flight
+- (none)
 
-## What Remains Unfinished
-- S2: Password handling (Credential struct, salted PBKDF2 hash in desktop.rs)
-- S3: Login throttling
-- S4: Physical memory map non-executable
-
-## Blocked Work
-- All kernel/ tasks are blocked due to the pivot to Linux distribution.
-- No further kernel work will be done.
-
-## Next Steps
-- Await new missions for the Linux edition under linux/
-- No kernel tasks to route or execute.
+## Blocked
+- (none)
 
 ## Budget
-- Tokens consumed in this mission: 3011268
-- Tokens remaining: 16988732
+- Tokens used this mission: 10796
+- Tokens remaining: 19989204
+
+## Last updated
+2026-09-17 21:02 UTC
