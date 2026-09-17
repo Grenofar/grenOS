@@ -46,14 +46,31 @@ test("secret values never survive into the output", () => {
   assert.equal(redact("key sk-abcdef123456 leaked twice sk-abcdef123456", ["sk-abcdef123456", ""]), "key [secret] leaked twice [secret]");
 });
 
-test("clippy's short output becomes repository paths, errors only", () => {
+test("each error keeps rustc's explanation, with repository paths and no home directory", () => {
+  const home = String.raw`C:\Users\someone`;
   const output = [
     "    Checking kernel v0.8.0",
-    String.raw`src\update.rs:16:11: error: constant ${"`DOWNLOAD`"} is never used`,
-    String.raw`src\chacha.rs:162:22: error: the loop variable ${"`index`"} is only used to index ${"`h`"}`,
+    "error[E0631]: type mismatch in closure arguments",
+    String.raw`   --> src\ahci.rs:211:22`,
+    "    |",
+    "211 |     let _ = v.iter().map(|x: &u32| x + 1).count();",
+    "    |                      ^^^ --------- found signature defined here",
+    "    = note: expected closure signature `fn(&u8) -> _`",
+    "               found closure signature `fn(&u32) -> _`",
+    "note: required by a bound in `core::iter::Iterator::map`",
+    String.raw`   --> C:\Users\someone\.rustup\toolchains\nightly\lib/rustlib/src/rust\library/core/src/iter/traits/iterator.rs:748:12`,
+    "",
+    "error: unused import: `alloc::format`",
+    String.raw` --> src\ahci.rs:8:5`,
+    "",
+    "Some errors have detailed explanations: E0599, E0631.",
     "error: could not compile `kernel` (bin \"kernel\") due to 2 previous errors",
   ].join("\n");
-  const lines = digest(output);
-  assert.equal(lines.length, 2);
-  assert.match(lines[0]!, /kernel\/src\/update\.rs:16:11: error: constant `DOWNLOAD`/);
+  const errors = digest(output, home);
+  assert.equal(errors.length, 2);
+  assert.match(errors[0]!, /--> kernel\/src\/ahci\.rs:211:22/);
+  assert.match(errors[0]!, /expected closure signature `fn\(&u8\) -> _`/);
+  assert.match(errors[0]!, /found closure signature `fn\(&u32\) -> _`/);
+  assert.ok(!errors[0]!.includes("someone"), "the home directory never leaves this machine");
+  assert.match(errors[1]!, /unused import: `alloc::format`/);
 });

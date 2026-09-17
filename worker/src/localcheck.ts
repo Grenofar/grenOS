@@ -86,17 +86,50 @@ export function redact(text: string, secrets: string[]): string {
 }
 
 /**
- * The lines of clippy's short output worth sending to a model: each error with
- * its place, paths as the repository names them, at most 25. Pure.
+ * The errors of clippy's full output, each with rustc's own explanation —
+ * where, the code, the expected and found types, the notes and the help —
+ * at most 8 errors of 30 lines each, paths as the repository names them and
+ * this machine's home directory hidden. Pure.
+ *
+ * The short format gave one line per error. On 2026-09-17 DeepSeek V4 Flash
+ * got "type mismatch in function arguments: expected due to this" four rounds
+ * in a row, never told which types, and never fixed it.
  */
-export function digest(output: string): string[] {
-  const lines = output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /^(src|build\.rs)[\\/].*:\d+:\d+: (error|warning)/.test(line) || /^error(\[E\d+\])?: /.test(line))
-    .filter((line) => !/^error: could not compile/.test(line) && !/^error: aborting due to/.test(line))
-    .map((line) => `local build (cargo clippy --release -- -D warnings, CI's toolchain): kernel/${line.replace(/\\/g, "/")}`);
-  return [...new Set(lines)].slice(0, 25);
+export function digest(output: string, home = ""): string[] {
+  const lines = output.split(/\r?\n/);
+  const blocks: string[][] = [];
+  let current: string[] | null = null;
+  for (const line of lines) {
+    if (/^(error|warning)(\[[A-Za-z0-9_:]+\])?: /.test(line)) {
+      const noise =
+        /^error: could not compile/.test(line) ||
+        /^error: aborting due to/.test(line) ||
+        /^warning: .*generated \d+ warnings?/.test(line) ||
+        /^warning: build failed/.test(line);
+      current = noise ? null : [line];
+      if (current) blocks.push(current);
+      continue;
+    }
+    if (!current) continue;
+    if (line.trim() === "" || /^(Some errors have|For more information about)/.test(line)) {
+      current = null;
+      continue;
+    }
+    current.push(line);
+  }
+  const clean = (text: string): string => {
+    let out = text.replace(/\b(src|build\.rs)\\/g, "$1/").replace(/(-->|:::)\s+src[\\/]/g, "$1 kernel/src/");
+    out = out.replace(/(^|[\s(])src\//g, "$1kernel/src/");
+    if (home) out = out.split(home).join("~");
+    return out.replace(/\\/g, "/");
+  };
+  return blocks
+    .slice(0, 8)
+    .map((block) => {
+      const shown = block.slice(0, 30);
+      const cut = block.length > shown.length ? `\n    ... ${block.length - shown.length} more lines` : "";
+      return `local build (cargo clippy --release -- -D warnings, CI's toolchain):\n${clean(shown.join("\n"))}${cut}`;
+    });
 }
 
 // One cargo at a time: the target directory is shared, which is what makes
@@ -145,7 +178,7 @@ async function check(gh: GitHub, readRef: string, changes: Change[]): Promise<Bu
     const result = await cargo(join(work, "kernel"));
     if (!result) return null;
     const output = redact(result.output, secrets());
-    const errors = result.code === 0 ? [] : digest(output);
+    const errors = result.code === 0 ? [] : digest(output, process.env.USERPROFILE ?? process.env.HOME ?? "");
     log.info(`  build local · ${result.code === 0 ? "vert" : `${errors.length} erreur(s)`} en ${Math.round((Date.now() - started) / 1000)} s`);
     if (result.code !== 0 && errors.length === 0) {
       errors.push(`local build failed: ${output.trim().split(/\r?\n/).slice(-6).join(" | ").slice(0, 600)}`);
@@ -205,7 +238,7 @@ function cargo(dir: string): Promise<{ code: number; output: string } | null> {
   return new Promise((resolve) => {
     let output = "";
     let settled = false;
-    const child = spawn("cargo", ["clippy", "--release", "--message-format", "short", "--", "-D", "warnings"], {
+    const child = spawn("cargo", ["clippy", "--release", "--", "-D", "warnings"], {
       cwd: dir,
       env: cleanEnvironment(),
       windowsHide: true,
