@@ -2,6 +2,8 @@
 //! `grenos:` for the pages below, `fichier:` for the file system, and `http:`
 //! and `https:`, which go out through the network card (`http.rs`).
 
+use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 pub struct Page {
@@ -154,4 +156,51 @@ pub fn parse(body: &str) -> Vec<Block<'_>> {
             Block::Text(line)
         })
         .collect()
+}
+
+/// Turns what the human typed into a URL to open.
+///
+/// - `http://`, `https://`, `grenos:` and `fichier:` are opened as they are.
+/// - Text with no space that contains a dot is opened as `https://` + text.
+/// - Anything else is a search on DuckDuckGo's HTML page, which answers text
+///   browsers, with the query percent-encoded (space as `+`, every byte
+///   outside `A-Za-z0-9-._~` as `%XX` of its UTF-8 bytes).
+#[allow(dead_code)]
+pub fn parse_address(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("http://")
+        || trimmed.starts_with("https://")
+        || trimmed.starts_with("grenos:")
+        || trimmed.starts_with("fichier:")
+    {
+        return Some(trimmed.to_string());
+    }
+    if !trimmed.contains(' ') && trimmed.contains('.') {
+        return Some(format!("https://{trimmed}"));
+    }
+    let mut encoded = String::new();
+    for byte in trimmed.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(byte as char);
+        } else if byte == b' ' {
+            encoded.push('+');
+        } else {
+            encoded.push('%');
+            encoded.push(hex(byte >> 4));
+            encoded.push(hex(byte & 0x0F));
+        }
+    }
+    Some(format!("https://html.duckduckgo.com/html/?q={encoded}"))
+}
+
+#[allow(dead_code)]
+fn hex(nibble: u8) -> char {
+    if nibble < 10 {
+        (b'0' + nibble) as char
+    } else {
+        (b'A' + (nibble - 10)) as char
+    }
 }
