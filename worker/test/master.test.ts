@@ -346,3 +346,10 @@ test("an agent works on several tasks of a mission at once, never two on the sam
   const three = [1, 2, 3].map((i) => ({ agent: "coder", paths: [`kernel/src/f${i}.rs`] }));
   assert.match(parallelRefusal(three, "coder", ["kernel/src/other.rs"])!, /3 tâches/);
 });
+
+test("a task that repeats a finished one is refused", async () => {
+  const { alreadyDone } = await import("../src/master.ts");
+  const done = ["Fix the three bugs in kernel/scripts/make-disk.sh: (1) copy the kernel"];
+  assert.equal(alreadyDone(done, "  fix the three bugs in kernel/scripts/make-disk.sh:  (1) copy the kernel "), true);
+  assert.equal(alreadyDone(done, "Create kernel/src/ahci.rs"), false);
+});

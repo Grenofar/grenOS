@@ -762,7 +762,9 @@ async function buildPrompt(
 
   // The repository as it stands on the agent's branch, plus the design
   // documents (context.ts). Before this, agents never saw a single file.
-  parts.push(await repoContext(gh, agent, allowedPaths, readRef));
+  parts.push(
+    await repoContext(gh, agent, allowedPaths, readRef, [task.goal, ...task.acceptance_criteria].join("\n")),
+  );
 
   // Evidence the task is about: a CI run to judge, another task to review.
   parts.push(...(await renderEvidence(task.context_refs)));

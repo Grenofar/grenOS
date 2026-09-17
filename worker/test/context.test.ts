@@ -97,3 +97,11 @@ test("a file too large to show whole is outlined by its items, bodies left out",
     ].join("\n"),
   );
 });
+
+test("the documents a task names come first, then the Master's notebook", async () => {
+  const { rankDocs } = await import("../src/context.ts");
+  const docs = [f("docs/MASTER.md"), f("docs/PLAN.md"), f("docs/specs/browser-search.md"), f("docs/specs/disk-and-updates.md")];
+  const order = rankDocs(docs, "Create kernel/src/ahci.rs as section 3 of docs/specs/disk-and-updates.md says").map((d) => d.path);
+  assert.deepEqual(order, ["docs/specs/disk-and-updates.md", "docs/MASTER.md", "docs/PLAN.md", "docs/specs/browser-search.md"]);
+  assert.deepEqual(rankDocs(docs, "").map((d) => d.path), ["docs/MASTER.md", "docs/PLAN.md", "docs/specs/browser-search.md", "docs/specs/disk-and-updates.md"]);
+});

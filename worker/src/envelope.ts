@@ -86,7 +86,11 @@ export class EnvelopeError extends Error {
 const STATUSES = new Set<AgentStatus>(["done", "needs_input", "failed", "delegated"]);
 
 export function parseEnvelope(raw: string): AgentEnvelope {
-  const json = extractJson(raw);
+  // File contents may come outside the JSON, in raw blocks (splitBlocks):
+  // they are taken out first, so the braces of the Rust inside them are
+  // never mistaken for the envelope.
+  const { rest, blocks } = splitBlocks(raw);
+  const json = extractJson(rest);
 
   let value: unknown;
   try {
@@ -116,7 +120,7 @@ export function parseEnvelope(raw: string): AgentEnvelope {
   const rawActions = value["actions"] ?? [];
   if (!Array.isArray(rawActions)) throw new EnvelopeError("actions doit être un tableau", raw);
 
-  const actions = rawActions.map((a, i) => validateAction(a, i, raw));
+  const actions = rawActions.map((a, i) => validateAction(a, i, raw, blocks));
 
   return {
     ...(typeof value["task_id"] === "string" ? { task_id: value["task_id"] } : {}),
@@ -132,7 +136,51 @@ export function parseEnvelope(raw: string): AgentEnvelope {
   };
 }
 
-function validateAction(value: unknown, index: number, raw: string): AgentAction {
+/**
+ * Raw blocks taken out of an answer, and what is left of it. Pure.
+ *
+ * A model quoting a whole Rust file inside a JSON string has to escape every
+ * quote, backslash and newline of it, and one slip loses the answer: on
+ * 2026-09-16 Nemotron's answers failed on "Bad Unicode escape" and "Expected
+ * double-quoted property name" three times in one task. So an action may name
+ * a block instead (`content_block`, `old_block`, `new_block`), and the block
+ * follows the JSON, unescaped:
+ *
+ *     -----BEGIN BLOCK main-----
+ *     fn main() {}
+ *     -----END BLOCK main-----
+ *
+ * The block is the lines between the two markers, each ending with a newline.
+ */
+export function splitBlocks(raw: string): { rest: string; blocks: Map<string, string> } {
+  const blocks = new Map<string, string>();
+  const lines = raw.split(/\r?\n/);
+  const kept: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const begin = /^-----BEGIN BLOCK ([A-Za-z0-9_.-]+)-----\s*$/.exec(lines[i]!);
+    if (!begin) {
+      kept.push(lines[i]!);
+      continue;
+    }
+    const id = begin[1]!;
+    const end = lines.findIndex((line, j) => j > i && line.trim() === `-----END BLOCK ${id}-----`);
+    if (end === -1) {
+      kept.push(lines[i]!);
+      continue;
+    }
+    const inner = lines.slice(i + 1, end);
+    blocks.set(id, inner.map((line) => `${line}\n`).join(""));
+    i = end;
+  }
+  return { rest: kept.join("\n"), blocks };
+}
+
+function validateAction(
+  value: unknown,
+  index: number,
+  raw: string,
+  blocks: Map<string, string> = new Map(),
+): AgentAction {
   if (!isRecord(value)) throw new EnvelopeError(`actions[${index}] n'est pas un objet`, raw);
 
   const type = value["type"];
@@ -144,16 +192,33 @@ function validateAction(value: unknown, index: number, raw: string): AgentAction
     return v;
   };
 
+  // A string field, or the raw block its `<name>_block` sibling names.
+  const textOrBlock = (key: string, blockKey: string): string => {
+    const id = value[blockKey];
+    if (typeof id === "string") {
+      const block = blocks.get(id.trim());
+      if (block === undefined) {
+        throw new EnvelopeError(
+          `${at} : ${blockKey} "${id}" introuvable. Écris le bloc après le JSON, entre ` +
+            `-----BEGIN BLOCK ${id.trim()}----- et -----END BLOCK ${id.trim()}----- sur leurs propres lignes`,
+          raw,
+        );
+      }
+      return block;
+    }
+    return text(key);
+  };
+
   switch (type) {
     case "write_file":
-      return { type, path: text("path"), content: text("content") };
+      return { type, path: text("path"), content: textOrBlock("content", "content_block") };
 
     case "patch_file": {
-      const old_str = text("old_str");
+      const old_str = textOrBlock("old_str", "old_block");
       if (!old_str) {
         throw new EnvelopeError(`${at} : old_str vide remplacerait tout le fichier`, raw);
       }
-      return { type, path: text("path"), old_str, new_str: text("new_str") };
+      return { type, path: text("path"), old_str, new_str: textOrBlock("new_str", "new_block") };
     }
 
     case "delete_file":

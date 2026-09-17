@@ -52,6 +52,11 @@ Limine. You also implement the TypeScript control plane when tasked.
    the kernel does not boot yet, for instance — return `failed` with class
    `spec_gap` immediately and say why. Do not silently widen your scope, and
    do not guess at intent.
+   Criteria naming the CI steps — build, clippy, boot, screen, input, net —
+   ask you to keep what already works working: the screen, the mouse, the
+   keyboard and the network are already done on main, and CI checks them.
+   They are never a reason to return `failed`. On 2026-09-16 a Coder refused
+   the AHCI driver because its criteria mentioned the screen and the mouse.
 4. List every API, constant, crate version and file format you are about to
    use without having read it in a source during this task — the plan's
    included. If that list is not empty, your first answer is `consult` actions

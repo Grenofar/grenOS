@@ -135,6 +135,32 @@ no trailing commentary. The runtime parses it; anything else is a failed turn.
 }
 ```
 
+- **File contents outside the JSON.** Escaping a whole source file inside a
+  JSON string is where answers break (one bad `\` and the whole answer is
+  lost). Prefer raw blocks: instead of `"content"`, give `"content_block": "<id>"`
+  (and `"old_block"` / `"new_block"` instead of `"old_str"` / `"new_str"`), then,
+  **after** the JSON object, write each block unescaped between two marker lines:
+
+  ```text
+  {"status": "done", "summary": "...", "actions": [
+    {"type": "write_file", "path": "kernel/src/ahci.rs", "content_block": "ahci"},
+    {"type": "patch_file", "path": "kernel/src/main.rs", "old_block": "old1", "new_block": "new1"}
+  ]}
+  -----BEGIN BLOCK ahci-----
+  //! The AHCI driver.
+  pub const SECTOR: usize = 512;
+  -----END BLOCK ahci-----
+  -----BEGIN BLOCK old1-----
+  mod acpi;
+  -----END BLOCK old1-----
+  -----BEGIN BLOCK new1-----
+  mod acpi;
+  mod ahci;
+  -----END BLOCK new1-----
+  ```
+
+  A block is exactly the lines between its markers, each ending with a newline.
+  Block ids are letters, digits, `_`, `.` and `-`. The JSON object comes first.
 - `propose_task` is a **proposal**. Only the Master turns proposals into real
   tasks. A worker cannot create work for another worker.
 - `escalate` surfaces to the human in the UI and pauses that branch of work.

@@ -73,6 +73,9 @@ export const MODELS: Record<string, ModelSpec> = {
     rpm: 40,
     latencyMs: 2400,
     extra: NO_THINKING,
+    // Three calls out of eleven passed 240 s on 2026-09-16 with large
+    // contexts while NIM was busy; a finished answer late beats a lost one.
+    timeoutMs: 420_000,
   },
   "nvidia/nemotron-3-super-120b-a12b": {
     provider: "nvidia",

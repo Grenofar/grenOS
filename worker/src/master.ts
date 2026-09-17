@@ -259,6 +259,12 @@ export async function runMasterCycle(
     agent: t.assigned_to as string,
     paths: (t.allowed_paths as string[] | null) ?? [],
   }));
+  const { data: doneTasks } = await db
+    .from("tasks")
+    .select("goal")
+    .eq("mission_id", mission.id)
+    .eq("status", "done");
+  const doneGoals = (doneTasks ?? []).map((t) => t.goal as string);
 
   // Documents the Master writes in this decision, committed together at the
   // end: one commit per decision, not one per file.
@@ -268,9 +274,11 @@ export async function runMasterCycle(
     switch (action.type) {
       case "propose_task": {
         const assignee = agents.get(action.assigned_to);
-        const refusal = assignee
-          ? parallelRefusal(busy, assignee.id, action.allowed_paths ?? assignee.allowedPaths)
-          : null;
+        const refusal = alreadyDone(doneGoals, action.goal)
+          ? "Tâche refusée : une tâche de cette mission avec exactement ce but est déjà terminée (vérifiée par la CI). Passe à la suivante."
+          : assignee
+            ? parallelRefusal(busy, assignee.id, action.allowed_paths ?? assignee.allowedPaths)
+            : null;
         if (refusal) {
           await emit({
             missionId: mission.id,
@@ -611,6 +619,18 @@ export function supersededByNewWork(state: State): string[] {
  * it could never close on its own. A failed or blocked task still holds the
  * mission open — that one needs a decision, not a shrug.
  */
+/**
+ * Whether `goal` repeats a task of the mission that is already done. Pure.
+ * 2026-09-16: a fix to make-disk.sh was merged at 20:31:59, the Master proposed
+ * the very same goal two seconds earlier in the same cycle, and the copy spent
+ * three CI runs and blocked the mission.
+ */
+export function alreadyDone(doneGoals: string[], goal: string): boolean {
+  const norm = (text: string) => text.trim().replace(/\s+/g, " ").toLowerCase();
+  const wanted = norm(goal);
+  return doneGoals.some((done) => norm(done) === wanted);
+}
+
 /** A task already open on the mission: who does it, and which files it may write. */
 export interface OpenWork {
   agent: string;

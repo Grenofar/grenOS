@@ -60,14 +60,20 @@ export function selectContext(files: RepoFile[], include: string[], maxBytesPerF
 // The kernel outgrew the first budget (60 000 characters, files of 30 KiB at
 // most): by 2026-09-16 it was 377 KiB, desktop.rs alone 150, and the files a
 // task most needed to patch were the ones never shown — patch_file has to
-// quote the file exactly. Now a task's writable files come whole, up to
-// 200 KiB each and 220 000 characters in all (about 65 000 tokens, inside
-// every model the cascades use); small read-only files follow whole; every
-// other Rust file is summed up by its signatures, so the APIs are still known.
-const BUDGET_CHARS = 220_000;
+// quote the file exactly. So a task's writable files always come whole, up to
+// 200 KiB each, whatever the budget.
+//
+// The rest is kept small, because size is latency: with about 50 000 tokens
+// per call the same night, DeepSeek V4 Flash timed out at 240 s three times
+// out of eleven. The design documents the task names come first, then the
+// Master's notebook, then the others, within DOCS_BUDGET_CHARS; small
+// read-only files whole within BUDGET_CHARS; every other Rust file is summed
+// up by its signatures, within OUTLINE_BUDGET_CHARS.
+const BUDGET_CHARS = 50_000;
 const MAX_FILE_BYTES = 200_000;
-const READ_ONLY_WHOLE_BYTES = 30_000;
-const DOCS_BUDGET_CHARS = 70_000;
+const READ_ONLY_WHOLE_BYTES = 12_000;
+const DOCS_BUDGET_CHARS = 45_000;
+const OUTLINE_BUDGET_CHARS = 30_000;
 // Four backticks: design documents contain their own triple-backtick blocks,
 // and a three-backtick fence would end at the first one.
 const FENCE = "````";
@@ -77,6 +83,8 @@ export async function repoContext(
   agent: AgentDefinition,
   allowedPaths: string[],
   readRef: string,
+  /** The task's goal and criteria: documents they name come first. */
+  mentioned = "",
 ): Promise<string> {
   const base = await gh.defaultBranch();
   const [branchTree, baseTree] = await Promise.all([
@@ -86,8 +94,9 @@ export async function repoContext(
 
   const code = selectContext(branchTree, [...allowedPaths, "kernel/**"], MAX_FILE_BYTES);
   const codePaths = new Set(code.map((f) => f.path));
-  const docs = selectContext(baseTree ?? branchTree, ["docs/**"], MAX_FILE_BYTES).filter(
-    (f) => !codePaths.has(f.path),
+  const docs = rankDocs(
+    selectContext(baseTree ?? branchTree, ["docs/**"], MAX_FILE_BYTES).filter((f) => !codePaths.has(f.path)),
+    mentioned,
   );
 
   const writable = (path: string) =>
@@ -134,9 +143,10 @@ export async function repoContext(
       (f) => writable(f.path),
       (f) => !writable(f.path) && f.size <= READ_ONLY_WHOLE_BYTES,
     ];
-    for (const pass of passes) {
+    for (const [index, pass] of passes.entries()) {
       for (const f of code.filter(pass)) {
-        if (used + f.size > BUDGET_CHARS + DOCS_BUDGET_CHARS) continue;
+        // Writable files are never left out: a patch needs the file.
+        if (index > 0 && used + f.size > BUDGET_CHARS + DOCS_BUDGET_CHARS) continue;
         const content = await gh.readFile(f.path, readRef);
         if (content === null) continue;
         used += content.length;
@@ -147,12 +157,14 @@ export async function repoContext(
       }
     }
     const outlined: string[] = [];
+    let outlinedChars = 0;
     for (const f of code) {
       if (whole.has(f.path) || !f.path.endsWith(".rs")) continue;
       const content = await gh.readFile(f.path, readRef);
       if (content === null) continue;
       const summary = outline(content);
-      if (used + summary.length > BUDGET_CHARS + DOCS_BUDGET_CHARS + 50_000) continue;
+      if (outlinedChars + summary.length > OUTLINE_BUDGET_CHARS) continue;
+      outlinedChars += summary.length;
       used += summary.length;
       outlined.push(`\n## ${f.path} — outline only (${f.size} B)\n${FENCE}\n${summary}\n${FENCE}`);
     }
@@ -187,4 +199,21 @@ export function outline(source: string): string {
     .filter((line) => keep.test(line))
     .map((line) => line.replace(/\s*\{\s*$/, "").replace(/\s+$/, ""))
     .join("\n");
+}
+
+/**
+ * Design documents in the order they are worth reading for a task. Pure.
+ * The ones its goal or criteria name come first, then the Master's notebook
+ * (it binds every agent), then the rest in their usual order.
+ */
+export function rankDocs(docs: RepoFile[], mentioned: string): RepoFile[] {
+  const score = (f: RepoFile): number => {
+    if (mentioned.includes(f.path) || mentioned.includes(f.path.split("/").pop() ?? "\u0000")) return 0;
+    if (f.path === "docs/MASTER.md") return 1;
+    return 2;
+  };
+  return docs
+    .map((f, index) => ({ f, index }))
+    .sort((a, b) => score(a.f) - score(b.f) || a.index - b.index)
+    .map(({ f }) => f);
 }
