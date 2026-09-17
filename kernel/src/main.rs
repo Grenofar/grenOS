@@ -5,6 +5,7 @@
 extern crate alloc;
 
 mod acpi;
+mod ahci;
 mod anim;
 mod chacha;
 mod desktop;
@@ -257,6 +258,37 @@ extern "C" fn kmain() -> ! {
     // SAFETY: every vector the PIC can now raise has its handler in the IDT.
     unsafe { core::arch::asm!("sti", options(nomem, nostack)) };
     log.say(if mouse_ok { "input: keyboard and mouse".to_string() } else { "input: keyboard, no mouse".to_string() });
+
+    // The SATA disks, through the AHCI controller (docs/specs/disk-and-updates.md
+    // §3). The first sector of each is read back as a proof: a disk with a
+    // partition table ends it with 55 AA.
+    // SAFETY: called once, with interrupts on, which the driver's timeouts count on.
+    let mut disks = match unsafe { ahci::find(&mut frames, &devices) } {
+        Ok(found) => {
+            for (port, why) in &found.failed {
+                log.say(format!("disk: AHCI port {port} did not come up ({why})"));
+            }
+            found.disks
+        }
+        Err(why) => {
+            log.say(format!("disk: {why}"));
+            Vec::new()
+        }
+    };
+    for disk in disks.iter_mut() {
+        let mut first = [0u8; ahci::SECTOR];
+        let proof = match disk.read(0, &mut first) {
+            Ok(()) => format!("sector 0 ends with {:02x}{:02x}", first[510], first[511]),
+            Err(why) => format!("sector 0 unreadable ({why})"),
+        };
+        log.say(format!(
+            "disk: AHCI port {}, {}, {} MiB, {}",
+            disk.port,
+            disk.model,
+            disk.sectors * ahci::SECTOR as u64 / MIB,
+            proof
+        ));
+    }
 
     // The address comes from the network itself: ask for one as soon as the
     // link is up, so the desktop opens with the answer already in hand.
