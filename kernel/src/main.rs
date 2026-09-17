@@ -228,6 +228,11 @@ extern "C" fn kmain() -> ! {
     } else {
         "crypto: ed25519 FAILED its RFC 8032 vectors".to_string()
     });
+    log.say(if sha256::pbkdf2_self_test() {
+        "security: pbkdf2 verified against RFC 7914".to_string()
+    } else {
+        "security: pbkdf2 FAILED its RFC 7914 vectors".to_string()
+    });
 
     // The network card, if this machine has one this kernel knows: QEMU gives
     // an 8254x by default, and VirtualBox calls the same chip the 82540EM.
