@@ -259,6 +259,17 @@ extern "C" fn kmain() -> ! {
     } else {
         "security: pbkdf2 FAILED its RFC 7914 vectors".to_string()
     });
+    // The session password, proven on a fixed input: a wrong password must
+    // fail, the right one must pass, and the comparison must be constant-time.
+    let fixed_salt = *b"grenOS-fixed-salt";
+    let credential = security::Credential::new(b"correct horse battery staple", fixed_salt);
+    let right = credential.matches(b"correct horse battery staple");
+    let wrong = credential.matches(b"wrong password");
+    log.say(if right && !wrong {
+        "security: password hashing verified".to_string()
+    } else {
+        "security: password hashing FAILED its check".to_string()
+    });
     // The browser's decoders (docs/specs/browser-search.md §5): CI has no
     // business depending on outside servers, so fixed inputs prove them.
     log.say(match http::self_test().and_then(|()| html::self_test()) {

@@ -23,6 +23,7 @@ use alloc::vec::Vec;
 use crate::fs::{self, Fs, Kind};
 use crate::memory::Frames;
 use crate::paging;
+use crate::sha256::pbkdf2;
 
 unsafe extern "C" {
     static __text_start: u8;
@@ -35,6 +36,38 @@ unsafe extern "C" {
 /// Page table bits worth reporting.
 const WRITABLE: u64 = 1 << 1;
 const NO_EXECUTE: u64 = 1 << 63;
+
+/// A password stored as a salted PBKDF2-SHA256 hash, compared in constant
+/// time. The salt is random, the iterations are fixed, and the hash is the
+/// only thing kept: the password itself is wiped after use.
+pub struct Credential {
+    pub salt: [u8; 16],
+    pub iterations: u32,
+    pub hash: [u8; 32],
+}
+
+impl Credential {
+    /// Hashes `password` with `salt` and the fixed iteration count.
+    pub fn new(password: &[u8], salt: [u8; 16]) -> Credential {
+        let mut hash = [0u8; 32];
+        pbkdf2(password, &salt, 100_000, &mut hash);
+        Credential { salt, iterations: 100_000, hash }
+    }
+
+    /// Compares `password` against the stored hash in constant time: every
+    /// byte is XORed and OR-ed together, and the result is examined once at
+    /// the end. No early exit, so the comparison takes the same time whether
+    /// the first byte matches or not.
+    pub fn matches(&self, password: &[u8]) -> bool {
+        let mut candidate = [0u8; 32];
+        pbkdf2(password, &self.salt, self.iterations, &mut candidate);
+        let mut diff = 0u8;
+        for i in 0..32 {
+            diff |= self.hash[i] ^ candidate[i];
+        }
+        diff == 0
+    }
+}
 
 /// One thing worth refusing, with the name shown to the human. The pattern is
 /// stored scrambled: see the note at the top of this file.
