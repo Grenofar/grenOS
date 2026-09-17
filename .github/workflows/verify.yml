@@ -172,6 +172,13 @@ jobs:
             echo "::error::Le kernel a panique au boot"
             exit 1
           fi
+          # Un autotest qui echoue au demarrage (crypto, pbkdf2...) fait echouer
+          # le boot. Le 2026-09-17, « security: pbkdf2 FAILED its RFC 7914
+          # vectors » etait imprime par une tache verte, et elle a ete fusionnee.
+          if grep -E 'FAILED its' "$RUNNER_TEMP/qemu.log"; then
+            echo "::error::Un autotest du noyau a echoue au demarrage (ligne ci-dessus)"
+            exit 1
+          fi
           if ! grep -q 'grenOS' "$RUNNER_TEMP/qemu.log"; then
             echo "::error::Marqueur grenOS absent de la sortie serie"
             exit 1
