@@ -519,13 +519,13 @@ extern "C" fn kmain() -> ! {
                             title: core::mem::take(&mut fetch.title),
                             lines: core::mem::take(&mut fetch.text),
                             status: fetch.status.clone(),
-                        });
+                        }.into())
                         // The page is the desktop's now; the raw body is not needed.
                         fetch.body = Vec::new();
                         delivered = true;
                     }
                     http::Phase::Failed => {
-                        desk.page_result(desktop::PageNews::Failed(fetch.status.clone()));
+                        desk.page_result(desktop::PageNews::Failed(fetch.status.clone()).into())
                         delivered = true;
                     }
                     _ if fetch.status != said => {
