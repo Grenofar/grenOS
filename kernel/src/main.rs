@@ -514,23 +514,21 @@ extern "C" fn kmain() -> ! {
             if !delivered {
                 match fetch.phase {
                     http::Phase::Done => {
-                        desk.page_result(desktop::PageNews::Loaded {
-                            url: fetch.url.clone(),
-                            title: core::mem::take(&mut fetch.title),
-                            lines: core::mem::take(&mut fetch.text),
-                            status: fetch.status.clone(),
-                        }.into())
+                        desk.page_result(
+                            format!("{} {}", fetch.status, fetch.url),
+                            Some(core::mem::take(&mut fetch.text)),
+                        );
                         // The page is the desktop's now; the raw body is not needed.
                         fetch.body = Vec::new();
                         delivered = true;
                     }
                     http::Phase::Failed => {
-                        desk.page_result(desktop::PageNews::Failed(fetch.status.clone()).into())
+                        desk.page_result(fetch.status.clone(), None);
                         delivered = true;
                     }
                     _ if fetch.status != said => {
                         said = fetch.status.clone();
-                        desk.page_result(desktop::PageNews::Progress(said.clone()));
+                        desk.page_result(said.clone(), None);
                     }
                     _ => {}
                 }
@@ -614,7 +612,7 @@ extern "C" fn kmain() -> ! {
                 }
             }
         } else if let Some(url) = desk.wants_page() {
-            desk.page_result(desktop::PageNews::Failed(format!("{url} : aucune carte réseau sur cette machine")));
+            desk.page_result(format!("{url} : aucune carte réseau sur cette machine"), None);
         }
         if card.is_none() && desk.wants_update() {
             desk.update_result(desktop::Found::Failed("aucune carte réseau sur cette machine".to_string()));
