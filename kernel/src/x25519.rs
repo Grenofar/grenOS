@@ -4,22 +4,23 @@
 //!
 //! The arithmetic follows TweetNaCl's shape — sixteen limbs of sixteen bits
 //! in signed 64-bit words — because it is short enough to read in one sitting
-//! and its behaviour does not depend on the values it handles.
+//! and its behaviour does not depend on the values it handles. Ed25519
+//! (ed25519.rs) uses the same field, so its arithmetic is shared.
 
-type Field = [i64; 16];
+pub(crate) type Field = [i64; 16];
 
-const ZERO: Field = [0; 16];
-const ONE: Field = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub(crate) const ZERO: Field = [0; 16];
+pub(crate) const ONE: Field = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 /// 121665, the constant of the curve's ladder.
 const A24: Field = [0xDB41, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-fn add(out: &mut Field, a: &Field, b: &Field) {
+pub(crate) fn add(out: &mut Field, a: &Field, b: &Field) {
     for i in 0..16 {
         out[i] = a[i] + b[i];
     }
 }
 
-fn subtract(out: &mut Field, a: &Field, b: &Field) {
+pub(crate) fn subtract(out: &mut Field, a: &Field, b: &Field) {
     for i in 0..16 {
         out[i] = a[i] - b[i];
     }
@@ -36,7 +37,7 @@ fn carry(field: &mut Field) {
     }
 }
 
-fn multiply(out: &mut Field, a: &Field, b: &Field) {
+pub(crate) fn multiply(out: &mut Field, a: &Field, b: &Field) {
     let mut product = [0i64; 31];
     for i in 0..16 {
         for j in 0..16 {
@@ -51,13 +52,13 @@ fn multiply(out: &mut Field, a: &Field, b: &Field) {
     carry(out);
 }
 
-fn square(out: &mut Field, a: &Field) {
+pub(crate) fn square(out: &mut Field, a: &Field) {
     let copy = *a;
     multiply(out, &copy, &copy);
 }
 
 /// Swaps `p` and `q` when `swap` is one, without a branch on the secret.
-fn conditional_swap(p: &mut Field, q: &mut Field, swap: i64) {
+pub(crate) fn conditional_swap(p: &mut Field, q: &mut Field, swap: i64) {
     let mask = !(swap - 1);
     for i in 0..16 {
         let difference = mask & (p[i] ^ q[i]);
@@ -67,7 +68,7 @@ fn conditional_swap(p: &mut Field, q: &mut Field, swap: i64) {
 }
 
 /// The inverse, by raising to p - 2.
-fn invert(out: &mut Field, a: &Field) {
+pub(crate) fn invert(out: &mut Field, a: &Field) {
     let mut c = *a;
     for i in (0..=253).rev() {
         let copy = c;
@@ -80,14 +81,14 @@ fn invert(out: &mut Field, a: &Field) {
     *out = c;
 }
 
-fn unpack(out: &mut Field, bytes: &[u8; 32]) {
+pub(crate) fn unpack(out: &mut Field, bytes: &[u8; 32]) {
     for i in 0..16 {
         out[i] = i64::from(bytes[2 * i]) + (i64::from(bytes[2 * i + 1]) << 8);
     }
     out[15] &= 0x7fff;
 }
 
-fn pack(out: &mut [u8; 32], field: &Field) {
+pub(crate) fn pack(out: &mut [u8; 32], field: &Field) {
     let mut value = *field;
     carry(&mut value);
     carry(&mut value);

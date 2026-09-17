@@ -10,6 +10,7 @@ mod anim;
 mod chacha;
 mod desktop;
 mod dhcp;
+mod ed25519;
 mod e1000;
 mod events;
 mod fb;
@@ -36,6 +37,7 @@ mod rtc;
 mod security;
 mod serial;
 mod sha256;
+mod sha512;
 mod shell;
 mod sysinfo;
 mod time;
@@ -210,6 +212,14 @@ extern "C" fn kmain() -> ! {
 
     let devices = pci::scan();
     log.say(format!("pci: {} devices", devices.len()));
+
+    // The signature check every installed update will go through
+    // (docs/specs/disk-and-updates.md §5), proven here on RFC 8032's vectors.
+    log.say(if ed25519::self_test() {
+        "crypto: ed25519 verified against RFC 8032".to_string()
+    } else {
+        "crypto: ed25519 FAILED its RFC 8032 vectors".to_string()
+    });
 
     // The network card, if this machine has one this kernel knows: QEMU gives
     // an 8254x by default, and VirtualBox calls the same chip the 82540EM.
