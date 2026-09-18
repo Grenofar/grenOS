@@ -113,6 +113,15 @@ os-prober
 fonts-inter
 fonts-dejavu-core
 
+## Ce dont live-config et live-boot ont besoin pour faire leur travail, et que
+## Debian ne fait que « recommander » : sans user-setup, aucun compte n'est
+## cree au demarrage, l'ecran de connexion reste vide et personne ne peut
+## entrer. C'est exactement ce qui est arrive a l'image du 18 septembre.
+user-setup
+live-tools
+uuid-runtime
+keyboard-configuration
+
 ## Polices, français, et les outils qu'un système doit avoir.
 fonts-noto-core
 fonts-noto-color-emoji

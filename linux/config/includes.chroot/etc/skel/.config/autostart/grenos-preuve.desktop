@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Preuve de session grenOS
+Comment=Ecrit une ligne sur le port serie quand le bureau s'ouvre, pour que la CI puisse le verifier
+Exec=sh -c "echo 'grenos: session de bureau ouverte' > /dev/ttyS0 2>/dev/null || true"
+Terminal=false
+NoDisplay=true
+X-KDE-autostart-phase=2
