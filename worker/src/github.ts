@@ -23,7 +23,11 @@ interface Change {
 /** One entry of a tree the Git Data API builds; a null sha deletes the path. */
 interface TreeEntry {
   path: string;
-  mode: "100644";
+  // Un fichier deja executable doit le rester : le 2026-09-18 un Codeur a
+  // reecrit un hook de live-build, le mode est retombe a 100644, et
+  // live-build ignore un hook non executable — tout le theme disparaissait
+  // sans qu'aucune etape ne rougisse.
+  mode: "100644" | "100755";
   type: "blob";
   sha: string | null;
 }
@@ -106,14 +110,26 @@ export class GitHub {
     return this.defaultBranch();
   }
 
-  /** Every file at `ref`, with its size. One request, no clone. */
-  async listTree(ref: string): Promise<Array<{ path: string; size: number }>> {
+  /** Every file at `ref`, with its size and its mode. One request, no clone. */
+  async listTree(ref: string): Promise<Array<{ path: string; size: number; mode: string }>> {
     const tree = await this.call<{
-      tree: Array<{ path: string; type: string; size?: number }>;
+      tree: Array<{ path: string; type: string; size?: number; mode?: string }>;
     }>(`/repos/${this.repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
     return tree.tree
       .filter((e) => e.type === "blob")
-      .map((e) => ({ path: e.path, size: e.size ?? 0 }));
+      .map((e) => ({ path: e.path, size: e.size ?? 0, mode: e.mode ?? "100644" }));
+  }
+
+  /** Which paths are executable at `ref`, so a commit keeps them that way. */
+  private async executableAt(ref: string): Promise<Set<string>> {
+    try {
+      const tree = await this.listTree(ref);
+      return new Set(tree.filter((e) => e.mode === "100755").map((e) => e.path));
+    } catch {
+      // Un arbre illisible ne doit pas empecher un commit : au pire les modes
+      // restent ceux par defaut, ce qui etait le comportement d'avant.
+      return new Set();
+    }
   }
 
   /** File content at a ref, or null when the file does not exist. */
@@ -179,12 +195,15 @@ export class GitHub {
     const head = await this.call<{ tree: { sha: string } }>(
       `/repos/${this.repo}/git/commits/${headSha}`,
     );
+    const executable = await this.executableAt(headSha);
+    const modeOf = (path: string): "100644" | "100755" =>
+      executable.has(path) ? "100755" : "100644";
 
     const written = await Promise.all(
       opts.changes.map(async (change): Promise<TreeEntry> => {
         if (change.content === null) {
           // A null sha in a tree entry is how the API expresses a deletion.
-          return { path: change.path, mode: "100644", type: "blob", sha: null };
+          return { path: change.path, mode: modeOf(change.path), type: "blob", sha: null };
         }
         const blob = await this.call<{ sha: string }>(`/repos/${this.repo}/git/blobs`, {
           method: "POST",
@@ -193,7 +212,7 @@ export class GitHub {
             encoding: "base64",
           }),
         });
-        return { path: change.path, mode: "100644", type: "blob", sha: blob.sha };
+        return { path: change.path, mode: modeOf(change.path), type: "blob", sha: blob.sha };
       }),
     );
     // The agent's own version of a file wins over the one it continues.
