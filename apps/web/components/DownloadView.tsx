@@ -1,20 +1,16 @@
 "use client";
 
-import { useLang, type Lang } from "@/lib/i18n";
+import { useLang } from "@/lib/i18n";
 
-/** A published image, as index.json in the Supabase "releases" bucket lists it. */
-export interface Build {
-  tag: string;
-  publishedAt: string;
-  size: number;
-  url: string;
-  vboxUrl?: string;
-  screenUrl?: string;
-  virtualboxUrl?: string;
-  virtualboxSize?: number;
-}
-
-/** Une image publiee en Release GitHub : l'edition Linux. */
+/**
+ * La page de téléchargement de grenOS, édition Linux.
+ *
+ * Une seule chose à télécharger, en deux formes : l'image ISO, et la machine
+ * VirtualBox déjà réglée. L'édition à noyau maison a été retirée de cette page
+ * le 2026-09-18 à la demande de Grenofar : elle reste dans le dépôt et dans
+ * l'historique des Releases, mais elle n'est plus proposée ici, où deux
+ * systèmes côte à côte ne faisaient que semer le doute.
+ */
 export interface LinuxRelease {
   tag: string;
   publishedAt: string;
@@ -25,133 +21,92 @@ export interface LinuxRelease {
   pageUrl: string;
 }
 
-const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 const go = (bytes: number) => (bytes / 1024 / 1024 / 1024).toFixed(2);
 
 /*
- * The page's copy lives here rather than in the shared dictionary: it is read
- * by people who are not operators, and it changes with what the OS can do.
- * Keep "now" honest — it is the first thing someone booting grenOS reads.
+ * Les textes vivent ici et non dans le dictionnaire partagé : ils sont lus par
+ * des gens qui ne sont pas opérateurs, et ils changent avec ce que le système
+ * sait faire. Rester honnête sur ce qu'il y a dedans : c'est la première chose
+ * que lit quelqu'un qui découvre grenOS.
  */
 const FR = {
   title: "Télécharger grenOS",
-  lead: "grenOS est un système d'exploitation x86_64 écrit en Rust par une équipe d'agents d'IA. Chaque image publiée ici a d'abord été construite, puis démarrée dans QEMU par la CI.",
-  pcTitle: "PC, clé USB ou QEMU",
-  pcText: "L'image ISO seule : à écrire sur une clé USB pour démarrer un vrai PC, ou à lancer dans QEMU.",
-  pcButton: "Télécharger l'ISO",
-  vboxText: "La machine VirtualBox déjà réglée, son disque dur et l'ISO, dans un seul zip : l'extraire, puis double-cliquer sur le fichier .vbox. grenOS démarre sur le disque et s'y installe ses mises à jour lui-même.",
-  vboxZipButton: "Télécharger pour VirtualBox",
-  vboxOnly: "ou seulement le fichier .vbox",
-  preview: "Ce que la CI a vu à l'écran, 25 secondes après le démarrage, dans QEMU :",
-  previewAlt: "Capture d'écran de grenOS dans QEMU",
-  mb: "Mo",
-  build: "Version",
+  lead: "grenOS est un système d'exploitation complet, construit sur Debian, assemblé et vérifié par une équipe d'agents. Chaque image publiée ici a d'abord été construite, puis démarrée pour de vrai, par la CI.",
   published: "publiée le",
-  all: "Versions précédentes",
-  none: "La première image est en cours de publication. Reviens dans quelques minutes.",
-  checked: "Vérifié automatiquement dans QEMU. VirtualBox et les vrais PC ne sont pas testés par la CI.",
-  nowTitle: "Ce qu'il fait aujourd'hui",
-  now: "Il démarre sans menu, directement sur un bureau sombre inspiré de Kali Linux : panneau en haut, menu d'applications avec recherche, fenêtres à ombre portée qu'on déplace, réduit et ferme, et des animations mesurées en millisecondes (donc identiques quel que soit le nombre d'images par seconde). Six applications : Terminal (vraies commandes : ls, cat, écrire, lspci, dmesg, grenfetch), Fichiers (un système de fichiers en mémoire), Navigateur (les pages du système et ses fichiers ; le web attend le pilote réseau), Bloc-notes qui enregistre pour de vrai, Paramètres (système, souris, écran, matériel, réseau, compte, mise à jour) et À propos. Un écran de connexion s'affiche dès qu'un mot de passe est défini dans Paramètres. Éteindre et Redémarrer passent par l'ACPI, le clavier est en AZERTY, F1 ouvre le menu. Et il a le réseau : pilote de carte Intel 8254x, DHCP, DNS, ping et TCP — et TLS 1.3 écrit dans le noyau — le navigateur ouvre les pages http et https, et grenOS vérifie tout seul au démarrage s'il existe une version plus récente (il la signale ; il ne l'installe pas encore, faute de disque). Une application Sécurité montre ce qui est réellement en place : NX, écriture du code interdite, SMEP, empreinte du code du noyau vérifiable d'un clic, et une analyse des fichiers qui met en quarantaine ce qu'elle reconnaît. L'explorateur de fichiers reprend la disposition de celui de Windows (accès rapide, fil d'Ariane, colonnes) et le navigateur celle de Chrome (onglet, barre d'adresse en pilule, favoris) — la disposition seulement : les icônes sont dessinées ici.",
-  vboxTitle: "VirtualBox",
+  go: "Go",
+  isoTitle: "PC, clé USB ou QEMU",
+  isoText: "L'image seule : à écrire sur une clé USB pour démarrer un vrai PC, ou à lancer dans une machine virtuelle.",
+  isoButton: "Télécharger l'ISO",
+  zipTitle: "VirtualBox",
+  zipText:
+    "La machine déjà réglée, son disque de 25 Go et l'image, dans un seul zip : l'extraire, puis double-cliquer sur le fichier .vbox.",
+  zipButton: "Télécharger pour VirtualBox",
+  none: "La première image Linux est en cours de construction. Elle arrive.",
+  checked: "Construite et démarrée par la CI avant publication, captures d'écran à l'appui.",
+  nowTitle: "Ce qu'il y a dedans",
+  now: "Un bureau KDE Plasma habillé aux couleurs de grenOS : thème sombre, animations, fond d'écran maison, et la bascule jour/nuit d'un raccourci. Tout est en français, clavier AZERTY. Les applications d'un système complet : navigateur Firefox avec ses onglets, explorateur de fichiers, éditeur de texte, terminal, visionneuse d'images, gestionnaire d'archives, capture d'écran, calculatrice. Alt+Tab passe d'une fenêtre à l'autre, Alt+F4 ferme, Ctrl+Maj+Échap ouvre le gestionnaire de tâches. Un magasin installe des applications en un clic, paquets Debian comme Flatpak — Steam compris. La session d'essai ne demande aucun mot de passe ; l'installateur pose le système sur le disque, avec ton compte et ton mot de passe, et tout est gardé d'un démarrage à l'autre. Ensuite, « Mise à jour de grenOS » apporte nos nouveautés et les correctifs de sécurité Debian, sans jamais retélécharger l'image.",
+  vboxTitle: "Dans VirtualBox",
   vbox: [
-    "Télécharger le zip « pour VirtualBox » et l'extraire (clic droit → Extraire tout) : le fichier .vbox, le disque .vdi et l'ISO sont côte à côte, et doivent le rester.",
-    "Double-cliquer sur le fichier .vbox, ou dans VirtualBox : Machine → Ajouter…, puis le choisir. La machine grenOS apparaît, déjà réglée : 64 bits, 256 Mo, un disque SATA sur lequel elle démarre, l'ISO en second.",
-    "Pour mettre grenOS à jour : Paramètres → Mise à jour → Installer la mise à jour. Il télécharge la nouvelle version, vérifie sa signature, l'écrit dans son second emplacement et propose de redémarrer. Si elle ne démarrait pas, appuyer sur une touche dans la seconde qui suit l'allumage ouvre le menu, et l'ancienne version y est toujours.",
-    "La démarrer : le bureau s'affiche tout de suite, sans menu de démarrage. Cliquer dans la fenêtre de la machine pour que VirtualBox lui donne la souris ; la touche Ctrl de droite la reprend. Si le pointeur ne bouge pas, ouvrir Paramètres → Souris et clavier : les compteurs disent si les octets arrivent.",
-    "Ce qu'il écrit sur le port série est dans C:\\Users\\Public\\Documents\\grenos-serie.txt : grenOS, la mémoire, la pagination, le tas, les périphériques PCI, l'ACPI, puis desktop: drawn.",
+    "Télécharger le zip « pour VirtualBox » et l'extraire (clic droit → Extraire tout) : le fichier .vbox, le disque .vdi et l'image .iso sont côte à côte, et doivent le rester.",
+    "Double-cliquer sur le fichier .vbox, ou dans VirtualBox : Machine → Ajouter…, puis le choisir. La machine grenOS apparaît, déjà réglée : 64 bits, 4 Go de mémoire, deux cœurs, 128 Mo de mémoire vidéo, un disque de 25 Go.",
+    "La démarrer. Le bureau arrive tout seul, sans mot de passe, et la page d'accueil explique le reste.",
+    "Pour garder ses fichiers et ses comptes : l'icône « Installer grenOS » sur le bureau. L'installation prend une dizaine de minutes, puis la machine démarre sur son disque.",
   ],
-  vboxNote: "Une machine 64 bits demande la virtualisation matérielle (VT-x ou AMD-V) activée dans le BIOS du PC. Sans le fichier .vbox : nouvelle machine Other/Unknown (64-bit), 256 Mo, sans disque dur, l'ISO dans le lecteur optique, port série 1 en « Fichier brut ».",
-  qemuTitle: "QEMU",
-  qemu: "La sortie série s'affiche dans le terminal :",
+  vboxNote:
+    "Une machine 64 bits demande la virtualisation matérielle (VT-x ou AMD-V) activée dans le BIOS du PC. Sans le fichier .vbox : nouvelle machine Debian (64-bit), 4 Go de mémoire, un disque de 25 Go, l'image dans le lecteur optique.",
   usbTitle: "Un vrai PC, sur clé USB",
   usb: [
     "Écrire l'image sur une clé avec Rufus (mode image DD), balenaEtcher, ou sous Linux la commande ci-dessous. La clé est entièrement effacée.",
-    "Démarrer le PC sur la clé, en mode Legacy / BIOS (CSM).",
-    "Le bureau s'affiche directement. Souris et clavier ne répondent que s'ils sont PS/2, ou si le BIOS émule le PS/2 pour l'USB : le clavier USB viendra avec le pilote xHCI.",
+    "Démarrer le PC sur la clé. L'image démarre aussi bien en BIOS qu'en UEFI ; Secure Boot doit être désactivé.",
+    "Le bureau s'affiche sans rien installer. L'icône « Installer grenOS » pose le système sur le disque — l'installateur demande avant de toucher à quoi que ce soit.",
   ],
+  qemuTitle: "QEMU",
+  qemu: "Pour essayer sans rien écrire sur un disque :",
   source: "Code source",
-  linuxTitle: "grenOS Linux",
-  linuxLead:
-    "L'edition complete : un bureau KDE Plasma habille aux couleurs de grenOS, sur une base Debian. Francais et clavier AZERTY, navigateur, fichiers, editeur, terminal, gestionnaire de taches, theme jour et nuit, et l'installateur pour la poser sur un disque. Les mises a jour se font depuis le systeme.",
-  linuxIso: "Telecharger l'ISO",
-  linuxZip: "Telecharger pour VirtualBox",
-  linuxSteps: [
-    "VirtualBox : extraire le zip, double-cliquer sur le fichier .vbox, demarrer. Le bureau arrive tout seul, sans mot de passe.",
-    "Un vrai PC ou une cle USB : ecrire l'ISO avec Rufus en mode image, ou balenaEtcher, puis demarrer dessus.",
-    "Pour garder ses fichiers et ses comptes : l'icone Installer grenOS, sur le bureau.",
-  ],
-  linuxNote: "Image construite et demarree par la CI avant publication. Steam et le magasin grenOS arrivent dans une prochaine version.",
-  linuxNone: "La premiere image Linux est en cours de construction. Elle arrive.",
-  go: "Go",
 };
 
 const EN: typeof FR = {
   title: "Download grenOS",
-  lead: "grenOS is an x86_64 operating system written in Rust by a team of AI agents. Every image published here was first built, then booted in QEMU, by CI.",
-  pcTitle: "PC, USB stick or QEMU",
-  pcText: "The ISO image alone: write it to a USB stick to boot a real PC, or run it in QEMU.",
-  pcButton: "Download the ISO",
-  vboxText: "The ready-made VirtualBox machine, its hard disk and the ISO, in one zip: extract it, then double-click the .vbox file. grenOS boots from the disk and installs its own updates there.",
-  vboxZipButton: "Download for VirtualBox",
-  vboxOnly: "or just the .vbox file",
-  preview: "What CI saw on screen, 25 seconds after boot, in QEMU:",
-  previewAlt: "Screenshot of grenOS in QEMU",
-  mb: "MB",
-  build: "Build",
+  lead: "grenOS is a complete operating system, built on Debian, assembled and checked by a team of agents. Every image published here was first built, then really booted, by CI.",
   published: "published",
-  all: "Earlier builds",
-  none: "The first image is being published. Come back in a few minutes.",
-  checked: "Checked automatically in QEMU. VirtualBox and real PCs are not tested by CI.",
-  nowTitle: "What it does today",
-  now: "It boots with no menu, straight into a dark desktop in the spirit of Kali Linux: a top panel, an application menu with search, windows with a shadow that you drag, minimise and close, and animations measured in milliseconds, so they look the same at any frame rate. Six applications: Terminal (real commands: ls, cat, écrire, lspci, dmesg, grenfetch), Files (a file system in memory), Browser (the system's own pages and files; the web waits for the network driver), a Notepad that really saves, Settings (system, mouse, screen, hardware, network, account, update) and About. A login screen appears as soon as a password is set in Settings. Shutdown and restart go through ACPI, the keyboard is French AZERTY, and F1 opens the menu. And it has the network: an Intel 8254x driver, DHCP, DNS, ping and TCP — and TLS 1.3 written into the kernel — the browser opens http and https pages, and grenOS checks by itself at boot whether a newer build exists (it tells you; it does not install it yet, having no disk). A Security application shows what is actually enforced: NX, write-protected kernel code, SMEP, a fingerprint of the kernel's own code you can re-check with one click, and a file scan that quarantines what it recognises. The file explorer follows the layout of the Windows one (quick access, breadcrumb, columns) and the browser that of Chrome (a tab, a pill address bar, bookmarks) — the layout only: the icons are drawn here.",
-  vboxTitle: "VirtualBox",
+  go: "GB",
+  isoTitle: "PC, USB stick or QEMU",
+  isoText: "The image alone: write it to a USB stick to boot a real PC, or run it in a virtual machine.",
+  isoButton: "Download the ISO",
+  zipTitle: "VirtualBox",
+  zipText:
+    "The ready-made machine, its 25 GB disk and the image, in one zip: extract it, then double-click the .vbox file.",
+  zipButton: "Download for VirtualBox",
+  none: "The first Linux image is being built. It is on its way.",
+  checked: "Built and booted by CI before publication, with screenshots to show for it.",
+  nowTitle: "What is inside",
+  now: "A KDE Plasma desktop dressed in grenOS colours: dark theme, animations, our own wallpaper, and a shortcut that switches day and night. Everything is in French, with a French keyboard. The applications of a complete system: Firefox with its tabs, a file manager, a text editor, a terminal, an image viewer, an archive manager, a screenshot tool, a calculator. Alt+Tab moves between windows, Alt+F4 closes, Ctrl+Shift+Esc opens the task manager. A store installs applications in one click, Debian packages as well as Flatpaks — Steam included. The live session asks for no password; the installer puts the system on the disk, with your own account and password, and everything is kept from one boot to the next. After that, the update tool brings our own changes and Debian's security fixes, without ever downloading the image again.",
+  vboxTitle: "In VirtualBox",
   vbox: [
-    "Download the zip “for VirtualBox” and extract it (right-click → Extract All): the .vbox file, the .vdi disk and the ISO sit side by side, and must stay together.",
-    "Double-click the .vbox file, or in VirtualBox: Machine → Add…, and pick it. The grenOS machine appears, already set up: 64-bit, 256 MB, a SATA disk it boots from, the ISO second.",
-    "To update grenOS: Settings → Update → Install the update. It downloads the new version, checks its signature, writes it to its second slot and offers to restart. Should it not boot, pressing a key in the second after power-on opens the menu, where the previous version still is.",
-    "Start it: the desktop appears at once, with no boot menu. Click inside the machine's window so VirtualBox hands it the mouse; the right Ctrl key takes it back. If the pointer will not move, open Settings → Mouse and keyboard: the counters say whether the bytes arrive.",
-    "What it writes to the serial port is in C:\\Users\\Public\\Documents\\grenos-serie.txt: grenOS, the memory, paging, the heap, the PCI devices, ACPI, then desktop: drawn.",
+    "Download the zip “for VirtualBox” and extract it (right-click → Extract All): the .vbox file, the .vdi disk and the .iso image sit side by side, and must stay together.",
+    "Double-click the .vbox file, or in VirtualBox: Machine → Add…, and pick it. The grenOS machine appears, already set up: 64-bit, 4 GB of memory, two cores, 128 MB of video memory, a 25 GB disk.",
+    "Start it. The desktop comes up on its own, with no password, and the welcome page explains the rest.",
+    "To keep your files and accounts: the “Installer grenOS” icon on the desktop. Installing takes about ten minutes, then the machine boots from its disk.",
   ],
-  vboxNote: "A 64-bit machine needs hardware virtualisation (VT-x or AMD-V) enabled in the host PC's firmware. Without the .vbox file: new machine Other/Unknown (64-bit), 256 MB, no hard disk, the ISO in the optical drive, serial port 1 in Raw File mode.",
-  qemuTitle: "QEMU",
-  qemu: "The serial output appears in the terminal:",
+  vboxNote:
+    "A 64-bit machine needs hardware virtualisation (VT-x or AMD-V) enabled in the PC's BIOS. Without the .vbox file: a new Debian (64-bit) machine, 4 GB of memory, a 25 GB disk, the image in the optical drive.",
   usbTitle: "A real PC, from a USB stick",
   usb: [
-    "Write the image to a stick with Rufus (DD image mode), balenaEtcher, or on Linux the command below. The stick is erased.",
-    "Boot the PC from the stick in Legacy / BIOS (CSM) mode.",
-    "The desktop appears straight away. The mouse and the keyboard only answer if they are PS/2, or if the firmware emulates PS/2 for USB ones: USB keyboards wait for the xHCI driver.",
+    "Write the image to a stick with Rufus (DD image mode), balenaEtcher, or the command below on Linux. The stick is wiped.",
+    "Boot the PC from the stick. The image boots under BIOS as well as UEFI; Secure Boot must be off.",
+    "The desktop appears without installing anything. The “Installer grenOS” icon puts the system on the disk — the installer asks before touching anything.",
   ],
+  qemuTitle: "QEMU",
+  qemu: "To try it without writing to any disk:",
   source: "Source code",
-  linuxTitle: "grenOS Linux",
-  linuxLead:
-    "The full edition: a KDE Plasma desktop dressed in grenOS colours, on a Debian base. French and AZERTY, browser, files, editor, terminal, task manager, day and night theme, and the installer to put it on a disk. Updates are done from inside the system.",
-  linuxIso: "Download the ISO",
-  linuxZip: "Download for VirtualBox",
-  linuxSteps: [
-    "VirtualBox: extract the zip, double-click the .vbox file, start it. The desktop comes up on its own, with no password.",
-    "A real PC or a USB stick: write the ISO with Rufus in image mode, or balenaEtcher, then boot from it.",
-    "To keep your files and accounts: the Install grenOS icon, on the desktop.",
-  ],
-  linuxNote: "Image built and booted by CI before publication. Steam and the grenOS store come in a later version.",
-  linuxNone: "The first Linux image is being built. It is on its way.",
-  go: "GB",
 };
 
-const TEXT: Record<Lang, typeof FR> = { fr: FR, en: EN };
+const TEXT = { fr: FR, en: EN };
 
-export function DownloadView({
-  builds,
-  linux = null,
-  repo,
-}: {
-  builds: Build[];
-  linux?: LinuxRelease | null;
-  repo: string;
-}) {
+export function DownloadView({ linux = null, repo }: { linux?: LinuxRelease | null; repo: string }) {
   const { lang } = useLang();
   const c = TEXT[lang];
-  const build = builds[0] ?? null;
-  const earlier = builds.slice(1);
+  const iso = linux ? linux.isoUrl.split("/").pop() : "grenos-linux.iso";
 
   return (
     <>
@@ -161,100 +116,40 @@ export function DownloadView({
       </div>
 
       <section>
-        <div className="card" style={{ borderColor: "#2f7df6" }}>
-          <h2 style={{ marginTop: 0 }}>{c.linuxTitle}</h2>
-          <p className="muted">{c.linuxLead}</p>
-          {linux ? (
-            <>
-              <p className="faint" style={{ marginTop: 0 }}>
-                <span className="dot ok" /> <span className="mono">{linux.tag}</span> · {c.published}{" "}
-                {linux.publishedAt.slice(0, 10)}
-              </p>
-              <div className="grid cols-2">
-                <div>
-                  <a className="dl-button" href={linux.isoUrl}>
-                    {c.linuxIso}
-                  </a>
-                  <div className="faint mono" style={{ marginTop: 8 }}>
-                    iso · {go(linux.isoSize)} {c.go}
-                  </div>
-                </div>
-                {linux.zipUrl && (
-                  <div>
-                    <a className="dl-button" href={linux.zipUrl}>
-                      {c.linuxZip}
-                    </a>
-                    <div className="faint mono" style={{ marginTop: 8 }}>
-                      zip · {go(linux.zipSize ?? 0)} {c.go}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <ol className="muted" style={{ marginBottom: 0 }}>
-                {c.linuxSteps.map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ol>
-              <p className="faint" style={{ marginBottom: 0 }}>
-                {c.linuxNote} <a href={linux.pageUrl}>{linux.tag}</a>
-              </p>
-            </>
-          ) : (
-            <p className="faint" style={{ marginBottom: 0 }}>
-              {c.linuxNone}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section>
-        {build ? (
+        {linux ? (
           <>
             <p className="faint" style={{ marginTop: 0 }}>
-              <span className="dot ok" /> {c.build} <span className="mono">{build.tag}</span> · {c.published}{" "}
-              {build.publishedAt.slice(0, 10)}
+              <span className="dot ok" /> <span className="mono">{linux.tag}</span> · {c.published}{" "}
+              {linux.publishedAt.slice(0, 10)}
             </p>
-            {/* Two choices, each enough on its own: the .vbox needs its ISO beside it. */}
+            {/* Deux formes de la même image : l'ISO seule, ou la machine toute prête. */}
             <div className="grid cols-2">
               <div className="card">
-                <h2>{c.pcTitle}</h2>
-                <p className="muted">{c.pcText}</p>
-                <a className="dl-button" href={build.url}>
-                  {c.pcButton}
+                <h2>{c.isoTitle}</h2>
+                <p className="muted">{c.isoText}</p>
+                <a className="dl-button" href={linux.isoUrl}>
+                  {c.isoButton}
                 </a>
                 <div className="faint mono" style={{ marginTop: 8 }}>
-                  grenos.iso · {mb(build.size)} {c.mb}
+                  iso · {go(linux.isoSize)} {c.go}
                 </div>
               </div>
               <div className="card">
-                <h2>{c.vboxTitle}</h2>
-                <p className="muted">{c.vboxText}</p>
-                {build.virtualboxUrl ? (
-                  <a className="dl-button" href={build.virtualboxUrl}>
-                    {c.vboxZipButton}
+                <h2>{c.zipTitle}</h2>
+                <p className="muted">{c.zipText}</p>
+                {linux.zipUrl && (
+                  <a className="dl-button" href={linux.zipUrl}>
+                    {c.zipButton}
                   </a>
-                ) : (
-                  build.vboxUrl && (
-                    <a className="dl-button" href={build.vboxUrl}>
-                      {c.vboxZipButton}
-                    </a>
-                  )
                 )}
-                <div className="faint" style={{ marginTop: 8 }}>
-                  {build.virtualboxSize ? (
-                    <span className="mono">
-                      zip · {mb(build.virtualboxSize)} {c.mb}
-                    </span>
-                  ) : null}
-                  {build.virtualboxUrl && build.vboxUrl && (
-                    <>
-                      {" "}
-                      · <a href={build.vboxUrl}>{c.vboxOnly}</a>
-                    </>
-                  )}
+                <div className="faint mono" style={{ marginTop: 8 }}>
+                  zip · {go(linux.zipSize ?? 0)} {c.go}
                 </div>
               </div>
             </div>
+            <p className="faint" style={{ marginTop: 8 }}>
+              {c.checked} <a href={linux.pageUrl}>{linux.tag}</a>
+            </p>
           </>
         ) : (
           <div className="card dl-card">
@@ -262,41 +157,6 @@ export function DownloadView({
               {c.none}
             </p>
           </div>
-        )}
-        <p className="faint" style={{ marginTop: 8 }}>
-          {c.checked}
-        </p>
-        {build?.screenUrl && (
-          <figure style={{ margin: "14px 0 0" }}>
-            <figcaption className="faint" style={{ marginBottom: 6 }}>
-              {c.preview}
-            </figcaption>
-            <img
-              src={build.screenUrl}
-              alt={c.previewAlt}
-              style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid rgba(127,127,127,.3)" }}
-            />
-          </figure>
-        )}
-        {earlier.length > 0 && (
-          <details className="faint" style={{ marginTop: 8 }}>
-            <summary>{c.all}</summary>
-            <ul>
-              {earlier.map((b) => (
-                <li key={b.tag}>
-                  <a href={b.url} className="mono">
-                    {b.tag}
-                  </a>{" "}
-                  {b.vboxUrl && (
-                    <>
-                      (<a href={b.vboxUrl}>.vbox</a>){" "}
-                    </>
-                  )}
-                  · {(b.size / 1024 / 1024).toFixed(1)} {c.mb} · {b.publishedAt.slice(0, 10)}
-                </li>
-              ))}
-            </ul>
-          </details>
         )}
       </section>
 
@@ -319,26 +179,27 @@ export function DownloadView({
             {c.vboxNote}
           </p>
         </div>
-
         <div className="card">
-          <h2>{c.qemuTitle}</h2>
-          <p className="muted" style={{ marginTop: 0 }}>
-            {c.qemu}
-          </p>
-          <pre className="dl-code">qemu-system-x86_64 -cdrom grenos.iso -serial stdio</pre>
-
-          <h2 style={{ marginTop: 22 }}>{c.usbTitle}</h2>
+          <h2>{c.usbTitle}</h2>
           <ol className="dl-steps">
             {c.usb.map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ol>
-          <pre className="dl-code">sudo dd if=grenos.iso of=/dev/sdX bs=4M status=progress</pre>
+          <pre className="mono dl-code">sudo dd if={iso} of=/dev/sdX bs=4M status=progress oflag=sync</pre>
+        </div>
+      </section>
+
+      <section>
+        <div className="card">
+          <h2>{c.qemuTitle}</h2>
+          <p className="muted">{c.qemu}</p>
+          <pre className="mono dl-code">qemu-system-x86_64 -m 4096 -smp 2 -cdrom {iso} -boot d</pre>
         </div>
       </section>
 
       <p className="faint">
-        {c.source} : <a href={`https://github.com/${repo}/tree/main/kernel`}>github.com/{repo}</a>
+        <a href={`https://github.com/${repo}`}>{c.source}</a>
       </p>
     </>
   );

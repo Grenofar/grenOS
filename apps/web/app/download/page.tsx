@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
-import { DownloadView, type Build, type LinuxRelease } from "@/components/DownloadView";
+import { DownloadView, type LinuxRelease } from "@/components/DownloadView";
 
 /**
- * The public download page (D-030, D-032): the images CI built and booted,
- * and how to run them. They live in Supabase Storage, in the public
- * "releases" bucket: anyone can download them without an account, and
- * without going through GitHub. release.yml puts them there, with index.json
- * listing the ten latest, newest first.
+ * La page publique de telechargement : l'image Linux que la CI a construite et
+ * demarree. Elle depasse le gigaoctet, donc elle est publiee en Release GitHub
+ * plutot que dans Supabase Storage, plafonne a 1 Go.
  *
- * Read on the server and refreshed every minute, as long as Storage caches
- * the index itself.
+ * Lue sur le serveur et rafraichie toutes les cinq minutes.
  */
 export const revalidate = 60;
 
@@ -20,51 +17,6 @@ export const metadata: Metadata = {
 
 const REPO = "Grenofar/grenOS";
 
-// The project URL is public (it is in verify.yml too); the variable wins.
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://tpqzhzuoyqpfairatdrw.supabase.co";
-const RELEASES = `${SUPABASE_URL}/storage/v1/object/public/releases`;
-
-/** One entry of index.json, as release.yml writes it. */
-interface Entry {
-  build: string;
-  path: string;
-  commit: string;
-  size: number;
-  published_at: string;
-  /** The VirtualBox machine that boots `path` (D-033), when published with it. */
-  vbox?: string | null;
-  /** What CI saw on screen, when the kernel drew something. */
-  screen?: string | null;
-  /** The ISO and its .vbox in one zip: the VirtualBox choice. */
-  virtualbox?: string | null;
-  virtualbox_size?: number | null;
-}
-
-async function publishedBuilds(): Promise<Build[]> {
-  try {
-    const res = await fetch(`${RELEASES}/index.json`, { next: { revalidate: 60 } });
-    if (!res.ok) return [];
-    const index: unknown = await res.json();
-    if (!Array.isArray(index)) return [];
-    return (index as Entry[])
-      .filter((e) => typeof e?.path === "string" && typeof e?.build === "string")
-      .map((e) => ({
-        tag: e.build,
-        publishedAt: e.published_at,
-        size: e.size,
-        // ?download makes Storage send the file as an attachment, under this name.
-        url: `${RELEASES}/${e.path}?download=grenos-${e.build}.iso`,
-        // The .vbox names the ISO by this same file name: both land side by side.
-        vboxUrl: e.vbox ? `${RELEASES}/${e.vbox}?download=grenos-${e.build}.vbox` : undefined,
-        screenUrl: e.screen ? `${RELEASES}/${e.screen}` : undefined,
-        virtualboxUrl: e.virtualbox ? `${RELEASES}/${e.virtualbox}?download=grenos-${e.build}-virtualbox.zip` : undefined,
-        virtualboxSize: e.virtualbox_size ?? undefined,
-      }));
-  } catch {
-    // Nothing published yet, or Storage unreachable: the page says so.
-    return [];
-  }
-}
 
 /**
  * L'edition Linux : une image de plus d'un gigaoctet, donc publiee en Release
@@ -106,6 +58,5 @@ async function linuxRelease(): Promise<LinuxRelease | null> {
 }
 
 export default async function DownloadPage() {
-  const [builds, linux] = await Promise.all([publishedBuilds(), linuxRelease()]);
-  return <DownloadView builds={builds} linux={linux} repo={REPO} />;
+  return <DownloadView linux={await linuxRelease()} repo={REPO} />;
 }
