@@ -35,6 +35,11 @@ async function linuxRelease(): Promise<LinuxRelease | null> {
     for (const release of releases as Array<Record<string, unknown>>) {
       const tag = typeof release.tag_name === "string" ? release.tag_name : "";
       if (!tag.startsWith("linux-")) continue;
+      // Une version marquee brouillon ou pre-publication a ete jugee
+      // defectueuse : elle reste telechargeable pour qui la cherche, mais la
+      // page ne la propose pas. Le 18 septembre, une image ou personne ne
+      // pouvait se connecter a ete publiee ; c'est ainsi qu'on l'ecarte.
+      if (release.draft === true || release.prerelease === true) continue;
       const assets = Array.isArray(release.assets) ? (release.assets as Array<Record<string, unknown>>) : [];
       const pick = (end: string) =>
         assets.find((a) => typeof a.name === "string" && (a.name as string).endsWith(end));
