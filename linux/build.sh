@@ -29,20 +29,18 @@ convert -size 900x260 xc:none \
     -fill '#e6ebf5' -gravity center -annotate +0+0 'grenOS' \
     PNG32:config/includes.chroot/usr/share/grenos/logo.png
 
-# Le dépôt de mises à jour de grenOS, quand la CI a préparé sa clé : sans
-# elle, l'image se construit quand même, sans dépôt — mieux qu'une image qui
-# ne se construit pas.
-if [ -f grenos-apt.gpg ]; then
+# Le dépôt de mises à jour de grenOS. La source va dans config/archives avec
+# le suffixe .binary : live-build ne l'ajoute qu'à l'image produite, et jamais
+# aux dépôts qu'il consulte pour construire — sinon l'apt de la construction
+# s'arrête sur un dépôt qui n'existe pas encore.
+rm -f config/archives/grenos.list.binary config/archives/grenos.key.binary
+if [ -f grenos-apt.gpg ] && [ -f grenos-apt.asc ]; then
+    mkdir -p config/archives
     install -D -m 0644 grenos-apt.gpg \
         config/includes.chroot/usr/share/keyrings/grenos-apt.gpg
-    install -d config/includes.chroot/etc/apt/sources.list.d
-    cat > config/includes.chroot/etc/apt/sources.list.d/grenos.sources <<'EOF'
-Types: deb
-URIs: https://tpqzhzuoyqpfairatdrw.supabase.co/storage/v1/object/public/apt
-Suites: stable
-Components: main
-Architectures: amd64
-Signed-By: /usr/share/keyrings/grenos-apt.gpg
+    cp grenos-apt.asc config/archives/grenos.key.binary
+    cat > config/archives/grenos.list.binary <<'EOF'
+deb [signed-by=/usr/share/keyrings/grenos-apt.gpg] https://tpqzhzuoyqpfairatdrw.supabase.co/storage/v1/object/public/apt stable main
 EOF
     echo "depot grenOS ajoute a l'image"
 else

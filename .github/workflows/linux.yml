@@ -95,9 +95,38 @@ jobs:
           chmod 700 "$GNUPGHOME"
           gpg --batch --quiet --import secret.asc
           gpg --batch --export > linux/grenos-apt.gpg
+          gpg --batch --armor --export > linux/grenos-apt.asc
           rm -rf "$GNUPGHOME"
-          ls -l linux/grenos-apt.gpg
+          ls -l linux/grenos-apt.gpg linux/grenos-apt.asc
           echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      # Le paquet grenos-desktop et le dépôt APT : c'est par là que grenOS se
+      # met à jour depuis grenOS, en plus des correctifs Debian.
+      - name: Le paquet et le depot APT de grenOS
+        id: apt
+        if: steps.key.outputs.ready == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          sudo apt-get install -y -qq dpkg-dev python3-numpy
+          VERSION="1.0.$(date -u +%Y%m%d%H%M)"
+          linux/tools/make-deb.sh "$VERSION" dist
+          APT_SECRET_KEY="$PWD/secret.asc" linux/tools/make-apt-repo.sh apt dist/grenos-desktop_${VERSION}_all.deb
+          # Un dépôt APT n'est qu'un ensemble de fichiers : on les dépose un à
+          # un dans le bucket public, en écrasant les anciens.
+          find apt -type f | while read -r file; do
+            target="${file#apt/}"
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+              -H "x-upsert: true" \
+              -H "cache-control: max-age=60" \
+              --data-binary @"$file" \
+              "$SUPABASE_URL/storage/v1/object/apt/$target")
+            echo "$target : HTTP $code"
+            [ "$code" = "200" ] || exit 1
+          done
+          echo "depot publie : $SUPABASE_URL/storage/v1/object/public/apt"
 
       # live-build monte des systèmes de fichiers et fait un debootstrap : cela
       # se passe dans un conteneur Debian privilégié, jamais sur le runner.
@@ -159,33 +188,6 @@ jobs:
             ${{ runner.temp }}/serial.log
           if-no-files-found: ignore
           retention-days: 14
-
-      # Le paquet grenos-desktop et le dépôt APT : c'est par là que grenOS se
-      # met à jour depuis grenOS, en plus des correctifs Debian.
-      - name: Le depot APT de grenOS
-        if: steps.key.outputs.ready == 'true'
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          sudo apt-get install -y -qq dpkg-dev python3-numpy
-          VERSION="1.0.$(date -u +%Y%m%d%H%M)"
-          linux/tools/make-deb.sh "$VERSION" dist
-          APT_SECRET_KEY="$PWD/secret.asc" linux/tools/make-apt-repo.sh apt dist/grenos-desktop_${VERSION}_all.deb
-          # Un dépôt APT n'est qu'un ensemble de fichiers : on les dépose un à
-          # un dans le bucket public, en écrasant les anciens.
-          find apt -type f | while read -r file; do
-            target="${file#apt/}"
-            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
-              -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-              -H "x-upsert: true" \
-              -H "cache-control: max-age=60" \
-              --data-binary @"$file" \
-              "$SUPABASE_URL/storage/v1/object/apt/$target")
-            echo "$target : HTTP $code"
-            [ "$code" = "200" ] || exit 1
-          done
-          echo "depot publie : $SUPABASE_URL/storage/v1/object/public/apt"
 
       # La machine VirtualBox toute prête : l'image, un disque vide où
       # l'installer, et le fichier .vbox à double-cliquer.
