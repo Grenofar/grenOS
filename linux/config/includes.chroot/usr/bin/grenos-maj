@@ -1,15 +1,22 @@
 #!/bin/sh
-# La mise à jour de grenOS, depuis grenOS : les paquets du système et ceux de
-# grenOS, dans une fenêtre, avec ce qui se passe sous les yeux.
+# La mise à jour de grenOS, depuis grenOS : les paquets du système et les
+# nôtres, dans une fenêtre, avec ce qui se passe sous les yeux.
 #
-# Rien n'est installé sans mot de passe : la fenêtre en demande un, comme toute
-# opération d'administration.
+# Deux scripts plutôt qu'une longue ligne : celui du travail, qui tourne en
+# root, et celui de la fenêtre, qui l'appelle et attend une touche avant de se
+# fermer. `x-terminal-emulator -e <script>` est la seule forme que tous les
+# terminaux comprennent de la même façon — `-e sh -c "..."` est redécoupé
+# différemment par chacun.
 
 set -e
 
 TITRE="Mise à jour de grenOS"
-SCRIPT=$(mktemp)
-cat > "$SCRIPT" <<'EOF'
+DOSSIER="${XDG_CACHE_HOME:-$HOME/.cache}/grenos"
+mkdir -p "$DOSSIER"
+TRAVAIL="$DOSSIER/maj.sh"
+FENETRE="$DOSSIER/maj-fenetre.sh"
+
+cat > "$TRAVAIL" <<'EOF'
 #!/bin/sh
 set -e
 echo "Lecture des dépôts..."
@@ -23,25 +30,36 @@ DEBIAN_FRONTEND=noninteractive apt-get -y upgrade
 echo
 echo "Terminé. Les applications ouvertes utiliseront la nouvelle version après leur redémarrage."
 EOF
-chmod +x "$SCRIPT"
+chmod +x "$TRAVAIL"
 
+# En root, il n'y a ni autorisation à demander ni fenêtre à ouvrir.
 if [ "$(id -u)" = 0 ]; then
-    "$SCRIPT"
-    rm -f "$SCRIPT"
+    "$TRAVAIL"
     exit 0
 fi
 
-# Tant qu'aucun mot de passe n'est defini, sudo passe sans rien demander ;
-# sinon pkexec ouvre la fenetre qui le demande.
+# Tant qu'aucun mot de passe n'est défini, sudo passe sans rien demander ;
+# sinon pkexec ouvre la fenêtre qui le demande.
 if sudo -n true 2>/dev/null; then
-    LANCEUR="sudo"
+    LANCEUR="sudo -n"
 else
     LANCEUR="pkexec"
 fi
 
-if command -v x-terminal-emulator >/dev/null 2>&1; then
-    x-terminal-emulator --title "$TITRE" -e sh -c "$LANCEUR '$SCRIPT'; echo; echo 'Entree pour fermer.'; read x"
-else
-    "$LANCEUR" "$SCRIPT"
+if ! command -v x-terminal-emulator >/dev/null 2>&1; then
+    $LANCEUR "$TRAVAIL"
+    exit 0
 fi
-rm -f "$SCRIPT"
+
+cat > "$FENETRE" <<EOF
+#!/bin/sh
+echo "$TITRE"
+echo
+$LANCEUR "$TRAVAIL"
+echo
+echo "Entrée pour fermer."
+read x
+EOF
+chmod +x "$FENETRE"
+
+exec x-terminal-emulator -T "$TITRE" -e "$FENETRE"

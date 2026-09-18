@@ -17,6 +17,14 @@ export XDG_MENU_PREFIX=grenos-
 # Les applications GTK suivent le thème du système, pas leurs propres couleurs.
 export GTK_OVERLAY_SCROLLING=0
 
+# La langue du système. lightdm ne la transmet pas à la session : sans ces
+# deux lignes, l'horloge de la barre affiche « Fri 18 Sep » au lieu de
+# « ven. 18 sept. », et les applications s'ouvrent en anglais.
+if [ -r /etc/default/locale ]; then
+    . /etc/default/locale
+    export LANG LANGUAGE LC_ALL LC_TIME 2>/dev/null || true
+fi
+
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/grenos"
 mkdir -p "$CONFIG"
 

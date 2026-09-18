@@ -188,6 +188,18 @@ jobs:
           if ! grep -q 'nom choisi' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
             echo "le nom n'a pas encore ete pris en compte, on continue d'observer"
           fi
+          sleep 15
+          # Le premier ecran doit accepter ce qu'on tape. S'il ne l'accepte pas,
+          # la personne reste devant une fenetre qui ignore son clavier — et le
+          # bureau finit par s'ouvrir tout seul, ce qui masque la panne. C'est
+          # exactement ce qui s'est passe le 18 septembre a 19h54.
+          if grep -q 'nom choisi' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+            grep -a 'nom choisi' "$RUNNER_TEMP/serial.log"
+          else
+            echo "::error::Le premier ecran n'a pas pris le nom tape : il ignore le clavier."
+            kill $QEMU 2>/dev/null || true
+            exit 1
+          fi
           # Le bureau met du temps à venir : on regarde à intervalles, et on
           # garde chaque capture pour pouvoir les lire ensuite.
           for minute in 1 2 3 4 5; do

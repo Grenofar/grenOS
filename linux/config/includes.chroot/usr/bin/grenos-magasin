@@ -9,6 +9,7 @@ toucher au reste de la machine.
 L'installation s'affiche dans un terminal, volontairement : une barre qui
 tourne sans rien dire pendant dix minutes inquiète plus qu'elle ne rassure.
 """
+import os
 import subprocess
 import sys
 
@@ -145,11 +146,22 @@ class Magasin(Gtk.Window):
         self.liste.show_all()
 
     def installer(self, source, identifiant, nom):
-        ligne = en_root(commande(source, identifiant))
-        grenosui.lancer(
-            f"x-terminal-emulator --title {GLib.shell_quote('Installation de ' + nom)} "
-            f"-e sh -c {GLib.shell_quote(ligne + '; echo; echo Terminé. Entrée pour fermer.; read x')}"
-        )
+        # Un script sur le disque, puis `-e <script>` : tous les terminaux
+        # acceptent cette forme. `-e sh -c "..."` est compris différemment par
+        # chacun, et la commande finirait découpée au mauvais endroit.
+        dossier = os.path.expanduser("~/.cache/grenos")
+        os.makedirs(dossier, exist_ok=True)
+        script = os.path.join(dossier, "installation.sh")
+        with open(script, "w", encoding="utf-8") as fichier:
+            fichier.write("#!/bin/sh\n"
+                          f"echo 'Installation de {nom}'\n"
+                          "echo\n"
+                          f"{en_root(commande(source, identifiant))}\n"
+                          "echo\n"
+                          "echo 'Terminé. Entrée pour fermer.'\n"
+                          "read x\n")
+        os.chmod(script, 0o755)
+        grenosui.lancer(f"x-terminal-emulator -e {GLib.shell_quote(script)}")
 
 
 def main():

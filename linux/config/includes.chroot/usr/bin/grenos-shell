@@ -141,9 +141,16 @@ class Menu(Gtk.Window):
     """Le menu des applications : une recherche, puis la liste."""
 
     def __init__(self):
-        super().__init__(type=Gtk.WindowType.POPUP)
+        # Une fenêtre ordinaire, sans décoration, plutôt qu'une POPUP : une
+        # POPUP ne reçoit pas le focus, donc elle n'apprend jamais qu'on a
+        # cliqué ailleurs, et le menu resterait ouvert à l'écran.
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.set_name("menu")
         self.set_size_request(MENU_LARGEUR, MENU_HAUTEUR)
+        self.set_decorated(False)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+        self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
         self.set_keep_above(True)
 
         boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -254,7 +261,9 @@ class Panneau(Gtk.Window):
         self.taches = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         boite.pack_start(self.taches, True, True, 6)
 
-        boite.pack_end(grenosui.bouton("⏻", lambda: grenosui.lancer("grenos-arret")), False, False, 0)
+        # Le symbole ⏻ n'existe pas dans Inter : il sortait en carré vide.
+        boite.pack_end(grenosui.bouton("Éteindre", lambda: grenosui.lancer("grenos-arret")),
+                       False, False, 0)
         self.horloge = Gtk.Label()
         self.horloge.set_name("horloge")
         boite.pack_end(self.horloge, False, False, 0)

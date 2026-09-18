@@ -65,25 +65,45 @@ window, .fenetre { background-color: @fond; color: @texte; }
     padding: 16px;
 }
 
+/* `background-image: none` n'est pas une coquetterie : le thème GTK du
+   système peint ses boutons avec une image de dégradé, et une image couvre la
+   couleur de fond. Sans cette ligne, tous nos boutons restent gris. */
 button, .bouton {
     color: @texte;
     background-color: @fond-haut;
+    background-image: none;
     border: 1px solid @bord;
     border-radius: 10px;
     padding: 9px 16px;
+    box-shadow: none;
+    text-shadow: none;
     transition: background-color 130ms ease, border-color 130ms ease;
 }
-button:hover, .bouton:hover { background-color: @survol; border-color: @accent; }
-button:active { background-color: @accent; color: #ffffff; }
-button:disabled { color: @texte-faible; background-color: @fond-creux; }
+button:hover, .bouton:hover {
+    background-color: @survol;
+    background-image: none;
+    border-color: @accent;
+}
+button:active { background-color: @accent; background-image: none; color: #ffffff; }
+button:disabled {
+    color: @texte-faible;
+    background-color: @fond-creux;
+    background-image: none;
+}
 
 .principal {
     background-color: @accent;
+    background-image: none;
     color: #ffffff;
     border: 1px solid @accent;
     font-weight: 600;
 }
-.principal:hover { background-color: @accent-clair; border-color: @accent-clair; }
+.principal:hover {
+    background-color: @accent-clair;
+    background-image: none;
+    border-color: @accent-clair;
+}
+.principal:disabled { background-color: @fond-creux; color: @texte-faible; }
 
 .discret { background: transparent; border-color: transparent; }
 .discret:hover { background-color: @survol; border-color: @bord; }
@@ -93,6 +113,7 @@ button:disabled { color: @texte-faible; background-color: @fond-creux; }
 
 entry {
     background-color: @fond-creux;
+    background-image: none;
     color: @texte;
     border: 1px solid @bord;
     border-radius: 10px;

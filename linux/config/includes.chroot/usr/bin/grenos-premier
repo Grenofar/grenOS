@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import unicodedata
 
 sys.path.insert(0, "/usr/lib/grenos")
@@ -126,6 +127,13 @@ def appliquer(login, affiche):
 class Premier(Gtk.Window):
     def __init__(self):
         super().__init__(title="Bienvenue dans grenOS")
+        # Aucun gestionnaire de fenêtres ne tourne à ce moment : `fullscreen()`
+        # est une demande qu'il n'y a personne pour exaucer. On prend donc nous-
+        # mêmes toute la place, sans quoi le quadrillage gris du serveur X
+        # apparaîtrait autour de la fenêtre.
+        ecran = Gdk.Screen.get_default()
+        self.set_default_size(ecran.get_width(), ecran.get_height())
+        self.move(0, 0)
         self.fullscreen()
         self.connect("destroy", Gtk.main_quit)
 
@@ -193,13 +201,29 @@ def main():
         sys.exit("grenos-premier doit être lancé par le système, en root.")
     if os.path.exists(IDENTITE):
         return
+
+    # live-config crée le compte de la session pendant le démarrage, et rien ne
+    # garantit qu'il soit déjà là. Renommer un compte inexistant donnerait une
+    # machine où personne ne peut entrer : on l'attend, une minute au plus.
+    for _ in range(60):
+        if compte_actuel():
+            break
+        time.sleep(1)
     grenosui.habiller(grenosui.NUIT)
     fenetre = Premier()
     fenetre.show_all()
-    dire("premier ecran affiche, il demande un nom")
-    # Le curseur du texte est déjà là : il n'y a rien d'autre à faire que taper.
+
+    # Aucun gestionnaire de fenêtres ne tourne ici, et c'est lui qui, d'ordinaire,
+    # décide quelle fenêtre reçoit le clavier. Sans personne pour le faire, il
+    # faut le demander au serveur X nous-mêmes — sinon la personne tape dans le
+    # vide, ce que la machine d'intégration a constaté au premier essai.
+    surface = fenetre.get_window()
+    if surface is not None:
+        surface.focus(Gdk.CURRENT_TIME)
+    fenetre.present()
     fenetre.champ.grab_focus()
-    Gdk.Screen.get_default()
+
+    dire("premier ecran affiche, il demande un nom")
     Gtk.main()
 
 

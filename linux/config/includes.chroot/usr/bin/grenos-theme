@@ -24,7 +24,6 @@ echo "$VOULU" > "$CONFIG/theme"
 
 # Les applications GTK du système : le même basculement, par leur réglage à
 # elles. Sans cela, l'explorateur resterait sombre sur un bureau clair.
-mkdir -p "$CONFIG/../gtk-3.0"
 if [ "$VOULU" = jour ]; then
     SOMBRE=false
 else
