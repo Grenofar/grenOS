@@ -131,7 +131,14 @@ done
 
 echo "--- grenOS : l'installateur ---"
 
-# Calamares porte nos couleurs (l'habillage est dans includes.chroot).
+# Calamares porte nos couleurs (l'habillage est dans includes.chroot). Son
+# fichier de marque réclame un logo.png à côté de lui : c'est le nom de grenOS,
+# rendu à la construction par build.sh.
+if [ -d /usr/share/calamares/branding/grenos ] && [ -f /usr/share/grenos/logo.png ]; then
+    install -m 0644 /usr/share/grenos/logo.png \
+        /usr/share/calamares/branding/grenos/logo.png || true
+fi
+
 if [ -f /etc/calamares/settings.conf ]; then
     sed -i 's/^branding:.*/branding: grenos/' /etc/calamares/settings.conf || true
     grep -q '^branding:' /etc/calamares/settings.conf || \
