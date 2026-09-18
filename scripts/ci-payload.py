@@ -50,6 +50,13 @@ STEPS = [
         "the kernel gets an address by DHCP over the emulated network card, and the gateway answers its ping",
     ),
 ]
+# L'edition Linux : une image Debian, jugee sur trois choses seulement. Le
+# domaine arrive par DOMAIN, et chaque etape a sa variable comme ci-dessus.
+LINUX_STEPS = [
+    ("image", "IMAGE", "l'image live se construit et fait moins de 2 Go"),
+    ("boot", "BOOT", "l'image demarre dans QEMU sans rester bloquee"),
+    ("screen", "SCREEN", "le bureau est dessine : au moins 3 couleurs, aucune sur plus de 90% de l'ecran"),
+]
 OUTCOMES = {"success": "PASS", "failure": "FAIL"}
 
 
@@ -73,11 +80,12 @@ def clean(text: str) -> str:
 
 
 def verdicts() -> list:
-    """Une entrée par étape, ou aucune quand il n'y avait pas de kernel à juger."""
+    """Une entrée par étape, ou aucune quand il n'y avait rien à juger."""
+    steps = LINUX_STEPS if os.environ.get("DOMAIN") == "linux" else STEPS
     if os.environ.get("PROBE") != "true":
         return []
     out = []
-    for step, var, criterion in STEPS:
+    for step, var, criterion in steps:
         outcome = os.environ.get(var, "")
         out.append(
             {

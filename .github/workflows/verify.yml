@@ -9,6 +9,15 @@ name: verify
 
 on:
   push:
+    # Ce workflow juge le noyau. Une branche qui ne touche que linux/ n'a rien
+    # a y faire : elle recevait un verdict spec_gap faute de kernel modifie,
+    # et c'est linux.yml qui la juge.
+    paths:
+      - "kernel/**"
+      - "scripts/ci-screen.py"
+      - "scripts/ci-payload.py"
+      - "scripts/make-vbox.py"
+      - ".github/workflows/verify.yml"
     branches: ["agent/**"]
   workflow_dispatch:
 

@@ -1,0 +1,32 @@
+#!/bin/sh
+# Alléger l'image : une Release GitHub refuse un fichier de plus de 2 Go, et la
+# première image en faisait 2,3. Ce qui part ici ne manque à personne sur un
+# bureau : les manuels, la documentation des paquets, et les traductions des
+# langues que grenOS ne propose pas (il est en français, avec l'anglais en
+# secours).
+#
+# Ce qui ne part pas : les micrologiciels, les pilotes, les polices. Une image
+# plus petite qui ne démarre pas sur la machine de quelqu'un n'a rien gagné.
+
+set -e
+
+avant=$(du -sm /usr 2>/dev/null | cut -f1)
+
+rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/lintian /usr/share/linda
+
+# Les traductions : on garde le français, l'anglais et le C.
+find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
+     ! -name 'fr*' ! -name 'en*' ! -name 'C*' -exec rm -rf {} + 2>/dev/null || true
+find /usr/share/qt6/translations /usr/share/qt5/translations -type f -name '*.qm' \
+     ! -name '*_fr*' ! -name '*_en*' -delete 2>/dev/null || true
+# L'aide en ligne de KDE, en dehors du français et de l'anglais.
+find /usr/share/help /usr/share/doc-base -mindepth 1 -maxdepth 1 \
+     ! -name 'fr*' ! -name 'en*' -exec rm -rf {} + 2>/dev/null || true
+
+# Les paquets téléchargés et les index : ils seront reconstruits au premier
+# `apt update` de l'utilisateur.
+apt-get clean
+rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
+
+apres=$(du -sm /usr 2>/dev/null | cut -f1)
+echo "grenos: /usr passe de ${avant} Mio a ${apres} Mio"

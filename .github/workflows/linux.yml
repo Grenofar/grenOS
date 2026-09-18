@@ -7,7 +7,7 @@ name: linux
 
 on:
   push:
-    branches: [main, "agent/linux-**", "claude/linux-**"]
+    branches: [main, "agent/**", "claude/**"]
     paths:
       - "linux/**"
       - ".github/workflows/linux.yml"
@@ -47,6 +47,10 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq qemu-system-x86 qemu-utils zip python3
+          # Le peripherique existe sur les runners, mais appartient au groupe
+          # kvm : sans droit d'ecriture, QEMU refuse de demarrer au lieu de se
+          # rabattre sur l'emulation.
+          sudo chmod 0666 /dev/kvm 2>/dev/null || true
           ls -l /dev/kvm || echo "pas de KVM : QEMU emulera, c'est plus lent"
 
       # live-build monte des systèmes de fichiers et fait un debootstrap : cela
@@ -58,6 +62,9 @@ jobs:
             -v "$PWD:/work" -w /work \
             -e LB_PARENT_MIRROR_BOOTSTRAP=http://deb.debian.org/debian \
             debian:trixie sh /work/linux/build.sh 2>&1 | tail -n 200
+          # Le conteneur ecrit en root ; la suite (lien, zip, artefact) tourne
+          # sous le compte du runner.
+          sudo chown -R "$(id -u):$(id -g)" linux || true
           ISO=$(ls linux/*.iso | head -1)
           echo "iso=$ISO" >> "$GITHUB_OUTPUT"
           echo "size=$(stat -c %s "$ISO")" >> "$GITHUB_OUTPUT"
@@ -69,7 +76,12 @@ jobs:
         run: |
           ISO="${{ steps.build.outputs.iso }}"
           ACCEL=""
-          [ -e /dev/kvm ] && ACCEL="-enable-kvm -cpu host"
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            ACCEL="-enable-kvm -cpu host"
+            echo "KVM disponible"
+          else
+            echo "sans KVM : l'emulation est lente, le bureau met plusieurs minutes"
+          fi
           qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
             -cdrom "$ISO" -boot d \
             -display none -vga std \
@@ -111,14 +123,78 @@ jobs:
           STAMP=$(date -u +%Y%m%d-%H%M)
           NAME="grenos-linux-$STAMP"
           mkdir -p dist
-          # Un lien, pas une copie : l'image fait plus d'un gigaoctet.
-          ln "$ISO" "dist/$NAME.iso"
+          # Un deplacement, pas une copie : l'image fait presque deux gigaoctets.
+          mv "$ISO" "dist/$NAME.iso"
           qemu-img create -f vdi "dist/$NAME.vdi" 25G
           python3 scripts/make-vbox.py "$NAME.iso" "dist/$NAME.vbox" --linux --disk "dist/$NAME.vdi" "$NAME.vdi"
           (cd dist && zip -q -9 "$NAME-virtualbox.zip" "$NAME.iso" "$NAME.vbox" "$NAME.vdi")
           ls -la dist
+          SIZE=$(stat -c %s "dist/$NAME.iso")
+          echo "image : $((SIZE / 1024 / 1024)) Mio"
+          if [ "$SIZE" -gt 2100000000 ]; then
+            echo "::error::L'image depasse 2 Go : une Release GitHub la refusera."
+            exit 1
+          fi
           echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      # Le verdict, pour que le Maitre et les taches sachent ou en est une
+      # branche : linux.yml juge l'image comme verify.yml juge le noyau.
+      - name: Rapporter le verdict
+        if: always() && github.ref != 'refs/heads/main'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DOMAIN: linux
+          PROBE: "true"
+          IMAGE: ${{ steps.build.outcome }}
+          BOOT: ${{ steps.boot.outcome }}
+          SCREEN: ${{ steps.boot.outcome }}
+          JOB_STATUS: ${{ job.status }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          RUNID: ${{ github.run_id }}
+          URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          git fetch -q --depth=1 origin main
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" ]; then
+            echo "::notice::Branche identique a main : rien a juger."
+            exit 0
+          fi
+          HEAD_NOW=$(git ls-remote --heads origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)
+          if [ -n "$HEAD_NOW" ] && [ "$HEAD_NOW" != "$GITHUB_SHA" ]; then
+            echo "::notice::Commit remplace : son run rendra le verdict."
+            exit 0
+          fi
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Verdict non transmis : secret SUPABASE_SERVICE_ROLE_KEY absent."
+            exit 1
+          fi
+          if [ "$IMAGE" != "success" ]; then
+            ST=failed; FL=compile_error
+          elif [ "$BOOT" != "success" ]; then
+            ST=failed; FL=test_failure
+          elif [ "$JOB_STATUS" = "cancelled" ]; then
+            ST=timeout; FL=""
+          else
+            ST=passed; FL=""
+          fi
+          : > combined.log
+          for f in ecran serial; do
+            [ -f "$RUNNER_TEMP/$f.log" ] && { echo "--- $f ---" >> combined.log; tail -n 60 "$RUNNER_TEMP/$f.log" >> combined.log; }
+          done
+          LOGTXT=$(tail -c 6000 combined.log 2>/dev/null || true)
+          export ST FL LOGTXT
+          python3 scripts/ci-payload.py > payload.json
+          code=$(curl -s -o response.json -w '%{http_code}' -X POST \
+            "$SUPABASE_URL/rest/v1/runs" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "content-type: application/json" \
+            -H "prefer: return=minimal" \
+            --data-binary @payload.json)
+          echo "verdict $ST : HTTP $code"
+          [ "$code" = "201" ] || { cat response.json; exit 1; }
 
       - name: Publier la Release
         if: github.ref == 'refs/heads/main' || inputs.publish
