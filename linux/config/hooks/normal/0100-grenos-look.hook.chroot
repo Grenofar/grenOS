@@ -156,6 +156,15 @@ CursorTheme=breeze_cursors
 
 [General]
 Numlock=on
+
+# La session X11 (plasmax11.desktop), pas Wayland (plasma.desktop) : sans
+# accélération 3D — une machine virtuelle, le plus souvent — X11 est
+# nettement plus fluide, et c'est la fluidité qui manquait. live-config écrit
+# le nom de l'utilisateur dans /etc/sddm.conf au démarrage ; SDDM lit ensuite
+# ce fichier-ci, qui a le dernier mot sur la session.
+[Autologin]
+Session=plasmax11.desktop
+Relogin=false
 EOF
 install -d /usr/share/sddm/themes/breeze
 cat > /usr/share/sddm/themes/breeze/theme.conf.user <<'EOF'
