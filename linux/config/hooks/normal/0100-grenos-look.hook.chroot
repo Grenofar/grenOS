@@ -237,6 +237,22 @@ if [ -f /etc/systemd/system/grenos-preuve.service ]; then
     systemctl enable grenos-preuve.service >/dev/null 2>&1 || true
 fi
 
+# ---- Les mises a jour se signalent toutes seules -----------------------------
+# Le veilleur du magasin tourne en fond et pose une icone dans la zone de
+# notification des qu'il y a quelque chose a installer — c'est le geste que
+# tout le monde connait de Windows. La verification est quotidienne, et rien
+# ne s'installe sans qu'on le demande.
+if [ -f /usr/share/applications/org.kde.discover.notifier.desktop ]; then
+    install -d /etc/skel/.config/autostart
+    cp /usr/share/applications/org.kde.discover.notifier.desktop /etc/skel/.config/autostart/
+fi
+cat > "$SKEL/PlasmaDiscoverUpdates" <<'EOF'
+[Global]
+UpdateInterval=1440
+UseUnattendedUpdates=false
+RequiredNotificationInterval=86400
+EOF
+
 # ---- L'installateur porte nos couleurs --------------------------------------
 # calamares-settings-debian installe un habillage au nom de Debian. Le nôtre
 # est dans /usr/share/calamares/branding/grenos ; il ne manque que le logo et
