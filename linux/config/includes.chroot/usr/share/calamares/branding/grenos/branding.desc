@@ -1,0 +1,44 @@
+# L'habillage de l'installateur grenOS.
+#
+# Calamares lit ce fichier pour savoir quel nom porter, quelles couleurs
+# prendre et quoi montrer pendant qu'il travaille. Sans lui, l'installation
+# s'annonce sous le nom de Debian, ce qui n'est ni vrai ni rassurant.
+---
+componentName: grenos
+
+welcomeStyleCalamares: false
+welcomeExpandingLogo: true
+
+windowExpanding: normal
+windowSize: 820px,560px
+windowPlacement: center
+
+strings:
+    productName:         grenOS
+    shortProductName:    grenOS
+    version:             1.0
+    shortVersion:        1.0
+    versionedName:       grenOS 1.0
+    shortVersionedName:  grenOS 1.0
+    bootloaderEntryName: grenOS
+    productUrl:          https://grenos-dev.vercel.app
+    supportUrl:          https://grenos-dev.vercel.app
+    knownIssuesUrl:      https://github.com/Grenofar/grenOS/issues
+    releaseNotesUrl:     https://github.com/Grenofar/grenOS/releases
+    donateUrl:           https://grenos-dev.vercel.app
+
+images:
+    productLogo:         "logo.png"
+    productIcon:         "logo.png"
+    productWelcome:      "logo.png"
+
+slideshow:               "show.qml"
+slideshowAPI:            2
+
+# Les couleurs de grenOS : le bleu de l'accent sur le fond sombre du bureau,
+# pour que l'installateur ne dépareille pas avec le reste.
+style:
+   SidebarBackground:    "#0f1522"
+   SidebarText:          "#e6ebf5"
+   SidebarTextCurrent:   "#ffffff"
+   SidebarBackgroundCurrent: "#2f7df6"

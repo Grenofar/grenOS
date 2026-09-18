@@ -231,6 +231,18 @@ if [ -f /usr/share/applications/grenos-bienvenue.desktop ]; then
     cp /usr/share/applications/grenos-bienvenue.desktop /etc/skel/.config/autostart/
 fi
 
+# ---- L'installateur porte nos couleurs --------------------------------------
+# calamares-settings-debian installe un habillage au nom de Debian. Le nôtre
+# est dans /usr/share/calamares/branding/grenos ; il ne manque que le logo et
+# la ligne qui dit à Calamares de le prendre.
+if [ -d /usr/share/calamares/branding/grenos ]; then
+    [ -f /usr/share/grenos/logo.png ] &&         install -m 0644 /usr/share/grenos/logo.png /usr/share/calamares/branding/grenos/logo.png
+    if [ -f /etc/calamares/settings.conf ]; then
+        sed -i 's/^branding:.*/branding: grenos/' /etc/calamares/settings.conf
+        grep -q '^branding:' /etc/calamares/settings.conf || echo "branding: grenos" >> /etc/calamares/settings.conf
+    fi
+fi
+
 # ---- Le magasin : Flathub branché d'avance ----------------------------------
 # Discover sait installer des paquets Debian et des Flatpak. Flathub est ajouté
 # ici pour que Steam et les applications grand public soient là dès le premier
