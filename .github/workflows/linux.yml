@@ -164,6 +164,12 @@ jobs:
             -monitor unix:"$RUNNER_TEMP/monitor.sock",server,nowait \
             -no-reboot &
           QEMU=$!
+          # Vingt secondes pour arriver au menu de démarrage, puis Entrée,
+          # comme le ferait la personne devant l'écran. Sans cela, un menu qui
+          # attend passe pour un système qui a démarré.
+          sleep 20
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-menu.ppm" || true
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
           # Le bureau met du temps à venir : on regarde à intervalles, et on
           # garde chaque capture pour pouvoir les lire ensuite.
           for minute in 1 2 3 4 5; do
@@ -174,6 +180,15 @@ jobs:
           python3 scripts/ci-screen.py judge "$RUNNER_TEMP/final.ppm" "$RUNNER_TEMP/final.png" | tee "$RUNNER_TEMP/ecran.log"
           kill $QEMU 2>/dev/null || true
           tail -n 40 "$RUNNER_TEMP/serial.log" || true
+          # Un bureau couvre son fond de fenetres, d'icones et d'un panneau :
+          # sa couleur dominante ne depasse jamais 70 % de l'ecran. Un menu de
+          # demarrage, lui, est noir a 90 %.
+          PART=$(sed -n 's/.*covers \([0-9]*\)%.*/\1/p' "$RUNNER_TEMP/ecran.log" | head -1)
+          echo "couleur dominante : ${PART:-?} %"
+          if [ -z "$PART" ] || [ "$PART" -gt 70 ]; then
+            echo "::error::L'ecran n'est pas un bureau : la couleur dominante couvre ${PART:-?} % apres cinq minutes."
+            exit 1
+          fi
 
       - name: Garder les captures
         if: always()
