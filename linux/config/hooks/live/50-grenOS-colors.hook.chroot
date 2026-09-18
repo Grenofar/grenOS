@@ -1,0 +1,4 @@
+#!/bin/set -e
+# Copy grenOS KDE colour scheme to the correct location in the live system
+cp /usr/share/color-schemes/grenOS.colors /usr/share/color-schemes/
+exit 0
