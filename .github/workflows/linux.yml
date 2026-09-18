@@ -215,7 +215,11 @@ jobs:
           mkdir -p dist
           # Un deplacement, pas une copie : l'image fait presque deux gigaoctets.
           mv "$ISO" "dist/$NAME.iso"
-          qemu-img create -f vdi "dist/$NAME.vdi" 25G
+          # Le disque de la machine : formate et etiquete persistence, pour que
+          # grenOS garde tout des le premier demarrage sans rien installer.
+          sudo apt-get install -y -qq gdisk e2fsprogs
+          sudo linux/tools/make-disk.sh "dist/$NAME.vdi" 25
+          sudo chown "$(id -u):$(id -g)" "dist/$NAME.vdi"
           python3 scripts/make-vbox.py "$NAME.iso" "dist/$NAME.vbox" --linux --disk "dist/$NAME.vdi" "$NAME.vdi"
           (cd dist && zip -q -9 "$NAME-virtualbox.zip" "$NAME.iso" "$NAME.vbox" "$NAME.vdi")
           ls -la dist

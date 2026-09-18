@@ -24,5 +24,5 @@ lb config noauto \
     --iso-volume "grenOS" \
     --image-name "grenos" \
     --compression xz     --apt-recommends false \
-    --bootappend-live "boot=live components locales=fr_FR.UTF-8 keyboard-layouts=fr keyboard-model=pc105 timezone=Europe/Paris username=grenos user-fullname=grenOS hostname=grenos quiet splash" \
+    --bootappend-live "boot=live components locales=fr_FR.UTF-8 keyboard-layouts=fr keyboard-model=pc105 timezone=Europe/Paris username=grenos user-fullname=grenOS hostname=grenos persistence persistence-encryption=none quiet splash" \
     "${@}"
