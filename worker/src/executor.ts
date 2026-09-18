@@ -252,6 +252,23 @@ export async function executeTask(
     return;
   }
 
+  // Un agent qui peut ecrire et qui n'a rien ecrit n'a pas fini : il a
+  // reflechi. Le 2026-09-18 un Codeur a demande confirmation parce que le
+  // dossier de ses fichiers n'existait pas encore — en creer un fichier le
+  // cree — et la tache est passee « done » sans une ligne de code. Elle est
+  // maintenant garee, avec la raison, pour que le Maitre la reformule.
+  if (agent.canWrite && changes.length === 0 && !escalation && !help) {
+    const detail = [
+      "Aucun fichier ecrit. Ce que l'agent a repondu :",
+      envelope.summary,
+      envelope.reasoning_brief,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    await recordFailure(task, "spec_gap", detail, specGapPatch(detail));
+    return;
+  }
+
   let status: string;
   if (escalation || help) status = "blocked";
   else if (wantsVerification) status = "awaiting_verification";
