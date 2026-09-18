@@ -39,8 +39,8 @@ else
     LANCEUR="pkexec"
 fi
 
-if command -v konsole >/dev/null 2>&1; then
-    konsole --title "$TITRE" --hold -e "$LANCEUR" "$SCRIPT"
+if command -v x-terminal-emulator >/dev/null 2>&1; then
+    x-terminal-emulator --title "$TITRE" -e sh -c "$LANCEUR '$SCRIPT'; echo; echo 'Entree pour fermer.'; read x"
 else
     "$LANCEUR" "$SCRIPT"
 fi

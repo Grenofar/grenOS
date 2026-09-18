@@ -1,0 +1,90 @@
+! Les fenêtres de grenOS : barre de titre, bordures, boutons.
+!
+! Les couleurs sont celles de tout le reste du système (le bleu #2f7df6 sur un
+! fond #0d1220) : une fenêtre doit avoir l'air de venir du même endroit que la
+! barre et le menu. Pas de dégradé coûteux, pas d'ombre calculée — un aplat se
+! dessine instantanément, même sans accélération 3D.
+
+border.width: 1
+padding.width: 6
+padding.height: 4
+window.handle.width: 0
+window.client.padding.width: 0
+window.client.padding.height: 0
+menu.overlap.x: 0
+menu.overlap.y: 0
+
+! La fenêtre au premier plan : on la reconnaît à son liseré bleu.
+window.active.border.color: #2f7df6
+window.active.title.bg: flat solid
+window.active.title.bg.color: #131a2b
+window.active.label.text.color: #e6ebf5
+window.active.handle.bg: flat solid
+window.active.handle.bg.color: #131a2b
+window.active.grip.bg: flat solid
+window.active.grip.bg.color: #131a2b
+window.active.button.unpressed.bg: flat solid
+window.active.button.unpressed.bg.color: #131a2b
+window.active.button.unpressed.image.color: #cdd6e6
+window.active.button.hover.bg: flat solid
+window.active.button.hover.bg.color: #1b2740
+window.active.button.hover.image.color: #ffffff
+window.active.button.pressed.bg: flat solid
+window.active.button.pressed.bg.color: #2f7df6
+window.active.button.pressed.image.color: #ffffff
+window.active.button.disabled.bg: flat solid
+window.active.button.disabled.bg.color: #131a2b
+window.active.button.disabled.image.color: #454f66
+
+! Les autres, en retrait, sans disparaître.
+window.inactive.border.color: #1e2942
+window.inactive.title.bg: flat solid
+window.inactive.title.bg.color: #0d1220
+window.inactive.label.text.color: #8e9ab0
+window.inactive.handle.bg: flat solid
+window.inactive.handle.bg.color: #0d1220
+window.inactive.grip.bg: flat solid
+window.inactive.grip.bg.color: #0d1220
+window.inactive.button.unpressed.bg: flat solid
+window.inactive.button.unpressed.bg.color: #0d1220
+window.inactive.button.unpressed.image.color: #6f7b91
+window.inactive.button.hover.bg: flat solid
+window.inactive.button.hover.bg.color: #1b2740
+window.inactive.button.hover.image.color: #e6ebf5
+window.inactive.button.disabled.bg: flat solid
+window.inactive.button.disabled.bg.color: #0d1220
+window.inactive.button.disabled.image.color: #39415400
+
+window.label.text.justify: center
+
+! Le menu du gestionnaire de fenêtres, et la liste d'Alt+Tab.
+menu.border.color: #1e2942
+menu.border.width: 1
+menu.title.bg: flat solid
+menu.title.bg.color: #131a2b
+menu.title.text.color: #e6ebf5
+menu.title.text.justify: center
+menu.items.bg: flat solid
+menu.items.bg.color: #0d1220
+menu.items.text.color: #e6ebf5
+menu.items.disabled.text.color: #5b6474
+menu.items.active.bg: flat solid
+menu.items.active.bg.color: #2f7df6
+menu.items.active.text.color: #ffffff
+menu.separator.color: #1e2942
+menu.separator.width: 1
+menu.separator.padding.width: 6
+menu.separator.padding.height: 3
+
+! La bulle qui montre où va la fenêtre pendant un déplacement.
+osd.border.width: 1
+osd.border.color: #1e2942
+osd.bg: flat solid
+osd.bg.color: #0d1220
+osd.label.bg: flat solid
+osd.label.bg.color: #0d1220
+osd.label.text.color: #e6ebf5
+osd.hilight.bg: flat solid
+osd.hilight.bg.color: #2f7df6
+osd.unhilight.bg: flat solid
+osd.unhilight.bg.color: #1b2740

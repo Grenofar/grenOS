@@ -19,7 +19,7 @@ while [ "$i" -lt 240 ]; do
     # une session graphique ouverte par quelqu'un d'autre que le gestionnaire
     # de connexion lui-meme.
     if command -v loginctl >/dev/null 2>&1; then
-        if loginctl list-sessions --no-legend 2>/dev/null | awk '$3 != "sddm" && $3 != "" { trouve = 1 } END { exit !trouve }'; then
+        if loginctl list-sessions --no-legend 2>/dev/null | awk '$3 != "lightdm" && $3 != "" { trouve = 1 } END { exit !trouve }'; then
             echo "grenos: session de bureau ouverte" > /dev/ttyS0 2>/dev/null || true
             exit 0
         fi

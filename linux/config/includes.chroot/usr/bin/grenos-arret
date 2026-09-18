@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Fermer la session, redémarrer, éteindre.
+
+Trois gestes qu'on ne veut jamais déclencher par erreur : la fenêtre demande,
+Échap annule, et le bouton d'extinction est le seul en rouge.
+"""
+import subprocess
+import sys
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gdk, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+
+GESTES = [
+    ("Fermer la session", "Revenir à l'écran de connexion.", ["openbox", "--exit"], ""),
+    ("Redémarrer", "Éteindre puis rallumer la machine.", ["systemctl", "reboot"], ""),
+    ("Éteindre", "Arrêter complètement la machine.", ["systemctl", "poweroff"], "danger"),
+]
+
+
+def faire(commande):
+    Gtk.main_quit()
+    subprocess.Popen(commande, start_new_session=True)
+
+
+class Arret(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Éteindre grenOS")
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_resizable(False)
+        self.set_keep_above(True)
+        self.connect("destroy", Gtk.main_quit)
+        self.connect("key-press-event", self.touche)
+
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        colonne.set_border_width(24)
+        colonne.set_size_request(380, -1)
+        self.add(colonne)
+
+        colonne.pack_start(grenosui.titre("Fin de session", grenosui.adresse()), False, False, 0)
+
+        for nom, note, commande, genre in GESTES:
+            bouton = Gtk.Button()
+            for classe in genre.split():
+                bouton.get_style_context().add_class(classe)
+            contenu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            titre = Gtk.Label(label=nom, xalign=0)
+            titre.get_style_context().add_class("entree-titre")
+            sous = Gtk.Label(label=note, xalign=0)
+            sous.get_style_context().add_class("sous")
+            contenu.pack_start(titre, False, False, 0)
+            contenu.pack_start(sous, False, False, 0)
+            bouton.add(contenu)
+            bouton.connect("clicked", lambda _, c=commande: faire(c))
+            colonne.pack_start(bouton, False, False, 0)
+
+        colonne.pack_start(grenosui.bouton("Annuler", Gtk.main_quit, "discret"), False, False, 6)
+
+    def touche(self, _widget, evenement):
+        if Gdk.keyval_name(evenement.keyval) == "Escape":
+            Gtk.main_quit()
+            return True
+        return False
+
+
+def main():
+    grenosui.habiller()
+    fenetre = Arret()
+    fenetre.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

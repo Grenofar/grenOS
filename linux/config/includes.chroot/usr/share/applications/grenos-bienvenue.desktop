@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Bienvenue dans grenOS
-Comment=Ce qu'il y a dans grenOS, et comment s'en servir
-Exec=xdg-open /usr/share/grenos/bienvenue.html
-Icon=system-help
-Terminal=false
-Categories=System;
-StartupNotify=true

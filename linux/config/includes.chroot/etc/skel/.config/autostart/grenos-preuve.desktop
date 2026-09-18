@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Preuve de session grenOS
-Comment=Depose une marque que le service de preuve lit, pour que la CI sache que le bureau s'est ouvert
-Exec=sh -c "echo ouverte > /tmp/grenos-session"
-Terminal=false
-NoDisplay=true
-X-KDE-autostart-phase=2

@@ -1,33 +1,50 @@
 #!/bin/sh
-# Le thème de grenOS, jour ou nuit, sans rien rouvrir : le bureau, les fenêtres
-# et le fond d'écran changent ensemble. Sans argument, il bascule.
+# Jour ou nuit, pour tout le système d'un coup.
+#
+# Le choix tient dans un fichier d'une ligne. Nos fenêtres le lisent à
+# l'ouverture, la barre le relit quand on la prévient, et les applications GTK
+# du système suivent par leur propre réglage. Sans argument, on bascule — c'est
+# ce que fait Meta+T.
+#
+#   grenos-theme [jour|nuit]
 
-set -e
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/grenos"
+mkdir -p "$CONFIG"
 
-current() {
-    if grep -qs 'breezedark' "$HOME/.config/kdeglobals"; then echo nuit; else echo jour; fi
-}
+ACTUEL=nuit
+[ -r "$CONFIG/theme" ] && ACTUEL=$(cat "$CONFIG/theme")
 
-wanted="${1:-}"
-case "$wanted" in
-    jour|day|clair) wanted=jour ;;
-    nuit|night|sombre) wanted=nuit ;;
-    "") [ "$(current)" = nuit ] && wanted=jour || wanted=nuit ;;
-    *) echo "usage: grenos-theme [jour|nuit]" >&2; exit 2 ;;
+case "${1:-}" in
+    jour|nuit) VOULU="$1" ;;
+    "")        [ "$ACTUEL" = nuit ] && VOULU=jour || VOULU=nuit ;;
+    *)         echo "usage: grenos-theme [jour|nuit]" >&2 ; exit 2 ;;
 esac
 
-if [ "$wanted" = nuit ]; then
-    look=org.kde.breezedark.desktop
-    paper=/usr/share/wallpapers/grenOS/
+echo "$VOULU" > "$CONFIG/theme"
+
+# Les applications GTK du système : le même basculement, par leur réglage à
+# elles. Sans cela, l'explorateur resterait sombre sur un bureau clair.
+mkdir -p "$CONFIG/../gtk-3.0"
+if [ "$VOULU" = jour ]; then
+    SOMBRE=false
 else
-    look=org.kde.breeze.desktop
-    paper=/usr/share/wallpapers/grenOS-Jour/
+    SOMBRE=true
 fi
+SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/settings.ini"
+mkdir -p "$(dirname "$SETTINGS")"
+cat > "$SETTINGS" <<EOF
+[Settings]
+gtk-theme-name=Adwaita
+gtk-icon-theme-name=Adwaita
+gtk-font-name=Inter 10
+gtk-application-prefer-dark-theme=$SOMBRE
+gtk-cursor-theme-name=Adwaita
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle=hintslight
+gtk-xft-rgba=rgb
+EOF
 
-plasma-apply-lookandfeel -a "$look" >/dev/null 2>&1 || true
-plasma-apply-wallpaperimage "$paper" >/dev/null 2>&1 || true
-
-if command -v kdialog >/dev/null 2>&1; then
-    kdialog --title grenOS --passivepopup "Thème $wanted" 3 >/dev/null 2>&1 || true
-fi
-echo "grenOS: thème $wanted"
+# Le fond, puis la barre : elle se relance avec la nouvelle palette.
+grenos-fond
+pkill -USR1 -f "grenos-shell" 2>/dev/null || true

@@ -1,213 +1,66 @@
 #!/bin/sh
-# Le visage de grenOS : ce que l'utilisateur voit au démarrage, dans le bureau
-# et dans les fenêtres. Tout est écrit dans /etc/skel, donc chaque compte créé
-# ensuite — y compris celui de l'installation sur disque — hérite des mêmes
-# réglages, sans rien figer : l'utilisateur peut tout changer après.
+# Ce qui fait que l'image ressemble à grenOS, et pas à une Debian nue.
+#
+# Tout ce qui se voit est écrit ici ou dans config/includes.chroot : le nom du
+# système, le fond d'écran, la session, l'écran de chargement, les entrées de
+# menu, l'installateur. Aucune configuration d'un bureau tiers : depuis le
+# 18 septembre 2026, le bureau de grenOS est `grenos-shell`, écrit dans ce
+# dépôt et posé sur openbox — Plasma composait l'écran par le GPU, et sans
+# accélération 3D la souris tombait à trois images par seconde.
+#
+# Piège déjà payé : avec `set -e`, une commande qui finit en erreur à la fin
+# d'une boucle fait sortir tout le hook, et le thème disparaît sans qu'aucune
+# étape ne rougisse. D'où les `|| true` et les `rm -f` sans test.
 
 set -e
 
 VERSION="1.0"
-SKEL=/etc/skel/.config
 
-mkdir -p "$SKEL" /etc/sddm.conf.d /etc/skel/Bureau /etc/skel/Documents /etc/skel/Images
+echo "--- grenOS : identite du systeme ---"
 
-# ---- L'identité du système ---------------------------------------------------
 cat > /etc/os-release <<EOF
 PRETTY_NAME="grenOS ${VERSION}"
 NAME="grenOS"
 VERSION_ID="${VERSION}"
-VERSION="${VERSION} (trixie)"
-VERSION_CODENAME=trixie
+VERSION="${VERSION}"
 ID=grenos
 ID_LIKE=debian
 HOME_URL="https://grenos-dev.vercel.app"
 SUPPORT_URL="https://grenos-dev.vercel.app"
 BUG_REPORT_URL="https://github.com/Grenofar/grenOS/issues"
 EOF
+
 cat > /etc/lsb-release <<EOF
 DISTRIB_ID=grenOS
 DISTRIB_RELEASE=${VERSION}
-DISTRIB_CODENAME=trixie
+DISTRIB_CODENAME=grenos
 DISTRIB_DESCRIPTION="grenOS ${VERSION}"
 EOF
-printf 'grenOS %s \\n \\l\n\n' "${VERSION}" > /etc/issue
 
-# ---- Le thème : sombre par défaut, clair d'un clic --------------------------
-cat > "$SKEL/kdeglobals" <<'EOF'
-[General]
-ColorScheme=grenOS
-Name=grenOS
-font=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
-fixed=Hack,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
-menuFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
-smallestReadableFont=Inter,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
-toolBarFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
-AccentColor=47,125,246
-LastUsedCustomAccentColor=47,125,246
-XftAntialias=true
-XftHintStyle=hintslight
-XftSubPixel=rgb
+printf 'grenOS %s\n\n' "${VERSION}" > /etc/issue
+cp /etc/issue /etc/issue.net
 
-[Icons]
-Theme=breeze-dark
+echo "--- grenOS : la session ---"
 
-[KDE]
-LookAndFeelPackage=org.kde.breezedark.desktop
-widgetStyle=Breeze
-AnimationDurationFactor=1
-SingleClick=false
-ShowDeleteCommand=true
+# Le thème de départ, hérité par tout compte créé ensuite — y compris celui de
+# l'installation sur disque.
+mkdir -p /etc/skel/.config/grenos /etc/skel/Documents /etc/skel/Images
+echo nuit > /etc/skel/.config/grenos/theme
 
-[General][ColorEffects:Disabled]
-ChangeSelectionColor=
+# Nos choix d'applications par défaut, plutôt que le hasard de l'installation.
+update-alternatives --set x-terminal-emulator /usr/bin/xfce4-terminal || true
+update-alternatives --set x-www-browser /usr/bin/firefox-esr || true
 
-[WM]
-activeBackground=27,32,43
-activeForeground=228,233,241
-inactiveBackground=19,23,33
-inactiveForeground=156,167,185
-EOF
+# LightDM est le seul gestionnaire de connexion, et il ouvre notre session.
+echo "/usr/sbin/lightdm" > /etc/X11/default-display-manager
 
-# ---- Les fenêtres : animations douces, coins arrondis, ombres ---------------
-cat > "$SKEL/kwinrc" <<'EOF'
-[Compositing]
-Enabled=true
-AnimationSpeed=3
-WindowsBlockCompositing=true
+# Le premier écran (le nom de la machine), puis la preuve que le bureau s'est
+# vraiment ouvert — c'est elle que lit la CI sur le port série.
+systemctl enable grenos-premier.service || true
+systemctl enable grenos-preuve.service || true
 
-[Effect-blur]
-BlurStrength=8
-NoiseStrength=2
+echo "--- grenOS : le clavier et la langue ---"
 
-[Plugins]
-blurEnabled=true
-contrastEnabled=true
-slideEnabled=true
-translucencyEnabled=true
-wobblywindowsEnabled=false
-magiclampEnabled=true
-kwin4_effect_squashEnabled=false
-kwin4_effect_fadeEnabled=true
-
-[TabBox]
-LayoutName=thumbnail_grid
-HighlightWindows=true
-
-[Windows]
-Placement=Centered
-RollOverDesktops=true
-EOF
-
-# ---- Les raccourcis ajoutés : seulement ceux qui manquent -------------------
-# Alt+Tab, Alt+F4, Meta et Meta+D sont déjà les raccourcis de KDE. Une ligne
-# vaut : raccourci actuel, raccourci par défaut, libellé.
-cat > "$SKEL/kglobalshortcutsrc" <<'EOF'
-[services][org.kde.plasma-systemmonitor.desktop]
-_k_friendly_name=Gestionnaire de tâches
-_launch=Ctrl+Shift+Esc,none,Gestionnaire de tâches
-
-[services][plasma-systemmonitor.desktop]
-_k_friendly_name=Gestionnaire de tâches
-_launch=Ctrl+Shift+Esc,none,Gestionnaire de tâches
-
-[services][grenos-theme.desktop]
-_k_friendly_name=Thème jour et nuit
-_launch=Meta+T,none,Thème jour et nuit
-EOF
-
-# L'écran de verrouillage ne s'arme pas tout seul : sans mot de passe, il
-# n'enferme personne dehors, et avec un mot de passe c'est à la personne de le
-# demander. Configuration du système, Verrouillage de l'écran, le rallume.
-cat > "$SKEL/kscreenlockerrc" <<'EOF'
-[Daemon]
-Autolock=false
-LockOnResume=false
-Timeout=0
-EOF
-
-# ---- Le fond d'écran, comme paquet de fonds d'écran KDE ---------------------
-install -d /usr/share/wallpapers/grenOS/contents/images
-install -d /usr/share/wallpapers/grenOS-Jour/contents/images
-mv /usr/share/grenos/grenos-nuit.png /usr/share/wallpapers/grenOS/contents/images/2560x1440.png
-mv /usr/share/grenos/grenos-jour.png /usr/share/wallpapers/grenOS-Jour/contents/images/2560x1440.png
-for name in grenOS grenOS-Jour; do
-  moment="Nuit"
-  [ "$name" = "grenOS-Jour" ] && moment="Jour"
-  cat > "/usr/share/wallpapers/$name/metadata.json" <<EOF
-{
-    "KPlugin": {
-        "Authors": [{"Name": "grenOS"}],
-        "Id": "$name",
-        "License": "CC-BY-SA-4.0",
-        "Name": "grenOS $moment"
-    }
-}
-EOF
-done
-
-cat > "$SKEL/plasma-org.kde.plasma.desktop-appletsrc" <<'EOF'
-[Containments][1]
-activityId=
-formfactor=0
-immutability=1
-lastScreen=0
-location=0
-plugin=org.kde.plasma.folder
-wallpaperplugin=org.kde.image
-
-[Containments][1][Wallpaper][org.kde.image][General]
-Image=file:///usr/share/wallpapers/grenOS/
-SlidePaths=/usr/share/wallpapers/
-FillMode=2
-EOF
-
-# ---- L'écran de connexion et l'écran de démarrage ---------------------------
-cat > /etc/sddm.conf.d/grenos.conf <<'EOF'
-[Theme]
-Current=breeze
-CursorTheme=breeze_cursors
-
-[General]
-Numlock=on
-
-# La session X11 (plasmax11.desktop), pas Wayland (plasma.desktop) : sans
-# accélération 3D — une machine virtuelle, le plus souvent — X11 est
-# nettement plus fluide, et c'est la fluidité qui manquait. live-config écrit
-# le nom de l'utilisateur dans /etc/sddm.conf au démarrage ; SDDM lit ensuite
-# ce fichier-ci, qui a le dernier mot sur la session.
-[Autologin]
-Session=plasmax11.desktop
-Relogin=false
-EOF
-install -d /usr/share/sddm/themes/breeze
-cat > /usr/share/sddm/themes/breeze/theme.conf.user <<'EOF'
-[General]
-background=/usr/share/wallpapers/grenOS/contents/images/2560x1440.png
-type=image
-EOF
-
-if [ -x /usr/sbin/plymouth-set-default-theme ]; then
-    plymouth-set-default-theme spinner || true
-fi
-# L'écran de chargement : le nom grenOS haut dans l'écran, l'anneau qui tourne
-# en dessous. Le gabarit pose la marque à 0,75 de la hauteur, tout en bas, où
-# elle passe inaperçue ; et quand les lignes n'existent pas, on les ajoute.
-if [ -f /usr/share/grenos/logo.png ]; then
-    THEME=/usr/share/plymouth/themes/spinner/spinner.plymouth
-    install -D -m 0644 /usr/share/grenos/logo.png /usr/share/plymouth/themes/spinner/watermark.png
-    sed -i 's/^WatermarkHorizontalAlignment=.*/WatermarkHorizontalAlignment=.5/' "$THEME" || true
-    sed -i 's/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.22/' "$THEME" || true
-    grep -q '^WatermarkVerticalAlignment=' "$THEME" || {
-        echo "WatermarkHorizontalAlignment=.5" >> "$THEME"
-        echo "WatermarkVerticalAlignment=.22" >> "$THEME"
-    }
-fi
-update-initramfs -u || true
-
-# ---- Le français partout -----------------------------------------------------
-echo "fr_FR.UTF-8 UTF-8" > /etc/locale.gen
-locale-gen || true
-update-locale LANG=fr_FR.UTF-8 || true
 cat > /etc/default/keyboard <<'EOF'
 XKBMODEL="pc105"
 XKBLAYOUT="fr"
@@ -216,73 +69,87 @@ XKBOPTIONS=""
 BACKSPACE="guess"
 EOF
 
-# ---- Ce que l'on trouve dans le menu et sur le bureau -----------------------
-install -d /etc/skel/Bureau
-for entry in grenos-bienvenue grenos-maj io.calamares.calamares; do
-    if [ -f "/usr/share/applications/$entry.desktop" ]; then
-        cp "/usr/share/applications/$entry.desktop" /etc/skel/Bureau/
-        chmod +x "/etc/skel/Bureau/$entry.desktop"
+echo "fr_FR.UTF-8 UTF-8" > /etc/locale.gen
+echo "LANG=fr_FR.UTF-8" > /etc/default/locale
+locale-gen >/dev/null 2>&1 || true
+
+echo "--- grenOS : l'ecran de chargement ---"
+
+# Plymouth, thème « spinner » : notre fond, notre nom monté haut sur l'écran,
+# et aucun logo Debian.
+if [ -d /usr/share/plymouth/themes/spinner ]; then
+    cp /usr/share/grenos/grenos-nuit.png \
+       /usr/share/plymouth/themes/spinner/background-tile.png 2>/dev/null || true
+    sed -i 's/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.22/' \
+        /usr/share/plymouth/themes/spinner/spinner.plymouth 2>/dev/null || true
+    plymouth-set-default-theme spinner >/dev/null 2>&1 || true
+fi
+update-initramfs -u >/dev/null 2>&1 || true
+
+echo "--- grenOS : les entrees de menu ---"
+
+mkdir -p /usr/share/applications
+
+ecrire_entree () {
+    cat > "/usr/share/applications/grenos-$1.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=$2
+Comment=$3
+Exec=grenos-$1
+Icon=preferences-system
+Terminal=false
+Categories=System;Settings;
+EOF
+}
+
+ecrire_entree bienvenue "Bienvenue" "Ce que l'on peut faire, tout de suite"
+ecrire_entree parametres "Réglages" "Le compte, l'écran, l'apparence, les mises à jour"
+ecrire_entree magasin "Magasin" "Ajouter des applications en un clic"
+ecrire_entree maj "Mettre à jour grenOS" "Les nouveautés et les correctifs de sécurité"
+ecrire_entree theme "Jour et nuit" "Changer la lumière du bureau"
+
+cat > /usr/share/applications/grenos-installer.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Installer grenOS
+Comment=Poser le système sur le disque de cette machine
+Exec=pkexec calamares
+Icon=drive-harddisk
+Terminal=false
+Categories=System;
+EOF
+
+# Ce que personne ne doit trouver dans le menu : outils internes et doublons.
+for cachee in calamares.desktop openbox.desktop debian-uxterm.desktop \
+              debian-xterm.desktop display-im6.q16.desktop feh.desktop \
+              lightdm-gtk-greeter.desktop; do
+    if [ -f "/usr/share/applications/${cachee}" ]; then
+        echo "NoDisplay=true" >> "/usr/share/applications/${cachee}"
     fi
 done
 
-# L'accueil s'ouvre une fois, au premier démarrage de la session.
-install -d /etc/skel/.config/autostart
-if [ -f /usr/share/applications/grenos-bienvenue.desktop ]; then
-    cp /usr/share/applications/grenos-bienvenue.desktop /etc/skel/.config/autostart/
+echo "--- grenOS : l'installateur ---"
+
+# Calamares porte nos couleurs (l'habillage est dans includes.chroot).
+if [ -f /etc/calamares/settings.conf ]; then
+    sed -i 's/^branding:.*/branding: grenos/' /etc/calamares/settings.conf || true
+    grep -q '^branding:' /etc/calamares/settings.conf || \
+        echo "branding: grenos" >> /etc/calamares/settings.conf
 fi
 
-# Le service qui annonce l'ouverture du bureau sur le port série : la CI en
-# fait sa preuve, et rien ne se publie sans elle.
-if [ -f /etc/systemd/system/grenos-preuve.service ]; then
-    systemctl enable grenos-preuve.service >/dev/null 2>&1 || true
-fi
+echo "--- grenOS : le magasin ---"
 
-# ---- Les mises a jour se signalent toutes seules -----------------------------
-# Le veilleur du magasin tourne en fond et pose une icone dans la zone de
-# notification des qu'il y a quelque chose a installer — c'est le geste que
-# tout le monde connait de Windows. La verification est quotidienne, et rien
-# ne s'installe sans qu'on le demande.
-if [ -f /usr/share/applications/org.kde.discover.notifier.desktop ]; then
-    install -d /etc/skel/.config/autostart
-    cp /usr/share/applications/org.kde.discover.notifier.desktop /etc/skel/.config/autostart/
-fi
-cat > "$SKEL/PlasmaDiscoverUpdates" <<'EOF'
-[Global]
-UpdateInterval=1440
-UseUnattendedUpdates=false
-RequiredNotificationInterval=86400
-EOF
-
-# ---- L'installateur porte nos couleurs --------------------------------------
-# calamares-settings-debian installe un habillage au nom de Debian. Le nôtre
-# est dans /usr/share/calamares/branding/grenos ; il ne manque que le logo et
-# la ligne qui dit à Calamares de le prendre.
-if [ -d /usr/share/calamares/branding/grenos ]; then
-    [ -f /usr/share/grenos/logo.png ] &&         install -m 0644 /usr/share/grenos/logo.png /usr/share/calamares/branding/grenos/logo.png
-    if [ -f /etc/calamares/settings.conf ]; then
-        sed -i 's/^branding:.*/branding: grenos/' /etc/calamares/settings.conf
-        grep -q '^branding:' /etc/calamares/settings.conf || echo "branding: grenos" >> /etc/calamares/settings.conf
-    fi
-fi
-
-# ---- Le magasin : Flathub branché d'avance ----------------------------------
-# Discover sait installer des paquets Debian et des Flatpak. Flathub est ajouté
-# ici pour que Steam et les applications grand public soient là dès le premier
-# démarrage, sans rien configurer. L'ajout ne télécharge rien.
+# Flathub, branché d'avance : le magasin installe Steam sans rien configurer.
+# L'ajout ne télécharge rien.
 if command -v flatpak >/dev/null 2>&1; then
-    flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || true
-fi
-if [ -f /usr/share/applications/org.kde.discover.desktop ]; then
-    sed -i 's/^Name=.*/Name=Magasin grenOS/; s/^Name\[fr\]=.*/Name[fr]=Magasin grenOS/'         /usr/share/applications/org.kde.discover.desktop || true
-    cp /usr/share/applications/org.kde.discover.desktop /etc/skel/Bureau/ 2>/dev/null || true
+    flatpak remote-add --if-not-exists flathub \
+        https://dl.flathub.org/repo/flathub.flatpakrepo || true
 fi
 
-# ---- Ce que l'on ne veut pas voir -------------------------------------------
-# Les entrées de menu qui n'ont pas de sens pour l'utilisateur de grenOS.
-# `rm -f` ne se plaint pas d'un fichier absent : pas de test, donc pas de
-# commande qui rend un code non nul et fait sortir le script (set -e).
-rm -f /usr/share/applications/org.kde.plasma-welcome.desktop \
-      /usr/share/applications/debian-uxterm.desktop \
-      /usr/share/applications/debian-xterm.desktop
+echo "--- grenOS : menage ---"
+
+rm -f /usr/share/applications/xfce4-about.desktop
+rm -f /usr/share/applications/org.gnome.Nautilus.desktop
 
 echo "grenos: look installed"

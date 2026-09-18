@@ -1,0 +1,7 @@
+#!/bin/sh
+# Ouvre le menu des applications.
+#
+# Le menu appartient à la barre, qui tourne déjà : plutôt que d'en ouvrir un
+# second, on prévient celle-ci. C'est ce que fait le clic droit sur le fond
+# d'écran, par openbox.
+exec pkill -USR2 -f "grenos-shell"

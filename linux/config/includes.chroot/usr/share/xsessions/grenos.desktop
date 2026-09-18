@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=grenOS
+Comment=Le bureau de grenOS
+Exec=/usr/bin/grenos-session
+TryExec=/usr/bin/grenos-session
+Type=Application
+DesktopNames=grenOS

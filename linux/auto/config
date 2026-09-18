@@ -1,7 +1,7 @@
 #!/bin/sh
 # La description de l'image grenOS, lue par live-build (lb config).
 #
-# Debian trixie, bureau KDE Plasma, session live en français avec clavier
+# Debian trixie, bureau grenOS (openbox + grenos-shell), session live en français avec clavier
 # AZERTY, et l'installateur Calamares pour poser le système sur le disque.
 # Tout ce qui fait grenOS — thème, fond d'écran, réglages, accueil — est
 # ajouté par config/includes.chroot et config/hooks.
@@ -23,6 +23,9 @@ lb config noauto \
     --iso-publisher "grenOS; https://grenos-dev.vercel.app" \
     --iso-volume "grenOS" \
     --image-name "grenos" \
-    --compression xz     --apt-recommends false \
-    --bootappend-live "boot=live components locales=fr_FR.UTF-8 keyboard-layouts=fr keyboard-model=pc105 timezone=Europe/Paris username=grenos user-fullname=grenOS hostname=grenos persistence persistence-encryption=none quiet splash loglevel=3 udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0" \
+    --compression xz \
+    --chroot-squashfs-compression-type zstd \
+    --chroot-squashfs-compression-level 19 \
+    --apt-recommends false \
+    --bootappend-live "boot=live components locales=fr_FR.UTF-8 keyboard-layouts=fr keyboard-model=pc105 timezone=Europe/Paris username=grenos user-fullname=grenOS hostname=grenos persistence persistence-encryption=none quiet splash loglevel=3 udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 rd.udev.log_level=3" \
     "${@}"

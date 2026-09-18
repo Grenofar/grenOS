@@ -1,0 +1,60 @@
+#!/bin/sh
+# La session grenOS : ce qui démarre quand on ouvre le bureau.
+#
+# L'ordre compte. D'abord l'écran (pas d'économiseur, pas de mise en veille :
+# dans une machine virtuelle, un écran qui s'éteint passe pour un plantage),
+# puis le fond, puis les services discrets, puis notre barre, et enfin le
+# gestionnaire de fenêtres au premier plan — c'est lui qui tient la session :
+# quand il s'arrête, la session se ferme.
+#
+# Rien ici ne compose l'écran. Pas d'ombres calculées par le GPU, pas de
+# transparence : c'est ce qui rend le pointeur fluide sur une machine sans
+# accélération 3D.
+
+export XDG_CURRENT_DESKTOP=grenOS
+export XDG_SESSION_DESKTOP=grenos
+export XDG_MENU_PREFIX=grenos-
+# Les applications GTK suivent le thème du système, pas leurs propres couleurs.
+export GTK_OVERLAY_SCROLLING=0
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/grenos"
+mkdir -p "$CONFIG"
+
+# L'écran reste allumé, et le pointeur est une flèche dès la première seconde.
+xset s off -dpms s noblank 2>/dev/null || true
+xsetroot -cursor_name left_ptr 2>/dev/null || true
+
+# Le pointeur des machines virtuelles : sans ce petit service, il colle au bord
+# de la fenêtre et il faut « libérer » le clavier pour en sortir.
+command -v spice-vdagent >/dev/null 2>&1 && spice-vdagent 2>/dev/null &
+command -v vmware-user-suid-wrapper >/dev/null 2>&1 && vmware-user-suid-wrapper 2>/dev/null &
+
+# Les autorisations : installer un paquet ouvre une fenêtre qui demande.
+for agent in /usr/lib/mate-polkit/polkit-mate-authentication-agent-1 \
+             /usr/libexec/polkit-mate-authentication-agent-1; do
+    if [ -x "$agent" ]; then
+        "$agent" &
+        break
+    fi
+done
+
+# Le réseau dans la barre d'état système.
+command -v nm-applet >/dev/null 2>&1 && nm-applet --indicator 2>/dev/null &
+
+# Le fond d'écran, selon le thème du moment.
+grenos-fond &
+
+# La preuve, pour la CI et pour les journaux : un bureau s'est vraiment ouvert.
+echo "$(date -u +%H:%M:%S) $USER" > /tmp/grenos-session 2>/dev/null || true
+
+# Notre barre. Si elle tombe, elle revient : un bureau sans barre est un bureau
+# perdu, et une session qui se ferme ferait perdre le travail en cours.
+grenos-veilleur grenos-shell &
+
+# L'accueil, une seule fois, à la première ouverture.
+if [ ! -e "$CONFIG/accueil-vu" ]; then
+    touch "$CONFIG/accueil-vu"
+    (sleep 2; grenos-bienvenue) &
+fi
+
+exec openbox

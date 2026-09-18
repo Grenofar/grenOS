@@ -1,0 +1,27 @@
+# Le tout premier écran : « comment vous appelez-vous ? »
+#
+# Il passe avant le gestionnaire de connexion, une seule fois, parce que c'est
+# le seul moment où renommer le compte est sûr : aucune session n'est ouverte,
+# aucun processus ne tient le compte. Ensuite, /etc/grenos/identite existe et ce
+# service ne fait plus rien.
+#
+# Le `-` devant la commande est délibéré : si le serveur graphique refuse de
+# démarrer ici, on ne bloque pas le démarrage du système. La machine ouvrira
+# alors la session avec le nom par défaut, et les Réglages permettront d'en
+# changer.
+
+[Unit]
+Description=Premier demarrage de grenOS : le nom de la machine
+After=live-config.service systemd-user-sessions.service
+Before=lightdm.service display-manager.service
+ConditionPathExists=!/etc/grenos/identite
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/bin/grenos-premier-x
+TimeoutStartSec=300
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Un serveur graphique le temps du premier écran, puis on le rend.
+#
+# On ne peut pas afficher une fenêtre sans serveur X, et le gestionnaire de
+# connexion ne démarre qu'après : on en ouvre donc un, juste pour cet écran,
+# sur le septième terminal virtuel. Quand la personne a donné son nom, le
+# programme se termine, le serveur s'arrête, et lightdm prend la suite sur son
+# propre écran.
+
+set -eu
+
+[ -e /etc/grenos/identite ] && exit 0
+command -v Xorg >/dev/null 2>&1 || exit 0
+
+# `-keeptty` : sans terminal de contrôle — c'est le cas sous systemd — Xorg
+# refuse de démarrer sans cette option.
+exec xinit /usr/bin/grenos-premier -- /usr/bin/Xorg :0 vt7 -keeptty -nolisten tcp -novtswitch

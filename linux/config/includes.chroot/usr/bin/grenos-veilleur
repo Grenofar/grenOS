@@ -1,0 +1,32 @@
+#!/bin/sh
+# Relance ce qu'on lui confie, tant que la session dure.
+#
+# Il sert à la barre du bureau : si elle tombe sur une erreur, elle revient
+# seule en une seconde au lieu de laisser un écran sans rien. La pause entre
+# deux essais monte jusqu'à cinq secondes, pour qu'un programme cassé ne fasse
+# pas tourner le processeur en boucle ; et après vingt échecs, on s'arrête, la
+# panne est ailleurs.
+#
+#   grenos-veilleur <commande> [arguments...]
+
+PAUSE=1
+ESSAIS=0
+
+while [ "$ESSAIS" -lt 20 ]; do
+    DEBUT=$(date +%s)
+    "$@"
+    FIN=$(date +%s)
+
+    # Un programme qui a tenu plus d'une minute n'était pas cassé au démarrage :
+    # on repart d'une pause courte.
+    if [ $((FIN - DEBUT)) -gt 60 ]; then
+        PAUSE=1
+        ESSAIS=0
+    else
+        ESSAIS=$((ESSAIS + 1))
+        [ "$PAUSE" -lt 5 ] && PAUSE=$((PAUSE + 1))
+    fi
+    sleep "$PAUSE"
+done
+
+echo "grenos-veilleur: $1 s'arrête aussitôt relancé, abandon" >&2

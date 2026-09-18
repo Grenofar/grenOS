@@ -1,0 +1,22 @@
+#!/bin/sh
+# Le fond d'écran, selon l'heure choisie : nuit par défaut, jour si on l'a dit.
+#
+# Une image posée sur la fenêtre racine par feh, et c'est tout : rien ne reste
+# en mémoire pour l'entretenir. C'est aussi ce qui évite qu'un fond animé mange
+# le processeur d'une machine virtuelle.
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/grenos"
+MOMENT=nuit
+[ -r "$CONFIG/theme" ] && MOMENT=$(cat "$CONFIG/theme")
+
+case "$MOMENT" in
+    jour) IMAGE=/usr/share/grenos/grenos-jour.png ; SECOURS="#f4f6fb" ;;
+    *)    IMAGE=/usr/share/grenos/grenos-nuit.png ; SECOURS="#0d1220" ;;
+esac
+
+if [ -r "$IMAGE" ] && command -v feh >/dev/null 2>&1; then
+    feh --no-fehbg --bg-fill "$IMAGE"
+else
+    # Sans image, une couleur unie vaut mieux qu'un damier noir et blanc.
+    xsetroot -solid "$SECOURS"
+fi

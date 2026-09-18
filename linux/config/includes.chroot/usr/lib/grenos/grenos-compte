@@ -1,0 +1,71 @@
+#!/bin/sh
+# Mettre ou retirer le mot de passe de la machine. Lancé en root par les
+# Réglages, jamais directement.
+#
+# Un mot de passe change trois choses d'un coup, et c'est pour cela qu'elles
+# sont réunies ici : le compte lui-même, l'ouverture automatique de la session
+# (qui n'a plus de sens quand la machine est protégée), et le droit d'installer
+# des logiciels sans rien demander. Les séparer, c'est promettre une protection
+# qui n'en est pas une.
+#
+#   grenos-compte definir <compte>   # le mot de passe arrive sur l'entrée
+#   grenos-compte effacer <compte>
+
+set -eu
+
+ACTION="${1:-}"
+COMPTE="${2:-}"
+AUTO=/etc/lightdm/lightdm.conf.d/60-grenos.conf
+SUDO=/etc/sudoers.d/grenos-identite
+
+if [ -z "$ACTION" ] || [ -z "$COMPTE" ]; then
+    echo "usage: grenos-compte definir|effacer <compte>" >&2
+    exit 2
+fi
+
+if ! getent passwd "$COMPTE" >/dev/null; then
+    echo "Ce compte n'existe pas sur cette machine." >&2
+    exit 1
+fi
+
+mkdir -p /etc/lightdm/lightdm.conf.d
+
+case "$ACTION" in
+definir)
+    # Le mot de passe n'apparaît ni dans la ligne de commande, ni dans un
+    # fichier : il vient de l'entrée standard et va droit à chpasswd.
+    IFS= read -r MOT
+    if [ -z "$MOT" ]; then
+        echo "Mot de passe vide." >&2
+        exit 1
+    fi
+    printf '%s:%s\n' "$COMPTE" "$MOT" | chpasswd
+
+    # La session ne s'ouvre plus toute seule : sinon le mot de passe ne
+    # protégerait rien.
+    cat > "$AUTO" <<EOF
+[Seat:*]
+user-session=grenos
+greeter-session=lightdm-gtk-greeter
+EOF
+    # Et l'administration redemande ce mot de passe.
+    printf '%s ALL=(ALL) ALL\n' "$COMPTE" > "$SUDO"
+    chmod 0440 "$SUDO"
+    ;;
+effacer)
+    passwd -d "$COMPTE" >/dev/null
+    cat > "$AUTO" <<EOF
+[Seat:*]
+autologin-user=$COMPTE
+autologin-user-timeout=0
+autologin-session=grenos
+user-session=grenos
+EOF
+    printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$COMPTE" > "$SUDO"
+    chmod 0440 "$SUDO"
+    ;;
+*)
+    echo "Action inconnue : $ACTION" >&2
+    exit 2
+    ;;
+esac

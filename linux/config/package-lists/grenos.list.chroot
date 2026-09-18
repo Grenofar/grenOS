@@ -1,37 +1,90 @@
 # Ce que grenOS installe. Une ligne par paquet, les commentaires expliquent
 # pourquoi il est là : une image qu'on ne peut pas justifier, on ne la construit
 # pas.
+#
+# 2026-09-18 : KDE Plasma est retiré. Il dessinait tout par le GPU, et dans une
+# machine virtuelle sans accélération 3D la souris tombait à trois images par
+# seconde. À la place : X11 sans composition, un gestionnaire de fenêtres
+# minimal, et notre propre bureau (`grenos-shell`). Ce qui se voit est écrit
+# ici ; Debian ne fournit que le noyau, les pilotes et les applications.
 
-## Le bureau : KDE Plasma, sans la suite complète de KDE (l'image doit rester
-## sous les 2 Go d'une Release GitHub).
-kde-plasma-desktop
-plasma-nm
-plasma-pa
-plasma-systemmonitor
-powerdevil
-kde-config-sddm
-sddm
-systemsettings
-kwin-x11
+## Le serveur graphique. Pas de composition, pas d'effets : une image dessinée
+## par le processeur reste fluide, même sans pilote 3D.
+xserver-xorg
+xserver-xorg-core
+xserver-xorg-input-libinput
+xserver-xorg-video-vesa
+xserver-xorg-video-vmware
+xserver-xorg-video-qxl
+xserver-xorg-video-amdgpu
+xserver-xorg-video-intel
+xserver-xorg-video-nouveau
+xinit
+x11-xserver-utils
+x11-utils
+dbus-x11
+xdg-utils
 
-## Les applications que l'on promet : fichiers, texte, terminal, images,
-## archives, capture d'écran, calculatrice, et le navigateur.
-dolphin
-kate
-konsole
-gwenview
-ark
-kde-spectacle
-kcalc
+## Le gestionnaire de fenêtres : openbox place, décore et empile les fenêtres,
+## et donne Alt+Tab et Alt+F4. Son thème et ses raccourcis sont les nôtres
+## (/usr/share/themes/grenOS, /etc/xdg/openbox). Il ne dessine ni barre, ni
+## menu, ni fond d'écran : tout cela, c'est `grenos-shell`.
+openbox
+
+## Notre bureau : Python 3 et GTK 3. GTK est la bibliothèque de dessin ; la
+## barre, le menu, les réglages, le magasin et l'accueil sont écrits dans ce
+## dépôt, pas empruntés à un bureau existant.
+python3
+python3-gi
+python3-gi-cairo
+gir1.2-gtk-3.0
+gir1.2-wnck-3.0
+
+## L'ouverture de session. LightDM est de la plomberie (PAM, logind, lancement
+## du serveur X) : avec l'ouverture automatique, on ne le voit jamais. Dès
+## qu'un mot de passe est défini, c'est son écran qui le demande, habillé à nos
+## couleurs.
+lightdm
+lightdm-gtk-greeter
+
+## Le fond d'écran, et la visionneuse d'images : le même petit programme.
+feh
+
+## Les applications d'un système complet.
 firefox-esr
+pcmanfm
+mousepad
+xfce4-terminal
+xarchiver
+galculator
+xfce4-screenshooter
+xfce4-taskmanager
 
-## Le magasin : Discover, la boutique de KDE, avec Flatpak et Flathub. C'est
-## par là que Steam s'installe en un clic, en version Flatpak — donc sans
-## activer l'architecture i386 ni toucher au systeme.
-plasma-discover
-plasma-discover-backend-flatpak
+## Réseau, son : les services, et les fenêtres pour les régler.
+network-manager
+network-manager-gnome
+pipewire-audio
+wireplumber
+pavucontrol
+
+## Les autorisations : installer un paquet ouvre une fenêtre qui demande, au
+## lieu d'échouer en silence.
+polkitd
+mate-polkit
+
+## Les disques que l'on branche, montés d'un clic dans l'explorateur.
+udisks2
+gvfs
+gvfs-backends
+gvfs-fuse
+ntfs-3g
+exfatprogs
+rsync
+
+## Le magasin : notre fenêtre installe des paquets Debian et des Flatpak. C'est
+## par là que Steam s'installe, en Flatpak — donc sans activer i386 ni toucher
+## au système.
 flatpak
-packagekit
 
 ## L'installation sur le disque, en un clic depuis le live.
 calamares
@@ -42,29 +95,16 @@ plymouth
 plymouth-themes
 plymouth-label
 
-## Réseau, son, et de quoi parler aux machines virtuelles (redimensionnement de
-## la fenêtre, presse-papiers, pointeur qui ne colle pas).
-network-manager
-pipewire-audio
-wireplumber
+## De quoi parler aux machines virtuelles : la fenêtre se redimensionne, le
+## presse-papiers suit, le pointeur ne colle plus.
 spice-vdagent
 qemu-guest-agent
 open-vm-tools
 open-vm-tools-desktop
 
-## Le serveur graphique et les pilotes libres les plus courants.
-xserver-xorg
-xserver-xorg-input-libinput
-xserver-xorg-video-vesa
-xserver-xorg-video-vmware
-xserver-xorg-video-qxl
-xserver-xorg-video-amdgpu
-xserver-xorg-video-intel
-xserver-xorg-video-nouveau
-
-## Le GPU : Mesa fournit l'accélération pour Intel et AMD sans rien installer,
-## et Vulkan est ce que demandent Steam et les jeux. NVIDIA reste à part : son
-## pilote est propriétaire et s'installe depuis le magasin, en un clic.
+## Le GPU : Mesa fournit l'accélération pour Intel et AMD sans rien installer.
+## Vulkan est ce que demandent Steam et les jeux. NVIDIA reste à part : son
+## pilote est propriétaire et s'installe depuis le magasin.
 mesa-vulkan-drivers
 mesa-utils
 vulkan-tools
@@ -77,61 +117,29 @@ firmware-iwlwifi
 firmware-realtek
 firmware-amd-graphics
 
-## Ce que Debian ne fait que « recommander », et qui manquerait vraiment : les
-## recommandés sont coupés à la construction (auto/config), parce qu'ils
-## amenaient 700 Mio de polices CJK, 240 Mio de moteur web et des
-## micrologiciels NVIDIA dont personne n'a besoin ici. Ceux-là, si.
-kio-extras
-ksystemstats
-kde-cli-tools
-kde-config-screenlocker
-kde-config-gtk-style
-breeze-gtk-theme
-sddm-theme-breeze
-polkit-kde-agent-1
-xdg-desktop-portal-kde
-xdg-user-dirs
-udisks2
-kinfocenter
-
-## Les disques que l'on branche, et ceux que l'on installe.
-ntfs-3g
-exfatprogs
-rsync
-# Les deux metapaquets grub-pc et grub-efi-amd64 s'excluent l'un l'autre :
-# Calamares installe le chargeur lui-meme a partir des paquets -bin, qui
-# cohabitent, et decide BIOS ou EFI selon la machine.
+## Le chargeur d'amorçage, posé par Calamares selon la machine. Les deux
+## metapaquets grub-pc et grub-efi-amd64 s'excluent l'un l'autre : les paquets
+## -bin, eux, cohabitent.
 grub2-common
 grub-pc-bin
 grub-efi-amd64-bin
 efibootmgr
 os-prober
 
-## Les polices : Inter pour l'interface — c'est la plus proche de celle de
-## Windows, et elle donne tout de suite un air moderne —, Hack pour le
-## terminal, Noto pour le reste et les emoji. Pas les 700 Mio de CJK.
+## Les polices : Inter pour l'interface — la plus proche de celle de Windows —,
+## Hack pour le terminal, DejaVu en secours. Pas les 700 Mio de CJK.
 fonts-inter
+fonts-hack
 fonts-dejavu-core
 
-## Ce dont live-config et live-boot ont besoin pour faire leur travail, et que
-## Debian ne fait que « recommander » : sans user-setup, aucun compte n'est
-## cree au demarrage, l'ecran de connexion reste vide et personne ne peut
-## entrer. C'est exactement ce qui est arrive a l'image du 18 septembre.
+## Ce dont live-config et live-boot ont besoin, et que Debian ne fait que
+## « recommander » : sans user-setup, aucun compte n'est créé au démarrage,
+## l'écran de connexion reste vide et personne ne peut entrer. C'est exactement
+## ce qui est arrivé à l'image du 18 septembre.
 user-setup
 live-tools
 uuid-runtime
 keyboard-configuration
-
-## Polices, français, et les outils qu'un système doit avoir.
-fonts-noto-core
-fonts-noto-color-emoji
-fonts-hack
-locales
 console-setup
+xdg-user-dirs
 sudo
-less
-nano
-curl
-ca-certificates
-gpg
-xdg-utils

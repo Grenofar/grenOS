@@ -170,6 +170,24 @@ jobs:
           sleep 20
           python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-menu.ppm" || true
           python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
+          # Le premier écran demande un nom, et la session ne s'ouvre pas tant
+          # qu'il n'en a pas. Il l'annonce sur le port série : on l'attend, on
+          # tape « ci », et on valide — exactement ce que fait une personne.
+          for essai in $(seq 1 60); do
+            if grep -q 'premier ecran affiche' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+              echo "premier ecran vu apres $((essai * 5))s"
+              python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-nom.ppm" || true
+              for touche in c i ret; do
+                python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+                sleep 1
+              done
+              break
+            fi
+            sleep 5
+          done
+          if ! grep -q 'nom choisi' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+            echo "le nom n'a pas encore ete pris en compte, on continue d'observer"
+          fi
           # Le bureau met du temps à venir : on regarde à intervalles, et on
           # garde chaque capture pour pouvoir les lire ensuite.
           for minute in 1 2 3 4 5; do

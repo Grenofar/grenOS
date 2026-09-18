@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+"""Le bureau de grenOS : la barre, le menu, l'horloge.
+
+Écrit ici, en GTK 3, posé sur un gestionnaire de fenêtres minimal. Pourquoi pas
+un bureau tout fait : Plasma et GNOME composent l'écran par le GPU, et dans une
+machine virtuelle sans accélération la souris tombe à trois images par seconde.
+Ici rien n'est composé — une barre, un menu, des fenêtres — et le pointeur suit
+la main.
+
+La barre fait ce qu'une barre doit faire, et rien de plus :
+  - le bouton grenOS ouvre le menu des applications, avec recherche ;
+  - trois lanceurs pour ce qu'on ouvre tous les jours ;
+  - les fenêtres ouvertes, lues et pilotées par les protocoles X11 standards
+    (EWMH), donc sans dépendre du gestionnaire de fenêtres ;
+  - le réseau, le son, l'heure, et le bouton qui éteint.
+
+Elle se redessine quand on change de thème : `grenos-theme` lui envoie USR1.
+"""
+import os
+import signal
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("Wnck", "3.0")
+from gi.repository import Gdk, GLib, Gtk, Wnck  # noqa: E402
+
+import grenosui  # noqa: E402
+
+HAUTEUR = 44
+MENU_LARGEUR = 460
+MENU_HAUTEUR = 520
+
+# Ce qu'on ouvre tous les jours, à portée de clic.
+LANCEURS = [
+    ("Fichiers", "pcmanfm"),
+    ("Web", "firefox-esr"),
+    ("Terminal", "x-terminal-emulator"),
+]
+
+STYLE = """
+#panneau {
+    background-color: @fond;
+    border-top: 1px solid @bord;
+}
+
+#panneau button {
+    color: @texte;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 5px 12px;
+    margin: 4px 2px;
+}
+#panneau button:hover { background-color: @survol; border-color: @bord; }
+#panneau button:active { background-color: @accent; color: #ffffff; }
+
+#bouton-menu { font-weight: 700; padding-left: 16px; padding-right: 16px; }
+
+.tache-active {
+    background-color: @fond-creux;
+    box-shadow: inset 0 -2px 0 @accent;
+}
+
+#horloge { color: @texte-faible; padding: 0 10px; }
+
+#menu {
+    background-color: @fond;
+    border: 1px solid @bord;
+    border-radius: 14px;
+}
+
+.entree {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 9px 12px;
+    margin: 2px 10px;
+}
+.entree:hover { background-color: @survol; border-color: @bord; }
+.entree-titre { font-weight: 600; }
+"""
+
+
+def applications():
+    """Les applications du système, lues dans les fichiers .desktop."""
+    trouvees = {}
+    for dossier in ("/usr/share/applications", "/usr/local/share/applications",
+                    os.path.expanduser("~/.local/share/applications"),
+                    "/var/lib/flatpak/exports/share/applications"):
+        if not os.path.isdir(dossier):
+            continue
+        for nom in sorted(os.listdir(dossier)):
+            if nom.endswith(".desktop"):
+                entree = lire_desktop(os.path.join(dossier, nom))
+                if entree:
+                    trouvees[nom] = entree
+    return sorted(trouvees.values(), key=lambda e: e["nom"].lower())
+
+
+def lire_desktop(chemin):
+    """Le nom, la description et la commande d'un fichier .desktop, ou None."""
+    champs, section = {}, None
+    try:
+        with open(chemin, encoding="utf-8", errors="replace") as fichier:
+            for ligne in fichier:
+                ligne = ligne.strip()
+                if ligne.startswith("["):
+                    section = ligne
+                elif section == "[Desktop Entry]" and "=" in ligne:
+                    cle, valeur = ligne.split("=", 1)
+                    champs[cle] = valeur
+    except OSError:
+        return None
+    if champs.get("Type") != "Application":
+        return None
+    if champs.get("NoDisplay", "").lower() == "true" or champs.get("Hidden", "").lower() == "true":
+        return None
+    nom, commande = champs.get("Name[fr]") or champs.get("Name"), champs.get("Exec")
+    if not nom or not commande:
+        return None
+    # %f, %u et consorts servent à passer un fichier : sans fichier à passer,
+    # ils n'ont rien à faire dans la commande.
+    for code in ("%f", "%F", "%u", "%U", "%i", "%c", "%k"):
+        commande = commande.replace(code, "")
+    return {
+        "nom": nom,
+        "note": champs.get("Comment[fr]") or champs.get("Comment") or "",
+        "commande": commande.strip(),
+        "terminal": champs.get("Terminal", "").lower() == "true",
+    }
+
+
+class Menu(Gtk.Window):
+    """Le menu des applications : une recherche, puis la liste."""
+
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.POPUP)
+        self.set_name("menu")
+        self.set_size_request(MENU_LARGEUR, MENU_HAUTEUR)
+        self.set_keep_above(True)
+
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.add(boite)
+
+        self.recherche = Gtk.SearchEntry()
+        self.recherche.set_placeholder_text("Chercher une application")
+        self.recherche.set_margin_top(12)
+        self.recherche.set_margin_start(12)
+        self.recherche.set_margin_end(12)
+        self.recherche.connect("search-changed", lambda _: self.remplir())
+        self.recherche.connect("activate", lambda _: self.premier())
+        self.recherche.connect("key-press-event", self.touche)
+        boite.pack_start(self.recherche, False, False, 0)
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        boite.pack_start(defilement, True, True, 6)
+        self.liste = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        defilement.add(self.liste)
+
+        self.applications = applications()
+        self.remplir()
+        self.connect("focus-out-event", lambda *_: (self.hide(), True)[1])
+
+    def touche(self, _widget, evenement):
+        if Gdk.keyval_name(evenement.keyval) == "Escape":
+            self.hide()
+            return True
+        return False
+
+    def visibles(self):
+        filtre = self.recherche.get_text().strip().lower()
+        if not filtre:
+            return self.applications
+        return [a for a in self.applications
+                if filtre in a["nom"].lower() or filtre in a["note"].lower()]
+
+    def remplir(self):
+        for enfant in self.liste.get_children():
+            self.liste.remove(enfant)
+        for application in self.visibles()[:60]:
+            bouton = Gtk.Button()
+            bouton.get_style_context().add_class("entree")
+            contenu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            titre = Gtk.Label(label=application["nom"], xalign=0)
+            titre.get_style_context().add_class("entree-titre")
+            contenu.pack_start(titre, False, False, 0)
+            if application["note"]:
+                note = Gtk.Label(label=application["note"], xalign=0)
+                note.get_style_context().add_class("sous")
+                note.set_ellipsize(3)
+                contenu.pack_start(note, False, False, 0)
+            bouton.add(contenu)
+            bouton.connect("clicked", lambda _, a=application: self.choisir(a))
+            self.liste.pack_start(bouton, False, False, 0)
+        self.liste.show_all()
+
+    def premier(self):
+        choix = self.visibles()
+        if choix:
+            self.choisir(choix[0])
+
+    def choisir(self, application):
+        self.hide()
+        grenosui.lancer(application["commande"], application["terminal"])
+
+    def montrer(self):
+        hauteur = Gdk.Screen.get_default().get_height()
+        self.move(12, hauteur - HAUTEUR - MENU_HAUTEUR - 12)
+        self.show_all()
+        self.present()
+        self.recherche.set_text("")
+        self.recherche.grab_focus()
+
+
+class Panneau(Gtk.Window):
+    """La barre du bas."""
+
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_name("panneau")
+        self.set_type_hint(Gdk.WindowTypeHint.DOCK)
+        self.set_decorated(False)
+        self.set_keep_above(True)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+
+        ecran = Gdk.Screen.get_default()
+        self.largeur, self.hauteur = ecran.get_width(), ecran.get_height()
+        self.set_default_size(self.largeur, HAUTEUR)
+        self.move(0, self.hauteur - HAUTEUR)
+        self.connect("realize", lambda *_: self.reserver())
+
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.add(boite)
+
+        self.menu = Menu()
+        ouvre_menu = Gtk.Button(label="grenOS")
+        ouvre_menu.set_name("bouton-menu")
+        ouvre_menu.connect("clicked", lambda _: self.menu.montrer())
+        boite.pack_start(ouvre_menu, False, False, 0)
+
+        for nom, commande in LANCEURS:
+            boite.pack_start(grenosui.bouton(nom, lambda c=commande: grenosui.lancer(c)),
+                             False, False, 0)
+
+        self.taches = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        boite.pack_start(self.taches, True, True, 6)
+
+        boite.pack_end(grenosui.bouton("⏻", lambda: grenosui.lancer("grenos-arret")), False, False, 0)
+        self.horloge = Gtk.Label()
+        self.horloge.set_name("horloge")
+        boite.pack_end(self.horloge, False, False, 0)
+        boite.pack_end(grenosui.bouton("Son", lambda: grenosui.lancer("pavucontrol")), False, False, 0)
+        boite.pack_end(grenosui.bouton("Réseau", lambda: grenosui.lancer("nm-connection-editor")),
+                       False, False, 0)
+        boite.pack_end(grenosui.bouton("Réglages", lambda: grenosui.lancer("grenos-parametres")),
+                       False, False, 0)
+
+        self.ecran_wnck = Wnck.Screen.get_default()
+        self.ecran_wnck.force_update()
+        for signalement in ("window-opened", "window-closed", "active-window-changed",
+                            "window-stacking-changed"):
+            self.ecran_wnck.connect(signalement, lambda *_: self.fenetres())
+        self.fenetres()
+
+        GLib.timeout_add_seconds(1, self.tic)
+        self.tic()
+
+    def reserver(self):
+        """Réserve la bande du bas : une fenêtre agrandie s'arrête au-dessus.
+
+        C'est la propriété `_NET_WM_STRUT` du protocole des bureaux X11. GTK ne
+        l'écrit pas pour nous, et sans elle une fenêtre plein écran passerait
+        sous la barre, qui deviendrait inutilisable.
+        """
+        fenetre = self.get_window()
+        if fenetre is None:
+            return
+        identifiant = str(fenetre.get_xid())
+        bas = HAUTEUR
+        subprocess.run(["xprop", "-id", identifiant, "-f", "_NET_WM_STRUT", "32c",
+                        "-set", "_NET_WM_STRUT", f"0, 0, 0, {bas}"], check=False)
+        subprocess.run(["xprop", "-id", identifiant, "-f", "_NET_WM_STRUT_PARTIAL", "32c",
+                        "-set", "_NET_WM_STRUT_PARTIAL",
+                        f"0, 0, 0, {bas}, 0, 0, 0, 0, 0, 0, 0, {self.largeur - 1}"], check=False)
+
+    def tic(self):
+        self.horloge.set_text(time.strftime("%H:%M  ·  %a %d %b"))
+        return True
+
+    def fenetres(self):
+        for enfant in self.taches.get_children():
+            self.taches.remove(enfant)
+        active = self.ecran_wnck.get_active_window()
+        for fenetre in self.ecran_wnck.get_windows():
+            if fenetre.is_skip_tasklist():
+                continue
+            titre = fenetre.get_name() or "Fenêtre"
+            bouton = Gtk.Button(label=titre[:26])
+            if active is not None and fenetre.get_xid() == active.get_xid():
+                bouton.get_style_context().add_class("tache-active")
+            bouton.connect("clicked", lambda _, f=fenetre: self.basculer(f))
+            self.taches.pack_start(bouton, False, False, 0)
+        self.taches.show_all()
+
+    def basculer(self, fenetre):
+        maintenant = Gtk.get_current_event_time()
+        if fenetre.is_active():
+            fenetre.minimize()
+        else:
+            fenetre.unminimize(maintenant)
+            fenetre.activate(maintenant)
+
+
+def main():
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    style = grenosui.habiller()
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), style, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    propre = Gtk.CssProvider()
+
+    def repeindre(*_):
+        """Relit la palette : c'est ce que déclenche le passage jour/nuit."""
+        couleurs = grenosui.palette()
+        entete = "".join(f"@define-color {n} {v};\n" for n, v in couleurs.items())
+        style.load_from_data(grenosui.feuille(couleurs))
+        propre.load_from_data((entete + STYLE).encode("utf-8"))
+        return True
+
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), propre, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+    repeindre()
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, repeindre)
+
+    panneau = Panneau()
+    panneau.show_all()
+
+    # Le clic droit sur le fond d'écran : openbox lance `grenos-menu`, qui
+    # envoie ce signal, et le menu s'ouvre là où il s'ouvre toujours.
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2,
+                         lambda: (panneau.menu.montrer(), True)[1])
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()
