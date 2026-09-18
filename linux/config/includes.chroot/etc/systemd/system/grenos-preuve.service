@@ -1,0 +1,11 @@
+[Unit]
+Description=Annonce sur le port serie que le bureau grenOS s'est ouvert
+After=graphical.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/grenos-preuve
+StandardOutput=null
+
+[Install]
+WantedBy=graphical.target

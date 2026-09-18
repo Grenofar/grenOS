@@ -1,0 +1,30 @@
+#!/bin/sh
+# La preuve que le bureau s'est ouvert, ecrite sur le port serie.
+#
+# Pourquoi passer par un service systeme : le compte de la session n'appartient
+# pas au groupe dialout, donc il ne peut pas ecrire sur /dev/ttyS0 lui-meme.
+# Le bureau depose un fichier dans /tmp, que tout le monde peut ecrire, et ce
+# service — qui tourne en root — le voit et l'annonce. La CI lit cette ligne :
+# une image ou personne ne peut se connecter ne l'ecrit jamais.
+
+set -u
+MARQUE=/tmp/grenos-session
+i=0
+while [ "$i" -lt 240 ]; do
+    if [ -e "$MARQUE" ]; then
+        echo "grenos: session de bureau ouverte" > /dev/ttyS0 2>/dev/null || true
+        exit 0
+    fi
+    # Deuxieme chemin, au cas ou le bureau n'aurait pas pu ecrire son fichier :
+    # une session graphique ouverte par quelqu'un d'autre que le gestionnaire
+    # de connexion lui-meme.
+    if command -v loginctl >/dev/null 2>&1; then
+        if loginctl list-sessions --no-legend 2>/dev/null | awk '$3 != "sddm" && $3 != "" { trouve = 1 } END { exit !trouve }'; then
+            echo "grenos: session de bureau ouverte" > /dev/ttyS0 2>/dev/null || true
+            exit 0
+        fi
+    fi
+    sleep 2
+    i=$((i + 1))
+done
+exit 0

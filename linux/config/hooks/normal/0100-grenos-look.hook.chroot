@@ -231,6 +231,12 @@ if [ -f /usr/share/applications/grenos-bienvenue.desktop ]; then
     cp /usr/share/applications/grenos-bienvenue.desktop /etc/skel/.config/autostart/
 fi
 
+# Le service qui annonce l'ouverture du bureau sur le port série : la CI en
+# fait sa preuve, et rien ne se publie sans elle.
+if [ -f /etc/systemd/system/grenos-preuve.service ]; then
+    systemctl enable grenos-preuve.service >/dev/null 2>&1 || true
+fi
+
 # ---- L'installateur porte nos couleurs --------------------------------------
 # calamares-settings-debian installe un habillage au nom de Debian. Le nôtre
 # est dans /usr/share/calamares/branding/grenos ; il ne manque que le logo et
