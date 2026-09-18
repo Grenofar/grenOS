@@ -35,8 +35,8 @@ printf 'grenOS %s \\n \\l\n\n' "${VERSION}" > /etc/issue
 # ---- Le thème : sombre par défaut, clair d'un clic --------------------------
 cat > "$SKEL/kdeglobals" <<'EOF'
 [General]
-ColorScheme=BreezeDark
-Name=Breeze Dark
+ColorScheme=grenOS
+Name=grenOS
 font=Noto Sans,10,-1,5,50,0,0,0,0,0
 fixed=Hack,10,-1,5,50,0,0,0,0,0
 menuFont=Noto Sans,10,-1,5,50,0,0,0,0,0
