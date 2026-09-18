@@ -176,10 +176,18 @@ EOF
 if [ -x /usr/sbin/plymouth-set-default-theme ]; then
     plymouth-set-default-theme spinner || true
 fi
+# L'écran de chargement : le nom grenOS haut dans l'écran, l'anneau qui tourne
+# en dessous. Le gabarit pose la marque à 0,75 de la hauteur, tout en bas, où
+# elle passe inaperçue ; et quand les lignes n'existent pas, on les ajoute.
 if [ -f /usr/share/grenos/logo.png ]; then
+    THEME=/usr/share/plymouth/themes/spinner/spinner.plymouth
     install -D -m 0644 /usr/share/grenos/logo.png /usr/share/plymouth/themes/spinner/watermark.png
-    sed -i 's/^WatermarkHorizontalAlignment=.*/WatermarkHorizontalAlignment=.5/; s/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.75/' \
-        /usr/share/plymouth/themes/spinner/spinner.plymouth || true
+    sed -i 's/^WatermarkHorizontalAlignment=.*/WatermarkHorizontalAlignment=.5/' "$THEME" || true
+    sed -i 's/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.22/' "$THEME" || true
+    grep -q '^WatermarkVerticalAlignment=' "$THEME" || {
+        echo "WatermarkHorizontalAlignment=.5" >> "$THEME"
+        echo "WatermarkVerticalAlignment=.22" >> "$THEME"
+    }
 fi
 update-initramfs -u || true
 
