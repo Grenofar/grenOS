@@ -1,0 +1,25 @@
+// Mettre à jour et installer sans mot de passe, pour les comptes
+// administrateurs de cette machine.
+//
+// Pourquoi : grenOS s'ouvre sans mot de passe tant que la personne n'en a pas
+// choisi un. Sans cette règle, le premier clic sur « Mise à jour » ou sur le
+// magasin demanderait un mot de passe qui n'existe pas, et rien ne se
+// passerait. La règle ne couvre que les paquets, les Flatpak et
+// l'installation du système — pas l'exécution de n'importe quoi en root.
+polkit.addRule(function (action, subject) {
+    var permis = [
+        "org.freedesktop.packagekit.",
+        "org.debian.apt.",
+        "org.freedesktop.Flatpak.",
+        "io.calamares.calamares."
+    ];
+    if (!subject.isInGroup("sudo")) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    for (var i = 0; i < permis.length; i++) {
+        if (action.id.indexOf(permis[i]) === 0) {
+            return polkit.Result.YES;
+        }
+    }
+    return polkit.Result.NOT_HANDLED;
+});

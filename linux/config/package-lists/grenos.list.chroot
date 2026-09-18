@@ -62,12 +62,20 @@ xserver-xorg-video-amdgpu
 xserver-xorg-video-intel
 xserver-xorg-video-nouveau
 
+## Le GPU : Mesa fournit l'accélération pour Intel et AMD sans rien installer,
+## et Vulkan est ce que demandent Steam et les jeux. NVIDIA reste à part : son
+## pilote est propriétaire et s'installe depuis le magasin, en un clic.
+mesa-vulkan-drivers
+mesa-utils
+vulkan-tools
+
 ## Micrologiciels : sans eux, beaucoup de cartes Wi-Fi restent muettes sur une
-## vraie machine.
+## vraie machine, et beaucoup de cartes graphiques AMD n'affichent rien.
 firmware-linux-free
 firmware-misc-nonfree
 firmware-iwlwifi
 firmware-realtek
+firmware-amd-graphics
 
 ## Ce que Debian ne fait que « recommander », et qui manquerait vraiment : les
 ## recommandés sont coupés à la construction (auto/config), parce qu'ils
@@ -99,7 +107,10 @@ grub-efi-amd64-bin
 efibootmgr
 os-prober
 
-## Les polices : le latin, le monospace et les emoji. Pas les 700 Mio de CJK.
+## Les polices : Inter pour l'interface — c'est la plus proche de celle de
+## Windows, et elle donne tout de suite un air moderne —, Hack pour le
+## terminal, Noto pour le reste et les emoji. Pas les 700 Mio de CJK.
+fonts-inter
 fonts-dejavu-core
 
 ## Polices, français, et les outils qu'un système doit avoir.

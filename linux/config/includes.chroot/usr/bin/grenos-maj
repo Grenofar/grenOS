@@ -31,9 +31,17 @@ if [ "$(id -u)" = 0 ]; then
     exit 0
 fi
 
-if command -v konsole >/dev/null 2>&1; then
-    konsole --title "$TITRE" --hold -e pkexec "$SCRIPT"
+# Tant qu'aucun mot de passe n'est defini, sudo passe sans rien demander ;
+# sinon pkexec ouvre la fenetre qui le demande.
+if sudo -n true 2>/dev/null; then
+    LANCEUR="sudo"
 else
-    pkexec "$SCRIPT"
+    LANCEUR="pkexec"
+fi
+
+if command -v konsole >/dev/null 2>&1; then
+    konsole --title "$TITRE" --hold -e "$LANCEUR" "$SCRIPT"
+else
+    "$LANCEUR" "$SCRIPT"
 fi
 rm -f "$SCRIPT"

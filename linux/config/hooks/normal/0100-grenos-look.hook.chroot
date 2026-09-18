@@ -37,13 +37,16 @@ cat > "$SKEL/kdeglobals" <<'EOF'
 [General]
 ColorScheme=grenOS
 Name=grenOS
-font=Noto Sans,10,-1,5,50,0,0,0,0,0
-fixed=Hack,10,-1,5,50,0,0,0,0,0
-menuFont=Noto Sans,10,-1,5,50,0,0,0,0,0
-smallestReadableFont=Noto Sans,8,-1,5,50,0,0,0,0,0
-toolBarFont=Noto Sans,10,-1,5,50,0,0,0,0,0
+font=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+fixed=Hack,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+menuFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+smallestReadableFont=Inter,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+toolBarFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 AccentColor=47,125,246
 LastUsedCustomAccentColor=47,125,246
+XftAntialias=true
+XftHintStyle=hintslight
+XftSubPixel=rgb
 
 [Icons]
 Theme=breeze-dark
@@ -110,6 +113,16 @@ _launch=Ctrl+Shift+Esc,none,Gestionnaire de tâches
 [services][grenos-theme.desktop]
 _k_friendly_name=Thème jour et nuit
 _launch=Meta+T,none,Thème jour et nuit
+EOF
+
+# L'écran de verrouillage ne s'arme pas tout seul : sans mot de passe, il
+# n'enferme personne dehors, et avec un mot de passe c'est à la personne de le
+# demander. Configuration du système, Verrouillage de l'écran, le rallume.
+cat > "$SKEL/kscreenlockerrc" <<'EOF'
+[Daemon]
+Autolock=false
+LockOnResume=false
+Timeout=0
 EOF
 
 # ---- Le fond d'écran, comme paquet de fonds d'écran KDE ---------------------

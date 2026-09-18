@@ -1,0 +1,31 @@
+#!/bin/sh
+# Pas de mot de passe tant que la personne n'en a pas mis un.
+#
+# live-config donne au compte le mot de passe « live », que personne ne devine
+# et que personne ne veut taper pour essayer un système. On le retire : l'écran
+# de connexion n'a plus qu'un bouton, et la session s'ouvre. Dès que
+# Configuration du système, Utilisateurs, reçoit un mot de passe, c'est lui qui
+# protège la machine, et il est gardé sur le disque de persistance.
+
+set -e
+
+Init ()
+{
+    if [ -e /var/lib/live/config/grenos-sans-mot-de-passe ]; then
+        exit 0
+    fi
+    echo -n " grenos-sans-mot-de-passe"
+}
+
+Config ()
+{
+    _USER=$(getent passwd 1000 | cut -d: -f1)
+    if [ -n "${_USER}" ]; then
+        passwd -d "${_USER}" >/dev/null 2>&1 || true
+    fi
+    mkdir -p /var/lib/live/config
+    touch /var/lib/live/config/grenos-sans-mot-de-passe
+}
+
+Init
+Config
