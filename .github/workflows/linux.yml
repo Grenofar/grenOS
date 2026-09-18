@@ -53,6 +53,52 @@ jobs:
           sudo chmod 0666 /dev/kvm 2>/dev/null || true
           ls -l /dev/kvm || echo "pas de KVM : QEMU emulera, c'est plus lent"
 
+      # La clé du dépôt APT de grenOS. Elle est fabriquée une seule fois, par
+      # la CI, et gardée dans le bucket privé `signing` : personne ne la voit
+      # passer, et l'image n'embarque que sa partie publique.
+      - name: La cle du depot
+        id: key
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -u
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::warning::Pas de cle de service : le depot APT ne sera ni signe ni publie."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          OBJ="$SUPABASE_URL/storage/v1/object/signing/apt-signing.asc"
+          code=$(curl -s -o secret.asc -w '%{http_code}' \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" "$OBJ")
+          if [ "$code" != "200" ]; then
+            echo "Pas encore de cle : on en fabrique une, une seule fois."
+            rm -f secret.asc
+            export GNUPGHOME=$(mktemp -d)
+            chmod 700 "$GNUPGHOME"
+            gpg --batch --passphrase "" --quick-generate-key \
+                "grenOS packages <grenos@grenos-dev.vercel.app>" rsa4096 sign never
+            gpg --batch --armor --export-secret-keys > secret.asc
+            up=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+              -H "content-type: application/pgp-keys" \
+              -H "x-upsert: true" \
+              --data-binary @secret.asc "$OBJ")
+            echo "depot de la cle privee : HTTP $up"
+            [ "$up" = "200" ] || { echo "::error::La cle n'a pas pu etre gardee : on n'en fabrique pas une autre."; exit 1; }
+            rm -rf "$GNUPGHOME"
+          else
+            echo "cle relue depuis le bucket prive"
+          fi
+          # La partie publique, celle que l'image embarque.
+          export GNUPGHOME=$(mktemp -d)
+          chmod 700 "$GNUPGHOME"
+          gpg --batch --quiet --import secret.asc
+          gpg --batch --export > linux/grenos-apt.gpg
+          rm -rf "$GNUPGHOME"
+          ls -l linux/grenos-apt.gpg
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
       # live-build monte des systèmes de fichiers et fait un debootstrap : cela
       # se passe dans un conteneur Debian privilégié, jamais sur le runner.
       - name: Construire l'image
@@ -113,6 +159,33 @@ jobs:
             ${{ runner.temp }}/serial.log
           if-no-files-found: ignore
           retention-days: 14
+
+      # Le paquet grenos-desktop et le dépôt APT : c'est par là que grenOS se
+      # met à jour depuis grenOS, en plus des correctifs Debian.
+      - name: Le depot APT de grenOS
+        if: steps.key.outputs.ready == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          sudo apt-get install -y -qq dpkg-dev python3-numpy
+          VERSION="1.0.$(date -u +%Y%m%d%H%M)"
+          linux/tools/make-deb.sh "$VERSION" dist
+          APT_SECRET_KEY="$PWD/secret.asc" linux/tools/make-apt-repo.sh apt dist/grenos-desktop_${VERSION}_all.deb
+          # Un dépôt APT n'est qu'un ensemble de fichiers : on les dépose un à
+          # un dans le bucket public, en écrasant les anciens.
+          find apt -type f | while read -r file; do
+            target="${file#apt/}"
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+              -H "x-upsert: true" \
+              -H "cache-control: max-age=60" \
+              --data-binary @"$file" \
+              "$SUPABASE_URL/storage/v1/object/apt/$target")
+            echo "$target : HTTP $code"
+            [ "$code" = "200" ] || exit 1
+          done
+          echo "depot publie : $SUPABASE_URL/storage/v1/object/public/apt"
 
       # La machine VirtualBox toute prête : l'image, un disque vide où
       # l'installer, et le fichier .vbox à double-cliquer.

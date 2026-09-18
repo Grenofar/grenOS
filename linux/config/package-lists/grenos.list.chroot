@@ -69,6 +69,33 @@ firmware-misc-nonfree
 firmware-iwlwifi
 firmware-realtek
 
+## Ce que Debian ne fait que « recommander », et qui manquerait vraiment : les
+## recommandés sont coupés à la construction (auto/config), parce qu'ils
+## amenaient 700 Mio de polices CJK, 240 Mio de moteur web et des
+## micrologiciels NVIDIA dont personne n'a besoin ici. Ceux-là, si.
+kio-extras
+ksystemstats
+kde-cli-tools
+kde-config-screenlocker
+kde-config-gtk-style
+breeze-gtk-theme
+sddm-theme-breeze
+polkit-kde-agent-1
+xdg-desktop-portal-kde
+xdg-user-dirs
+udisks2
+kinfocenter
+
+## Les disques que l'on branche, et ceux que l'on installe.
+ntfs-3g
+exfatprogs
+rsync
+grub-pc
+grub-efi-amd64
+
+## Les polices : le latin, le monospace et les emoji. Pas les 700 Mio de CJK.
+fonts-dejavu-core
+
 ## Polices, français, et les outils qu'un système doit avoir.
 fonts-noto-core
 fonts-noto-color-emoji

@@ -23,6 +23,6 @@ lb config noauto \
     --iso-publisher "grenOS; https://grenos-dev.vercel.app" \
     --iso-volume "grenOS" \
     --image-name "grenos" \
-    --compression xz \
+    --compression xz     --apt-recommends false \
     --bootappend-live "boot=live components locales=fr_FR.UTF-8 keyboard-layouts=fr keyboard-model=pc105 timezone=Europe/Paris username=grenos user-fullname=grenOS hostname=grenos quiet splash" \
     "${@}"
