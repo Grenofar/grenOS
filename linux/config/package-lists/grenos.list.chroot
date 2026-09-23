@@ -27,6 +27,11 @@ x11-utils
 # seule façon de dépasser 60 images par seconde quand la liste s'arrête là.
 xcvt
 dbus-x11
+# Le bus D-Bus de la session. Sans lui, logind n'ouvre aucun bus pour la
+# personne, et les services qui en dependent ne demarrent jamais : PipeWire
+# ne repondait pas, et les Reglages affichaient « aucune sortie audio »
+# alors que la carte son etait bien la.
+dbus-user-session
 xdg-utils
 
 ## Le gestionnaire de fenêtres : openbox place, décore et empile les fenêtres,

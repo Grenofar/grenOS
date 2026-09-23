@@ -241,7 +241,23 @@ jobs:
           # encore la publication — on ne rend une etape obligatoire qu'apres
           # l'avoir vue verte.
           AVANT=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" || echo 0)
-          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "mouse_move 15900 32400" || true
+          # La barre dit ou se trouve son bouton : on vise ce point plutot que
+          # de deviner. Elle est centree, donc sa position depend du nombre
+          # d'icones — un clic au juge tombe a cote, et c'est ce qui est arrive.
+          POINT=$(grep -a 'bouton grenos en' "$RUNNER_TEMP/serial.log" | tail -1 | sed 's/.*en //')
+          if [ -n "$POINT" ]; then
+            PX=${POINT%,*}
+            PY=${POINT#*,}
+            # La tablette parle en 0-32767, l'ecran en pixels : on convertit.
+            TX=$(( PX * 32767 / 1280 ))
+            TY=$(( PY * 32767 / 800 ))
+            echo "souris: le bouton est en $PX,$PY (tablette $TX,$TY)"
+          else
+            TX=15900
+            TY=32400
+            echo "souris: position inconnue, on vise le centre de la barre"
+          fi
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "mouse_move $TX $TY" || true
           sleep 1
           python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "mouse_button 1" || true
           sleep 1

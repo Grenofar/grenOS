@@ -89,7 +89,11 @@ grenos-veilleur grenos-shell &
 # cette ligne, « aucune sortie détectée » dans les Réglages ne permet pas de
 # distinguer une panne d'un ordinateur sans carte son.
 (
-    sleep 10
+    # PipeWire demarre par socket, a la demande : on le reveille plutot que
+    # d'esperer que quelqu'un d'autre le fasse.
+    systemctl --user start pipewire.socket pipewire-pulse.socket 2>/dev/null
+    systemctl --user start wireplumber.service 2>/dev/null
+    sleep 12
     SORTIES=$(pactl list short sinks 2>/dev/null | wc -l)
     COURANTE=$(pactl info 2>/dev/null | sed -n 's/^Default Sink: //p')
     grenos-dire "son, $SORTIES sorties, courante ${COURANTE:-aucune}"

@@ -713,6 +713,18 @@ def main():
     panneau.show_all()
     grenosui.lancer(f"grenos-dire 'barre prete, {len(panneau.epingles)} epinglees'")
 
+    # Ou se trouve le bouton grenOS, en pixels. La machine d'integration vise
+    # ainsi le bon endroit : la barre est centree, donc sa position depend du
+    # nombre d'icones, et un clic au juge tombe a cote.
+    def dire_le_bouton():
+        zone = panneau.bouton_menu.get_allocation()
+        x = zone.x + zone.width // 2
+        y = panneau.hauteur - HAUTEUR + zone.y + zone.height // 2
+        grenosui.lancer(f"grenos-dire 'bouton grenos en {x},{y}'")
+        return False
+
+    GLib.timeout_add_seconds(3, dire_le_bouton)
+
     # Le clic droit sur le fond d'écran : `grenos-menu` envoie ce signal.
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2,
                          lambda: (panneau.menu.ouvrir(), True)[1])
