@@ -117,6 +117,18 @@ def vbox(
     cpus = 4 if linux else 1
     memory = 8192 if linux else 256
     pointing = "USBTablet" if linux else "PS2Mouse"
+    # Une carte son, sans quoi il n'y a rien à régler : la machine livrée
+    # n'en avait aucune, et la page Son des Réglages aurait répondu « aucune
+    # sortie détectée » quoi qu'on fasse. HDA est ce que Linux pilote le mieux,
+    # et `driver="Default"` laisse VirtualBox choisir la sortie de l'hôte.
+    # L'édition à noyau maison, elle, n'a pas de pile audio : inutile de lui
+    # donner une carte.
+    audio = (
+        """      <AudioAdapter controller="HDA" driver="Default" enabled="true"
+                    enabledIn="false" enabledOut="true"/>\n"""
+        if linux
+        else ""
+    )
     display = (
         '<Display controller="VMSVGA" VRAMSize="256"/>'
         if linux
@@ -167,7 +179,7 @@ def vbox(
           <NAT/>
         </Adapter>
       </Network>
-{serial}    </Hardware>
+{audio}{serial}    </Hardware>
     <StorageControllers>
 {sata}      <StorageController name="IDE" type="PIIX4" PortCount="2" useHostIOCache="true" Bootable="true">
         <AttachedDevice passthrough="false" type="DVD" hotpluggable="false" port="1" device="0">

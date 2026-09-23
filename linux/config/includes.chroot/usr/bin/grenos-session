@@ -85,6 +85,16 @@ echo "$(date -u +%H:%M:%S) $USER" > /tmp/grenos-session 2>/dev/null || true
 # perdu, et une session qui se ferme ferait perdre le travail en cours.
 grenos-veilleur grenos-shell &
 
+# Le son, une fois PipeWire debout : combien de sorties, et laquelle. Sans
+# cette ligne, « aucune sortie détectée » dans les Réglages ne permet pas de
+# distinguer une panne d'un ordinateur sans carte son.
+(
+    sleep 10
+    SORTIES=$(pactl list short sinks 2>/dev/null | wc -l)
+    COURANTE=$(pactl info 2>/dev/null | sed -n 's/^Default Sink: //p')
+    grenos-dire "son, $SORTIES sorties, courante ${COURANTE:-aucune}"
+) &
+
 # L'accueil, une seule fois, à la première ouverture.
 if [ ! -e "$CONFIG/accueil-vu" ]; then
     touch "$CONFIG/accueil-vu"
