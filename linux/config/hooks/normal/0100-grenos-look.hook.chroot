@@ -205,6 +205,23 @@ if command -v flatpak >/dev/null 2>&1; then
         https://dl.flathub.org/repo/flathub.flatpakrepo || true
 fi
 
+echo "--- grenOS : les icones ---"
+
+# Papirus apporte un jeu complet et moderne ; on ne garde que les deux
+# variantes dont grenOS se sert. Les autres pèsent une centaine de mégaoctets
+# pour rien.
+rm -rf /usr/share/icons/ePapirus /usr/share/icons/ePapirus-Dark        /usr/share/icons/Papirus-Light
+if [ -d /usr/share/icons/Papirus-Dark ]; then
+    for fichier in /etc/gtk-3.0/settings.ini /etc/skel/.config/gtk-3.0/settings.ini; do
+        mkdir -p "$(dirname "$fichier")"
+        if [ -f "$fichier" ]; then
+            sed -i 's/^gtk-icon-theme-name=.*/gtk-icon-theme-name=Papirus-Dark/' "$fichier"
+        fi
+    done
+fi
+gtk-update-icon-cache -f /usr/share/icons/Papirus-Dark >/dev/null 2>&1 || true
+gtk-update-icon-cache -f /usr/share/icons/Adwaita >/dev/null 2>&1 || true
+
 echo "--- grenOS : verification des styles ---"
 
 # GTK refuse une feuille de style entière pour une seule propriété qu'il ne

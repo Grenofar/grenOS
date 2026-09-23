@@ -133,6 +133,16 @@ grub-efi-amd64-bin
 efibootmgr
 os-prober
 
+## Les icônes. Adwaita seul ne fournit plus les noms classiques
+## (system-file-manager, preferences-system, web-browser...) : sans le paquet
+## « legacy », la moitié des boutons du bureau s'affichaient sans image.
+## Papirus donne le rendu moderne ; les variantes qu'on n'utilise pas sont
+## retirées à la construction.
+adwaita-icon-theme
+adwaita-icon-theme-legacy
+papirus-icon-theme
+hicolor-icon-theme
+
 ## Les polices : Inter pour l'interface — la plus proche de celle de Windows —,
 ## Hack pour le terminal, DejaVu en secours. Pas les 700 Mio de CJK.
 fonts-inter

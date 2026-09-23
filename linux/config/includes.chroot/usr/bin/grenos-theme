@@ -34,7 +34,7 @@ mkdir -p "$(dirname "$SETTINGS")"
 cat > "$SETTINGS" <<EOF
 [Settings]
 gtk-theme-name=Adwaita
-gtk-icon-theme-name=Adwaita
+gtk-icon-theme-name=Papirus-Dark
 gtk-font-name=Inter 10
 gtk-application-prefer-dark-theme=$SOMBRE
 gtk-cursor-theme-name=Adwaita

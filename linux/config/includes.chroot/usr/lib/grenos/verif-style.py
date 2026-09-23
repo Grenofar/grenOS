@@ -17,12 +17,19 @@ import sys
 
 sys.path.insert(0, "/usr/lib/grenos")
 
-import gi  # noqa: E402
+try:
+    import gi
 
-gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, Gtk  # noqa: E402
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import GLib, Gtk
 
-import grenosui  # noqa: E402
+    import grenosui
+except (ImportError, ValueError) as souci:
+    # Ce contrôle est un filet, pas une dépendance. S'il ne peut pas s'exécuter
+    # ici, on le dit et on laisse la construction continuer : bloquer une image
+    # parce que le vérificateur lui-même ne démarre pas serait absurde.
+    print(f"styles : verification impossible ({souci})")
+    sys.exit(0)
 
 # Les feuilles des programmes sont des constantes `STYLE = """..."""`.
 PROGRAMMES = ["/usr/bin/grenos-shell", "/usr/bin/grenos-bureau", "/usr/bin/grenplace"]

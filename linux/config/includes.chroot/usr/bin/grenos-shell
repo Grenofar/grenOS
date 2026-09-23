@@ -12,6 +12,7 @@ referme aussi dès qu'on clique ailleurs : il attrape le pointeur pendant qu'il
 est ouvert, ce qui est la seule façon fiable d'apprendre qu'on a cliqué dehors
 quand aucun bureau complet ne s'en charge.
 """
+import locale
 import os
 import signal
 import subprocess
@@ -34,11 +35,24 @@ MENU_LARGEUR = 520
 MENU_HAUTEUR = 580
 
 # Ce qu'on ouvre tous les jours, à portée de clic, avec l'icône du système.
+# Chaque icône a plusieurs noms possibles : les thèmes ne fournissent pas tous
+# les mêmes, et une image manquante laissait un bouton muet.
 LANCEURS = [
-    ("Fichiers", "pcmanfm", "system-file-manager"),
-    ("Web", "firefox-esr", "web-browser"),
-    ("Terminal", "x-terminal-emulator", "utilities-terminal"),
-    ("GrenPlace", "grenplace", "system-software-install"),
+    ("Fichiers", "pcmanfm", ["system-file-manager", "folder", "inode-directory"]),
+    ("Web", "firefox-esr", ["firefox-esr", "web-browser", "internet-web-browser"]),
+    ("Terminal", "x-terminal-emulator", ["utilities-terminal", "terminal"]),
+    ("GrenPlace", "grenplace", ["system-software-install", "software-store",
+                                "package-x-generic"]),
+]
+
+# Les boutons de droite : le nom qui s'affiche si aucune icône n'est trouvée.
+COTE_DROIT = [
+    ("Réglages", "grenos-parametres", ["preferences-system", "preferences-desktop",
+                                       "applications-system"]),
+    ("Réseau", "nm-connection-editor", ["network-wireless", "network-workgroup",
+                                        "network-transmit-receive"]),
+    ("Son", "grenos-parametres son", ["audio-volume-high", "audio-speakers",
+                                      "multimedia-volume-control"]),
 ]
 
 STYLE = """
@@ -160,19 +174,30 @@ def lire_desktop(chemin):
     }
 
 
-def image_de(nom_icone, taille=28):
-    """L'image d'une application, demandée au thème d'icônes du système."""
-    if not nom_icone:
+def image_de(noms, taille=28):
+    """La première icône trouvée parmi plusieurs noms possibles, ou rien.
+
+    Les thèmes d'icônes ne portent pas tous les mêmes noms, et un nom absent
+    laissait un bouton vide au milieu de la barre. On essaie donc les noms
+    l'un après l'autre.
+    """
+    if not noms:
         return None
+    if isinstance(noms, str):
+        noms = [noms]
     theme = Gtk.IconTheme.get_default()
-    try:
-        if os.path.isabs(nom_icone) and os.path.exists(nom_icone):
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(nom_icone, taille, taille, True)
-        else:
-            pixbuf = theme.load_icon(nom_icone, taille, Gtk.IconLookupFlags.FORCE_SIZE)
-        return Gtk.Image.new_from_pixbuf(pixbuf)
-    except GLib.Error:
-        return None
+    for nom in noms:
+        if not nom:
+            continue
+        try:
+            if os.path.isabs(nom) and os.path.exists(nom):
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(nom, taille, taille, True)
+            else:
+                pixbuf = theme.load_icon(nom, taille, Gtk.IconLookupFlags.FORCE_SIZE)
+            return Gtk.Image.new_from_pixbuf(pixbuf)
+        except GLib.Error:
+            continue
+    return None
 
 
 class Menu(Gtk.Window):
@@ -348,10 +373,10 @@ class Panneau(Gtk.Window):
         self.bouton_menu.connect("clicked", self.sur_le_bouton)
         boite.pack_start(self.bouton_menu, False, False, 0)
 
-        for nom, commande, icone in LANCEURS:
+        for nom, commande, icones in LANCEURS:
             bouton = Gtk.Button()
             contenu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            image = image_de(icone, 20)
+            image = image_de(icones, 20)
             if image is not None:
                 contenu.pack_start(image, False, False, 0)
             contenu.pack_start(Gtk.Label(label=nom), False, False, 0)
@@ -363,13 +388,13 @@ class Panneau(Gtk.Window):
         self.taches = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         boite.pack_start(self.taches, True, True, 8)
 
-        boite.pack_end(self.action("Éteindre", "grenos-arret", "system-shutdown"), False, False, 0)
+        boite.pack_end(self.action("Éteindre", "grenos-arret",
+                                   ["system-shutdown", "system-log-out"]), False, False, 0)
         self.horloge = Gtk.Label()
         self.horloge.set_name("horloge")
         boite.pack_end(self.horloge, False, False, 0)
-        boite.pack_end(self.action("", "grenos-parametres son", "audio-volume-high"), False, False, 0)
-        boite.pack_end(self.action("", "nm-connection-editor", "network-wireless"), False, False, 0)
-        boite.pack_end(self.action("", "grenos-parametres", "preferences-system"), False, False, 0)
+        for nom, commande, icones in COTE_DROIT:
+            boite.pack_end(self.action(nom, commande, icones), False, False, 0)
 
         self.menu = Menu(self)
         self.ecran_wnck = Wnck.Screen.get_default()
@@ -382,19 +407,21 @@ class Panneau(Gtk.Window):
         GLib.timeout_add_seconds(1, self.tic)
         self.tic()
 
-    def action(self, texte, commande, icone):
-        """Un bouton de la droite : une icône, et une infobulle qui la nomme."""
+    def action(self, texte, commande, icones):
+        """Un bouton de la droite : son icône si elle existe, son nom sinon.
+
+        Jamais d'étiquette vague : un bouton qui disait « Ouvrir » parce que
+        son icône manquait n'apprenait rien à personne.
+        """
         bouton = Gtk.Button()
         contenu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        image = image_de(icone, 20)
+        image = image_de(icones, 20)
         if image is not None:
             contenu.pack_start(image, False, False, 0)
-        if texte or image is None:
-            contenu.pack_start(Gtk.Label(label=texte or "Ouvrir"), False, False, 0)
+        else:
+            contenu.pack_start(Gtk.Label(label=texte), False, False, 0)
         bouton.add(contenu)
-        bouton.set_tooltip_text(texte or {"audio-volume-high": "Son",
-                                          "network-wireless": "Réseau",
-                                          "preferences-system": "Réglages"}.get(icone, ""))
+        bouton.set_tooltip_text(texte)
         bouton.connect("clicked", lambda _: grenosui.lancer(commande))
         return bouton
 
@@ -460,6 +487,14 @@ class Panneau(Gtk.Window):
 
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+    # Sans cette ligne, l'horloge affiche « Wed 23 Sep » : Python garde la
+    # locale « C » tant qu'on ne lui dit pas d'écouter l'environnement, même
+    # quand tout le reste du système est en français.
+    try:
+        locale.setlocale(locale.LC_ALL, "")
+    except locale.Error:
+        pass
     style = grenosui.habiller()
     propre = Gtk.CssProvider()
 
