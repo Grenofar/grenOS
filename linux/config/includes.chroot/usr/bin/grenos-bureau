@@ -64,10 +64,21 @@ STYLE = """
 
 
 def dossier_bureau():
-    """Le dossier « Bureau » de la personne, créé s'il n'existe pas encore."""
+    """Le dossier « Bureau » de la personne, créé s'il n'existe pas encore.
+
+    `GLib.get_user_special_dir` lit les réglages XDG, qui ne sont pas encore
+    écrits à la toute première session : il répond alors `~/Desktop`, un
+    dossier vide, pendant que les raccourcis attendent dans `~/Bureau`. Le
+    bureau paraissait vide au premier démarrage — exactement ce que la preuve
+    « bureau pret, 0 icones » a montré. On préfère donc ce qui existe
+    vraiment.
+    """
+    francais = os.path.expanduser("~/Bureau")
+    if os.path.isdir(francais):
+        return francais
     chemin = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP)
     if not chemin:
-        chemin = os.path.expanduser("~/Bureau")
+        chemin = francais
     os.makedirs(chemin, exist_ok=True)
     return chemin
 
@@ -449,7 +460,8 @@ def main():
     bureau = Bureau()
     bureau.show_all()
     grenosui.lancer(
-        f"grenos-dire 'bureau pret, {len(bureau.positions)} icones'")
+        f"grenos-dire 'bureau pret, {len(bureau.plan.get_children())} icones "
+        f"dans {os.path.basename(bureau.dossier)}'")
 
     # `grenos-fond` prévient d'un changement de thème ou de fond d'écran.
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, bureau.repeindre)

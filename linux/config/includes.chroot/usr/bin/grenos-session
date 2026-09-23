@@ -28,6 +28,12 @@ fi
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/grenos"
 mkdir -p "$CONFIG" "$HOME/Bureau"
 
+# Les dossiers en français, écrits avant que quoi que ce soit ne les demande.
+# Sans cela, les applications cherchent ~/Desktop — vide — pendant que les
+# raccourcis attendent dans ~/Bureau.
+command -v xdg-user-dirs-update >/dev/null 2>&1 && xdg-user-dirs-update 2>/dev/null
+export XDG_DESKTOP_DIR="$HOME/Bureau"
+
 # L'écran reste allumé, et le pointeur est une flèche dès la première seconde.
 xset s off -dpms s noblank 2>/dev/null || true
 xsetroot -cursor_name left_ptr 2>/dev/null || true
