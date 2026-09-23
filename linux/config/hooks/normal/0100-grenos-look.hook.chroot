@@ -117,6 +117,13 @@ if [ -d /usr/share/plymouth/themes/spinner ]; then
         /usr/share/plymouth/themes/spinner/spinner.plymouth 2>/dev/null || true
     plymouth-set-default-theme spinner >/dev/null 2>&1 || true
 fi
+
+# L'écran de chargement reste aussi à l'extinction et au redémarrage : sinon,
+# éteindre la machine affiche une page de journaux au lieu de la fermer.
+for service in plymouth-poweroff plymouth-reboot plymouth-halt plymouth-kexec; do
+    systemctl enable "${service}.service" >/dev/null 2>&1 || true
+done
+
 update-initramfs -u >/dev/null 2>&1 || true
 
 echo "--- grenOS : les entrees de menu ---"
@@ -140,6 +147,7 @@ ecrire_entree bienvenue "Bienvenue" "Ce que l'on peut faire, tout de suite" "use
 ecrire_entree parametres "Réglages" "L'apparence, l'écran, le son, le compte, les mises à jour" "preferences-system"
 ecrire_entree maj "Mettre à jour grenOS" "Les nouveautés et les correctifs de sécurité" "system-software-update"
 ecrire_entree theme "Jour et nuit" "Changer la lumière du bureau" "weather-clear-night"
+ecrire_entree taches "Gestionnaire de tâches" "Ce qui tourne, et ce que ça consomme" "utilities-system-monitor"
 
 # GrenPlace ne suit pas le nommage grenos-* : c'est une marque, pas un outil.
 cat > /usr/share/applications/grenplace.desktop <<'EOF'

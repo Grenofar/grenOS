@@ -32,7 +32,7 @@ mkdir -p "$BUILD/DEBIAN" \
 # une machine déjà nommée n'aurait aucun sens.
 for outil in grenos-shell grenos-session grenos-menu grenos-fond grenos-veilleur \
              grenos-arret grenos-parametres grenplace grenos-bienvenue grenos-bureau \
-             grenos-theme grenos-maj; do
+             grenos-theme grenos-maj grenos-taches; do
     install -m 0755 "$DEDANS/usr/bin/$outil" "$BUILD/usr/bin/"
 done
 

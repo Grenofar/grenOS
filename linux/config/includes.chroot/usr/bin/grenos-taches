@@ -1,0 +1,348 @@
+#!/usr/bin/env python3
+"""Le gestionnaire de tâches de grenOS : ce qui tourne, et ce que ça consomme.
+
+Ctrl+Maj+Échap, comme partout. La disposition est celle que tout le monde
+connaît : en haut ce que la machine consomme en ce moment, en dessous la liste
+triée par appétit, et un bouton pour arrêter ce qui ne répond plus.
+
+Tout est lu dans `/proc`, sans aucun outil extérieur. Le pourcentage de
+processeur est une vraie mesure : la différence de temps consommé entre deux
+lectures, rapportée au temps écoulé — c'est la seule façon d'obtenir un chiffre
+qui veut dire quelque chose, une lecture unique ne dirait rien.
+"""
+import os
+import signal
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+
+RAFRAICHIR = 2  # secondes entre deux mesures
+
+STYLE = """
+#tete-taches {
+    background-image: linear-gradient(to bottom, @fond-clair, @fond-haut);
+    border-bottom: 1px solid @bord;
+    padding: 16px 20px;
+}
+
+.jauge-nom { font-size: 12px; font-weight: 700; color: @texte-faible; letter-spacing: 0.06em; }
+.jauge-valeur { font-size: 21px; font-weight: 800; color: @texte; }
+.jauge-detail { font-size: 12px; color: @texte-faible; }
+
+treeview {
+    background-color: @fond;
+    color: @texte;
+}
+treeview:selected { background-color: @accent; color: #ffffff; }
+treeview header button {
+    background-color: @fond-haut;
+    background-image: none;
+    border: none;
+    border-right: 1px solid @bord;
+    border-bottom: 1px solid @bord;
+    border-radius: 0;
+    color: @texte-faible;
+    font-weight: 600;
+    padding: 8px 10px;
+    margin: 0;
+}
+treeview header button:hover { background-color: @survol; color: @texte; }
+
+#pied-taches {
+    border-top: 1px solid @bord;
+    padding: 12px 20px;
+}
+"""
+
+
+def horloge_systeme():
+    """Le temps total consommé par la machine, en battements d'horloge."""
+    try:
+        with open("/proc/stat", encoding="utf-8") as fichier:
+            champs = fichier.readline().split()
+    except OSError:
+        return 0
+    return sum(int(valeur) for valeur in champs[1:8])
+
+
+def memoire_totale():
+    """La mémoire vive de la machine, en kibioctets."""
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as fichier:
+            for ligne in fichier:
+                if ligne.startswith("MemTotal:"):
+                    return int(ligne.split()[1])
+    except OSError:
+        pass
+    return 1
+
+
+def memoire_utilisee():
+    """Ce qui est réellement occupé, en kibioctets : total moins disponible."""
+    valeurs = {}
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as fichier:
+            for ligne in fichier:
+                nom, _, reste = ligne.partition(":")
+                valeurs[nom] = int(reste.split()[0])
+    except (OSError, IndexError, ValueError):
+        return 0
+    return valeurs.get("MemTotal", 0) - valeurs.get("MemAvailable", 0)
+
+
+def processus():
+    """Tout ce qui tourne : pid, nom, temps consommé, mémoire, propriétaire."""
+    trouves = {}
+    for entree in os.listdir("/proc"):
+        if not entree.isdigit():
+            continue
+        pid = int(entree)
+        try:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as fichier:
+                brut = fichier.read()
+            # Le nom du programme est entre parenthèses et peut contenir des
+            # espaces : on découpe après la dernière parenthèse fermante.
+            debut, _, reste = brut.partition("(")
+            nom, _, apres = reste.rpartition(")")
+            champs = apres.split()
+            temps = int(champs[11]) + int(champs[12])  # utime + stime
+            _ = debut
+
+            memoire = 0
+            with open(f"/proc/{pid}/status", encoding="utf-8") as fichier:
+                for ligne in fichier:
+                    if ligne.startswith("VmRSS:"):
+                        memoire = int(ligne.split()[1])
+                        break
+            proprietaire = os.stat(f"/proc/{pid}").st_uid
+        except (OSError, IndexError, ValueError):
+            continue
+
+        # Le nom complet est plus parlant que les quinze caractères de /proc.
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fichier:
+                ligne = fichier.read().split(b"\x00")
+            if ligne and ligne[0]:
+                candidat = os.path.basename(ligne[0].decode("utf-8", "replace"))
+                if candidat and not candidat.startswith("-"):
+                    nom = candidat
+        except OSError:
+            pass
+
+        trouves[pid] = {"nom": nom, "temps": temps, "memoire": memoire,
+                        "proprietaire": proprietaire}
+    return trouves
+
+
+class Taches(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Gestionnaire de tâches")
+        self.set_default_size(900, 640)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.connect("destroy", Gtk.main_quit)
+        self.connect("key-press-event", self.touche)
+
+        self.precedents = processus()
+        self.horloge = horloge_systeme()
+        self.memoire = memoire_totale()
+        self.filtre = ""
+
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(colonne)
+
+        colonne.pack_start(self.tete(), False, False, 0)
+
+        recherche_boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        recherche_boite.set_border_width(14)
+        self.recherche = Gtk.SearchEntry()
+        self.recherche.set_placeholder_text("Chercher une tâche")
+        self.recherche.connect("search-changed", self.chercher)
+        recherche_boite.pack_start(self.recherche, True, True, 0)
+        colonne.pack_start(recherche_boite, False, False, 0)
+
+        # pid, nom, processeur, memoire, texte processeur, texte memoire
+        self.donnees = Gtk.ListStore(int, str, float, float, str, str)
+        self.tri = Gtk.TreeModelSort(model=self.donnees)
+        self.tri.set_sort_column_id(2, Gtk.SortType.DESCENDING)
+
+        self.vue = Gtk.TreeView(model=self.tri)
+        self.vue.set_headers_clickable(True)
+        for titre, colonne_texte, colonne_tri, largeur in (
+                ("Nom", 1, 1, 320), ("Processeur", 4, 2, 130),
+                ("Mémoire", 5, 3, 130), ("PID", 0, 0, 90)):
+            rendu = Gtk.CellRendererText()
+            if titre != "Nom":
+                rendu.set_property("xalign", 1.0)
+            vraie = Gtk.TreeViewColumn(titre, rendu, text=colonne_texte)
+            vraie.set_sort_column_id(colonne_tri)
+            vraie.set_resizable(True)
+            vraie.set_min_width(largeur)
+            self.vue.append_column(vraie)
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        defilement.add(self.vue)
+        colonne.pack_start(defilement, True, True, 0)
+
+        pied = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        pied.set_name("pied-taches")
+        self.nombre = Gtk.Label(label="", xalign=0)
+        self.nombre.get_style_context().add_class("sous")
+        pied.pack_start(self.nombre, True, True, 0)
+        pied.pack_end(grenosui.bouton("Fin de tâche", self.arreter, "danger"), False, False, 0)
+        colonne.pack_start(pied, False, False, 0)
+
+        self.mesurer()
+        GLib.timeout_add_seconds(RAFRAICHIR, self.mesurer)
+
+    def tete(self):
+        """Les deux jauges du haut : le processeur et la mémoire, en un coup d'œil."""
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=30)
+        boite.set_name("tete-taches")
+
+        self.jauges = {}
+        for cle, nom in (("processeur", "PROCESSEUR"), ("memoire", "MÉMOIRE")):
+            bloc = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            etiquette = Gtk.Label(label=nom, xalign=0)
+            etiquette.get_style_context().add_class("jauge-nom")
+            valeur = Gtk.Label(label="—", xalign=0)
+            valeur.get_style_context().add_class("jauge-valeur")
+            barre = Gtk.ProgressBar()
+            detail = Gtk.Label(label="", xalign=0)
+            detail.get_style_context().add_class("jauge-detail")
+            for widget in (etiquette, valeur, barre, detail):
+                bloc.pack_start(widget, False, False, 0)
+            boite.pack_start(bloc, True, True, 0)
+            self.jauges[cle] = (valeur, barre, detail)
+        return boite
+
+    def touche(self, _widget, evenement):
+        nom = Gdk.keyval_name(evenement.keyval)
+        if nom == "Escape":
+            Gtk.main_quit()
+            return True
+        if nom == "Delete":
+            self.arreter()
+            return True
+        return False
+
+    def chercher(self, champ):
+        self.filtre = champ.get_text().strip().lower()
+        self.mesurer()
+
+    def mesurer(self):
+        """Une mesure : la différence avec la précédente, c'est la consommation."""
+        maintenant = processus()
+        horloge = horloge_systeme()
+        ecoule = max(horloge - self.horloge, 1)
+        coeurs = os.cpu_count() or 1
+
+        choisi = self.selection()
+        self.donnees.clear()
+        total_processeur = 0.0
+
+        for pid, etat in maintenant.items():
+            avant = self.precedents.get(pid)
+            part = 0.0
+            if avant is not None:
+                part = (etat["temps"] - avant["temps"]) / ecoule * 100 * coeurs
+            total_processeur += part
+            if self.filtre and self.filtre not in etat["nom"].lower():
+                continue
+            if etat["memoire"] == 0 and part < 0.05:
+                # Les fils du noyau n'ont ni mémoire propre ni activité : les
+                # afficher noierait ce que la personne cherche.
+                continue
+            self.donnees.append([
+                pid, etat["nom"], part, etat["memoire"],
+                f"{part:.1f} %",
+                f"{etat['memoire'] / 1024:.0f} Mo" if etat["memoire"] else "—",
+            ])
+
+        self.precedents = maintenant
+        self.horloge = horloge
+
+        part_processeur = min(total_processeur / coeurs, 100.0)
+        valeur, barre, detail = self.jauges["processeur"]
+        valeur.set_text(f"{part_processeur:.0f} %")
+        barre.set_fraction(part_processeur / 100)
+        detail.set_text(f"{coeurs} cœurs")
+
+        utilisee = memoire_utilisee()
+        part_memoire = utilisee / self.memoire if self.memoire else 0
+        valeur, barre, detail = self.jauges["memoire"]
+        valeur.set_text(f"{part_memoire * 100:.0f} %")
+        barre.set_fraction(min(part_memoire, 1.0))
+        detail.set_text(f"{utilisee / 1024 / 1024:.1f} Go sur "
+                        f"{self.memoire / 1024 / 1024:.1f} Go")
+
+        self.nombre.set_text(f"{len(maintenant)} processus")
+        if choisi is not None:
+            self.reselectionner(choisi)
+        return True
+
+    def selection(self):
+        modele, ligne = self.vue.get_selection().get_selected()
+        return modele[ligne][0] if ligne is not None else None
+
+    def reselectionner(self, pid):
+        """Garder la ligne choisie malgré le tri qui bouge à chaque mesure."""
+        def chercher(modele, chemin, ligne):
+            if modele[ligne][0] == pid:
+                self.vue.get_selection().select_path(chemin)
+                return True
+            return False
+        self.tri.foreach(chercher)
+
+    def arreter(self):
+        pid = self.selection()
+        if pid is None:
+            return
+        nom = ""
+        for ligne in self.donnees:
+            if ligne[0] == pid:
+                nom = ligne[1]
+                break
+
+        question = Gtk.MessageDialog(
+            transient_for=self, modal=True, message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.OK_CANCEL,
+            text=f"Arrêter « {nom} » ?")
+        question.format_secondary_text(
+            "Ce qui n'est pas enregistré dans cette application sera perdu.")
+        reponse = question.run()
+        question.destroy()
+        if reponse != Gtk.ResponseType.OK:
+            return
+
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except PermissionError:
+            # Un processus qui ne nous appartient pas demande une autorisation.
+            subprocess.Popen(["pkexec", "kill", "-TERM", str(pid)], start_new_session=True)
+        except ProcessLookupError:
+            pass
+        GLib.timeout_add_seconds(1, lambda: (self.mesurer(), False)[1])
+
+
+def main():
+    grenosui.habiller()
+    grenosui.ajouter_style(STYLE)
+    fenetre = Taches()
+    fenetre.show_all()
+    _ = time
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

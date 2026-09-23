@@ -190,6 +190,13 @@ class Reglages(Gtk.Window):
         self.choix_taille.connect("changed", lambda _: self.relire_taux())
         self.relire_taux()
 
+        # Au-delà de ce que le pilote propose : on calcule la définition
+        # soi-même. Sans cela, impossible de dépasser 60 images par seconde
+        # quand la liste annoncée s'arrête là — ce qui est le cas de presque
+        # toutes les machines virtuelles.
+        self.libre_taux = Gtk.SpinButton.new_with_range(24, 360, 1)
+        self.libre_taux.set_value(120)
+
         return self.enveloppe(
             grenosui.titre(
                 "Écran",
@@ -203,6 +210,15 @@ class Reglages(Gtk.Window):
                 self.note("Dans une machine virtuelle, la fenêtre peut aussi être "
                           "redimensionnée librement : la définition suit toute seule."),
             ),
+            grenosui.carte(
+                self.ligne("Aller plus haut", self.libre_taux),
+                grenosui.bouton("Essayer cette fréquence", self.forcer_taux),
+                self.note("Le pilote n'annonce pas toujours tout ce que l'écran accepte : "
+                          "cette définition est calculée puis essayée sur la définition "
+                          "choisie au-dessus. Si l'écran refuse, rien ne change — et s'il "
+                          "accepte mais que l'image est noire, attends dix secondes : "
+                          "rien n'est enregistré tant que l'essai n'a pas réussi."),
+            ),
         )
 
     def relire_taux(self):
@@ -211,6 +227,15 @@ class Reglages(Gtk.Window):
         for taux in self.modes[index]["taux"]:
             self.choix_taux.append_text(taux)
         self.choix_taux.set_active(0)
+
+    def forcer_taux(self):
+        index = max(self.choix_taille.get_active(), 0)
+        taille = self.modes[index]["taille"]
+        largeur, hauteur = taille.split("x")
+        taux = self.libre_taux.get_value()
+        souci = module_ecran.ajouter_mode(self.ecrans[0]["nom"], largeur, hauteur, taux)
+        self.dire_ecran.set_text(
+            souci or f"Appliqué : {taille} à {taux:.0f} images par seconde.")
 
     def appliquer_ecran(self):
         index = max(self.choix_taille.get_active(), 0)

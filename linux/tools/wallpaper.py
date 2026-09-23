@@ -36,35 +36,56 @@ def png(path, pixels):
 
 
 def make(path, width, height, night):
-    top = np.array((0x08, 0x0C, 0x18) if night else (0xEC, 0xF1, 0xFA), dtype=float)
-    bottom = np.array((0x03, 0x05, 0x0B) if night else (0xCF, 0xDC, 0xF2), dtype=float)
-    strength = 0.55 if night else 0.30
+    """Une composition en courbes, calculée : ni photo, ni motif répété.
+
+    Refaite le 23 septembre 2026 : l'ancienne version empilait trois halos et
+    une écharpe de lumière, ce qui donnait une brume uniforme. Celle-ci a une
+    ligne d'horizon — des ondes larges qui traversent l'image en biais, plus
+    claires là où elles se croisent. Un fond d'écran doit tenir derrière des
+    icônes : il garde donc ses valeurs sombres en bas à gauche, là où les
+    icônes se posent, et respire en haut à droite.
+    """
+    haut = np.array((0x0B, 0x12, 0x24) if night else (0xF2, 0xF6, 0xFD), dtype=float)
+    bas = np.array((0x04, 0x06, 0x0E) if night else (0xD6, 0xE0, 0xF3), dtype=float)
 
     ys, xs = np.mgrid[0:height, 0:width].astype(float)
-    # Le fond : un dégradé vertical, du plus clair en haut au plus sombre en bas.
-    image = top + (bottom - top) * (ys / max(height - 1, 1))[..., None]
+    u = xs / max(width - 1, 1)
+    v = ys / max(height - 1, 1)
 
-    # Trois halos, posés en proportions de l'image pour tenir à toute taille.
-    for fx, fy, radius, tint, weight in [
-        (0.24, 0.22, 0.75, ACCENT, 1.00),
-        (0.82, 0.78, 0.85, VIOLET, 0.80),
-        (0.66, 0.12, 0.45, TEAL, 0.35),
-    ]:
-        distance = np.hypot(xs - fx * width, ys - fy * height) / (radius * height)
-        amount = (np.clip(1.0 - distance, 0.0, 1.0) ** 2 * weight * strength)[..., None]
-        image += (np.array(tint, dtype=float) - image) * amount
+    # Le fond : un dégradé en diagonale plutôt qu'à la verticale. Le regard
+    # suit la diagonale, et l'image paraît moins plate.
+    diagonale = np.clip(v * 0.78 + u * 0.22, 0.0, 1.0)
+    image = haut + (bas - haut) * diagonale[..., None]
 
-    # L'écharpe de lumière : une diagonale large, si douce qu'on la voit à
-    # peine — une arête nette sur un fond d'écran saute aux yeux.
-    band = np.abs((xs * 0.55 + ys) / (width * 0.55 + height) - 0.42)
-    veil = (np.clip(0.30 - band, 0.0, None) / 0.30) ** 2 * (0.055 if night else 0.10)
-    image += (255.0 - image) * veil[..., None]
+    # Trois ondes larges. Leur amplitude diminue vers le bas de l'image, pour
+    # que la zone des icônes reste calme.
+    calme = np.clip(1.0 - v * 1.15, 0.0, 1.0)
+    for frequence, phase, hauteur_onde, tint, force in (
+            (1.6, 0.0, 0.30, ACCENT, 1.00),
+            (2.3, 1.7, 0.22, VIOLET, 0.75),
+            (3.1, 3.4, 0.14, TEAL, 0.45)):
+        ligne = 0.34 + hauteur_onde * np.sin(u * frequence * np.pi * 2 + phase) * 0.5
+        distance = np.abs(v - ligne)
+        lueur = np.clip(1.0 - distance / 0.34, 0.0, 1.0) ** 3
+        quantite = (lueur * calme * force * (0.55 if night else 0.32))[..., None]
+        image += (np.array(tint, dtype=float) - image) * quantite
 
-    # Un vignettage léger, pour que les icônes du bureau se détachent.
-    edge = np.hypot((xs / width - 0.5) * 1.1, (ys / height - 0.5) * 1.1)
-    dark = np.array((0, 0, 0) if night else (0x9A, 0xA8, 0xC0), dtype=float)
-    shade = np.clip(edge - 0.45, 0.0, None)[..., None] * 0.55
-    image += (dark - image) * shade
+    # Un point de lumière en haut à droite : une source, et l'image cesse
+    # d'être un aplat.
+    distance = np.hypot((u - 0.78) * (width / height), v - 0.16)
+    halo = np.clip(1.0 - distance / 0.55, 0.0, 1.0) ** 2
+    blanc = np.array((255, 255, 255), dtype=float)
+    image += (blanc - image) * (halo * (0.16 if night else 0.42))[..., None]
+
+    # Un grain très fin : sans lui, un dégradé calculé montre des bandes sur
+    # les écrans qui n'affichent pas toutes les nuances.
+    grain = np.random.default_rng(7).normal(0.0, 1.4, size=(height, width))[..., None]
+    image += grain
+
+    # Le coin des icônes reste sombre : c'est là qu'on lit des noms de fichier.
+    coin = np.clip(1.0 - np.hypot(u / 0.55, (1.0 - v) / 0.75), 0.0, 1.0) ** 2
+    sombre = np.array((0, 0, 0) if night else (0x8F, 0x9F, 0xBA), dtype=float)
+    image += (sombre - image) * (coin * (0.35 if night else 0.18))[..., None]
 
     png(path, np.clip(image, 0, 255).astype(np.uint8))
 

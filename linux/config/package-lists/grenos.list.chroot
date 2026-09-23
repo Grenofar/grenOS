@@ -22,6 +22,10 @@ xserver-xorg-video-nouveau
 xinit
 x11-xserver-utils
 x11-utils
+# `cvt` calcule une définition d'écran aux normes VESA : c'est ce qui permet
+# aux Réglages de proposer une fréquence que le pilote n'annonce pas — la
+# seule façon de dépasser 60 images par seconde quand la liste s'arrête là.
+xcvt
 dbus-x11
 xdg-utils
 
@@ -58,7 +62,6 @@ xfce4-terminal
 xarchiver
 galculator
 xfce4-screenshooter
-xfce4-taskmanager
 
 ## Réseau, son : les services, et les fenêtres pour les régler. `pactl`
 ## (pulseaudio-utils) est ce qui permet aux Réglages de choisir la sortie audio

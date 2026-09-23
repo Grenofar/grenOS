@@ -1,90 +1,106 @@
 ! Les fenêtres de grenOS : barre de titre, bordures, boutons.
 !
-! Les couleurs sont celles de tout le reste du système (le bleu #2f7df6 sur un
-! fond #0d1220) : une fenêtre doit avoir l'air de venir du même endroit que la
-! barre et le menu. Pas de dégradé coûteux, pas d'ombre calculée — un aplat se
-! dessine instantanément, même sans accélération 3D.
+! Inspiré de Windows, sans rien lui emprunter : une barre plate et sobre,
+! l'icône puis le titre à gauche, les trois boutons à droite, et le bouton de
+! fermeture qui devient rouge quand on le survole. Aucun dégradé, aucune ombre
+! calculée — un aplat se dessine instantanément, même sans accélération 3D, et
+! c'est ce qui garde le pointeur fluide.
 
 border.width: 1
-padding.width: 6
-padding.height: 4
+padding.width: 8
+padding.height: 7
 window.handle.width: 0
 window.client.padding.width: 0
 window.client.padding.height: 0
 menu.overlap.x: 0
 menu.overlap.y: 0
 
-! La fenêtre au premier plan : on la reconnaît à son liseré bleu.
-window.active.border.color: #2f7df6
+! La fenêtre au premier plan. Le liseré bleu dit laquelle reçoit le clavier.
+window.active.border.color: #3b82f6
 window.active.title.bg: flat solid
-window.active.title.bg.color: #131a2b
-window.active.label.text.color: #e6ebf5
+window.active.title.bg.color: #141b2d
+window.active.label.bg: parentrelative
+window.active.label.text.color: #eef2fa
 window.active.handle.bg: flat solid
-window.active.handle.bg.color: #131a2b
+window.active.handle.bg.color: #141b2d
 window.active.grip.bg: flat solid
-window.active.grip.bg.color: #131a2b
+window.active.grip.bg.color: #141b2d
+
 window.active.button.unpressed.bg: flat solid
-window.active.button.unpressed.bg.color: #131a2b
-window.active.button.unpressed.image.color: #cdd6e6
+window.active.button.unpressed.bg.color: #141b2d
+window.active.button.unpressed.image.color: #cbd5e8
 window.active.button.hover.bg: flat solid
-window.active.button.hover.bg.color: #1b2740
+window.active.button.hover.bg.color: #253352
 window.active.button.hover.image.color: #ffffff
 window.active.button.pressed.bg: flat solid
-window.active.button.pressed.bg.color: #2f7df6
+window.active.button.pressed.bg.color: #3b82f6
 window.active.button.pressed.image.color: #ffffff
 window.active.button.disabled.bg: flat solid
-window.active.button.disabled.bg.color: #131a2b
-window.active.button.disabled.image.color: #454f66
+window.active.button.disabled.bg.color: #141b2d
+window.active.button.disabled.image.color: #46506b
 
-! Les autres, en retrait, sans disparaître.
-window.inactive.border.color: #1e2942
+! Fermer se distingue des autres : c'est le seul geste qu'on ne rattrape pas.
+window.active.button.close.hover.bg: flat solid
+window.active.button.close.hover.bg.color: #e0293c
+window.active.button.close.hover.image.color: #ffffff
+window.active.button.close.pressed.bg: flat solid
+window.active.button.close.pressed.bg.color: #b31f2e
+window.active.button.close.pressed.image.color: #ffffff
+window.inactive.button.close.hover.bg: flat solid
+window.inactive.button.close.hover.bg.color: #e0293c
+window.inactive.button.close.hover.image.color: #ffffff
+
+! Les autres fenêtres, en retrait, sans disparaître.
+window.inactive.border.color: #22304d
 window.inactive.title.bg: flat solid
-window.inactive.title.bg.color: #0d1220
-window.inactive.label.text.color: #8e9ab0
+window.inactive.title.bg.color: #0f1524
+window.inactive.label.bg: parentrelative
+window.inactive.label.text.color: #8b98b0
 window.inactive.handle.bg: flat solid
-window.inactive.handle.bg.color: #0d1220
+window.inactive.handle.bg.color: #0f1524
 window.inactive.grip.bg: flat solid
-window.inactive.grip.bg.color: #0d1220
+window.inactive.grip.bg.color: #0f1524
 window.inactive.button.unpressed.bg: flat solid
-window.inactive.button.unpressed.bg.color: #0d1220
-window.inactive.button.unpressed.image.color: #6f7b91
+window.inactive.button.unpressed.bg.color: #0f1524
+window.inactive.button.unpressed.image.color: #6e7b93
 window.inactive.button.hover.bg: flat solid
-window.inactive.button.hover.bg.color: #1b2740
-window.inactive.button.hover.image.color: #e6ebf5
+window.inactive.button.hover.bg.color: #1c2740
+window.inactive.button.hover.image.color: #eef2fa
 window.inactive.button.disabled.bg: flat solid
-window.inactive.button.disabled.bg.color: #0d1220
+window.inactive.button.disabled.bg.color: #0f1524
 window.inactive.button.disabled.image.color: #39415400
 
-window.label.text.justify: center
+! Le titre à gauche, comme dans toutes les fenêtres qu'on connaît.
+window.label.text.justify: left
 
 ! Le menu du gestionnaire de fenêtres, et la liste d'Alt+Tab.
-menu.border.color: #1e2942
+menu.border.color: #22304d
 menu.border.width: 1
 menu.title.bg: flat solid
-menu.title.bg.color: #131a2b
-menu.title.text.color: #e6ebf5
-menu.title.text.justify: center
+menu.title.bg.color: #141b2d
+menu.title.text.color: #eef2fa
+menu.title.text.justify: left
 menu.items.bg: flat solid
-menu.items.bg.color: #0d1220
-menu.items.text.color: #e6ebf5
+menu.items.bg.color: #0b101c
+menu.items.text.color: #eef2fa
 menu.items.disabled.text.color: #5b6474
 menu.items.active.bg: flat solid
-menu.items.active.bg.color: #2f7df6
+menu.items.active.bg.color: #3b82f6
 menu.items.active.text.color: #ffffff
-menu.separator.color: #1e2942
+menu.separator.color: #22304d
 menu.separator.width: 1
 menu.separator.padding.width: 6
 menu.separator.padding.height: 3
 
 ! La bulle qui montre où va la fenêtre pendant un déplacement.
 osd.border.width: 1
-osd.border.color: #1e2942
+osd.border.color: #22304d
 osd.bg: flat solid
-osd.bg.color: #0d1220
+osd.bg.color: #0b101c
 osd.label.bg: flat solid
-osd.label.bg.color: #0d1220
-osd.label.text.color: #e6ebf5
+osd.label.bg.color: #0b101c
+osd.label.text.color: #eef2fa
 osd.hilight.bg: flat solid
-osd.hilight.bg.color: #2f7df6
+osd.hilight.bg.color: #3b82f6
 osd.unhilight.bg: flat solid
-osd.unhilight.bg.color: #1b2740
+osd.unhilight.bg.color: #1c2740
