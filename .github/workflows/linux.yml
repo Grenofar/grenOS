@@ -169,7 +169,7 @@ jobs:
           fi
           qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
             -cdrom "$ISO" -boot d \
-            -display none -vga std             -usb -device usb-tablet             -device intel-hda -device hda-duplex -audiodev none,id=silence \
+            -display none -vga std             -usb -device usb-tablet             -audiodev none,id=silence -device intel-hda \n            -device hda-duplex,audiodev=silence \
             -serial file:"$RUNNER_TEMP/serial.log" \
             -monitor unix:"$RUNNER_TEMP/monitor.sock",server,nowait \
             -no-reboot &
