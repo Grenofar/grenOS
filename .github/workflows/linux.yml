@@ -244,6 +244,13 @@ jobs:
           # La barre dit ou se trouve son bouton : on vise ce point plutot que
           # de deviner. Elle est centree, donc sa position depend du nombre
           # d'icones — un clic au juge tombe a cote, et c'est ce qui est arrive.
+          # Attendre que la barre ait annonce sa position : elle le fait trois
+          # secondes apres son demarrage, et le premier essai cliquait avant
+          # que la ligne ne soit arrivee — donc au mauvais endroit.
+          for essai in $(seq 1 30); do
+            grep -aq 'bouton grenos en' "$RUNNER_TEMP/serial.log" && break
+            sleep 2
+          done
           POINT=$(grep -a 'bouton grenos en' "$RUNNER_TEMP/serial.log" | tail -1 | sed 's/.*en //')
           if [ -n "$POINT" ]; then
             PX=${POINT%,*}
