@@ -77,16 +77,37 @@ a:hover { text-decoration: underline; }
 
 .main { flex: 1; min-width: 0; padding: 26px 30px 60px; }
 
+/* L'en-tête d'une page : un titre qui a du poids, et un trait d'accent qui
+   sépare la page de sa barre latérale. Avant, le titre avait la taille d'un
+   paragraphe et rien ne marquait le début de la page. */
 .page-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 22px;
+  margin: 0 0 26px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
 }
-h1 { font-size: 19px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--text-dim);
-     text-transform: uppercase; letter-spacing: 0.06em; }
+.page-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 64px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+h1 {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+h2 { font-size: 12px; font-weight: 700; margin: 0 0 12px; color: var(--text-faint);
+     text-transform: uppercase; letter-spacing: 0.1em; }
 
 .grid { display: grid; gap: 14px; }
 .grid.cols-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
@@ -478,9 +499,68 @@ button.google-btn:hover { background: #f7f8f8; filter: none; }
 }
 .public-main { max-width: 900px; margin: 0 auto; padding: 10px 20px 70px; }
 
-.dl-hero { margin-bottom: 24px; }
-.dl-hero h1 { font-size: 26px; margin-bottom: 8px; }
-.dl-hero p { color: var(--text-dim); font-size: 14.5px; max-width: 660px; margin: 0; }
+/* La première chose que voit quelqu'un qui découvre grenOS. Un dégradé court,
+   un titre large, et une phrase qui dit ce que c'est — pas un titre de 19
+   pixels perdu en haut d'une page grise. */
+.dl-hero {
+  position: relative;
+  margin: 0 0 28px;
+  padding: 40px 34px 34px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background:
+    radial-gradient(900px 260px at 12% -10%, rgba(91, 156, 255, 0.20), transparent 70%),
+    radial-gradient(700px 240px at 92% 0%, rgba(124, 77, 240, 0.16), transparent 70%),
+    linear-gradient(180deg, var(--surface-2), var(--surface));
+  overflow: hidden;
+}
+.dl-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.6;
+}
+.dl-hero h1 {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  margin: 0 0 12px;
+  line-height: 1.05;
+}
+.dl-hero p { color: var(--text-dim); font-size: 15.5px; max-width: 680px; margin: 0; }
+
+.dl-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 16px;
+}
+.dl-mark span.puce {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(91, 156, 255, 0.16);
+}
+
+/* « Ce qu'il y a dedans » : une grille de points courts. Un paragraphe de
+   deux cents mots, personne ne le lit. */
+.dl-quoi { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.dl-quoi .card { display: flex; flex-direction: column; gap: 5px; }
+.dl-quoi b { color: var(--text); font-size: 14px; font-weight: 650; }
+.dl-quoi span { color: var(--text-dim); font-size: 13.2px; line-height: 1.5; }
+
+@media (max-width: 720px) {
+  .dl-hero { padding: 28px 20px 24px; }
+  .dl-hero h1 { font-size: 30px; }
+}
 
 .dl-card {
   display: flex;

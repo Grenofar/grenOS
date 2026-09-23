@@ -44,7 +44,57 @@ const FR = {
   none: "La première image Linux est en cours de construction. Elle arrive.",
   checked: "Construite et démarrée par la CI avant publication, captures d'écran à l'appui.",
   nowTitle: "Ce qu'il y a dedans",
-  now: "Un bureau écrit pour grenOS : notre barre, notre menu, nos réglages, notre thème sombre et un fond d'écran maison — rien d'emprunté à un autre système. Il ne compose pas l'écran par la carte graphique, donc il reste fluide dans une machine virtuelle sans accélération 3D. Au tout premier démarrage, un seul écran : ton nom. Il devient ton compte et ton adresse sur la machine — entrer « lea » donne lea@grenos. Tout est en français, clavier AZERTY. Les applications d'un système complet : Firefox avec ses onglets, explorateur de fichiers, éditeur de texte, terminal, visionneuse d'images, gestionnaire d'archives, capture d'écran, calculatrice. Alt+Tab passe d'une fenêtre à l'autre, Alt+F4 ferme, Ctrl+Maj+Échap ouvre le moniteur des tâches, Meta+T bascule entre le jour et la nuit. Les Réglages changent la définition de l'écran et le nombre d'images par seconde, et posent un mot de passe quand tu en veux un. Un magasin installe des applications en un clic, paquets Debian comme Flatpak — Steam compris. Rien à installer pour commencer : la machine livrée avec l'image garde déjà tout sur son disque — fichiers, réglages, applications ajoutées, mot de passe. L'installateur, lui, pose le système en dur quand tu le veux. Ensuite, « Mettre à jour grenOS » apporte nos nouveautés et les correctifs de sécurité Debian, sans jamais retélécharger l'image.",
+  quoi: [
+    {
+      titre: "Un bureau écrit pour grenOS",
+      texte:
+        "Notre barre, notre menu, nos Réglages, notre thème et notre fond d'écran. Rien d'emprunté à un autre système.",
+    },
+    {
+      titre: "Fluide sans carte graphique",
+      texte:
+        "L'écran n'est pas composé par le GPU : le pointeur suit la main, même dans une machine virtuelle sans accélération 3D.",
+    },
+    {
+      titre: "Ton nom dès le premier écran",
+      texte: "Il devient ton compte et ton adresse sur la machine : entrer « lea » donne lea@grenos.",
+    },
+    {
+      titre: "Un bureau où l'on pose des choses",
+      texte:
+        "Fichiers, dossiers et raccourcis restent où tu les laisses. Clic droit pour créer, renommer, changer le fond.",
+    },
+    {
+      titre: "Les applications d'un système complet",
+      texte:
+        "Firefox et ses onglets, explorateur de fichiers, éditeur de texte, terminal, images, archives, capture d'écran, calculatrice.",
+    },
+    {
+      titre: "GrenPlace",
+      texte:
+        "Les applications s'installent en un clic, paquets Debian comme Flatpak — Steam compris — dans une fenêtre, jamais dans un terminal.",
+    },
+    {
+      titre: "Des Réglages qui règlent vraiment",
+      texte:
+        "Jour et nuit, définition de l'écran et images par seconde, sortie audio et volume, mot de passe, mises à jour.",
+    },
+    {
+      titre: "Les raccourcis que tu connais",
+      texte:
+        "Alt+Tab change de fenêtre, Alt+F4 ferme, Ctrl+Maj+Échap ouvre les tâches, Meta+T bascule le jour et la nuit.",
+    },
+    {
+      titre: "Rien à installer pour commencer",
+      texte:
+        "La machine livrée avec l'image garde déjà tout sur son disque : fichiers, réglages, applications, mot de passe.",
+    },
+    {
+      titre: "Les mises à jour depuis l'OS",
+      texte:
+        "Nos nouveautés et les correctifs de sécurité Debian arrivent ensemble, sans jamais retélécharger l'image.",
+    },
+  ],
   vboxTitle: "Dans VirtualBox",
   vbox: [
     "Télécharger le zip « pour VirtualBox » et l'extraire (clic droit → Extraire tout) : le fichier .vbox, le disque .vdi et l'image .iso sont côte à côte, et doivent le rester.",
@@ -80,7 +130,58 @@ const EN: typeof FR = {
   none: "The first Linux image is being built. It is on its way.",
   checked: "Built and booted by CI before publication, with screenshots to show for it.",
   nowTitle: "What is inside",
-  now: "A desktop written for grenOS: our own panel, menu, settings, dark theme and wallpaper — nothing borrowed from another system. It does not compose the screen on the graphics card, so it stays smooth inside a virtual machine with no 3D acceleration. On the very first boot there is a single screen: your name. It becomes your account and your address on the machine — typing “lea” gives lea@grenos. Everything is in French, with a French keyboard. The applications of a complete system: Firefox with its tabs, a file manager, a text editor, a terminal, an image viewer, an archive manager, a screenshot tool, a calculator. Alt+Tab moves between windows, Alt+F4 closes, Ctrl+Shift+Esc opens the task monitor, Meta+T switches day and night. Settings change the screen resolution and refresh rate, and set a password whenever you want one. A store installs applications in one click, Debian packages as well as Flatpaks — Steam included. Nothing to install to begin with: the machine shipped with the image already keeps everything on its disk — files, settings, applications added, password. The installer puts the system on the disk for good whenever you want it. After that, the update tool brings our own changes and Debian's security fixes, without ever downloading the image again.",
+  quoi: [
+    {
+      titre: "A desktop written for grenOS",
+      texte:
+        "Our own panel, menu, Settings, theme and wallpaper. Nothing borrowed from another system.",
+    },
+    {
+      titre: "Smooth without a graphics card",
+      texte:
+        "The screen is not composed on the GPU: the pointer follows your hand, even in a virtual machine with no 3D acceleration.",
+    },
+    {
+      titre: "Your name on the very first screen",
+      texte:
+        "It becomes your account and your address on the machine: typing “lea” gives lea@grenos.",
+    },
+    {
+      titre: "A desktop you can put things on",
+      texte:
+        "Files, folders and shortcuts stay where you leave them. Right-click to create, rename, change the wallpaper.",
+    },
+    {
+      titre: "The applications of a complete system",
+      texte:
+        "Firefox with its tabs, a file manager, a text editor, a terminal, images, archives, a screenshot tool, a calculator.",
+    },
+    {
+      titre: "GrenPlace",
+      texte:
+        "Applications install in one click, Debian packages as well as Flatpaks — Steam included — in a window, never in a terminal.",
+    },
+    {
+      titre: "Settings that actually settle things",
+      texte:
+        "Day and night, screen resolution and refresh rate, audio output and volume, password, updates.",
+    },
+    {
+      titre: "The shortcuts you already know",
+      texte:
+        "Alt+Tab switches windows, Alt+F4 closes, Ctrl+Shift+Esc opens the task monitor, Meta+T switches day and night.",
+    },
+    {
+      titre: "Nothing to install to begin with",
+      texte:
+        "The machine shipped with the image already keeps everything on its disk: files, settings, applications, password.",
+    },
+    {
+      titre: "Updates from inside the OS",
+      texte:
+        "Our own changes and Debian's security fixes arrive together, without ever downloading the image again.",
+    },
+  ],
   vboxTitle: "In VirtualBox",
   vbox: [
     "Download the zip “for VirtualBox” and extract it (right-click → Extract All): the .vbox file, the .vdi disk and the .iso image sit side by side, and must stay together.",
@@ -111,6 +212,9 @@ export function DownloadView({ linux = null, repo }: { linux?: LinuxRelease | nu
   return (
     <>
       <div className="dl-hero">
+        <div className="dl-mark">
+          <span className="puce" /> grenOS · Linux
+        </div>
         <h1>{c.title}</h1>
         <p>{c.lead}</p>
       </div>
@@ -162,9 +266,16 @@ export function DownloadView({ linux = null, repo }: { linux?: LinuxRelease | nu
 
       <section>
         <h2>{c.nowTitle}</h2>
-        <p className="muted" style={{ fontSize: 13.5 }}>
-          {c.now}
-        </p>
+        {/* Une grille de points courts : un pavé de deux cents mots, personne
+            ne le lit, et c'est pourtant ce que regarde quelqu'un qui hésite. */}
+        <div className="dl-quoi">
+          {c.quoi.map((point) => (
+            <div className="card" key={point.titre}>
+              <b>{point.titre}</b>
+              <span>{point.texte}</span>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="grid cols-2">
