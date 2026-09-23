@@ -205,6 +205,15 @@ if command -v flatpak >/dev/null 2>&1; then
         https://dl.flathub.org/repo/flathub.flatpakrepo || true
 fi
 
+echo "--- grenOS : verification des styles ---"
+
+# GTK refuse une feuille de style entière pour une seule propriété qu'il ne
+# connaît pas, et le programme qui la charge meurt avec elle. Une faute de
+# style ne se voit donc pas comme un défaut d'apparence : la fenêtre ne
+# s'ouvre pas. On le vérifie ici, pendant la construction, et on refuse de
+# produire une image dont l'interface ne se chargerait pas.
+python3 /usr/lib/grenos/verif-style.py
+
 echo "--- grenOS : menage ---"
 
 rm -f /usr/share/applications/xfce4-about.desktop

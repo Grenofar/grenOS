@@ -17,6 +17,7 @@ Deux principes tiennent tout le reste :
 """
 import os
 import subprocess
+import sys
 
 import gi
 
@@ -87,7 +88,7 @@ window, .fenetre { background-color: @fond; color: @texte; }
     letter-spacing: 1.2px;
     color: @texte-faible;
 }
-.entree-titre { font-weight: 650; }
+.entree-titre { font-weight: 600; }
 .grand-chiffre { font-size: 22px; font-weight: 700; color: @accent-clair; }
 
 /* ---- La carte : l'unité de mise en page de tout le système ------------- */
@@ -324,10 +325,28 @@ def feuille(couleurs=None):
     return (entete + MODELE).encode("utf-8")
 
 
+def charger(fournisseur, css):
+    """Charge une feuille de style sans jamais faire tomber le programme.
+
+    GTK refuse une feuille entière pour une seule propriété qu'il ne connaît
+    pas, et PyGObject transforme ce refus en exception. Une faute de style ne
+    doit pas coûter un bureau : on la signale sur la sortie d'erreur, et on
+    continue sans elle. Le vrai garde-fou est ailleurs — la construction de
+    l'image vérifie toutes nos feuilles et refuse de produire une image dont
+    le style ne se charge pas.
+    """
+    try:
+        fournisseur.load_from_data(css if isinstance(css, bytes) else css.encode("utf-8"))
+        return True
+    except GLib.Error as souci:
+        print(f"grenos: style refuse par GTK : {souci}", file=sys.stderr)
+        return False
+
+
 def habiller(couleurs=None):
     """Applique le style à tout l'écran : toute fenêtre ouverte ensuite le suit."""
     fournisseur = Gtk.CssProvider()
-    fournisseur.load_from_data(feuille(couleurs))
+    charger(fournisseur, feuille(couleurs))
     Gtk.StyleContext.add_provider_for_screen(
         Gdk.Screen.get_default(), fournisseur, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
     )
@@ -339,7 +358,7 @@ def ajouter_style(css, couleurs=None):
     couleurs = couleurs or palette()
     entete = "".join(f"@define-color {nom} {valeur};\n" for nom, valeur in couleurs.items())
     fournisseur = Gtk.CssProvider()
-    fournisseur.load_from_data((entete + css).encode("utf-8"))
+    charger(fournisseur, entete + css)
     Gtk.StyleContext.add_provider_for_screen(
         Gdk.Screen.get_default(), fournisseur, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
     )

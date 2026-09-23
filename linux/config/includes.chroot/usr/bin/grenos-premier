@@ -211,6 +211,7 @@ class Premier(Gtk.Window):
 
 
 def main():
+    dire("premier ecran : le programme demarre")
     if os.geteuid() != 0:
         sys.exit("grenos-premier doit être lancé par le système, en root.")
     if os.path.exists(IDENTITE):
