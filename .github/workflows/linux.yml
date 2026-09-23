@@ -169,11 +169,23 @@ jobs:
           fi
           qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
             -cdrom "$ISO" -boot d \
-            -display none -vga std             -usb -device usb-tablet             -audiodev none,id=silence -device intel-hda \n            -device hda-duplex,audiodev=silence \
+            -display none -vga std \
+            -usb -device usb-tablet \
+            -audiodev none,id=silence \
+            -device intel-hda -device hda-duplex,audiodev=silence \
             -serial file:"$RUNNER_TEMP/serial.log" \
             -monitor unix:"$RUNNER_TEMP/monitor.sock",server,nowait \
             -no-reboot &
           QEMU=$!
+          # QEMU a-t-il seulement demarre ? Une option mal ecrite le fait
+          # sortir aussitot, et sans ce controle on attend six minutes devant
+          # un ecran qui n'existe pas avant de comprendre. C'est arrive trois
+          # fois le 23 septembre.
+          sleep 3
+          if ! kill -0 "$QEMU" 2>/dev/null; then
+            echo "::error::QEMU n'a pas demarre : sa ligne de commande est fautive."
+            exit 1
+          fi
           # Vingt secondes pour arriver au menu de démarrage, puis Entrée,
           # comme le ferait la personne devant l'écran. Sans cela, un menu qui
           # attend passe pour un système qui a démarré.
