@@ -57,8 +57,8 @@ Section: x11
 Priority: optional
 Architecture: all
 Maintainer: grenOS <grenos@grenos-dev.vercel.app>
-Depends: python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils
-Recommends: flatpak, lightdm, pcmanfm, xfce4-terminal, xfce4-taskmanager
+Depends: python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils
+Recommends: flatpak, lightdm, pcmanfm, xfce4-terminal, xfce4-taskmanager, papirus-icon-theme
 Installed-Size: $SIZE
 Homepage: https://grenos-dev.vercel.app
 Description: Le bureau de grenOS
