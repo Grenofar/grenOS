@@ -216,6 +216,23 @@ jobs:
             sleep 60
             python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-${minute}min.ppm" || true
           done
+          # Le bureau s'affiche-t-il, ou obeit-il ? Une capture d'ecran ne
+          # repond qu'a la premiere question. On lui parle donc : on ouvre le
+          # menu au clavier, on le referme, on ouvre le gestionnaire de taches,
+          # et le bureau dit sur le port serie ce qu'il a fait. Sans cela, une
+          # barre qui tombe au premier clic passerait au vert — c'est ce qui a
+          # failli arriver le 23 septembre.
+          echo "--- le bureau repond-il ---"
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+          sleep 6
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-menu-ouvert.ppm" || true
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+          sleep 4
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-shift-esc" || true
+          sleep 10
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-taches.ppm" || true
+          grep -a 'grenos:' "$RUNNER_TEMP/serial.log" | tail -n 15 || true
+
           cp "$RUNNER_TEMP/ecran-5min.ppm" "$RUNNER_TEMP/final.ppm" 2>/dev/null ||             python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/final.ppm" || true
           python3 scripts/ci-screen.py judge "$RUNNER_TEMP/final.ppm" "$RUNNER_TEMP/final.png" | tee "$RUNNER_TEMP/ecran.log"
           kill $QEMU 2>/dev/null || true
@@ -229,6 +246,23 @@ jobs:
             echo "::error::Aucune session de bureau : personne ne peut entrer dans cette image."
             exit 1
           fi
+          # Le bureau a-t-il obei ? Trois lignes, et chacune prouve autre chose :
+          # la barre a demarre, son menu s'ouvre a la demande, et une fenetre
+          # s'ouvre au clavier. Une image ou l'une manque est une image ou
+          # quelque chose ne repond pas.
+          MUET=0
+          for attendu in "barre prete" "menu ouvert" "taches ouvert"; do
+            if grep -q "grenos: $attendu" "$RUNNER_TEMP/serial.log"; then
+              echo "repond: $attendu"
+            else
+              echo "::error::Le bureau n'a pas repondu : « $attendu » n'est jamais venu."
+              MUET=1
+            fi
+          done
+          if [ "$MUET" = 1 ]; then
+            exit 1
+          fi
+
           # Un bureau couvre son fond de fenetres, d'icones et d'un panneau :
           # sa couleur dominante ne depasse jamais 70 % de l'ecran. Un menu de
           # demarrage, lui, est noir a 90 %.

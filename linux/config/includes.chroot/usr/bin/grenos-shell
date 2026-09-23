@@ -475,12 +475,18 @@ class Menu(Gtk.Window):
                        None, None, None, None)
             self.attrape = siege
 
+        # Le dire au journal : une capture d'écran montre un bureau, elle ne
+        # prouve pas qu'il obéit. C'est cette ligne que lit la machine
+        # d'intégration pour savoir que le menu s'ouvre vraiment.
+        grenosui.lancer(f"grenos-dire 'menu ouvert, {len(self.applications)} applications'")
+
     def fermer(self):
         if self.attrape is not None:
             self.attrape.ungrab()
             self.attrape = None
         self.hide()
         self.panneau.enfoncer(False)
+        grenosui.lancer("grenos-dire 'menu ferme'")
 
 
 class Panneau(Gtk.Window):
@@ -705,6 +711,7 @@ def main():
 
     panneau = Panneau()
     panneau.show_all()
+    grenosui.lancer(f"grenos-dire 'barre prete, {len(panneau.epingles)} epinglees'")
 
     # Le clic droit sur le fond d'écran : `grenos-menu` envoie ce signal.
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2,

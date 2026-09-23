@@ -1,30 +1,56 @@
 #!/bin/sh
-# La preuve que le bureau s'est ouvert, ecrite sur le port serie.
+# Ce que le bureau a fait, ecrit sur le port serie.
 #
 # Pourquoi passer par un service systeme : le compte de la session n'appartient
-# pas au groupe dialout, donc il ne peut pas ecrire sur /dev/ttyS0 lui-meme.
-# Le bureau depose un fichier dans /tmp, que tout le monde peut ecrire, et ce
-# service — qui tourne en root — le voit et l'annonce. La CI lit cette ligne :
-# une image ou personne ne peut se connecter ne l'ecrit jamais.
+# pas au groupe dialout, donc il ne peut pas ecrire sur /dev/ttyS0 lui-meme, et
+# l'y mettre lui donnerait bien plus que ce dont il a besoin. Le bureau depose
+# donc des billets dans /tmp/grenos-billets (que tout le monde peut ecrire), et
+# ce service — qui tourne en root — les relaie un par un.
+#
+# La machine d'integration lit ces lignes. C'est ainsi qu'elle sait qu'un menu
+# s'est ouvert ou qu'une fenetre a repondu : une capture d'ecran montre un
+# bureau, elle ne prouve pas qu'il obeit.
 
 set -u
+
+BOITE=/tmp/grenos-billets
 MARQUE=/tmp/grenos-session
+mkdir -p "$BOITE" 2>/dev/null || true
+chmod 1777 "$BOITE" 2>/dev/null || true
+
+dire () {
+    echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
+}
+
+vu_session=0
 i=0
-while [ "$i" -lt 240 ]; do
-    if [ -e "$MARQUE" ]; then
-        echo "grenos: session de bureau ouverte" > /dev/ttyS0 2>/dev/null || true
-        exit 0
-    fi
-    # Deuxieme chemin, au cas ou le bureau n'aurait pas pu ecrire son fichier :
-    # une session graphique ouverte par quelqu'un d'autre que le gestionnaire
-    # de connexion lui-meme.
-    if command -v loginctl >/dev/null 2>&1; then
-        if loginctl list-sessions --no-legend 2>/dev/null | awk '$3 != "lightdm" && $3 != "" { trouve = 1 } END { exit !trouve }'; then
-            echo "grenos: session de bureau ouverte" > /dev/ttyS0 2>/dev/null || true
-            exit 0
+# Une heure de veille : au-dela, la machine d'integration a rendu son verdict
+# depuis longtemps, et sur une vraie machine plus personne ne lit.
+while [ "$i" -lt 3600 ]; do
+    # Les billets deposes par le bureau, dans l'ordre ou ils sont arrives.
+    for billet in "$BOITE"/*; do
+        [ -f "$billet" ] || continue
+        while IFS= read -r ligne; do
+            [ -n "$ligne" ] && dire "$ligne"
+        done < "$billet"
+        rm -f "$billet"
+    done
+
+    if [ "$vu_session" -eq 0 ]; then
+        if [ -e "$MARQUE" ]; then
+            dire "session de bureau ouverte"
+            vu_session=1
+        elif command -v loginctl >/dev/null 2>&1 && \
+             loginctl list-sessions --no-legend 2>/dev/null | \
+             awk '$3 != "lightdm" && $3 != "" { trouve = 1 } END { exit !trouve }'; then
+            # Deuxieme chemin, au cas ou le bureau n'aurait pas pu ecrire son
+            # fichier : une session graphique ouverte par quelqu'un d'autre que
+            # le gestionnaire de connexion lui-meme.
+            dire "session de bureau ouverte"
+            vu_session=1
         fi
     fi
-    sleep 2
+
+    sleep 1
     i=$((i + 1))
 done
-exit 0

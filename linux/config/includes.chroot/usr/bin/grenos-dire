@@ -1,0 +1,20 @@
+#!/bin/sh
+# Dire quelque chose au journal de la machine, depuis le bureau.
+#
+# Le compte de la session n'a pas le droit d'écrire sur le port série — il
+# n'appartient pas au groupe `dialout`, et l'y mettre lui donnerait bien plus
+# que ce dont il a besoin. Il dépose donc un billet dans un dossier que tout le
+# monde peut écrire, et `grenos-preuve`, qui tourne en root, le relaie.
+#
+# C'est par là que la machine d'intégration apprend qu'un menu s'est ouvert ou
+# qu'une fenêtre a répondu : des choses qu'aucune capture d'écran ne prouve.
+#
+#   grenos-dire "menu ouvert"
+
+BOITE=/tmp/grenos-billets
+mkdir -p "$BOITE" 2>/dev/null || exit 0
+chmod 1777 "$BOITE" 2>/dev/null || true
+
+# Un nom unique : deux billets déposés dans la même seconde doivent survivre.
+BILLET="$BOITE/$(date +%s)-$$-$(od -An -N2 -tu2 /dev/urandom 2>/dev/null | tr -d ' ')"
+printf '%s\n' "$*" > "$BILLET" 2>/dev/null || true

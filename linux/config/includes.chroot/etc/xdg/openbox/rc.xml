@@ -125,6 +125,15 @@
       <action name="Close"/>
     </keybind>
 
+    <!-- Ouvrir le menu sans la souris : Ctrl+Échap, comme partout. C'est
+         aussi par là que la machine d'intégration vérifie que le bureau
+         répond — une capture d'écran ne le prouve pas. -->
+    <keybind key="C-Escape">
+      <action name="Execute">
+        <command>grenos-menu</command>
+      </action>
+    </keybind>
+
     <!-- Voir ce qui tourne, et arrêter ce qui ne répond plus. -->
     <keybind key="C-S-Escape">
       <action name="Execute">
