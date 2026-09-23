@@ -204,6 +204,25 @@ if [ -f /etc/calamares/settings.conf ]; then
         echo "branding: grenos" >> /etc/calamares/settings.conf
 fi
 
+# Ce que l'on promet de l'installateur doit être dans l'image. Personne ne
+# lance Calamares en intégration — cela demanderait un disque et une suite de
+# clics — mais rien n'empêche de vérifier que sa configuration y est, et de
+# refuser l'image sinon. C'est moins qu'une preuve, et c'est mieux que rien.
+manque=""
+[ -f /etc/calamares/settings.conf ] || manque="$manque settings.conf"
+grep -q '^branding: grenos' /etc/calamares/settings.conf 2>/dev/null || \
+    manque="$manque branding-grenos"
+[ -f /usr/share/calamares/branding/grenos/branding.desc ] || manque="$manque branding.desc"
+grep -q '^initialPartitioningChoice: erase' /etc/calamares/modules/partition.conf 2>/dev/null || \
+    manque="$manque tout-le-disque"
+grep -q '^allowManualPartitioning: true' /etc/calamares/modules/partition.conf 2>/dev/null || \
+    manque="$manque choix-manuel"
+if [ -n "$manque" ]; then
+    echo "grenos: l'installateur est incomplet :$manque" >&2
+    exit 1
+fi
+echo "grenos: installateur verifie (nos couleurs, tout le disque par defaut, choix manuel possible)"
+
 echo "--- grenOS : le magasin ---"
 
 # Flathub, branché d'avance : le magasin installe Steam sans rien configurer.

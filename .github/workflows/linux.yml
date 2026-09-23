@@ -169,7 +169,7 @@ jobs:
           fi
           qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
             -cdrom "$ISO" -boot d \
-            -display none -vga std \
+            -display none -vga std             -usb -device usb-tablet \
             -serial file:"$RUNNER_TEMP/serial.log" \
             -monitor unix:"$RUNNER_TEMP/monitor.sock",server,nowait \
             -no-reboot &
@@ -222,6 +222,29 @@ jobs:
           # et le bureau dit sur le port serie ce qu'il a fait. Sans cela, une
           # barre qui tombe au premier clic passerait au vert — c'est ce qui a
           # failli arriver le 23 septembre.
+          echo "--- la souris, pour de vrai ---"
+          # Le bouton grenOS est au centre de la barre, tout en bas. Les
+          # coordonnees de la tablette vont de 0 a 32767 : le centre horizontal
+          # est donc 16384, et le bas de l'ecran 32400. Ce test ne bloque pas
+          # encore la publication — on ne rend une etape obligatoire qu'apres
+          # l'avoir vue verte.
+          AVANT=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" || echo 0)
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "mouse_move 15900 32400" || true
+          sleep 1
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "mouse_button 1" || true
+          sleep 1
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "mouse_button 0" || true
+          sleep 5
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-clic.ppm" || true
+          APRES=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" || echo 0)
+          if [ "$APRES" -gt "$AVANT" ]; then
+            echo "souris: le clic sur grenOS a ouvert le menu"
+          else
+            echo "souris: le clic n'a rien ouvert (test non bloquant, a affiner)"
+          fi
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+          sleep 3
+
           echo "--- le bureau repond-il ---"
           python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
           sleep 6
