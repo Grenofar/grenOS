@@ -108,11 +108,17 @@ def vbox(
         else ""
     )
     system = "Debian_64" if linux else "Other_64"
-    cpus = 2 if linux else 1
-    memory = 4096 if linux else 256
+    # Ce que la machine reçoit par défaut. Généreux sans être déraisonnable :
+    # quatre cœurs et 8 Go conviennent à un PC d'aujourd'hui, et VirtualBox
+    # laisse changer ces deux nombres en deux clics quand la machine hôte a
+    # plus — ou moins — à donner. La mémoire vidéo est poussée au maximum que
+    # VMSVGA accepte, parce que c'est elle qui décide de la définition
+    # d'écran possible.
+    cpus = 4 if linux else 1
+    memory = 8192 if linux else 256
     pointing = "USBTablet" if linux else "PS2Mouse"
     display = (
-        '<Display controller="VMSVGA" VRAMSize="128"/>'
+        '<Display controller="VMSVGA" VRAMSize="256"/>'
         if linux
         else '<Display controller="VBoxVGA" VRAMSize="32"/>'
     )

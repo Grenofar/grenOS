@@ -1,0 +1,458 @@
+#!/usr/bin/env python3
+"""Le bureau lui-même : le fond d'écran, et ce qu'on pose dessus.
+
+C'est la couche du dessous, celle qui occupe tout l'écran sous les fenêtres.
+Elle montre le contenu du dossier « Bureau » : chaque fichier, chaque dossier,
+chaque raccourci y a son icône, qu'on peut déplacer où l'on veut et qui reste
+où on l'a laissée. Double-clic pour ouvrir, clic droit pour le reste.
+
+Écrit ici plutôt qu'emprunté à un explorateur existant, pour deux raisons : le
+fond d'écran est dessiné par la même fenêtre (donc pas de clignotement entre
+deux programmes qui se disputent la racine de l'écran), et un clic droit sur le
+vide ouvre *notre* menu, pas celui d'un autre bureau.
+"""
+import json
+import os
+import signal
+import subprocess
+import sys
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+
+TAILLE_ICONE = 56
+LARGEUR_CASE = 118
+HAUTEUR_CASE = 116
+MARGE = 24
+BARRE = 52          # la hauteur de la barre du bas, que rien ne doit recouvrir
+
+STYLE = """
+#bureau { background-color: @fond; }
+
+.icone-bureau {
+    border-radius: 14px;
+    border: 1px solid transparent;
+    padding: 10px 6px;
+    transition: background-color 130ms ease, border-color 130ms ease;
+}
+.icone-bureau:hover {
+    background-color: alpha(@accent, 0.20);
+    border-color: alpha(@accent, 0.40);
+}
+.icone-choisie {
+    background-color: alpha(@accent, 0.34);
+    border-color: @accent;
+}
+
+/* Le nom passe sur n'importe quel fond d'ecran : c'est l'ombre qui le tient,
+   et elle ne coute rien puisqu'elle est portee par le texte, pas par une
+   fenetre entiere. */
+.nom-icone {
+    color: #ffffff;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.8);
+}
+"""
+
+
+def dossier_bureau():
+    """Le dossier « Bureau » de la personne, créé s'il n'existe pas encore."""
+    chemin = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP)
+    if not chemin:
+        chemin = os.path.expanduser("~/Bureau")
+    os.makedirs(chemin, exist_ok=True)
+    return chemin
+
+
+def icone_de(chemin):
+    """L'image qui représente ce fichier, demandée au système."""
+    theme = Gtk.IconTheme.get_default()
+    nom = "text-x-generic"
+    if os.path.isdir(chemin):
+        nom = "folder"
+    elif chemin.endswith(".desktop"):
+        entree = lire_raccourci(chemin)
+        nom = (entree or {}).get("icone") or "application-x-executable"
+    else:
+        devine, _ = Gio.content_type_guess(chemin, None)
+        if devine:
+            gicone = Gio.content_type_get_icon(devine)
+            for candidat in getattr(gicone, "get_names", lambda: [])():
+                if theme.has_icon(candidat):
+                    nom = candidat
+                    break
+    try:
+        return theme.load_icon(nom, TAILLE_ICONE, Gtk.IconLookupFlags.FORCE_SIZE)
+    except GLib.Error:
+        try:
+            return theme.load_icon("text-x-generic", TAILLE_ICONE, Gtk.IconLookupFlags.FORCE_SIZE)
+        except GLib.Error:
+            return None
+
+
+def lire_raccourci(chemin):
+    """Le nom, l'icône et la commande d'un raccourci .desktop."""
+    champs, section = {}, None
+    try:
+        with open(chemin, encoding="utf-8", errors="replace") as fichier:
+            for ligne in fichier:
+                ligne = ligne.strip()
+                if ligne.startswith("["):
+                    section = ligne
+                elif section == "[Desktop Entry]" and "=" in ligne:
+                    cle, valeur = ligne.split("=", 1)
+                    champs[cle] = valeur
+    except OSError:
+        return None
+    commande = champs.get("Exec", "")
+    for code in ("%f", "%F", "%u", "%U", "%i", "%c", "%k"):
+        commande = commande.replace(code, "")
+    return {
+        "nom": champs.get("Name[fr]") or champs.get("Name") or os.path.basename(chemin),
+        "icone": champs.get("Icon", ""),
+        "commande": commande.strip(),
+    }
+
+
+class Bureau(Gtk.Window):
+    """La fenêtre du fond : le papier peint, et les icônes posées dessus."""
+
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_name("bureau")
+        self.set_type_hint(Gdk.WindowTypeHint.DESKTOP)
+        self.set_decorated(False)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+        self.set_keep_below(True)
+
+        ecran = Gdk.Screen.get_default()
+        self.largeur, self.hauteur = ecran.get_width(), ecran.get_height()
+        self.set_default_size(self.largeur, self.hauteur)
+        self.move(0, 0)
+
+        self.dossier = dossier_bureau()
+        self.positions = self.lire_positions()
+        self.choisie = None
+        self.glisse = None
+
+        self.fond = Gtk.DrawingArea()
+        self.fond.connect("draw", self.peindre_fond)
+        self.plan = Gtk.Fixed()
+
+        pile = Gtk.Overlay()
+        pile.add(self.fond)
+        pile.add_overlay(self.plan)
+        self.add(pile)
+
+        self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        self.connect("button-press-event", self.clic_sur_le_vide)
+
+        self.image = self.charger_fond()
+        self.remplir()
+        self.surveiller()
+
+    # ---- Le fond d'écran ---------------------------------------------------
+    def charger_fond(self):
+        moment = "nuit"
+        try:
+            with open(os.path.join(grenosui.REGLAGES, "theme"), encoding="utf-8") as fichier:
+                moment = fichier.read().strip() or "nuit"
+        except OSError:
+            pass
+        chemin = f"/usr/share/grenos/grenos-{moment}.png"
+
+        # L'image choisie dans les Réglages l'emporte sur la nôtre.
+        try:
+            with open(os.path.join(grenosui.REGLAGES, "fond"), encoding="utf-8") as fichier:
+                choisie = fichier.readline().strip()
+            if choisie and os.path.exists(choisie):
+                chemin = choisie
+        except OSError:
+            pass
+
+        try:
+            return GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                chemin, self.largeur, self.hauteur, False)
+        except GLib.Error:
+            return None
+
+    def repeindre(self, *_):
+        """Relit le thème et le fond : c'est ce que déclenche le jour/nuit."""
+        self.image = self.charger_fond()
+        self.fond.queue_draw()
+        return True
+
+    def peindre_fond(self, _widget, contexte):
+        """Le papier peint, dessiné par nous : personne ne se dispute la racine."""
+        if self.image is not None:
+            Gdk.cairo_set_source_pixbuf(contexte, self.image, 0, 0)
+            contexte.paint()
+        else:
+            couleurs = grenosui.palette()
+            fond = Gdk.RGBA()
+            fond.parse(couleurs["fond"])
+            Gdk.cairo_set_source_rgba(contexte, fond)
+            contexte.paint()
+        return False
+
+    # ---- Les icônes --------------------------------------------------------
+    def lire_positions(self):
+        try:
+            with open(os.path.join(grenosui.REGLAGES, "bureau.json"), encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def ecrire_positions(self):
+        os.makedirs(grenosui.REGLAGES, exist_ok=True)
+        with open(os.path.join(grenosui.REGLAGES, "bureau.json"), "w", encoding="utf-8") as f:
+            json.dump(self.positions, f, indent=1, ensure_ascii=False)
+
+    def place_libre(self, occupees):
+        """La première case vide, en colonnes, de haut en bas."""
+        colonnes = max(1, (self.hauteur - 2 * MARGE - BARRE) // HAUTEUR_CASE)
+        index = 0
+        while True:
+            x = MARGE + (index // colonnes) * LARGEUR_CASE
+            y = MARGE + (index % colonnes) * HAUTEUR_CASE
+            if (x, y) not in occupees:
+                return x, y
+            index += 1
+
+    def remplir(self):
+        for enfant in self.plan.get_children():
+            self.plan.remove(enfant)
+
+        try:
+            noms = sorted(os.listdir(self.dossier), key=str.lower)
+        except OSError:
+            noms = []
+
+        occupees = set()
+        for nom in noms:
+            if nom.startswith("."):
+                continue
+            chemin = os.path.join(self.dossier, nom)
+            place = self.positions.get(nom)
+            if place:
+                x, y = int(place[0]), int(place[1])
+            else:
+                x, y = self.place_libre(occupees)
+                self.positions[nom] = [x, y]
+            occupees.add((x, y))
+            self.plan.put(self.faire_icone(nom, chemin), x, y)
+
+        self.plan.show_all()
+
+    def faire_icone(self, nom, chemin):
+        boite = Gtk.EventBox()
+        boite.set_visible_window(True)
+        boite.get_style_context().add_class("icone-bureau")
+        boite.set_size_request(LARGEUR_CASE - 12, HAUTEUR_CASE - 12)
+
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        pixbuf = icone_de(chemin)
+        if pixbuf is not None:
+            colonne.pack_start(Gtk.Image.new_from_pixbuf(pixbuf), False, False, 0)
+
+        titre = nom
+        if chemin.endswith(".desktop"):
+            entree = lire_raccourci(chemin)
+            if entree:
+                titre = entree["nom"]
+        etiquette = Gtk.Label(label=titre)
+        etiquette.get_style_context().add_class("nom-icone")
+        etiquette.set_max_width_chars(12)
+        etiquette.set_ellipsize(3)
+        etiquette.set_justify(Gtk.Justification.CENTER)
+        colonne.pack_start(etiquette, False, False, 0)
+        boite.add(colonne)
+
+        boite.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK
+                         | Gdk.EventMask.POINTER_MOTION_MASK)
+        boite.connect("button-press-event", self.clic_icone, nom, chemin)
+        boite.connect("motion-notify-event", self.glisser, nom)
+        boite.connect("button-release-event", self.poser, nom)
+        return boite
+
+    # ---- Ce qu'on fait avec ------------------------------------------------
+    def clic_icone(self, widget, evenement, nom, chemin):
+        self.selectionner(widget)
+        if evenement.type == Gdk.EventType.DOUBLE_BUTTON_PRESS and evenement.button == 1:
+            self.ouvrir(chemin)
+            return True
+        if evenement.button == 1:
+            # Le début d'un déplacement : on note d'où l'on part.
+            x, y = self.plan.child_get(widget, "x", "y")
+            self.glisse = (evenement.x_root, evenement.y_root, x, y, widget)
+            return True
+        if evenement.button == 3:
+            self.menu_icone(nom, chemin, evenement)
+            return True
+        return False
+
+    def glisser(self, widget, evenement, _nom):
+        if self.glisse is None or self.glisse[4] is not widget:
+            return False
+        depart_x, depart_y, x0, y0, _ = self.glisse
+        x = max(0, min(self.largeur - LARGEUR_CASE, int(x0 + evenement.x_root - depart_x)))
+        y = max(0, min(self.hauteur - HAUTEUR_CASE - BARRE, int(y0 + evenement.y_root - depart_y)))
+        self.plan.move(widget, x, y)
+        return True
+
+    def poser(self, widget, _evenement, nom):
+        """Une icône déplacée reste où on l'a lâchée, y compris au prochain démarrage."""
+        if self.glisse is not None and self.glisse[4] is widget:
+            x, y = self.plan.child_get(widget, "x", "y")
+            self.positions[nom] = [x, y]
+            self.ecrire_positions()
+            self.glisse = None
+        return True
+
+    def selectionner(self, widget):
+        if self.choisie is not None:
+            self.choisie.get_style_context().remove_class("icone-choisie")
+        self.choisie = widget
+        if widget is not None:
+            widget.get_style_context().add_class("icone-choisie")
+
+    def ouvrir(self, chemin):
+        if chemin.endswith(".desktop"):
+            entree = lire_raccourci(chemin)
+            if entree and entree["commande"]:
+                grenosui.lancer(entree["commande"])
+                return
+        grenosui.lancer(f"xdg-open {GLib.shell_quote(chemin)}")
+
+    # ---- Les menus ---------------------------------------------------------
+    def menu_icone(self, nom, chemin, evenement):
+        menu = Gtk.Menu()
+        for texte, action in (
+            ("Ouvrir", lambda: self.ouvrir(chemin)),
+            ("Renommer", lambda: self.renommer(nom, chemin)),
+            ("Supprimer", lambda: self.supprimer(nom, chemin)),
+        ):
+            element = Gtk.MenuItem(label=texte)
+            element.connect("activate", lambda _, a=action: a())
+            menu.append(element)
+        menu.show_all()
+        menu.popup_at_pointer(evenement)
+
+    def clic_sur_le_vide(self, _widget, evenement):
+        if evenement.button != 3:
+            self.selectionner(None)
+            return False
+        menu = Gtk.Menu()
+        gestes = (
+            ("Nouveau dossier", self.nouveau_dossier),
+            ("Nouveau fichier texte", self.nouveau_fichier),
+            ("Ouvrir le dossier Bureau", lambda: grenosui.lancer(f"xdg-open {self.dossier}")),
+            (None, None),
+            ("Changer le fond et les couleurs", lambda: grenosui.lancer("grenos-parametres apparence")),
+            ("Réglages", lambda: grenosui.lancer("grenos-parametres")),
+        )
+        for texte, action in gestes:
+            if texte is None:
+                menu.append(Gtk.SeparatorMenuItem())
+                continue
+            element = Gtk.MenuItem(label=texte)
+            element.connect("activate", lambda _, a=action: a())
+            menu.append(element)
+        menu.show_all()
+        menu.popup_at_pointer(evenement)
+        return True
+
+    def demander(self, titre, valeur=""):
+        """Une petite fenêtre qui demande un nom. Entrée valide, Échap annule."""
+        boite = Gtk.Dialog(title=titre, transient_for=self, modal=True)
+        boite.add_buttons("Annuler", Gtk.ResponseType.CANCEL, "Valider", Gtk.ResponseType.OK)
+        champ = Gtk.Entry()
+        champ.set_text(valeur)
+        champ.set_activates_default(True)
+        boite.set_default_response(Gtk.ResponseType.OK)
+        contenu = boite.get_content_area()
+        contenu.set_border_width(16)
+        contenu.set_spacing(10)
+        contenu.pack_start(Gtk.Label(label=titre, xalign=0), False, False, 0)
+        contenu.pack_start(champ, False, False, 0)
+        boite.show_all()
+        reponse = boite.run()
+        texte = champ.get_text().strip()
+        boite.destroy()
+        return texte if reponse == Gtk.ResponseType.OK and texte else None
+
+    def nouveau_dossier(self):
+        nom = self.demander("Nom du nouveau dossier", "Nouveau dossier")
+        if nom:
+            os.makedirs(os.path.join(self.dossier, nom), exist_ok=True)
+
+    def nouveau_fichier(self):
+        nom = self.demander("Nom du nouveau fichier", "Nouveau fichier.txt")
+        if nom:
+            chemin = os.path.join(self.dossier, nom)
+            if not os.path.exists(chemin):
+                open(chemin, "w", encoding="utf-8").close()
+
+    def renommer(self, nom, chemin):
+        nouveau = self.demander("Nouveau nom", nom)
+        if nouveau and nouveau != nom:
+            os.rename(chemin, os.path.join(self.dossier, nouveau))
+            self.positions[nouveau] = self.positions.pop(nom, None) or [MARGE, MARGE]
+            self.ecrire_positions()
+
+    def supprimer(self, nom, chemin):
+        question = Gtk.MessageDialog(
+            transient_for=self, modal=True, message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.OK_CANCEL, text=f"Supprimer « {nom} » ?")
+        question.format_secondary_text("Cette suppression est définitive.")
+        reponse = question.run()
+        question.destroy()
+        if reponse != Gtk.ResponseType.OK:
+            return
+        try:
+            if os.path.isdir(chemin):
+                subprocess.run(["rm", "-rf", chemin], check=False)
+            else:
+                os.remove(chemin)
+        except OSError:
+            return
+        self.positions.pop(nom, None)
+        self.ecrire_positions()
+
+    # ---- Rester à jour -----------------------------------------------------
+    def surveiller(self):
+        """Le dossier est surveillé : ce qu'on y dépose apparaît tout seul."""
+        fichier = Gio.File.new_for_path(self.dossier)
+        self.moniteur = fichier.monitor_directory(Gio.FileMonitorFlags.NONE, None)
+        self.moniteur.connect("changed", lambda *_: self.remplir())
+
+
+def main():
+    style = grenosui.habiller()
+    propre = Gtk.CssProvider()
+    couleurs = grenosui.palette()
+    entete = "".join(f"@define-color {n} {v};\n" for n, v in couleurs.items())
+    propre.load_from_data((entete + STYLE).encode("utf-8"))
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), propre, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+    _ = style
+
+    bureau = Bureau()
+    bureau.show_all()
+
+    # `grenos-fond` prévient d'un changement de thème ou de fond d'écran.
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, bureau.repeindre)
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

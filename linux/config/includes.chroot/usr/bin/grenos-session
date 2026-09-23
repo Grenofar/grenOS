@@ -1,11 +1,11 @@
 #!/bin/sh
 # La session grenOS : ce qui démarre quand on ouvre le bureau.
 #
-# L'ordre compte. D'abord l'écran (pas d'économiseur, pas de mise en veille :
-# dans une machine virtuelle, un écran qui s'éteint passe pour un plantage),
-# puis le fond, puis les services discrets, puis notre barre, et enfin le
-# gestionnaire de fenêtres au premier plan — c'est lui qui tient la session :
-# quand il s'arrête, la session se ferme.
+# L'ordre compte. D'abord la langue et l'écran (pas d'économiseur, pas de mise
+# en veille : dans une machine virtuelle, un écran qui s'éteint passe pour un
+# plantage), puis le bureau et ses icônes, puis les services discrets, puis
+# notre barre, et enfin le gestionnaire de fenêtres au premier plan — c'est lui
+# qui tient la session : quand il s'arrête, la session se ferme.
 #
 # Rien ici ne compose l'écran. Pas d'ombres calculées par le GPU, pas de
 # transparence : c'est ce qui rend le pointeur fluide sur une machine sans
@@ -18,7 +18,7 @@ export XDG_MENU_PREFIX=grenos-
 export GTK_OVERLAY_SCROLLING=0
 
 # La langue du système. lightdm ne la transmet pas à la session : sans ces
-# deux lignes, l'horloge de la barre affiche « Fri 18 Sep » au lieu de
+# lignes, l'horloge de la barre affiche « Fri 18 Sep » au lieu de
 # « ven. 18 sept. », et les applications s'ouvrent en anglais.
 if [ -r /etc/default/locale ]; then
     . /etc/default/locale
@@ -26,11 +26,34 @@ if [ -r /etc/default/locale ]; then
 fi
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/grenos"
-mkdir -p "$CONFIG"
+mkdir -p "$CONFIG" "$HOME/Bureau"
 
 # L'écran reste allumé, et le pointeur est une flèche dès la première seconde.
 xset s off -dpms s noblank 2>/dev/null || true
 xsetroot -cursor_name left_ptr 2>/dev/null || true
+
+# La définition choisie dans les Réglages est réappliquée.
+grenos-parametres --restaurer-ecran 2>/dev/null || true
+
+# L'installation sur le disque n'a de sens que sur une vraie machine. Dans une
+# machine virtuelle, le disque garde déjà tout, et proposer d'installer
+# par-dessus ne ferait qu'inquiéter : on retire l'entrée du menu pour ce
+# compte, sans toucher au système.
+VIRTUELLE=$(systemd-detect-virt 2>/dev/null || echo none)
+mkdir -p "$HOME/.local/share/applications"
+if [ "$VIRTUELLE" = "none" ]; then
+    rm -f "$HOME/.local/share/applications/grenos-installer.desktop"
+    if [ ! -e "$HOME/Bureau/grenos-installer.desktop" ] && \
+       [ ! -e "$CONFIG/installer-pose" ]; then
+        cp /usr/share/applications/grenos-installer.desktop "$HOME/Bureau/" 2>/dev/null || true
+        chmod +x "$HOME/Bureau/grenos-installer.desktop" 2>/dev/null || true
+        touch "$CONFIG/installer-pose"
+    fi
+else
+    rm -f "$HOME/Bureau/grenos-installer.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=Installer grenOS\nNoDisplay=true\nExec=pkexec calamares\n' \
+        > "$HOME/.local/share/applications/grenos-installer.desktop"
+fi
 
 # Le pointeur des machines virtuelles : sans ce petit service, il colle au bord
 # de la fenêtre et il faut « libérer » le clavier pour en sortir.
@@ -46,11 +69,8 @@ for agent in /usr/lib/mate-polkit/polkit-mate-authentication-agent-1 \
     fi
 done
 
-# Le réseau dans la barre d'état système.
-command -v nm-applet >/dev/null 2>&1 && nm-applet --indicator 2>/dev/null &
-
-# Le fond d'écran, selon le thème du moment.
-grenos-fond &
+# Le bureau : le fond d'écran et ce qu'on pose dessus.
+grenos-veilleur grenos-bureau &
 
 # La preuve, pour la CI et pour les journaux : un bureau s'est vraiment ouvert.
 echo "$(date -u +%H:%M:%S) $USER" > /tmp/grenos-session 2>/dev/null || true

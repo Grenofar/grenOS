@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Les réglages de grenOS : le compte, l'écran, l'apparence, les mises à jour.
+"""Les Réglages de grenOS : tout ce qui se règle, au même endroit.
 
-Une seule fenêtre, quatre pages, et rien qui demande de connaître Linux. Ce
-qu'elle change, elle le change pour de vrai : la définition de l'écran passe
-par RandR, le mot de passe par le système de comptes, le thème par le fichier
-que lisent toutes nos fenêtres.
+Sept pages, et rien qui demande de connaître Linux : l'apparence, l'écran, le
+son, le réseau, le compte, les mises à jour, et ce que la machine a dans le
+ventre. Ce que cette fenêtre change, elle le change pour de vrai — la
+définition de l'écran passe par RandR, le son par PipeWire, le mot de passe par
+le système de comptes.
+
+    grenos-parametres [apparence|ecran|son|reseau|compte|maj|materiel]
 """
 import os
 import subprocess
@@ -15,10 +18,12 @@ sys.path.insert(0, "/usr/lib/grenos")
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
 
-import ecran  # noqa: E402
+import ecran as module_ecran  # noqa: E402
 import grenosui  # noqa: E402
+import materiel  # noqa: E402
+import son as module_son  # noqa: E402
 
 COMPTE = "/usr/lib/grenos/grenos-compte"
 
@@ -43,25 +48,26 @@ def en_root(arguments, entree=""):
 
 
 class Reglages(Gtk.Window):
-    def __init__(self):
+    def __init__(self, page=""):
         super().__init__(title="Réglages de grenOS")
-        self.set_default_size(880, 620)
+        self.set_default_size(960, 660)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
         self.identite = grenosui.identite()
+        self.login = self.identite.get("login", os.environ.get("USER", "grenos"))
 
         cadre = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.add(cadre)
 
-        # À gauche, les pages ; à droite, la page choisie. La même disposition
-        # que partout ailleurs dans grenOS : on ne cherche jamais où cliquer.
+        # À gauche les pages, à droite celle qu'on a choisie : la disposition
+        # que tout le monde connaît, et qu'on ne cherche pas.
         self.pages = Gtk.Stack()
         self.pages.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        self.pages.set_transition_duration(120)
+        self.pages.set_transition_duration(130)
 
         cote = Gtk.StackSidebar()
         cote.set_stack(self.pages)
-        cote.set_size_request(190, -1)
+        cote.set_size_request(210, -1)
         cadre.pack_start(cote, False, False, 0)
 
         defilement = Gtk.ScrolledWindow()
@@ -69,95 +75,113 @@ class Reglages(Gtk.Window):
         defilement.add(self.pages)
         cadre.pack_start(defilement, True, True, 0)
 
-        self.pages.add_titled(self.page_compte(), "compte", "Compte")
-        self.pages.add_titled(self.page_ecran(), "ecran", "Écran")
         self.pages.add_titled(self.page_apparence(), "apparence", "Apparence")
-        self.pages.add_titled(self.page_systeme(), "systeme", "Système")
+        self.pages.add_titled(self.page_ecran(), "ecran", "Écran")
+        self.pages.add_titled(self.page_son(), "son", "Son")
+        self.pages.add_titled(self.page_reseau(), "reseau", "Réseau")
+        self.pages.add_titled(self.page_compte(), "compte", "Compte")
+        self.pages.add_titled(self.page_maj(), "maj", "Mises à jour")
+        self.pages.add_titled(self.page_materiel(), "materiel", "Matériel")
+
+        if page:
+            self.pages.set_visible_child_name(page)
 
     def enveloppe(self, *blocs):
         boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        boite.set_border_width(24)
+        boite.set_border_width(26)
         for bloc in blocs:
             boite.pack_start(bloc, False, False, 0)
         return boite
 
-    # ---- Le compte ---------------------------------------------------------
-    def page_compte(self):
-        login = self.identite.get("login", os.environ.get("USER", "grenos"))
-        self.protege = a_un_mot_de_passe(login)
+    def ligne(self, texte, widget):
+        """Un réglage : son nom à gauche, ce qui le change à droite."""
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        etiquette = Gtk.Label(label=texte, xalign=0)
+        boite.pack_start(etiquette, False, False, 0)
+        boite.pack_end(widget, False, False, 0)
+        return boite
 
-        etat = "Cette machine demande un mot de passe pour ouvrir la session." \
-            if self.protege else \
-            "Cette machine s'ouvre sans mot de passe : un clic suffit."
+    def note(self, texte):
+        etiquette = Gtk.Label(label=texte, xalign=0)
+        etiquette.get_style_context().add_class("sous")
+        etiquette.set_line_wrap(True)
+        return etiquette
 
-        self.mot1 = Gtk.Entry(visibility=False)
-        self.mot1.set_placeholder_text("Nouveau mot de passe")
-        self.mot2 = Gtk.Entry(visibility=False)
-        self.mot2.set_placeholder_text("Le même, pour être sûr")
-        self.dire_compte = Gtk.Label(label="", xalign=0)
-        self.dire_compte.get_style_context().add_class("sous")
+    # ---- L'apparence -------------------------------------------------------
+    def page_apparence(self):
+        moment = "nuit"
+        try:
+            with open(os.path.join(grenosui.REGLAGES, "theme"), encoding="utf-8") as f:
+                moment = f.read().strip() or "nuit"
+        except OSError:
+            pass
 
-        boutons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        boutons.pack_start(grenosui.bouton("Enregistrer", self.definir_mot, "principal"), False, False, 0)
-        if self.protege:
-            boutons.pack_start(grenosui.bouton("Retirer le mot de passe", self.effacer_mot, "discret"),
-                               False, False, 0)
+        choix = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        nuit = grenosui.bouton("Nuit", lambda: self.theme("nuit"),
+                               "principal" if moment == "nuit" else "")
+        jour = grenosui.bouton("Jour", lambda: self.theme("jour"),
+                               "principal" if moment == "jour" else "")
+        choix.pack_start(nuit, False, False, 0)
+        choix.pack_start(jour, False, False, 0)
 
         return self.enveloppe(
-            grenosui.titre("Compte", f"{grenosui.adresse()} — {self.identite.get('nom') or 'sans nom affiché'}"),
+            grenosui.titre("Apparence", "Le même bureau, deux lumières."),
             grenosui.carte(
-                Gtk.Label(label=etat, xalign=0),
-                Gtk.Label(label="Mettre un mot de passe protège aussi l'installation "
-                                "de logiciels et les réglages du système.", xalign=0),
-                self.mot1, self.mot2, boutons, self.dire_compte,
+                self.ligne("Thème", choix),
+                self.note("Meta+T fait la bascule sans ouvrir cette fenêtre. "
+                          "Le fond d'écran, la barre, les menus et les applications "
+                          "suivent ensemble."),
+            ),
+            grenosui.carte(
+                self.ligne("Fond d'écran",
+                           grenosui.bouton("Choisir une image", self.choisir_fond)),
+                self.note("Une image à toi, posée sur le bureau. Sans choix, grenOS "
+                          "garde le sien, calculé à la construction de l'image."),
             ),
         )
 
-    def definir_mot(self):
-        login = self.identite.get("login", os.environ.get("USER", "grenos"))
-        premier, second = self.mot1.get_text(), self.mot2.get_text()
-        if len(premier) < 4:
-            self.dire_compte.set_text("Quatre caractères au minimum.")
-            return
-        if premier != second:
-            self.dire_compte.set_text("Les deux ne sont pas identiques.")
-            return
-        resultat = en_root(["definir", login], entree=premier + "\n")
-        if resultat.returncode == 0:
-            self.protege = True
-            self.mot1.set_text("")
-            self.mot2.set_text("")
-            self.dire_compte.set_text("C'est fait. Il sera demandé à la prochaine ouverture.")
-        else:
-            self.dire_compte.set_text(resultat.stderr.strip() or "Le système a refusé.")
+    def theme(self, moment):
+        grenosui.lancer(f"grenos-theme {moment}")
+        GLib.timeout_add(600, lambda: (self.rafraichir_apparence(), False)[1])
 
-    def effacer_mot(self):
-        login = self.identite.get("login", os.environ.get("USER", "grenos"))
-        resultat = en_root(["effacer", login])
-        if resultat.returncode == 0:
-            self.protege = False
-            self.dire_compte.set_text("Retiré : la session s'ouvrira toute seule.")
-        else:
-            self.dire_compte.set_text(resultat.stderr.strip() or "Le système a refusé.")
+    def rafraichir_apparence(self):
+        grenosui.habiller()
+
+    def choisir_fond(self):
+        boite = Gtk.FileChooserDialog(title="Choisir un fond d'écran", transient_for=self,
+                                      action=Gtk.FileChooserAction.OPEN)
+        boite.add_buttons("Annuler", Gtk.ResponseType.CANCEL, "Choisir", Gtk.ResponseType.OK)
+        filtre = Gtk.FileFilter()
+        filtre.set_name("Images")
+        for motif in ("*.png", "*.jpg", "*.jpeg", "*.webp", "*.bmp"):
+            filtre.add_pattern(motif)
+        boite.add_filter(filtre)
+        boite.set_current_folder(os.path.expanduser("~"))
+        if boite.run() == Gtk.ResponseType.OK:
+            chemin = boite.get_filename()
+            os.makedirs(grenosui.REGLAGES, exist_ok=True)
+            with open(os.path.join(grenosui.REGLAGES, "fond"), "w", encoding="utf-8") as f:
+                f.write(chemin + "\n")
+            grenosui.lancer("grenos-fond")
+        boite.destroy()
 
     # ---- L'écran -----------------------------------------------------------
     def page_ecran(self):
-        self.ecrans = ecran.sorties()
+        self.ecrans = module_ecran.sorties()
         self.dire_ecran = Gtk.Label(label="", xalign=0)
         self.dire_ecran.get_style_context().add_class("sous")
 
         if not self.ecrans:
             return self.enveloppe(
                 grenosui.titre("Écran"),
-                grenosui.carte(Gtk.Label(label="Aucun écran interrogeable ici.", xalign=0)),
-            )
+                grenosui.carte(self.note("Aucun écran interrogeable ici.")))
 
+        premier = self.ecrans[0]
+        self.modes = sorted(premier["modes"], key=lambda m: module_ecran.surface(m["taille"]),
+                            reverse=True)
         self.choix_taille = Gtk.ComboBoxText()
         self.choix_taux = Gtk.ComboBoxText()
-        premier = self.ecrans[0]
-        modes = sorted(premier["modes"], key=lambda m: ecran.surface(m["taille"]), reverse=True)
-        self.modes = modes
-        for index, mode in enumerate(modes):
+        for index, mode in enumerate(self.modes):
             self.choix_taille.append_text(mode["taille"])
             if mode["taille"] == premier["actuelle"]:
                 self.choix_taille.set_active(index)
@@ -166,26 +190,18 @@ class Reglages(Gtk.Window):
         self.choix_taille.connect("changed", lambda _: self.relire_taux())
         self.relire_taux()
 
-        ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        ligne.pack_start(Gtk.Label(label="Définition"), False, False, 0)
-        ligne.pack_start(self.choix_taille, True, True, 0)
-        ligne.pack_start(Gtk.Label(label="Images par seconde"), False, False, 0)
-        ligne.pack_start(self.choix_taux, True, True, 0)
-
         return self.enveloppe(
             grenosui.titre(
                 "Écran",
                 f"Écran {premier['nom']}, actuellement {premier['actuelle'] or 'inconnu'} "
-                f"à {premier['taux'] or '?'} images par seconde.",
-            ),
+                f"à {premier['taux'] or '?'} images par seconde."),
             grenosui.carte(
-                ligne,
+                self.ligne("Définition", self.choix_taille),
+                self.ligne("Images par seconde", self.choix_taux),
                 grenosui.bouton("Appliquer", self.appliquer_ecran, "principal"),
                 self.dire_ecran,
-                Gtk.Label(
-                    label="Dans une machine virtuelle, la fenêtre peut aussi être "
-                          "redimensionnée librement : la définition suit toute seule.",
-                    xalign=0, wrap=True),
+                self.note("Dans une machine virtuelle, la fenêtre peut aussi être "
+                          "redimensionnée librement : la définition suit toute seule."),
             ),
         )
 
@@ -200,24 +216,141 @@ class Reglages(Gtk.Window):
         index = max(self.choix_taille.get_active(), 0)
         taille = self.modes[index]["taille"]
         taux = self.choix_taux.get_active_text() or ""
-        souci = ecran.appliquer(self.ecrans[0]["nom"], taille, taux)
+        souci = module_ecran.appliquer(self.ecrans[0]["nom"], taille, taux)
         self.dire_ecran.set_text(souci or f"Appliqué : {taille} à {taux} images par seconde.")
 
-    # ---- L'apparence -------------------------------------------------------
-    def page_apparence(self):
-        ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        ligne.pack_start(grenosui.bouton("Nuit", lambda: self.theme("nuit"), "principal"), False, False, 0)
-        ligne.pack_start(grenosui.bouton("Jour", lambda: self.theme("jour")), False, False, 0)
+    # ---- Le son ------------------------------------------------------------
+    def page_son(self):
+        self.sorties_son = module_son.sorties()
+        courante = module_son.sortie_actuelle()
+
+        self.choix_sortie = Gtk.ComboBoxText()
+        for index, (nom, description) in enumerate(self.sorties_son):
+            self.choix_sortie.append_text(description)
+            if nom == courante:
+                self.choix_sortie.set_active(index)
+        if self.sorties_son and self.choix_sortie.get_active() < 0:
+            self.choix_sortie.set_active(0)
+        self.choix_sortie.connect("changed", self.changer_sortie)
+
+        self.curseur = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.curseur.set_size_request(320, -1)
+        self.curseur.set_value(module_son.volume())
+        self.curseur.set_draw_value(True)
+        self.curseur.connect("value-changed",
+                             lambda c: module_son.regler_volume(c.get_value()))
+
+        silence = Gtk.Switch()
+        silence.set_active(module_son.muet())
+        silence.connect("notify::active", lambda *_: module_son.basculer_muet())
+
+        contenu = [self.ligne("Sortie", self.choix_sortie),
+                   self.ligne("Volume", self.curseur),
+                   self.ligne("Silence", silence)]
+        if not self.sorties_son:
+            contenu = [self.note("Aucune sortie audio détectée. Dans une machine "
+                                 "virtuelle, vérifie que le son est activé côté hôte.")]
+
         return self.enveloppe(
-            grenosui.titre("Apparence", "Le même bureau, deux lumières. Meta+T fait la bascule."),
-            grenosui.carte(ligne),
+            grenosui.titre("Son", "Par où le son sort, et à quel volume."),
+            grenosui.carte(*contenu),
+            grenosui.carte(
+                self.ligne("Réglages détaillés",
+                           grenosui.bouton("Ouvrir le mélangeur",
+                                           lambda: grenosui.lancer("pavucontrol"))),
+                self.note("Le mélangeur règle le volume application par application."),
+            ),
         )
 
-    def theme(self, moment):
-        grenosui.lancer(f"grenos-theme {moment}")
+    def changer_sortie(self, combo):
+        index = combo.get_active()
+        if 0 <= index < len(self.sorties_son):
+            module_son.choisir_sortie(self.sorties_son[index][0])
 
-    # ---- Le système --------------------------------------------------------
-    def page_systeme(self):
+    # ---- Le réseau ---------------------------------------------------------
+    def page_reseau(self):
+        etat = "inconnu"
+        try:
+            etat = subprocess.run(["nmcli", "-t", "-f", "STATE", "general"],
+                                  capture_output=True, text=True, timeout=5).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+        lisible = {"connected": "connecté", "disconnected": "déconnecté",
+                   "connecting": "connexion en cours"}.get(etat, etat or "inconnu")
+
+        return self.enveloppe(
+            grenosui.titre("Réseau", f"État : {lisible}."),
+            grenosui.carte(
+                self.ligne("Connexions",
+                           grenosui.bouton("Gérer les connexions",
+                                           lambda: grenosui.lancer("nm-connection-editor"),
+                                           "principal")),
+                self.note("Wi-Fi, câble, partage de connexion : tout se règle là. "
+                          "Dans une machine virtuelle, le réseau passe par l'hôte et "
+                          "fonctionne sans rien configurer."),
+            ),
+        )
+
+    # ---- Le compte ---------------------------------------------------------
+    def page_compte(self):
+        self.protege = a_un_mot_de_passe(self.login)
+        etat = ("Cette machine demande un mot de passe pour ouvrir la session."
+                if self.protege else
+                "Cette machine s'ouvre sans mot de passe : un clic suffit.")
+
+        self.mot1 = Gtk.Entry(visibility=False)
+        self.mot1.set_placeholder_text("Nouveau mot de passe")
+        self.mot2 = Gtk.Entry(visibility=False)
+        self.mot2.set_placeholder_text("Le même, pour être sûr")
+        self.dire_compte = Gtk.Label(label="", xalign=0)
+        self.dire_compte.get_style_context().add_class("sous")
+
+        boutons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        boutons.pack_start(grenosui.bouton("Enregistrer", self.definir_mot, "principal"),
+                           False, False, 0)
+        if self.protege:
+            boutons.pack_start(grenosui.bouton("Retirer le mot de passe", self.effacer_mot,
+                                               "discret"), False, False, 0)
+
+        return self.enveloppe(
+            grenosui.titre("Compte",
+                           f"{grenosui.adresse()} — "
+                           f"{self.identite.get('nom') or 'sans nom affiché'}"),
+            grenosui.carte(
+                self.note(etat),
+                self.mot1, self.mot2, boutons, self.dire_compte,
+                self.note("Un mot de passe protège aussi l'installation de logiciels "
+                          "et les réglages du système."),
+            ),
+        )
+
+    def definir_mot(self):
+        premier, second = self.mot1.get_text(), self.mot2.get_text()
+        if len(premier) < 4:
+            self.dire_compte.set_text("Quatre caractères au minimum.")
+            return
+        if premier != second:
+            self.dire_compte.set_text("Les deux ne sont pas identiques.")
+            return
+        resultat = en_root(["definir", self.login], entree=premier + "\n")
+        if resultat.returncode == 0:
+            self.protege = True
+            self.mot1.set_text("")
+            self.mot2.set_text("")
+            self.dire_compte.set_text("C'est fait. Il sera demandé à la prochaine ouverture.")
+        else:
+            self.dire_compte.set_text(resultat.stderr.strip() or "Le système a refusé.")
+
+    def effacer_mot(self):
+        resultat = en_root(["effacer", self.login])
+        if resultat.returncode == 0:
+            self.protege = False
+            self.dire_compte.set_text("Retiré : la session s'ouvrira toute seule.")
+        else:
+            self.dire_compte.set_text(resultat.stderr.strip() or "Le système a refusé.")
+
+    # ---- Les mises à jour --------------------------------------------------
+    def page_maj(self):
         version = "grenOS"
         try:
             with open("/etc/os-release", encoding="utf-8") as fichier:
@@ -227,34 +360,68 @@ class Reglages(Gtk.Window):
         except OSError:
             pass
 
-        boutons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        boutons.pack_start(grenosui.bouton("Mettre à jour grenOS",
-                                           lambda: grenosui.lancer("grenos-maj"), "principal"),
-                           False, False, 0)
-        boutons.pack_start(grenosui.bouton("Ouvrir le magasin",
-                                           lambda: grenosui.lancer("grenos-magasin")),
-                           False, False, 0)
-        boutons.pack_start(grenosui.bouton("Installer sur le disque",
-                                           lambda: grenosui.lancer("pkexec calamares")),
-                           False, False, 0)
+        return self.enveloppe(
+            grenosui.titre("Mises à jour", version),
+            grenosui.carte(
+                self.ligne("grenOS et Debian",
+                           grenosui.bouton("Vérifier et installer",
+                                           lambda: grenosui.lancer("grenos-maj"), "principal")),
+                self.note("Les nouveautés de grenOS et les correctifs de sécurité de "
+                          "Debian arrivent ensemble, sans jamais retélécharger l'image."),
+            ),
+            grenosui.carte(
+                self.ligne("Applications",
+                           grenosui.bouton("Ouvrir GrenPlace",
+                                           lambda: grenosui.lancer("grenplace"))),
+                self.note("Les applications installées depuis GrenPlace se mettent à "
+                          "jour avec le reste du système."),
+            ),
+        )
+
+    # ---- Le matériel -------------------------------------------------------
+    def page_materiel(self):
+        infos = materiel.resume()
+        virtuelle = infos["virtuelle"]
+
+        lignes = [
+            self.ligne("Processeur", Gtk.Label(label=f"{infos['coeurs']} cœurs")),
+            self.ligne("Modèle", Gtk.Label(label=infos["processeur"][:52])),
+            self.ligne("Mémoire vive",
+                       Gtk.Label(label=f"{infos['memoire']:.1f} Go "
+                                       f"({infos['memoire_libre']:.1f} Go libres)")),
+            self.ligne("Carte graphique", Gtk.Label(label=infos["carte"][:52])),
+            self.ligne("Pilote", Gtk.Label(label=infos["pilote"][:52])),
+            self.ligne("Disque",
+                       Gtk.Label(label=f"{infos['disque']:.0f} Go "
+                                       f"({infos['disque_libre']:.0f} Go libres)")),
+        ]
+
+        explication = ("grenOS utilise d'office tout ce que la machine lui donne : "
+                       "tous les cœurs, toute la mémoire, toute la mémoire vidéo. "
+                       "Il n'y a rien à débloquer.")
+        if virtuelle:
+            explication += (f"\n\nCette machine est virtuelle ({virtuelle}) : c'est l'hôte "
+                            "qui décide de ce qu'elle voit. Pour lui en donner plus, "
+                            "éteins-la et augmente la mémoire, les processeurs et la "
+                            "mémoire vidéo dans les réglages de la machine.")
 
         return self.enveloppe(
-            grenosui.titre("Système", version),
-            grenosui.carte(
-                Gtk.Label(label="Les mises à jour apportent les nouveautés de grenOS et les "
-                                "correctifs de sécurité de Debian, sans retélécharger l'image.",
-                          xalign=0, wrap=True),
-                boutons,
-            ),
+            grenosui.titre("Matériel", "Ce que la machine a, et ce que grenOS en voit."),
+            grenosui.carte(*lignes),
+            grenosui.carte(self.note(explication)),
         )
 
 
 def main():
+    # La session appelle cette forme au démarrage : elle ne montre rien, elle
+    # remet seulement l'écran dans la définition choisie la dernière fois.
     if len(sys.argv) > 1 and sys.argv[1] == "--restaurer-ecran":
-        ecran.restaurer()
+        module_ecran.restaurer()
         return
+
+    page = sys.argv[1] if len(sys.argv) > 1 else ""
     grenosui.habiller()
-    fenetre = Reglages()
+    fenetre = Reglages(page)
     fenetre.show_all()
     Gtk.main()
 

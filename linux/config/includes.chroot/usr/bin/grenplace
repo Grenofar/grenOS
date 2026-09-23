@@ -1,0 +1,327 @@
+#!/usr/bin/env python3
+"""GrenPlace : les applications de grenOS, en un clic.
+
+Deux sources, un seul bouton. Les paquets Debian viennent du système et se
+mettent à jour avec lui ; les Flatpak viennent de Flathub et tournent dans leur
+coin, ce qui permet d'installer Steam sans activer l'architecture 32 bits ni
+toucher au reste de la machine.
+
+L'installation se regarde dans une fenêtre — une barre qui avance et une phrase
+qui dit où l'on en est — et jamais dans un terminal noir. Le détail complet
+reste disponible pour qui veut le lire.
+"""
+import os
+import re
+import subprocess
+import sys
+import threading
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+
+# rayon, nom, description, source, identifiant, icône
+CATALOGUE = [
+    ("Jeux", "Steam", "Les jeux, et la couche Proton qui fait tourner les jeux Windows.",
+     "flatpak", "com.valvesoftware.Steam", "applications-games"),
+    ("Jeux", "Lutris", "Lance et range tous tes jeux, quelle que soit leur boutique.",
+     "flatpak", "net.lutris.Lutris", "applications-games"),
+    ("Jeux", "Heroic", "Les jeux Epic Games et GOG, sur Linux.",
+     "flatpak", "com.heroicgameslauncher.hgl", "applications-games"),
+
+    ("Bureautique", "LibreOffice", "Traitement de texte, tableur, présentations.",
+     "flatpak", "org.libreoffice.LibreOffice", "x-office-document"),
+    ("Bureautique", "Thunderbird", "Le courrier électronique.",
+     "apt", "thunderbird", "internet-mail"),
+    ("Bureautique", "Okular", "Lire et annoter des PDF.",
+     "flatpak", "org.kde.okular", "x-office-document"),
+
+    ("Création", "GIMP", "Retouche et dessin, en pixels.",
+     "flatpak", "org.gimp.GIMP", "applications-graphics"),
+    ("Création", "Inkscape", "Dessin vectoriel : logos, affiches, schémas.",
+     "flatpak", "org.inkscape.Inkscape", "applications-graphics"),
+    ("Création", "Blender", "Modélisation, animation et rendu 3D.",
+     "flatpak", "org.blender.Blender", "applications-graphics"),
+    ("Création", "Krita", "Peinture numérique, pensée pour les dessinateurs.",
+     "flatpak", "org.kde.krita", "applications-graphics"),
+    ("Création", "Audacity", "Enregistrer et monter du son.",
+     "flatpak", "org.audacityteam.Audacity", "audio-x-generic"),
+    ("Création", "OBS Studio", "Enregistrer son écran, diffuser en direct.",
+     "flatpak", "com.obsproject.Studio", "video-x-generic"),
+
+    ("Internet", "Chromium", "Le navigateur libre dont Chrome est tiré.",
+     "apt", "chromium", "web-browser"),
+    ("Internet", "Discord", "Discussion écrite et vocale.",
+     "flatpak", "com.discordapp.Discord", "internet-chat"),
+    ("Internet", "VLC", "Lit à peu près tout ce qui existe comme vidéo et comme son.",
+     "flatpak", "org.videolan.VLC", "video-x-generic"),
+    ("Internet", "qBittorrent", "Télécharger par torrent.",
+     "flatpak", "org.qbittorrent.qBittorrent", "applications-internet"),
+
+    ("Développement", "Visual Studio Code", "L'éditeur de code de Microsoft.",
+     "flatpak", "com.visualstudio.code", "text-x-script"),
+    ("Développement", "Git", "Le gestionnaire de versions, en ligne de commande.",
+     "apt", "git", "text-x-script"),
+    ("Développement", "Python 3", "Le langage, ses outils et son gestionnaire de paquets.",
+     "apt", "python3-pip", "text-x-script"),
+
+    ("Système", "Pilote NVIDIA", "Le pilote propriétaire, pour les cartes NVIDIA récentes. "
+     "Redémarrer après l'installation.", "apt", "nvidia-driver", "preferences-system"),
+    ("Système", "GParted", "Voir et modifier les partitions des disques.",
+     "apt", "gparted", "drive-harddisk"),
+    ("Système", "Timeshift", "Des instantanés du système, pour revenir en arrière.",
+     "apt", "timeshift", "drive-harddisk"),
+]
+
+RAYONS = ["Tout", "Jeux", "Bureautique", "Création", "Internet", "Développement", "Système"]
+
+STYLE = """
+.rayon {
+    background-color: transparent;
+    background-image: none;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 6px 16px;
+    margin: 2px;
+}
+.rayon:hover { background-color: @survol; border-color: @bord; }
+.rayon:checked { background-color: @accent; color: #ffffff; border-color: @accent; }
+"""
+
+
+def lanceur():
+    """sudo quand il ne demande rien, pkexec sinon."""
+    if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode == 0:
+        return ["sudo", "-n"]
+    return ["pkexec"]
+
+
+def installe(source, identifiant):
+    """Cette application est-elle déjà là ?"""
+    if source == "flatpak":
+        return subprocess.run(["flatpak", "info", identifiant],
+                              capture_output=True).returncode == 0
+    return subprocess.run(["dpkg-query", "-W", "-f=${Status}", identifiant],
+                          capture_output=True, text=True).stdout.startswith("install ok")
+
+
+def image_de(nom_icone, taille=36):
+    try:
+        pixbuf = Gtk.IconTheme.get_default().load_icon(
+            nom_icone, taille, Gtk.IconLookupFlags.FORCE_SIZE)
+        return Gtk.Image.new_from_pixbuf(pixbuf)
+    except GLib.Error:
+        return None
+
+
+class Installation(Gtk.Window):
+    """La fenêtre qui installe : une barre, une phrase, et le détail au besoin."""
+
+    def __init__(self, parent, nom, source, identifiant, fini):
+        super().__init__(title=f"Installation de {nom}")
+        self.set_default_size(620, 360)
+        self.set_transient_for(parent)
+        self.set_position(Gtk.WindowPosition.CENTER_ON_PARENT)
+        self.nom, self.source, self.identifiant = nom, source, identifiant
+        self.fini = fini
+
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        colonne.set_border_width(24)
+        self.add(colonne)
+
+        colonne.pack_start(grenosui.titre(nom, "Installation en cours."), False, False, 0)
+        self.etat = Gtk.Label(label="Préparation…", xalign=0)
+        self.barre = Gtk.ProgressBar()
+        colonne.pack_start(grenosui.carte(self.etat, self.barre), False, False, 0)
+
+        self.details = Gtk.Expander(label="Voir le détail")
+        vue = Gtk.ScrolledWindow()
+        vue.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        vue.set_size_request(-1, 160)
+        self.texte = Gtk.TextView()
+        self.texte.set_editable(False)
+        self.texte.set_monospace(True)
+        vue.add(self.texte)
+        self.details.add(vue)
+        colonne.pack_start(self.details, True, True, 0)
+
+        self.fermer = grenosui.bouton("Fermer", self.destroy)
+        self.fermer.set_sensitive(False)
+        colonne.pack_start(self.fermer, False, False, 0)
+
+        threading.Thread(target=self.travailler, daemon=True).start()
+
+    def journal(self, ligne):
+        def ajouter():
+            tampon = self.texte.get_buffer()
+            tampon.insert(tampon.get_end_iter(), ligne + "\n")
+            return False
+        GLib.idle_add(ajouter)
+
+    def courir(self, commande, avancer=None):
+        processus = subprocess.Popen(
+            commande, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            bufsize=1, env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+        for ligne in processus.stdout:
+            ligne = ligne.rstrip()
+            if ligne:
+                self.journal(ligne)
+                if avancer is not None:
+                    avancer(ligne)
+        processus.wait()
+        return processus.returncode
+
+    def travailler(self):
+        faits = [0]
+
+        def suivre(ligne):
+            trouve = re.search(r"(\d+)%", ligne)
+            if trouve:
+                GLib.idle_add(self.barre.set_fraction, int(trouve.group(1)) / 100)
+            elif re.match(r"^(Unpacking|Dépaquetage|Setting up|Paramétrage|Installing)", ligne):
+                faits[0] += 1
+                GLib.idle_add(self.barre.set_fraction, min(0.15 + faits[0] / 30, 0.95))
+
+        GLib.idle_add(self.etat.set_text, "Téléchargement et installation…")
+        if self.source == "flatpak":
+            self.courir(["flatpak", "remote-add", "--if-not-exists", "flathub",
+                         "https://dl.flathub.org/repo/flathub.flatpakrepo"])
+            code = self.courir(["flatpak", "install", "-y", "--noninteractive",
+                                "flathub", self.identifiant], suivre)
+        else:
+            self.courir(lanceur() + ["apt-get", "update"])
+            code = self.courir(lanceur() + ["apt-get", "install", "-y", self.identifiant],
+                               suivre)
+
+        GLib.idle_add(self.barre.set_fraction, 1.0)
+        if code == 0:
+            GLib.idle_add(self.etat.set_text,
+                          f"{self.nom} est installé. Il est dans le menu.")
+        else:
+            GLib.idle_add(self.etat.set_text,
+                          "L'installation s'est arrêtée. Le détail est ci-dessous.")
+            GLib.idle_add(self.details.set_expanded, True)
+        GLib.idle_add(self.fermer.set_sensitive, True)
+        GLib.idle_add(self.fini)
+
+
+class GrenPlace(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="GrenPlace")
+        self.set_default_size(940, 700)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.connect("destroy", Gtk.main_quit)
+        self.rayon = "Tout"
+
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        colonne.set_border_width(26)
+        self.add(colonne)
+
+        colonne.pack_start(
+            grenosui.titre("GrenPlace",
+                           "Les applications s'installent ici, et se mettent ensuite à "
+                           "jour avec le reste du système."),
+            False, False, 0)
+
+        self.recherche = Gtk.SearchEntry()
+        self.recherche.set_placeholder_text("Chercher une application")
+        self.recherche.connect("search-changed", lambda _: self.remplir())
+        colonne.pack_start(self.recherche, False, False, 0)
+
+        rayons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        premier = None
+        for nom in RAYONS:
+            bouton = Gtk.RadioButton.new_with_label_from_widget(premier, nom)
+            bouton.set_mode(False)
+            bouton.get_style_context().add_class("rayon")
+            if premier is None:
+                premier = bouton
+            bouton.connect("toggled", self.changer_rayon, nom)
+            rayons.pack_start(bouton, False, False, 0)
+        colonne.pack_start(rayons, False, False, 0)
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        colonne.pack_start(defilement, True, True, 0)
+        self.liste = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        defilement.add(self.liste)
+
+        self.remplir()
+
+    def changer_rayon(self, bouton, nom):
+        if bouton.get_active():
+            self.rayon = nom
+            self.remplir()
+
+    def remplir(self):
+        filtre = self.recherche.get_text().strip().lower()
+        for enfant in self.liste.get_children():
+            self.liste.remove(enfant)
+
+        for rayon, nom, note, source, identifiant, icone in CATALOGUE:
+            if self.rayon != "Tout" and rayon != self.rayon:
+                continue
+            if filtre and filtre not in nom.lower() and filtre not in note.lower():
+                continue
+
+            ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+            image = image_de(icone)
+            if image is not None:
+                ligne.pack_start(image, False, False, 0)
+
+            texte = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+            titre = Gtk.Label(label=nom, xalign=0)
+            titre.get_style_context().add_class("entree-titre")
+            sous = Gtk.Label(label=note, xalign=0)
+            sous.get_style_context().add_class("sous")
+            sous.set_line_wrap(True)
+            origine = Gtk.Label(
+                label=f"{rayon} · " + ("paquet Debian" if source == "apt"
+                                       else "Flatpak, depuis Flathub"), xalign=0)
+            origine.get_style_context().add_class("section")
+            texte.pack_start(titre, False, False, 0)
+            texte.pack_start(sous, False, False, 0)
+            texte.pack_start(origine, False, False, 0)
+            ligne.pack_start(texte, True, True, 0)
+
+            if installe(source, identifiant):
+                etat = Gtk.Label(label="Installé")
+                etat.get_style_context().add_class("sous")
+                ligne.pack_end(etat, False, False, 8)
+            else:
+                ligne.pack_end(
+                    grenosui.bouton("Installer",
+                                    lambda s=source, i=identifiant, n=nom:
+                                    self.installer(s, i, n), "principal"),
+                    False, False, 0)
+
+            self.liste.pack_start(grenosui.carte(ligne), False, False, 0)
+        self.liste.show_all()
+
+    def installer(self, source, identifiant, nom):
+        fenetre = Installation(self, nom, source, identifiant, self.remplir)
+        fenetre.show_all()
+
+
+def main():
+    style = grenosui.habiller()
+    propre = Gtk.CssProvider()
+    couleurs = grenosui.palette()
+    entete = "".join(f"@define-color {n} {v};\n" for n, v in couleurs.items())
+    propre.load_from_data((entete + STYLE).encode("utf-8"))
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), propre, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+    _ = style
+
+    fenetre = GrenPlace()
+    fenetre.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

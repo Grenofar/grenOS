@@ -15,7 +15,9 @@ set -eu
 
 ACTION="${1:-}"
 COMPTE="${2:-}"
-AUTO=/etc/lightdm/lightdm.conf.d/60-grenos.conf
+# LightDM lit lightdm.conf en dernier : c'est lui qui decide.
+AUTO=/etc/lightdm/lightdm.conf
+AUTOD=/etc/lightdm/lightdm.conf.d/60-grenos.conf
 SUDO=/etc/sudoers.d/grenos-identite
 
 if [ -z "$ACTION" ] || [ -z "$COMPTE" ]; then
@@ -43,24 +45,29 @@ definir)
 
     # La session ne s'ouvre plus toute seule : sinon le mot de passe ne
     # protégerait rien.
-    cat > "$AUTO" <<EOF
+    for FICHIER in "$AUTO" "$AUTOD"; do
+        cat > "$FICHIER" <<EOF
 [Seat:*]
 user-session=grenos
 greeter-session=lightdm-gtk-greeter
 EOF
+    done
     # Et l'administration redemande ce mot de passe.
     printf '%s ALL=(ALL) ALL\n' "$COMPTE" > "$SUDO"
     chmod 0440 "$SUDO"
     ;;
 effacer)
     passwd -d "$COMPTE" >/dev/null
-    cat > "$AUTO" <<EOF
+    for FICHIER in "$AUTO" "$AUTOD"; do
+        cat > "$FICHIER" <<EOF
 [Seat:*]
 autologin-user=$COMPTE
 autologin-user-timeout=0
 autologin-session=grenos
 user-session=grenos
+greeter-session=lightdm-gtk-greeter
 EOF
+    done
     printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$COMPTE" > "$SUDO"
     chmod 0440 "$SUDO"
     ;;

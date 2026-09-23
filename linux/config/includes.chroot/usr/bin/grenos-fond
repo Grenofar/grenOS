@@ -1,9 +1,10 @@
 #!/bin/sh
-# Le fond d'écran, selon l'heure choisie : nuit par défaut, jour si on l'a dit.
+# Le fond d'écran, selon le thème choisi — ou l'image que la personne a mise.
 #
-# Une image posée sur la fenêtre racine par feh, et c'est tout : rien ne reste
-# en mémoire pour l'entretenir. C'est aussi ce qui évite qu'un fond animé mange
-# le processeur d'une machine virtuelle.
+# Le bureau (`grenos-bureau`) dessine lui-même ce fond : ce script sert quand il
+# n'est pas là, et pour l'écran de connexion. Une image posée une fois, rien qui
+# reste en mémoire pour l'entretenir — c'est aussi ce qui évite qu'un fond animé
+# mange le processeur d'une machine virtuelle.
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/grenos"
 MOMENT=nuit
@@ -14,9 +15,18 @@ case "$MOMENT" in
     *)    IMAGE=/usr/share/grenos/grenos-nuit.png ; SECOURS="#0d1220" ;;
 esac
 
+# Le choix de la personne l'emporte sur le nôtre.
+if [ -r "$CONFIG/fond" ]; then
+    CHOISIE=$(head -1 "$CONFIG/fond")
+    [ -r "$CHOISIE" ] && IMAGE="$CHOISIE"
+fi
+
 if [ -r "$IMAGE" ] && command -v feh >/dev/null 2>&1; then
     feh --no-fehbg --bg-fill "$IMAGE"
 else
     # Sans image, une couleur unie vaut mieux qu'un damier noir et blanc.
     xsetroot -solid "$SECOURS"
 fi
+
+# Le bureau redessine son fond quand on le prévient.
+pkill -USR1 -f "grenos-bureau" 2>/dev/null || true

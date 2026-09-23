@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fabrique le paquet grenos-desktop : le bureau de grenOS, celui qui est écrit
-# dans ce dépôt — la barre, le menu, les réglages, le magasin, l'accueil, le
+# dans ce dépôt — la barre, le bureau, les réglages, GrenPlace, l'accueil, le
 # thème des fenêtres et les fonds d'écran.
 #
 # C'est ce paquet que `grenos-maj` met à jour depuis l'OS : les correctifs de
@@ -31,13 +31,14 @@ mkdir -p "$BUILD/DEBIAN" \
 # il ne sert qu'au tout premier démarrage d'une image, et le réinstaller sur
 # une machine déjà nommée n'aurait aucun sens.
 for outil in grenos-shell grenos-session grenos-menu grenos-fond grenos-veilleur \
-             grenos-arret grenos-parametres grenos-magasin grenos-bienvenue \
+             grenos-arret grenos-parametres grenplace grenos-bienvenue grenos-bureau \
              grenos-theme grenos-maj; do
     install -m 0755 "$DEDANS/usr/bin/$outil" "$BUILD/usr/bin/"
 done
 
-install -m 0644 "$DEDANS/usr/lib/grenos/grenosui.py" "$BUILD/usr/lib/grenos/"
-install -m 0644 "$DEDANS/usr/lib/grenos/ecran.py" "$BUILD/usr/lib/grenos/"
+for module in grenosui ecran son materiel; do
+    install -m 0644 "$DEDANS/usr/lib/grenos/$module.py" "$BUILD/usr/lib/grenos/"
+done
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-compte" "$BUILD/usr/lib/grenos/"
 
 install -m 0644 "$DEDANS/usr/share/xsessions/grenos.desktop" "$BUILD/usr/share/xsessions/"
@@ -61,7 +62,7 @@ Recommends: flatpak, lightdm, pcmanfm, xfce4-terminal, xfce4-taskmanager
 Installed-Size: $SIZE
 Homepage: https://grenos-dev.vercel.app
 Description: Le bureau de grenOS
- La barre, le menu des applications, les réglages, le magasin, l'accueil, la
+ La barre, le bureau et ses icônes, le menu, les Réglages, GrenPlace, la
  bascule jour et nuit, le thème des fenêtres et les fonds d'écran. Tout ce qui
  se voit dans grenOS est ici ; Debian fournit le noyau, les pilotes et les
  applications. Ce paquet se met à jour depuis le système comme un autre.

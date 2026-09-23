@@ -60,12 +60,15 @@ galculator
 xfce4-screenshooter
 xfce4-taskmanager
 
-## Réseau, son : les services, et les fenêtres pour les régler.
+## Réseau, son : les services, et les fenêtres pour les régler. `pactl`
+## (pulseaudio-utils) est ce qui permet aux Réglages de choisir la sortie audio
+## et le volume : PipeWire lui répond comme le faisait PulseAudio.
 network-manager
 network-manager-gnome
 pipewire-audio
 wireplumber
 pavucontrol
+pulseaudio-utils
 
 ## Les autorisations : installer un paquet ouvre une fenêtre qui demande, au
 ## lieu d'échouer en silence.
@@ -101,6 +104,10 @@ spice-vdagent
 qemu-guest-agent
 open-vm-tools
 open-vm-tools-desktop
+
+## De quoi répondre à « qu'est-ce que cette machine a dans le ventre ? » dans
+## les Réglages : lspci nomme la carte graphique et son pilote.
+pciutils
 
 ## Le GPU : Mesa fournit l'accélération pour Intel et AMD sans rien installer.
 ## Vulkan est ce que demandent Steam et les jeux. NVIDIA reste à part : son

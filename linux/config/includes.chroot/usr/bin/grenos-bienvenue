@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """La fenêtre d'accueil : ce qu'on peut faire, tout de suite, en un clic.
 
-Elle s'ouvre une fois, à la première session, et reste accessible dans le menu.
-Elle ne fait pas la leçon : six gestes utiles, trois astuces, et le nom de la
+Elle s'ouvre une fois, à la première session, et reste dans le menu. Elle ne
+fait pas la leçon : quelques gestes utiles, trois astuces, et le nom de la
 personne en tête — c'est sa machine.
+
+L'installation sur le disque n'apparaît que sur une vraie machine. Dans une
+machine virtuelle, elle n'a pas de sens : le disque de la machine garde déjà
+tout, et proposer d'installer par-dessus ne ferait qu'inquiéter.
 """
 import sys
 
@@ -12,41 +16,73 @@ sys.path.insert(0, "/usr/lib/grenos")
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
 
 import grenosui  # noqa: E402
+import materiel  # noqa: E402
 
 GESTES = [
-    ("Installer grenOS", "Poser le système sur le disque, à côté ou à la place de "
-     "ce qui s'y trouve. Rien n'est touché avant que tu ne valides.", "pkexec calamares"),
-    ("Le magasin", "Ajouter des applications en un clic — Steam, un traitement de "
-     "texte, un éditeur de code.", "grenos-magasin"),
+    ("GrenPlace", "Ajouter des applications en un clic — Steam, un traitement de "
+     "texte, un éditeur de code.", "grenplace", "system-software-install"),
+    ("Réglages", "Le thème jour et nuit, l'écran, le son, le mot de passe, "
+     "les mises à jour.", "grenos-parametres", "preferences-system"),
     ("Mettre à jour", "Les nouveautés de grenOS et les correctifs de sécurité, "
-     "sans retélécharger l'image.", "grenos-maj"),
-    ("Réglages", "Le mot de passe, la définition de l'écran et le nombre d'images "
-     "par seconde, le jour et la nuit.", "grenos-parametres"),
-    ("Naviguer", "Firefox est là, avec ses onglets et ses favoris.", "firefox-esr"),
-    ("Tes fichiers", "L'explorateur ouvre, renomme, copie et supprime ; "
-     "l'éditeur de texte enregistre.", "pcmanfm"),
+     "sans retélécharger l'image.", "grenos-maj", "system-software-update"),
+    ("Naviguer", "Firefox est là, avec ses onglets et ses favoris.",
+     "firefox-esr", "web-browser"),
+    ("Tes fichiers", "Ouvrir, renommer, copier, supprimer — et tout ce que tu poses "
+     "sur le bureau reste là.", "pcmanfm", "system-file-manager"),
+    ("Terminal", "Pour qui veut taper des commandes. Les autres n'en ont pas besoin.",
+     "x-terminal-emulator", "utilities-terminal"),
 ]
 
+INSTALLER = ("Installer grenOS", "Poser le système sur le disque de ce PC, à côté ou à "
+             "la place de ce qui s'y trouve. Rien n'est touché avant que tu ne valides.",
+             "pkexec calamares", "drive-harddisk")
+
 ASTUCES = [
+    "Clic droit sur le bureau : créer un dossier, un fichier, changer le fond.",
     "Alt+Tab passe d'une fenêtre à l'autre, Alt+F4 ferme celle du dessus.",
     "Ctrl+Maj+Échap ouvre le moniteur des tâches, Meta+T bascule jour et nuit.",
-    "Dans VirtualBox : Écran, « Redimensionner automatiquement l'affichage », "
-    "et la fenêtre suit la taille que tu lui donnes.",
 ]
+
+
+def image_de(nom_icone, taille=32):
+    try:
+        pixbuf = Gtk.IconTheme.get_default().load_icon(
+            nom_icone, taille, Gtk.IconLookupFlags.FORCE_SIZE)
+        return Gtk.Image.new_from_pixbuf(pixbuf)
+    except GLib.Error:
+        return None
+
+
+def carte_geste(nom, note, commande, icone):
+    entete = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    image = image_de(icone)
+    if image is not None:
+        entete.pack_start(image, False, False, 0)
+    titre = Gtk.Label(label=nom, xalign=0)
+    titre.get_style_context().add_class("entree-titre")
+    entete.pack_start(titre, True, True, 0)
+
+    texte = Gtk.Label(label=note, xalign=0)
+    texte.get_style_context().add_class("sous")
+    texte.set_line_wrap(True)
+
+    return grenosui.carte(
+        entete, texte,
+        grenosui.bouton("Ouvrir", lambda: grenosui.lancer(commande), "principal"))
 
 
 def main():
-    fenetre = grenosui.fenetre("Bienvenue dans grenOS", 900, 660)
+    fenetre = grenosui.fenetre("Bienvenue dans grenOS", 940, 700)
 
     defilement = Gtk.ScrolledWindow()
     defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     fenetre.add(defilement)
 
     colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-    colonne.set_border_width(28)
+    colonne.set_border_width(30)
     defilement.add(colonne)
 
     identite = grenosui.identite()
@@ -54,8 +90,13 @@ def main():
     colonne.pack_start(
         grenosui.titre(salut, f"Cette machine est à toi : {grenosui.adresse()}. "
                               "Voici de quoi commencer."),
-        False, False, 0,
-    )
+        False, False, 0)
+
+    gestes = list(GESTES)
+    virtuelle = materiel.machine_virtuelle()
+    if not virtuelle:
+        # Sur un vrai PC, installer est le geste qui compte : il passe devant.
+        gestes.insert(0, INSTALLER)
 
     grille = Gtk.FlowBox()
     grille.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -64,24 +105,19 @@ def main():
     grille.set_row_spacing(14)
     grille.set_homogeneous(True)
     colonne.pack_start(grille, False, False, 0)
-
-    for nom, note, commande in GESTES:
-        etiquette = Gtk.Label(label=note, xalign=0)
-        etiquette.get_style_context().add_class("sous")
-        etiquette.set_line_wrap(True)
-        titre = Gtk.Label(label=nom, xalign=0)
-        titre.get_style_context().add_class("entree-titre")
-        bloc = grenosui.carte(
-            titre, etiquette,
-            grenosui.bouton("Ouvrir", lambda c=commande: grenosui.lancer(c), "principal"),
-        )
-        grille.add(bloc)
+    for nom, note, commande, icone in gestes:
+        grille.add(carte_geste(nom, note, commande, icone))
 
     astuces = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
     entete = Gtk.Label(label="ASTUCES", xalign=0)
     entete.get_style_context().add_class("section")
     astuces.pack_start(entete, False, False, 0)
-    for astuce in ASTUCES:
+    lignes = list(ASTUCES)
+    if virtuelle:
+        lignes.append("Cette machine est virtuelle : tout ce que tu fais est déjà gardé "
+                      "sur son disque. Pour lui donner plus de mémoire ou de cœurs, "
+                      "éteins-la et change ses réglages côté hôte.")
+    for astuce in lignes:
         ligne = Gtk.Label(label="·  " + astuce, xalign=0)
         ligne.get_style_context().add_class("sous")
         ligne.set_line_wrap(True)

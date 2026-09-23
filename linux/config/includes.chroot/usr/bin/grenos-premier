@@ -80,6 +80,21 @@ def probleme(login):
     return None
 
 
+def ouverture(login, automatique=True):
+    """Écrit qui ouvre la session, dans le fichier qui a le dernier mot."""
+    lignes = ["[Seat:*]\n", "user-session=grenos\n",
+              "greeter-session=lightdm-gtk-greeter\n"]
+    if automatique:
+        lignes += [f"autologin-user={login}\n", "autologin-user-timeout=0\n",
+                   "autologin-session=grenos\n"]
+    os.makedirs("/etc/lightdm/lightdm.conf.d", exist_ok=True)
+    for chemin in ("/etc/lightdm/lightdm.conf",
+                   "/etc/lightdm/lightdm.conf.d/60-grenos.conf"):
+        with open(chemin, "w", encoding="utf-8") as fichier:
+            fichier.write("# Écrit par grenOS. LightDM lit lightdm.conf en dernier.\n")
+            fichier.writelines(lignes)
+
+
 def appliquer(login, affiche):
     """Renomme le compte, écrit qui habite ici, et rend le nom retenu."""
     ancien = compte_actuel()
@@ -107,15 +122,14 @@ def appliquer(login, affiche):
         )
 
     # Tant qu'aucun mot de passe n'est choisi, il n'y en a pas à taper : ni pour
-    # ouvrir la session, ni pour installer un paquet. `grenos-parametres`
-    # remplace ces deux fichiers dès qu'un mot de passe est défini.
-    os.makedirs("/etc/lightdm/lightdm.conf.d", exist_ok=True)
-    with open("/etc/lightdm/lightdm.conf.d/60-grenos.conf", "w", encoding="utf-8") as fichier:
-        fichier.write("[Seat:*]\n"
-                      f"autologin-user={login}\n"
-                      "autologin-user-timeout=0\n"
-                      "autologin-session=grenos\n"
-                      "user-session=grenos\n")
+    # ouvrir la session, ni pour installer un paquet. `grenos-compte` remplace
+    # ces fichiers dès qu'un mot de passe est défini.
+    #
+    # On écrit /etc/lightdm/lightdm.conf, et pas seulement le dossier
+    # lightdm.conf.d : LightDM lit ce fichier en dernier, donc c'est lui qui
+    # l'emporte. live-config y a mis le compte du live, qui n'existe plus une
+    # fois renommé — et l'écran de connexion réapparaissait.
+    ouverture(login)
     with open("/etc/sudoers.d/grenos-identite", "w", encoding="utf-8") as fichier:
         fichier.write(f"{login} ALL=(ALL) NOPASSWD: ALL\n")
     os.chmod("/etc/sudoers.d/grenos-identite", 0o440)

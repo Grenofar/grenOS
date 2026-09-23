@@ -43,9 +43,35 @@ cp /etc/issue /etc/issue.net
 echo "--- grenOS : la session ---"
 
 # Le thème de départ, hérité par tout compte créé ensuite — y compris celui de
-# l'installation sur disque.
-mkdir -p /etc/skel/.config/grenos /etc/skel/Documents /etc/skel/Images
+# l'installation sur disque. Le bureau n'est pas vide : ce qu'on y pose reste,
+# et ce qui s'y trouve se déplace à la souris.
+mkdir -p /etc/skel/.config/grenos /etc/skel/Bureau /etc/skel/Documents \
+         /etc/skel/Images /etc/skel/Téléchargements
 echo nuit > /etc/skel/.config/grenos/theme
+
+# Les dossiers que les applications cherchent, déclarés une fois pour toutes.
+cat > /etc/xdg/user-dirs.defaults <<'EOF'
+DESKTOP=Bureau
+DOWNLOAD=Téléchargements
+DOCUMENTS=Documents
+PICTURES=Images
+MUSIC=Musique
+VIDEOS=Vidéos
+EOF
+
+# L'ouverture de session. LightDM lit lightdm.conf *après* lightdm.conf.d :
+# c'est donc lui qui décide, et c'est là que live-config écrit le compte du
+# live. On l'écrit nous-mêmes ; le premier écran le réécrira avec le nom choisi.
+mkdir -p /etc/lightdm
+cat > /etc/lightdm/lightdm.conf <<'EOF'
+# Écrit par grenOS.
+[Seat:*]
+autologin-user=grenos
+autologin-user-timeout=0
+autologin-session=grenos
+user-session=grenos
+greeter-session=lightdm-gtk-greeter
+EOF
 
 # Nos choix d'applications par défaut, plutôt que le hasard de l'installation.
 update-alternatives --set x-terminal-emulator /usr/bin/xfce4-terminal || true
@@ -73,6 +99,13 @@ echo "fr_FR.UTF-8 UTF-8" > /etc/locale.gen
 echo "LANG=fr_FR.UTF-8" > /etc/default/locale
 locale-gen >/dev/null 2>&1 || true
 
+# L'environnement global : sans cela, l'écran de connexion s'affiche en anglais.
+# Il démarre avant qu'une session n'ait lu /etc/default/locale.
+cat > /etc/environment <<'EOF'
+LANG=fr_FR.UTF-8
+LC_ALL=fr_FR.UTF-8
+EOF
+
 echo "--- grenOS : l'ecran de chargement ---"
 
 # Plymouth, thème « spinner » : notre fond, notre nom monté haut sur l'écran,
@@ -97,17 +130,35 @@ Type=Application
 Name=$2
 Comment=$3
 Exec=grenos-$1
-Icon=preferences-system
+Icon=$4
 Terminal=false
 Categories=System;Settings;
 EOF
 }
 
-ecrire_entree bienvenue "Bienvenue" "Ce que l'on peut faire, tout de suite"
-ecrire_entree parametres "Réglages" "Le compte, l'écran, l'apparence, les mises à jour"
-ecrire_entree magasin "Magasin" "Ajouter des applications en un clic"
-ecrire_entree maj "Mettre à jour grenOS" "Les nouveautés et les correctifs de sécurité"
-ecrire_entree theme "Jour et nuit" "Changer la lumière du bureau"
+ecrire_entree bienvenue "Bienvenue" "Ce que l'on peut faire, tout de suite" "user-home"
+ecrire_entree parametres "Réglages" "L'apparence, l'écran, le son, le compte, les mises à jour" "preferences-system"
+ecrire_entree maj "Mettre à jour grenOS" "Les nouveautés et les correctifs de sécurité" "system-software-update"
+ecrire_entree theme "Jour et nuit" "Changer la lumière du bureau" "weather-clear-night"
+
+# GrenPlace ne suit pas le nommage grenos-* : c'est une marque, pas un outil.
+cat > /usr/share/applications/grenplace.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=GrenPlace
+Comment=Ajouter des applications en un clic, Steam compris
+Exec=grenplace
+Icon=system-software-install
+Terminal=false
+Categories=System;PackageManager;
+EOF
+
+# Ce qu'on trouve sur le bureau au premier démarrage : de quoi commencer.
+for raccourci in grenos-bienvenue grenplace; do
+    if [ -f "/usr/share/applications/${raccourci}.desktop" ]; then
+        install -m 0755 "/usr/share/applications/${raccourci}.desktop" /etc/skel/Bureau/
+    fi
+done
 
 cat > /usr/share/applications/grenos-installer.desktop <<'EOF'
 [Desktop Entry]
