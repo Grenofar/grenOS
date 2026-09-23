@@ -49,6 +49,9 @@ install -m 0644 "$DEDANS/etc/xdg/openbox/rc.xml" "$BUILD/etc/xdg/openbox/"
 # Les fonds d'écran, calculés ici comme à la construction de l'image.
 python3 "$HERE/tools/wallpaper.py" "$BUILD/usr/share/grenos" 2560 1440
 
+# Le catalogue de secours de GrenPlace : celui du réseau l'emporte toujours.
+install -m 0644 "$HERE/data/catalogue.json" "$BUILD/usr/share/grenos/catalogue.json"
+
 SIZE=$(du -ks "$BUILD" | cut -f1)
 cat > "$BUILD/DEBIAN/control" <<EOF
 Package: grenos-desktop

@@ -19,8 +19,14 @@ apt-get install -y -qq --no-install-recommends \
     grub-efi-amd64-bin grub-pc-bin mtools dosfstools ca-certificates \
     python3 python3-numpy imagemagick fonts-noto-core >/dev/null
 
-echo "--- fonds d'écran et logo ---"
+echo "--- catalogue du magasin ---"
 mkdir -p config/includes.chroot/usr/share/grenos
+# GrenPlace demande son catalogue à notre backend ; cette copie n'est là que
+# pour le premier lancement et pour les machines sans réseau.
+cp data/catalogue.json config/includes.chroot/usr/share/grenos/catalogue.json
+python3 -c "import json,sys; d=json.load(open('data/catalogue.json')); print(len(d['applications']), 'applications')"
+
+echo "--- fonds d'écran et logo ---"
 python3 tools/wallpaper.py config/includes.chroot/usr/share/grenos 2560 1440
 # Le logo : le nom, dans la police du système, sur fond transparent. Il sert à
 # l'écran de démarrage et à l'accueil.

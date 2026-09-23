@@ -102,6 +102,16 @@ jobs:
 
       # Le paquet grenos-desktop et le dépôt APT : c'est par là que grenOS se
       # met à jour depuis grenOS, en plus des correctifs Debian.
+      # Le catalogue de GrenPlace vit dans notre backend, pas dans l'image :
+      # ajouter une application ne demande ni nouvelle image ni mise a jour du
+      # systeme. On le republie a chaque construction, c'est idempotent.
+      - name: Le catalogue du magasin
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python3 linux/tools/publier-catalogue.py
+
       - name: Le paquet et le depot APT de grenOS
         id: apt
         if: steps.key.outputs.ready == 'true'

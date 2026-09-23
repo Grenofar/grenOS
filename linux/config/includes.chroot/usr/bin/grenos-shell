@@ -34,6 +34,13 @@ HAUTEUR = 52
 MENU_LARGEUR = 520
 MENU_HAUTEUR = 580
 
+# Les jours et les mois, écrits ici. `strftime` suit la locale du système, et
+# une locale absente ou mal chargée donnait « Wed 23 Sep » sur un bureau
+# entièrement en français. Une horloge n'a pas à dépendre de cela.
+JOURS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
+MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin",
+        "juil.", "août", "sept.", "oct.", "nov.", "déc."]
+
 # Ce qu'on ouvre tous les jours, à portée de clic, avec l'icône du système.
 # Chaque icône a plusieurs noms possibles : les thèmes ne fournissent pas tous
 # les mêmes, et une image manquante laissait un bouton muet.
@@ -451,7 +458,12 @@ class Panneau(Gtk.Window):
                        check=False)
 
     def tic(self):
-        self.horloge.set_text(time.strftime("%H:%M  ·  %a %d %b"))
+        maintenant = time.localtime()
+        jour = JOURS[maintenant.tm_wday]
+        mois = MOIS[maintenant.tm_mon - 1]
+        self.horloge.set_text(
+            f"{maintenant.tm_hour:02d}:{maintenant.tm_min:02d}  ·  "
+            f"{jour} {maintenant.tm_mday} {mois}")
         return True
 
     def fenetres(self):
@@ -488,13 +500,14 @@ class Panneau(Gtk.Window):
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    # Sans cette ligne, l'horloge affiche « Wed 23 Sep » : Python garde la
-    # locale « C » tant qu'on ne lui dit pas d'écouter l'environnement, même
-    # quand tout le reste du système est en français.
-    try:
-        locale.setlocale(locale.LC_ALL, "")
-    except locale.Error:
-        pass
+    # Le reste de l'interface suit la langue du système quand elle est
+    # disponible ; l'horloge, elle, n'en dépend plus (voir JOURS et MOIS).
+    for essai in ("", "fr_FR.UTF-8", "fr_FR.utf8"):
+        try:
+            locale.setlocale(locale.LC_ALL, essai)
+            break
+        except locale.Error:
+            continue
     style = grenosui.habiller()
     propre = Gtk.CssProvider()
 
