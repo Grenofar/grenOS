@@ -100,6 +100,37 @@ def memoire_utilisee():
     return valeurs.get("MemTotal", 0) - valeurs.get("MemAvailable", 0)
 
 
+# Ce qui exécute le programme de quelqu'un d'autre. Voir « python3 » quatre
+# fois dans la liste n'apprend rien : ce sont nos propres applications, et
+# c'est leur nom qu'il faut lire.
+INTERPRETES = {"python", "python3", "sh", "bash", "dash", "perl", "ruby",
+               "node", "nodejs", "wish", "tclsh", "env"}
+
+
+def nom_lisible(mots):
+    """Le nom à montrer pour une ligne de commande, ou rien si elle est vide.
+
+    `cmdline[0]` est l'interprète quand il y en a un — c'est pourquoi la barre,
+    le bureau, le magasin et le gestionnaire s'affichaient tous les quatre
+    comme « python3 ». On saute l'interprète et ses options, et on prend le
+    programme qui vient après.
+    """
+    if not mots:
+        return ""
+    nom = os.path.basename(mots[0])
+    if nom not in INTERPRETES:
+        return nom if not nom.startswith("-") else ""
+    for mot in mots[1:]:
+        if mot.startswith("-"):
+            continue
+        suivant = os.path.basename(mot)
+        # `env python3 grenplace` : on saute l'interprète une seconde fois.
+        if suivant in INTERPRETES:
+            continue
+        return suivant
+    return nom
+
+
 def processus():
     """Tout ce qui tourne : pid, nom, temps consommé, mémoire, propriétaire."""
     trouves = {}
@@ -131,11 +162,11 @@ def processus():
         # Le nom complet est plus parlant que les quinze caractères de /proc.
         try:
             with open(f"/proc/{pid}/cmdline", "rb") as fichier:
-                ligne = fichier.read().split(b"\x00")
-            if ligne and ligne[0]:
-                candidat = os.path.basename(ligne[0].decode("utf-8", "replace"))
-                if candidat and not candidat.startswith("-"):
-                    nom = candidat
+                mots = [m.decode("utf-8", "replace")
+                        for m in fichier.read().split(b"\x00") if m]
+            candidat = nom_lisible(mots)
+            if candidat:
+                nom = candidat
         except OSError:
             pass
 
