@@ -58,6 +58,19 @@ else
     dire "maj: grenos-desktop n'est pas installe, apt n'aura rien a mettre a jour"
 fi
 
+# ---- Y a-t-il un disque ou s'installer ? ------------------------------------
+#
+# L'installateur ne peut rien proposer si le systeme ne voit aucun disque, et
+# c'est une panne qu'on decouvrirait au pire moment : devant l'ecran de
+# Calamares, sur la machine de quelqu'un. Le dire ici coute une ligne.
+disques=$(lsblk -dn -o NAME,SIZE,TYPE 2>/dev/null \
+          | awk '$3 == "disk" { printf "%s %s ", $1, $2 }')
+if [ -n "$disques" ]; then
+    dire "disques : $disques"
+else
+    dire "disques : aucun, l'installateur n'aurait rien a proposer"
+fi
+
 vu_session=0
 i=0
 # Un quart d'heure, et pas davantage. La machine d'integration a rendu son
