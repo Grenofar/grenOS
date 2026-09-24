@@ -18,16 +18,20 @@ Ce qu'on vérifie, et pourquoi :
   - le partitionnement propose tout le disque et laisse le choix manuel,
     ce que Grenofar a demandé en toutes lettres.
 
-Ce contrôle empêche une publication, donc il ne doit pas se tromper. Vérifié
-avant de le brancher, en ouvrant les deux paquets : les 30 modules distincts
-de la suite sont tous fournis — 24 par `calamares` 3.3.14-1, 6 par
-`calamares-settings-debian` 13.0.13-1. Aucun faux positif possible sur une
-installation correcte.
+Ce contrôle empêche une publication, donc il ne doit pas se tromper — et ma
+première version se trompait. Elle ne cherchait que dans
+`/usr/lib/calamares/modules`, et déclarait vingt-quatre modules manquants sur
+une installation parfaitement saine : le paquet `calamares` 3.3.14-1 range
+les siens dans le dossier multiarch `/usr/lib/x86_64-linux-gnu/calamares/
+modules`, et seuls les six de `calamares-settings-debian` 13.0.13-1 sont dans
+l'autre. Vérifié en ouvrant les deux paquets, après que la construction
+`36071774449` l'eut refusé.
 
     python3 linux/tools/verif-installateur.py [racine]
 
 `racine` sert aux essais : par défaut, c'est le système lui-même.
 """
+import glob
 import os
 import re
 import sys
@@ -75,9 +79,22 @@ def verifier(racine=""):
     modules = modules_de_la_suite(texte)
     if not modules:
         fautes.append("aucun module dans la suite : settings.conf est illisible")
-    manquants = [nom for nom in modules
-                 if not os.path.exists(chemin("usr", "lib", "calamares", "modules",
-                                              nom, "module.desc"))]
+
+    # Deux dossiers, et pas un seul : `calamares-settings-debian` pose ses six
+    # modules dans /usr/lib/calamares/modules, et le paquet `calamares`
+    # lui-même met les siens dans le dossier multiarch
+    # /usr/lib/x86_64-linux-gnu/calamares/modules. Ma première version ne
+    # regardait que le premier et déclarait vingt-quatre modules manquants sur
+    # une installation parfaitement saine. Le motif évite de coder le nom de
+    # l'architecture, qui changerait sur une autre machine.
+    dossiers = [chemin("usr", "lib", "calamares", "modules")]
+    dossiers += sorted(glob.glob(chemin("usr", "lib", "*", "calamares", "modules")))
+
+    def present(nom):
+        return any(os.path.exists(os.path.join(dossier, nom, "module.desc"))
+                   for dossier in dossiers)
+
+    manquants = [nom for nom in modules if not present(nom)]
     print(f"modules de la suite : {len(modules) - len(manquants)}/{len(modules)} presents")
     if manquants:
         fautes.append("ces modules manquent, Calamares s'arreterait au lancement : "
