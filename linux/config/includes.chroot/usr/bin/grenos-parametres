@@ -603,6 +603,11 @@ def main():
     grenosui.habiller()
     fenetre = Reglages(page)
     fenetre.show_all()
+    # Les Réglages sont la porte des mises à jour et du son, et la machine
+    # d'intégration ne les avait jamais ouverts : ils auraient pu ne plus
+    # démarrer du tout sans qu'une seule étape ne rougisse. Huit pages
+    # construites, c'est huit occasions qu'une exception passe inaperçue.
+    grenosui.dire("reglages ouvert, %d pages" % len(fenetre.pages.get_children()))
     Gtk.main()
 
 

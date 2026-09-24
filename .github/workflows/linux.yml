@@ -400,7 +400,23 @@ jobs:
             echo "magasin: il ne s est pas annonce (test non bloquant, a affiner)"
           fi
 
-          grep -a 'grenos:' "$RUNNER_TEMP/serial.log" | tail -n 20 || true
+          echo "--- les reglages s ouvrent-ils ---"
+          # C'est la porte des mises a jour, du son et du mot de passe, et
+          # personne ne l'avait jamais ouverte ici. Huit pages construites,
+          # c'est huit occasions qu'une exception passe inapercue.
+          #
+          # Meta+I, comme sous Windows : le raccourci existe deja dans
+          # openbox, on ne l'invente pas pour le test.
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey meta_l-i" || true
+          sleep 18
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-reglages.ppm" || true
+          if grep -aq 'reglages ouvert' "$RUNNER_TEMP/serial.log"; then
+            grep -a 'reglages ouvert' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+          else
+            echo "reglages: ils ne se sont pas annonces (test non bloquant, a affiner)"
+          fi
+
+          grep -a 'grenos:' "$RUNNER_TEMP/serial.log" | tail -n 24 || true
 
           if ! cp "$RUNNER_TEMP/ecran-5min.ppm" "$RUNNER_TEMP/final.ppm" 2>/dev/null; then
             python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/final.ppm" || true

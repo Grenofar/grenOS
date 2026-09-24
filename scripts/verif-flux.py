@@ -66,7 +66,13 @@ def verifier(chemin):
     texte = io.open(chemin, encoding="utf-8", newline="").read()
     fautes = []
 
-    for numero, ligne in enumerate(texte.split("\n"), 1):
+    # Un fichier entièrement en CRLF n'est pas un défaut : `.gitattributes`
+    # normalise, et le runner reçoit du LF. Ce qui casse, c'est un retour
+    # chariot **isolé** au milieu d'une ligne — celui qu'une réécriture laisse
+    # tomber, et qui coupe le YAML en deux. On ne regarde donc que ceux-là.
+    sans_crlf = texte.replace("\r\n", "\n")
+
+    for numero, ligne in enumerate(sans_crlf.split("\n"), 1):
         nu = ligne.strip()
         if BARRE_N in ligne:
             fautes.append((numero, "un « n » precede d'une barre oblique inverse"))
@@ -80,6 +86,7 @@ def verifier(chemin):
 
     # Le YAML se lit-il encore ? PyYAML n'est pas garanti partout : son absence
     # ne doit pas faire échouer le contrôle pour une mauvaise raison.
+    texte = sans_crlf
     try:
         import yaml
     except ImportError:
