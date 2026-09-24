@@ -252,6 +252,57 @@ def marque(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def connexions(chemin, taille):
+    """Les connexions : les arcs du Wi-Fi, et le point d'ou ils partent.
+
+    La page Connexions portait `network-wireless`, que le theme ne rend pas
+    toujours : on voyait une petite silhouette grise, qui ne dit rien. Trois
+    arcs et un point se reconnaissent partout, et a seize pixels.
+    """
+    image, u, v = toile(taille)
+
+    # Le point d'emission, en bas au centre.
+    source = np.clip((0.075 - np.hypot(u - 0.5, v - 0.78)) / 0.014, 0.0, 1.0)
+
+    rayon = np.hypot(u - 0.5, v - 0.78)
+    vers_le_haut = v < 0.74
+    # Des arcs epais : a seize pixels, un trait fin disparait purement et
+    # simplement. Regarde a taille reelle avant de fixer ces chiffres.
+    for i, (distance, epaisseur) in enumerate(((0.22, 0.090), (0.39, 0.100),
+                                               (0.56, 0.110))):
+        arc = (np.clip((epaisseur / 2 - np.abs(rayon - distance)) / 0.016, 0.0, 1.0)
+               * vers_le_haut)
+        # Du bleu vers le violet en montant : la meme famille que le reste.
+        melange = i / 2.0
+        couleur = tuple(ACCENT[c] * (1 - melange) + SECOND[c] * melange for c in range(3))
+        poser(image, arc, couleur, 1.0)
+
+    poser(image, source, CLAIR, 1.0)
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
+def taches(chemin, taille):
+    """Le gestionnaire de taches : trois barres, comme ce qu'il montre.
+
+    Il portait `utilities-system-monitor`, absent du theme : la liste
+    affichait un losange generique, le meme que n'importe quel programme
+    inconnu. Des barres de hauteurs differentes disent tout de suite de quoi
+    il s'agit.
+    """
+    image, u, v = toile(taille)
+
+    for x0, hauteur, melange in ((0.20, 0.42, 0.0), (0.42, 0.66, 0.5), (0.64, 0.86, 1.0)):
+        barre = rectangle(u, v, x0, 0.88 - hauteur, x0 + 0.16, 0.88, rayon=0.045)
+        couleur = tuple(ACCENT[c] * (1 - melange) + SECOND[c] * melange for c in range(3))
+        poser(image, barre, couleur, 1.0)
+
+    # Le socle : sans lui, les barres flottent.
+    socle = rectangle(u, v, 0.14, 0.885, 0.86, 0.925, rayon=0.02)
+    poser(image, socle, CLAIR, 0.85)
+
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
@@ -264,6 +315,8 @@ def main():
     son(os.path.join(dossier, 'grenos-son-muet.png'), taille, niveau=0)
     nuage(os.path.join(dossier, 'grenos-nuage.png'), taille)
     manette(os.path.join(dossier, 'grenos-jeux.png'), taille)
+    connexions(os.path.join(dossier, 'grenos-connexions.png'), taille)
+    taches(os.path.join(dossier, 'grenos-taches.png'), taille)
 
 
 if __name__ == '__main__':

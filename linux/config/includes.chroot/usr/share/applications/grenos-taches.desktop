@@ -3,6 +3,6 @@ Type=Application
 Name=Gestionnaire de tâches
 Comment=Ce qui tourne, et ce que ça consomme
 Exec=grenos-taches
-Icon=utilities-system-monitor
+Icon=grenos-taches
 Terminal=false
 Categories=System;

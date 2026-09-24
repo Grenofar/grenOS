@@ -3,6 +3,6 @@ Type=Application
 Name=Connexions
 Comment=Wi-Fi et Bluetooth
 Exec=grenos-connexions
-Icon=network-wireless
+Icon=grenos-connexions
 Terminal=false
 Categories=System;Settings;
