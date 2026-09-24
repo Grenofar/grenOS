@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=grenOS Magasin
+Comment=Ouvrir le magasin grenOS
+Exec=xdg-open file:///usr/share/grenos/magasin.html
+Icon=web-browser
+Terminal=false
+Type=Application
+Categories=Utility;
