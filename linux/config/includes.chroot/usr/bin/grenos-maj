@@ -6,15 +6,10 @@ Ce que ça ne fait pas, volontairement : afficher un mur de texte noir. Une
 barre qui avance, une phrase qui dit où l'on en est, et le détail complet
 derrière un bouton pour qui veut le lire.
 
-Le travail tourne dans un fil séparé : sans cela, la fenêtre se figerait
-pendant les minutes du téléchargement, et une fenêtre figée passe pour un
-plantage.
+Le travail lui-même est dans `/usr/lib/grenos/maj.py`, partagé avec la page
+Mises à jour des Réglages : une seule façon de mettre à jour la machine.
 """
-import os
-import re
-import subprocess
 import sys
-import threading
 
 sys.path.insert(0, "/usr/lib/grenos")
 
@@ -24,22 +19,15 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 import grenosui  # noqa: E402
-
-
-def lanceur():
-    """sudo quand il ne demande rien, pkexec sinon."""
-    if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode == 0:
-        return ["sudo", "-n"]
-    return ["pkexec"]
+import maj  # noqa: E402
 
 
 class Maj(Gtk.Window):
     def __init__(self):
         super().__init__(title="Mise à jour de grenOS")
-        self.set_default_size(680, 420)
+        self.set_default_size(680, 430)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
-        self.travail = None
 
         colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         colonne.set_border_width(26)
@@ -53,11 +41,7 @@ class Maj(Gtk.Window):
 
         self.etat = Gtk.Label(label="Prêt.", xalign=0)
         self.barre = Gtk.ProgressBar()
-        self.barre.set_show_text(False)
-
         self.bouton = grenosui.bouton("Vérifier et installer", self.demarrer, "principal")
-        boutons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        boutons.pack_start(self.bouton, False, False, 0)
 
         self.details = Gtk.Expander(label="Voir le détail")
         vue = Gtk.ScrolledWindow()
@@ -69,15 +53,13 @@ class Maj(Gtk.Window):
         vue.add(self.texte)
         self.details.add(vue)
 
-        colonne.pack_start(grenosui.carte(self.etat, self.barre, boutons), False, False, 0)
+        colonne.pack_start(grenosui.carte(self.etat, self.barre, self.bouton), False, False, 0)
         colonne.pack_start(self.details, True, True, 0)
 
-    # ---- L'affichage -------------------------------------------------------
-    def dire(self, texte):
-        GLib.idle_add(self.etat.set_text, texte)
-
-    def avancer(self, part):
-        GLib.idle_add(self.barre.set_fraction, min(max(part, 0.0), 1.0))
+        self.travail = maj.Travail(
+            lambda t: GLib.idle_add(self.etat.set_text, t),
+            lambda p: GLib.idle_add(self.barre.set_fraction, min(max(p, 0.0), 1.0)),
+            self.journal, self.fini)
 
     def journal(self, ligne):
         def ajouter():
@@ -86,76 +68,20 @@ class Maj(Gtk.Window):
             return False
         GLib.idle_add(ajouter)
 
-    # ---- Le travail --------------------------------------------------------
     def demarrer(self):
-        if self.travail is not None and self.travail.is_alive():
-            return
-        self.bouton.set_sensitive(False)
-        self.bouton.set_label("En cours…")
-        self.travail = threading.Thread(target=self.tout_faire, daemon=True)
-        self.travail.start()
-
-    def courir(self, commande, sur_ligne=None):
-        """Lance une commande en root et rapporte chaque ligne au fur et à mesure."""
-        processus = subprocess.Popen(
-            lanceur() + commande, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
-        for ligne in processus.stdout:
-            ligne = ligne.rstrip()
-            if ligne:
-                self.journal(ligne)
-                if sur_ligne is not None:
-                    sur_ligne(ligne)
-        processus.wait()
-        return processus.returncode
-
-    def tout_faire(self):
-        self.dire("Lecture des dépôts…")
-        self.avancer(0.05)
-        if self.courir(["apt-get", "update"]) != 0:
-            return self.fini("Les dépôts n'ont pas pu être lus. Vérifie le réseau.", False)
-
-        self.dire("Ce qui va changer…")
-        self.avancer(0.25)
-        simulation = subprocess.run(
-            lanceur() + ["apt-get", "-s", "upgrade"], capture_output=True, text=True).stdout
-        a_faire = [l for l in simulation.splitlines() if l.startswith("Inst ")]
-        total = len(a_faire)
-        for ligne in a_faire:
-            self.journal(ligne)
-
-        if total == 0:
-            self.avancer(1.0)
-            return self.fini("Tout est déjà à jour.", True)
-
-        self.dire(f"{total} paquet{'s' if total > 1 else ''} à installer…")
-        faits = [0]
-
-        def suivre(ligne):
-            # apt annonce chaque paquet qu'il déballe et qu'il installe : c'est
-            # la seule mesure honnête de l'avancement.
-            if re.match(r"^(Unpacking|Dépaquetage|Setting up|Paramétrage)", ligne):
-                faits[0] += 1
-                self.avancer(0.3 + 0.65 * min(faits[0] / (total * 2), 1.0))
-
-        code = self.courir(["apt-get", "-y", "upgrade"], suivre)
-        self.avancer(1.0)
-        if code != 0:
-            return self.fini("L'installation s'est arrêtée. Le détail est ci-dessous.", False)
-        return self.fini(f"{total} paquet{'s' if total > 1 else ''} installé"
-                         f"{'s' if total > 1 else ''}. C'est à jour.", True)
+        if self.travail.demarrer():
+            self.bouton.set_sensitive(False)
+            self.bouton.get_child().get_children()[-1].set_text("En cours…")
 
     def fini(self, message, bien):
-        self.dire(message)
-
         def remettre():
+            self.etat.set_text(message)
             self.bouton.set_sensitive(True)
-            self.bouton.set_label("Vérifier et installer")
+            self.bouton.get_child().get_children()[-1].set_text("Vérifier et installer")
             if not bien:
                 self.details.set_expanded(True)
             return False
         GLib.idle_add(remettre)
-        return bien
 
 
 def main():

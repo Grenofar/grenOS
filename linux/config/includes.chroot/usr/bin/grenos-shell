@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """La barre des tâches de grenOS, et son menu.
 
-La disposition est celle que tout le monde connaît : les icônes au centre, le
-bouton grenOS devant, l'heure à droite. Des icônes, pas des mots — une barre
-pleine de texte se lit mal et se remplit vite.
+Une icône par application, et une seule : si une application épinglée est
+ouverte, c'est son icône qui porte l'indicateur — pas un second bouton à côté.
+Un trait arrondi apparaît sous elle, vif quand la fenêtre est au premier plan,
+éteint quand elle est réduite, absent quand elle est fermée. C'est ce que fait
+Windows, et cela se lit sans y penser.
 
-Ce qui s'y trouve appartient à la personne : clic droit sur une icône pour la
-retirer, clic droit dans le menu pour l'épingler ou la poser sur le bureau. Ces
-choix vivent dans `~/.config/grenos/barre.json` et survivent au redémarrage.
+Les icônes sont celles des applications elles-mêmes, retrouvées par leur classe
+de fenêtre dans les fichiers .desktop du système : sans cela, chaque fenêtre
+affiche le cahier blanc générique de GTK.
 
-Rien n'est composé par la carte graphique : une barre, un menu, des fenêtres.
-C'est ce qui garde le pointeur fluide sur une machine sans accélération 3D.
+Ce qui se trouve dans la barre appartient à la personne : clic droit pour
+épingler ou retirer, glisser une application du menu vers le bureau pour l'y
+poser. Ces choix vivent dans `~/.config/grenos/barre.json`.
 """
 import json
 import os
@@ -35,21 +38,23 @@ MENU_LARGEUR = 640
 MENU_HAUTEUR = 640
 BARRE = os.path.join(grenosui.REGLAGES, "barre.json")
 
-# Ce qui est épinglé quand personne n'a encore rien choisi.
 EPINGLES_PAR_DEFAUT = [
-    {"nom": "Fichiers", "commande": "pcmanfm",
-     "icone": ["system-file-manager", "folder", "inode-directory"]},
-    {"nom": "Web", "commande": "firefox-esr",
-     "icone": ["firefox-esr", "firefox", "web-browser"]},
-    {"nom": "Terminal", "commande": "x-terminal-emulator",
-     "icone": ["utilities-terminal", "terminal"]},
-    {"nom": "GrenPlace", "commande": "grenplace",
-     "icone": ["system-software-install", "software-store"]},
+    {"nom": "Fichiers", "commande": "pcmanfm", "icone": "grenos-fichiers"},
+    {"nom": "Web", "commande": "firefox-esr", "icone": "firefox-esr"},
+    {"nom": "Terminal", "commande": "x-terminal-emulator", "icone": "utilities-terminal"},
+    {"nom": "GrenPlace", "commande": "grenplace", "icone": "grenplace"},
 ]
 
-# Les jours et les mois, écrits ici. `strftime` suit la locale du système, et
-# une locale absente ou mal chargée donnait « Wed 23 Sep » sur un bureau
-# entièrement en français. Une horloge n'a pas à dépendre de cela.
+# Ce que personne ne cherche dans une liste d'applications : des réglages qui
+# ont leur place dans les Réglages, et des outils qu'on ouvre par un autre
+# chemin. Ils restent accessibles en tapant leur nom dans la recherche.
+HORS_LISTE = {
+    "pavucontrol", "nm-connection-editor", "galculator", "calamares",
+    "grenos-installer", "grenos-theme", "grenos-maj", "xfce4-terminal-settings",
+    "xfce4-settings-manager", "vim", "gvim", "xarchiver", "debian-installer",
+    "qvidcap", "qdbusviewer", "lstopo", "assistant", "designer", "linguist",
+}
+
 JOURS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
 MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin",
         "juil.", "août", "sept.", "oct.", "nov.", "déc."]
@@ -66,53 +71,61 @@ STYLE = """
     background-image: none;
     border: 1px solid transparent;
     border-radius: 10px;
-    padding: 4px 10px;
-    margin: 5px 2px;
+    padding: 2px 10px;
+    margin: 3px 2px;
     box-shadow: none;
     text-shadow: none;
-    transition: background-color 120ms ease, border-color 120ms ease;
+    transition: background-color 130ms ease, border-color 130ms ease;
 }
 #panneau button:hover { background-color: @survol; border-color: @bord; }
 
-#bouton-menu {
-    font-weight: 700;
-    padding-left: 14px;
-    padding-right: 14px;
-}
+#bouton-menu { font-weight: 700; padding-left: 14px; padding-right: 14px; }
 #bouton-menu:checked {
     background-image: linear-gradient(to bottom, @accent-clair, @accent);
     color: #ffffff;
     border-color: @accent-sombre;
 }
 
-/* Une fenêtre ouverte porte un trait sous son icône ; celle du dessus a le
-   trait plein. C'est ce que fait Windows, et cela se lit sans y penser. */
-.tache { box-shadow: inset 0 -2px 0 alpha(@accent, 0.45); }
-.tache-active {
-    background-color: @fond-creux;
-    box-shadow: inset 0 -3px 0 @accent;
+/* Le trait sous une application ouverte. Sa couleur et sa transparence
+   changent seules, par transition : c'est ce qui rend l'apparition douce
+   sans rien coûter au processeur. */
+.trait {
+    background-color: transparent;
+    border-radius: 999px;
+    min-height: 3px;
+    margin: 0 14px 3px 14px;
+    transition: background-color 220ms ease, opacity 220ms ease, margin 220ms ease;
+    opacity: 0;
+}
+.trait-ouverte {
+    background-color: alpha(@accent, 0.55);
+    opacity: 1;
+    margin: 0 16px 3px 16px;
+}
+.trait-active {
+    background-color: @accent-clair;
+    opacity: 1;
+    margin: 0 9px 3px 9px;
+}
+.trait-reduite {
+    background-color: alpha(@accent, 0.30);
+    opacity: 1;
+    margin: 0 19px 3px 19px;
 }
 
-#horloge {
-    color: @texte;
-    font-size: 12.5px;
-    padding: 0 14px;
-}
+#horloge { color: @texte; font-size: 12.5px; padding: 0 14px; }
 
 #menu {
     background-color: @fond;
     border: 1px solid @bord-clair;
     border-radius: 14px;
 }
-
 #recherche-menu { margin: 16px 16px 6px; }
-
 #pied-menu {
     background-color: @fond-haut;
     border-top: 1px solid @bord;
     padding: 12px 16px;
 }
-
 .titre-section {
     font-size: 11px;
     font-weight: 800;
@@ -120,7 +133,6 @@ STYLE = """
     color: @texte-faible;
     padding: 10px 18px 4px;
 }
-
 .epingle {
     background-color: transparent;
     background-image: none;
@@ -131,7 +143,6 @@ STYLE = """
 }
 .epingle:hover { background-color: @survol; border-color: @bord; }
 .epingle label { font-size: 12px; }
-
 .entree {
     background-color: transparent;
     background-image: none;
@@ -145,25 +156,8 @@ STYLE = """
 
 
 # ---- Les applications du système -------------------------------------------
-def applications():
-    """Les applications du système, lues dans les fichiers .desktop."""
-    trouvees = {}
-    for dossier in ("/usr/share/applications", "/usr/local/share/applications",
-                    os.path.expanduser("~/.local/share/applications"),
-                    "/var/lib/flatpak/exports/share/applications",
-                    os.path.expanduser("~/.local/share/flatpak/exports/share/applications")):
-        if not os.path.isdir(dossier):
-            continue
-        for nom in sorted(os.listdir(dossier)):
-            if nom.endswith(".desktop"):
-                entree = lire_desktop(os.path.join(dossier, nom))
-                if entree:
-                    trouvees[nom] = entree
-    return sorted(trouvees.values(), key=lambda e: e["nom"].lower())
-
-
 def lire_desktop(chemin):
-    """Le nom, la description, l'icône et la commande d'un fichier .desktop."""
+    """Ce qu'un fichier .desktop dit d'une application."""
     champs, section = {}, None
     try:
         with open(chemin, encoding="utf-8", errors="replace") as fichier:
@@ -183,26 +177,41 @@ def lire_desktop(chemin):
     nom, commande = champs.get("Name[fr]") or champs.get("Name"), champs.get("Exec")
     if not nom or not commande:
         return None
-    # %f, %u et consorts servent à passer un fichier : sans fichier à passer,
-    # ils n'ont rien à faire dans la commande.
     for code in ("%f", "%F", "%u", "%U", "%i", "%c", "%k"):
         commande = commande.replace(code, "")
+    commande = commande.strip()
     return {
         "nom": nom,
         "note": champs.get("Comment[fr]") or champs.get("Comment") or "",
-        "commande": commande.strip(),
+        "commande": commande,
         "icone": champs.get("Icon", ""),
+        "classe": (champs.get("StartupWMClass", "")
+                   or os.path.basename(commande.split()[0] if commande else "")),
         "fichier": chemin,
+        "cache": os.path.splitext(os.path.basename(chemin))[0] in HORS_LISTE,
         "terminal": champs.get("Terminal", "").lower() == "true",
     }
 
 
-def image_de(noms, taille=26):
-    """La première icône trouvée parmi plusieurs noms possibles, ou rien.
+def applications():
+    """Toutes les applications du système, celles qu'on montre en premier."""
+    trouvees = {}
+    for dossier in ("/usr/share/applications", "/usr/local/share/applications",
+                    os.path.expanduser("~/.local/share/applications"),
+                    "/var/lib/flatpak/exports/share/applications",
+                    os.path.expanduser("~/.local/share/flatpak/exports/share/applications")):
+        if not os.path.isdir(dossier):
+            continue
+        for nom in sorted(os.listdir(dossier)):
+            if nom.endswith(".desktop"):
+                entree = lire_desktop(os.path.join(dossier, nom))
+                if entree:
+                    trouvees[nom] = entree
+    return sorted(trouvees.values(), key=lambda e: e["nom"].lower())
 
-    Les thèmes ne portent pas tous les mêmes noms, et un nom absent laissait un
-    bouton vide au milieu de la barre.
-    """
+
+def image_de(noms, taille=26):
+    """La première icône trouvée parmi plusieurs noms possibles."""
     if not noms:
         return None
     if isinstance(noms, str):
@@ -213,20 +222,15 @@ def image_de(noms, taille=26):
             continue
         try:
             if os.path.isabs(nom) and os.path.exists(nom):
-                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(nom, taille, taille, True)
-            else:
-                pixbuf = theme.load_icon(nom, taille, Gtk.IconLookupFlags.FORCE_SIZE)
-            return Gtk.Image.new_from_pixbuf(pixbuf)
+                return Gtk.Image.new_from_pixbuf(
+                    GdkPixbuf.Pixbuf.new_from_file_at_scale(nom, taille, taille, True))
+            return Gtk.Image.new_from_pixbuf(
+                theme.load_icon(nom, taille, Gtk.IconLookupFlags.FORCE_SIZE))
         except GLib.Error:
             continue
-    try:
-        return Gtk.Image.new_from_pixbuf(
-            theme.load_icon("application-x-executable", taille, Gtk.IconLookupFlags.FORCE_SIZE))
-    except GLib.Error:
-        return None
+    return None
 
 
-# ---- Ce que la personne a épinglé ------------------------------------------
 def lire_epingles():
     try:
         with open(BARRE, encoding="utf-8") as fichier:
@@ -242,6 +246,33 @@ def ecrire_epingles(epingles):
     os.makedirs(grenosui.REGLAGES, exist_ok=True)
     with open(BARRE, "w", encoding="utf-8") as fichier:
         json.dump(epingles, fichier, ensure_ascii=False, indent=1)
+
+
+def meme_application(fenetre, commande, applications_connues):
+    """Cette fenêtre appartient-elle à cette application ?
+
+    On compare la classe de la fenêtre au nom du programme lancé. C'est
+    imparfait — Firefox se présente parfois sous « Navigator » — mais c'est ce
+    dont on dispose, et les fichiers .desktop donnent la correspondance quand
+    ils la déclarent (StartupWMClass).
+    """
+    programme = os.path.basename((commande or "").split()[0]) if commande else ""
+    if not programme:
+        return False
+    groupe = (fenetre.get_class_group_name() or "").lower()
+    instance = (fenetre.get_name() or "").lower()
+    candidats = {programme.lower()}
+    for application in applications_connues:
+        if application["commande"] == commande and application["classe"]:
+            candidats.add(application["classe"].lower())
+    for candidat in candidats:
+        if not candidat:
+            continue
+        if candidat in groupe or groupe in candidat:
+            return True
+        if candidat in instance:
+            return True
+    return False
 
 
 class Menu(Gtk.Window):
@@ -276,7 +307,6 @@ class Menu(Gtk.Window):
         self.contenu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         defilement.add(self.contenu)
 
-        # En bas : qui utilise la machine, et de quoi la régler ou l'éteindre.
         pied = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         pied.set_name("pied-menu")
         identite = grenosui.identite()
@@ -306,14 +336,13 @@ class Menu(Gtk.Window):
 
     def petit(self, texte, commande, icones):
         bouton = Gtk.Button()
-        image = image_de(icones, 18)
         contenu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
+        image = image_de(icones, 18)
         if image is not None:
             contenu.pack_start(image, False, False, 0)
         contenu.pack_start(Gtk.Label(label=texte), False, False, 0)
         bouton.add(contenu)
         bouton.get_style_context().add_class("discret")
-        bouton.set_tooltip_text(texte)
         bouton.connect("clicked", lambda _: (self.fermer(), grenosui.lancer(commande)))
         return bouton
 
@@ -324,7 +353,6 @@ class Menu(Gtk.Window):
         return False
 
     def clic(self, _widget, evenement):
-        """Un clic hors du menu le referme : c'est ce qu'attend n'importe qui."""
         largeur, hauteur = self.get_size()
         if not (0 <= evenement.x < largeur and 0 <= evenement.y < hauteur):
             self.fermer()
@@ -339,14 +367,15 @@ class Menu(Gtk.Window):
     def visibles(self):
         filtre = self.recherche.get_text().strip().lower()
         if not filtre:
-            return self.applications
+            # Sans recherche, on ne montre pas les réglages déguisés en
+            # applications : ils encombrent la liste et ont leur place ailleurs.
+            return [a for a in self.applications if not a["cache"]]
         return [a for a in self.applications
                 if filtre in a["nom"].lower() or filtre in a["note"].lower()]
 
     def remplir(self):
         for enfant in self.contenu.get_children():
             self.contenu.remove(enfant)
-
         cherche = bool(self.recherche.get_text().strip())
 
         if not cherche:
@@ -370,7 +399,6 @@ class Menu(Gtk.Window):
         self.contenu.show_all()
 
     def carreau(self, epingle):
-        """Une application épinglée : une grande icône et son nom dessous."""
         bouton = Gtk.Button()
         bouton.get_style_context().add_class("epingle")
         colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -393,23 +421,33 @@ class Menu(Gtk.Window):
         image = image_de(application["icone"], 24)
         if image is not None:
             ligne.pack_start(image, False, False, 0)
-        titre = Gtk.Label(label=application["nom"], xalign=0)
-        ligne.pack_start(titre, True, True, 0)
+        ligne.pack_start(Gtk.Label(label=application["nom"], xalign=0), True, True, 0)
         bouton.add(ligne)
         bouton.connect("clicked", lambda _: self.choisir(application))
         bouton.connect("button-press-event", self.menu_application, application)
+
+        # Glisser une application vers le bureau l'y pose : c'est le geste
+        # qu'on essaie d'instinct, et il ne marchait pas.
+        bouton.drag_source_set(Gdk.ModifierType.BUTTON1_MASK, [],
+                               Gdk.DragAction.COPY)
+        bouton.drag_source_add_uri_targets()
+        bouton.connect("drag-data-get", self.donner_uri, application)
+        bouton.connect("drag-begin", lambda w, c: self.fermer())
         return bouton
 
+    def donner_uri(self, _widget, _contexte, donnees, _info, _temps, application):
+        """Ce qu'on dépose : le fichier .desktop de l'application."""
+        chemin = application.get("fichier", "")
+        if chemin:
+            donnees.set_uris([GLib.filename_to_uri(chemin, None)])
+
     def menu_application(self, _widget, evenement, application):
-        """Clic droit : épingler à la barre, ou poser sur le bureau."""
         if evenement.button != 3:
             return False
         menu = Gtk.Menu()
-        gestes = [
-            ("Épingler à la barre des tâches", lambda: self.epingler(application)),
-            ("Ajouter au bureau", lambda: self.poser_sur_le_bureau(application)),
-        ]
-        for texte, action in gestes:
+        for texte, action in (
+                ("Épingler à la barre des tâches", lambda: self.epingler(application)),
+                ("Ajouter au bureau", lambda: poser_sur_le_bureau(application))):
             element = Gtk.MenuItem(label=texte)
             element.connect("activate", lambda _, a=action: a())
             menu.append(element)
@@ -418,32 +456,9 @@ class Menu(Gtk.Window):
         return True
 
     def epingler(self, application):
-        epingles = self.panneau.epingles
-        if any(e["commande"] == application["commande"] for e in epingles):
-            return
-        epingles.append({"nom": application["nom"], "commande": application["commande"],
-                         "icone": application["icone"]})
-        ecrire_epingles(epingles)
-        self.panneau.refaire_epingles()
+        self.panneau.epingler(application["nom"], application["commande"],
+                              application["icone"])
         self.remplir()
-
-    def poser_sur_le_bureau(self, application):
-        """Un raccourci sur le bureau : une copie du fichier .desktop."""
-        bureau = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP) \
-            or os.path.expanduser("~/Bureau")
-        os.makedirs(bureau, exist_ok=True)
-        source = application.get("fichier", "")
-        if not source or not os.path.exists(source):
-            return
-        cible = os.path.join(bureau, os.path.basename(source))
-        try:
-            with open(source, encoding="utf-8") as entree:
-                contenu = entree.read()
-            with open(cible, "w", encoding="utf-8") as sortie:
-                sortie.write(contenu)
-            os.chmod(cible, 0o755)
-        except OSError:
-            pass
 
     def premier(self):
         choix = self.visibles()
@@ -466,18 +481,11 @@ class Menu(Gtk.Window):
         self.recherche.grab_focus()
         self.panneau.enfoncer(True)
 
-        # Attraper le pointeur : sans cela, un clic sur le fond d'écran ou sur
-        # une autre fenêtre n'arriverait jamais jusqu'ici, et le menu resterait
-        # ouvert derrière ce qu'on vient d'ouvrir.
         siege = Gdk.Display.get_default().get_default_seat()
         if siege is not None and self.get_window() is not None:
             siege.grab(self.get_window(), Gdk.SeatCapabilities.ALL_POINTING, True,
                        None, None, None, None)
             self.attrape = siege
-
-        # Le dire au journal : une capture d'écran montre un bureau, elle ne
-        # prouve pas qu'il obéit. C'est cette ligne que lit la machine
-        # d'intégration pour savoir que le menu s'ouvre vraiment.
         grenosui.lancer(f"grenos-dire 'menu ouvert, {len(self.applications)} applications'")
 
     def fermer(self):
@@ -487,6 +495,113 @@ class Menu(Gtk.Window):
         self.hide()
         self.panneau.enfoncer(False)
         grenosui.lancer("grenos-dire 'menu ferme'")
+
+
+def poser_sur_le_bureau(application):
+    """Un raccourci sur le bureau : une copie du fichier .desktop."""
+    bureau = os.path.expanduser("~/Bureau")
+    if not os.path.isdir(bureau):
+        bureau = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP) or bureau
+    os.makedirs(bureau, exist_ok=True)
+    source = application.get("fichier", "")
+    if not source or not os.path.exists(source):
+        return
+    cible = os.path.join(bureau, os.path.basename(source))
+    try:
+        with open(source, encoding="utf-8") as entree:
+            contenu = entree.read()
+        with open(cible, "w", encoding="utf-8") as sortie:
+            sortie.write(contenu)
+        os.chmod(cible, 0o755)
+    except OSError:
+        pass
+
+
+class Tuile(Gtk.Box):
+    """Une case de la barre : l'icône d'une application, et son trait."""
+
+    def __init__(self, panneau, nom, commande, icone, epinglee):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.panneau = panneau
+        self.nom = nom
+        self.commande = commande
+        self.icone = icone
+        self.epinglee = epinglee
+        self.fenetres = []
+
+        self.bouton = Gtk.Button()
+        image = image_de([icone, "application-x-executable"], 26)
+        if image is not None:
+            self.bouton.add(image)
+        else:
+            self.bouton.add(Gtk.Label(label=nom[:8]))
+        self.bouton.set_tooltip_text(nom)
+        self.bouton.connect("clicked", lambda _: self.activer())
+        self.bouton.connect("button-press-event", self.menu)
+        self.pack_start(self.bouton, True, True, 0)
+
+        self.trait = Gtk.Box()
+        self.trait.get_style_context().add_class("trait")
+        self.pack_start(self.trait, False, False, 0)
+
+    def marquer(self, fenetres, active):
+        """Le trait dit l'état : ouverte, au premier plan, réduite, fermée."""
+        self.fenetres = fenetres
+        style = self.trait.get_style_context()
+        for classe in ("trait-ouverte", "trait-active", "trait-reduite"):
+            style.remove_class(classe)
+        if not fenetres:
+            return
+        if active is not None and any(f.get_xid() == active.get_xid() for f in fenetres):
+            style.add_class("trait-active")
+        elif all(f.is_minimized() for f in fenetres):
+            style.add_class("trait-reduite")
+        else:
+            style.add_class("trait-ouverte")
+        self.bouton.set_tooltip_text(
+            f"{self.nom} — {len(fenetres)} fenêtre{'s' if len(fenetres) > 1 else ''}")
+
+    def activer(self):
+        maintenant = Gtk.get_current_event_time()
+        if not self.fenetres:
+            grenosui.lancer(self.commande)
+            return
+        active = self.panneau.ecran_wnck.get_active_window()
+        if active is not None and any(f.get_xid() == active.get_xid() for f in self.fenetres):
+            for fenetre in self.fenetres:
+                fenetre.minimize()
+            return
+        cible = self.fenetres[0]
+        cible.unminimize(maintenant)
+        cible.activate(maintenant)
+
+    def menu(self, _widget, evenement):
+        if evenement.button != 3:
+            return False
+        maintenant = Gtk.get_current_event_time()
+        gestes = []
+        if self.fenetres:
+            gestes.append(("Afficher", lambda: (self.fenetres[0].unminimize(maintenant),
+                                                self.fenetres[0].activate(maintenant))))
+            gestes.append(("Réduire", lambda: [f.minimize() for f in self.fenetres]))
+        else:
+            gestes.append(("Ouvrir", lambda: grenosui.lancer(self.commande)))
+        if self.epinglee:
+            gestes.append(("Retirer de la barre", lambda: self.panneau.retirer(self.commande)))
+        else:
+            gestes.append(("Épingler à la barre",
+                           lambda: self.panneau.epingler(self.nom, self.commande, self.icone)))
+        if self.fenetres:
+            gestes.append(("Fermer", lambda: [f.close(maintenant) for f in self.fenetres]))
+
+        menu = Gtk.Menu()
+        for texte, action in gestes:
+            element = Gtk.MenuItem(label=texte)
+            element.connect("activate", lambda _, a=action: a())
+            menu.append(element)
+        menu.show_all()
+        menu.popup_at_pointer(evenement)
+        return True
 
 
 class Panneau(Gtk.Window):
@@ -508,12 +623,10 @@ class Panneau(Gtk.Window):
         self.connect("realize", lambda *_: self.reserver())
 
         self.epingles = lire_epingles()
+        self.applications = applications()
 
         boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.add(boite)
-
-        # Le centre est vraiment au centre : deux espaces qui poussent de part
-        # et d'autre, comme le fait Windows depuis sa onzième version.
         boite.pack_start(Gtk.Box(), True, True, 0)
 
         self.centre = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -522,103 +635,127 @@ class Panneau(Gtk.Window):
         self.bouton_menu = Gtk.ToggleButton(label="grenOS")
         self.bouton_menu.set_name("bouton-menu")
         self.bouton_menu.set_tooltip_text("Menu grenOS")
-        # On garde le numéro de la liaison : le menu doit pouvoir enfoncer ou
-        # relâcher ce bouton sans que cela ne relance l'ouverture. Sans cette
-        # précaution, ouvrir le menu s'appellerait lui-même sans fin.
         self.poignee = self.bouton_menu.connect("clicked", self.sur_le_bouton)
         self.centre.pack_start(self.bouton_menu, False, False, 0)
 
-        self.boite_epingles = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.centre.pack_start(self.boite_epingles, False, False, 4)
-
-        self.taches = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.centre.pack_start(self.taches, False, False, 0)
+        self.tuiles = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.centre.pack_start(self.tuiles, False, False, 6)
 
         boite.pack_start(Gtk.Box(), True, True, 0)
 
-        # À droite, ce qui ne se cherche pas : l'heure, et de quoi éteindre.
         self.horloge = Gtk.Label()
         self.horloge.set_name("horloge")
         boite.pack_end(self.horloge, False, False, 0)
 
-        self.refaire_epingles()
-        self.menu = Menu(self)
+        # Les connexions, a portee de clic : c'est le geste qu'on cherche en
+        # premier sur une machine neuve. Le reste des reglages est dans le menu.
+        self.bouton_reseau = Gtk.Button()
+        image = image_de(["network-wireless", "network-workgroup",
+                          "network-transmit-receive"], 20)
+        if image is not None:
+            self.bouton_reseau.add(image)
+        else:
+            self.bouton_reseau.add(Gtk.Label(label="Réseau"))
+        self.bouton_reseau.set_tooltip_text("Connexions : Wi-Fi et Bluetooth")
+        self.bouton_reseau.connect("clicked",
+                                   lambda _: grenosui.lancer("grenos-connexions"))
+        boite.pack_end(self.bouton_reseau, False, False, 0)
 
+        self.menu = Menu(self)
         self.ecran_wnck = Wnck.Screen.get_default()
         self.ecran_wnck.force_update()
         for signalement in ("window-opened", "window-closed", "active-window-changed",
                             "window-stacking-changed"):
-            self.ecran_wnck.connect(signalement, lambda *_: self.fenetres())
-        self.fenetres()
+            self.ecran_wnck.connect(signalement, lambda *_: self.refaire())
+        self.refaire()
 
         GLib.timeout_add_seconds(1, self.tic)
         self.tic()
 
-    # ---- Les épinglées -----------------------------------------------------
-    def refaire_epingles(self):
-        for enfant in self.boite_epingles.get_children():
-            self.boite_epingles.remove(enfant)
+    # ---- Les tuiles --------------------------------------------------------
+    def refaire(self):
+        """Une icône par application : l'épinglée porte son propre indicateur."""
+        for enfant in self.tuiles.get_children():
+            self.tuiles.remove(enfant)
+
+        ouvertes = [f for f in self.ecran_wnck.get_windows() if not f.is_skip_tasklist()]
+        active = self.ecran_wnck.get_active_window()
+        prises = set()
+
         for epingle in self.epingles:
-            bouton = Gtk.Button()
-            image = image_de(epingle.get("icone"), 26)
-            if image is not None:
-                bouton.add(image)
-            else:
-                bouton.add(Gtk.Label(label=epingle["nom"][:8]))
-            bouton.set_tooltip_text(epingle["nom"])
-            bouton.connect("clicked", lambda _, c=epingle["commande"]: grenosui.lancer(c))
-            bouton.connect("button-press-event", self.menu_epingle, epingle)
-            self.boite_epingles.pack_start(bouton, False, False, 0)
-        self.boite_epingles.show_all()
+            miennes = [f for f in ouvertes
+                       if meme_application(f, epingle["commande"], self.applications)]
+            prises.update(f.get_xid() for f in miennes)
+            tuile = Tuile(self, epingle["nom"], epingle["commande"],
+                          epingle.get("icone", ""), True)
+            tuile.marquer(miennes, active)
+            self.tuiles.pack_start(tuile, False, False, 0)
 
-    def menu_epingle(self, _widget, evenement, epingle):
-        """Clic droit sur une icône de la barre : l'ouvrir, ou la retirer."""
-        if evenement.button != 3:
-            return False
-        menu = Gtk.Menu()
-        gestes = [
-            ("Ouvrir", lambda: grenosui.lancer(epingle["commande"])),
-            ("Retirer de la barre", lambda: self.retirer(epingle)),
-        ]
-        for texte, action in gestes:
-            element = Gtk.MenuItem(label=texte)
-            element.connect("activate", lambda _, a=action: a())
-            menu.append(element)
-        menu.show_all()
-        menu.popup_at_pointer(evenement)
-        return True
+        # Ce qui tourne sans être épinglé : son icône, retrouvée par sa classe
+        # de fenêtre — sinon GTK affiche un cahier blanc pour tout le monde.
+        restantes = {}
+        for fenetre in ouvertes:
+            if fenetre.get_xid() in prises:
+                continue
+            groupe = (fenetre.get_class_group_name() or fenetre.get_name() or "?")
+            restantes.setdefault(groupe, []).append(fenetre)
 
-    def retirer(self, epingle):
-        self.epingles = [e for e in self.epingles if e["commande"] != epingle["commande"]]
+        for groupe, fenetres in restantes.items():
+            application = self.application_de(groupe)
+            nom = application["nom"] if application else groupe
+            commande = application["commande"] if application else ""
+            icone = application["icone"] if application else ""
+            tuile = Tuile(self, nom, commande, icone, False)
+            if icone == "" :
+                icone_wnck = fenetres[0].get_icon()
+                if icone_wnck is not None:
+                    for enfant in tuile.bouton.get_children():
+                        tuile.bouton.remove(enfant)
+                    tuile.bouton.add(Gtk.Image.new_from_pixbuf(
+                        icone_wnck.scale_simple(26, 26, GdkPixbuf.InterpType.BILINEAR)))
+            tuile.marquer(fenetres, active)
+            self.tuiles.pack_start(tuile, False, False, 0)
+
+        self.tuiles.show_all()
+
+    def application_de(self, groupe):
+        """L'application du système qui correspond à cette classe de fenêtre."""
+        groupe = (groupe or "").lower()
+        for application in self.applications:
+            classe = (application.get("classe") or "").lower()
+            if classe and (classe in groupe or groupe in classe):
+                return application
+        return None
+
+    def epingler(self, nom, commande, icone):
+        if not commande:
+            return
+        if any(e["commande"] == commande for e in self.epingles):
+            return
+        self.epingles.append({"nom": nom, "commande": commande, "icone": icone})
         ecrire_epingles(self.epingles)
-        self.refaire_epingles()
+        self.refaire()
+
+    def retirer(self, commande):
+        self.epingles = [e for e in self.epingles if e["commande"] != commande]
+        ecrire_epingles(self.epingles)
+        self.refaire()
 
     # ---- Le reste ----------------------------------------------------------
     def sur_le_bouton(self, bouton):
-        """Le bouton est un interrupteur : il ouvre, puis il referme."""
         if bouton.get_active():
             self.menu.ouvrir()
         else:
             self.menu.fermer()
 
     def enfoncer(self, etat):
-        """Met le bouton dans l'état voulu sans déclencher son action.
-
-        GTK émet « clicked » même quand le programme enfonce le bouton
-        lui-même : le menu rouvrirait le menu, indéfiniment. On coupe la
-        liaison le temps du geste.
-        """
+        """Enfonce le bouton sans déclencher son action (GTK émet « clicked »)."""
         self.bouton_menu.handler_block(self.poignee)
         self.bouton_menu.set_active(etat)
         self.bouton_menu.handler_unblock(self.poignee)
 
     def reserver(self):
-        """Réserve la bande du bas : une fenêtre agrandie s'arrête au-dessus.
-
-        C'est la propriété `_NET_WM_STRUT` du protocole des bureaux X11. GTK ne
-        l'écrit pas pour nous, et sans elle une fenêtre plein écran passerait
-        sous la barre, qui deviendrait inutilisable.
-        """
+        """Réserve la bande du bas : une fenêtre agrandie s'arrête au-dessus."""
         fenetre = self.get_window()
         if fenetre is None:
             return
@@ -637,59 +774,6 @@ class Panneau(Gtk.Window):
             f"{JOURS[maintenant.tm_wday]} {maintenant.tm_mday} {MOIS[maintenant.tm_mon - 1]}")
         return True
 
-    def fenetres(self):
-        """Les fenêtres ouvertes, en icônes : un mot par fenêtre remplit la barre."""
-        for enfant in self.taches.get_children():
-            self.taches.remove(enfant)
-        active = self.ecran_wnck.get_active_window()
-        for fenetre in self.ecran_wnck.get_windows():
-            if fenetre.is_skip_tasklist():
-                continue
-            titre = fenetre.get_name() or "Fenêtre"
-            bouton = Gtk.Button()
-            icone = fenetre.get_icon()
-            if icone is not None:
-                bouton.add(Gtk.Image.new_from_pixbuf(
-                    icone.scale_simple(26, 26, GdkPixbuf.InterpType.BILINEAR)))
-            else:
-                bouton.add(Gtk.Label(label=titre[:10]))
-            bouton.set_tooltip_text(titre)
-            style = bouton.get_style_context()
-            style.add_class("tache")
-            if active is not None and fenetre.get_xid() == active.get_xid():
-                style.add_class("tache-active")
-            bouton.connect("clicked", lambda _, f=fenetre: self.basculer(f))
-            bouton.connect("button-press-event", self.menu_fenetre, fenetre)
-            self.taches.pack_start(bouton, False, False, 0)
-        self.taches.show_all()
-
-    def menu_fenetre(self, _widget, evenement, fenetre):
-        """Clic droit sur une fenêtre de la barre : la ranger ou la fermer."""
-        if evenement.button != 3:
-            return False
-        maintenant = Gtk.get_current_event_time()
-        menu = Gtk.Menu()
-        gestes = [
-            ("Afficher", lambda: (fenetre.unminimize(maintenant), fenetre.activate(maintenant))),
-            ("Réduire", fenetre.minimize),
-            ("Fermer", lambda: fenetre.close(maintenant)),
-        ]
-        for texte, action in gestes:
-            element = Gtk.MenuItem(label=texte)
-            element.connect("activate", lambda _, a=action: a())
-            menu.append(element)
-        menu.show_all()
-        menu.popup_at_pointer(evenement)
-        return True
-
-    def basculer(self, fenetre):
-        maintenant = Gtk.get_current_event_time()
-        if fenetre.is_active():
-            fenetre.minimize()
-        else:
-            fenetre.unminimize(maintenant)
-            fenetre.activate(maintenant)
-
 
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -697,7 +781,6 @@ def main():
     propre = Gtk.CssProvider()
 
     def repeindre(*_):
-        """Relit la palette : c'est ce que déclenche le passage jour/nuit."""
         couleurs = grenosui.palette()
         entete = "".join(f"@define-color {n} {v};\n" for n, v in couleurs.items())
         grenosui.charger(style, grenosui.feuille(couleurs))
@@ -713,9 +796,6 @@ def main():
     panneau.show_all()
     grenosui.lancer(f"grenos-dire 'barre prete, {len(panneau.epingles)} epinglees'")
 
-    # Ou se trouve le bouton grenOS, en pixels. La machine d'integration vise
-    # ainsi le bon endroit : la barre est centree, donc sa position depend du
-    # nombre d'icones, et un clic au juge tombe a cote.
     def dire_le_bouton():
         zone = panneau.bouton_menu.get_allocation()
         x = zone.x + zone.width // 2
@@ -724,8 +804,6 @@ def main():
         return False
 
     GLib.timeout_add_seconds(3, dire_le_bouton)
-
-    # Le clic droit sur le fond d'écran : `grenos-menu` envoie ce signal.
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2,
                          lambda: (panneau.menu.ouvrir(), True)[1])
     Gtk.main()

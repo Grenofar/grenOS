@@ -32,11 +32,11 @@ mkdir -p "$BUILD/DEBIAN" \
 # une machine déjà nommée n'aurait aucun sens.
 for outil in grenos-shell grenos-session grenos-menu grenos-fond grenos-veilleur \
              grenos-arret grenos-parametres grenplace grenos-bienvenue grenos-bureau \
-             grenos-theme grenos-maj grenos-taches; do
+             grenos-theme grenos-maj grenos-taches grenos-connexions grenos-dire; do
     install -m 0755 "$DEDANS/usr/bin/$outil" "$BUILD/usr/bin/"
 done
 
-for module in grenosui ecran son materiel; do
+for module in grenosui ecran son materiel maj heure clavier reseau; do
     install -m 0644 "$DEDANS/usr/lib/grenos/$module.py" "$BUILD/usr/lib/grenos/"
 done
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-compte" "$BUILD/usr/lib/grenos/"
@@ -60,7 +60,7 @@ Section: x11
 Priority: optional
 Architecture: all
 Maintainer: grenOS <grenos@grenos-dev.vercel.app>
-Depends: python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils
+Depends: python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, xcvt, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils, dbus-user-session, pipewire-audio, wireplumber, xdg-user-dirs
 Recommends: flatpak, lightdm, pcmanfm, xfce4-terminal, xfce4-taskmanager, papirus-icon-theme
 Installed-Size: $SIZE
 Homepage: https://grenos-dev.vercel.app

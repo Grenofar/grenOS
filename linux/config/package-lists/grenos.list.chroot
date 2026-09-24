@@ -68,6 +68,11 @@ xarchiver
 galculator
 xfce4-screenshooter
 
+## Le Bluetooth : le service, l'outil en ligne de commande dont notre fenêtre
+## Connexions se sert, et de quoi envoyer le son vers un casque sans fil.
+bluez
+libspa-0.2-bluetooth
+
 ## Réseau, son : les services, et les fenêtres pour les régler. `pactl`
 ## (pulseaudio-utils) est ce qui permet aux Réglages de choisir la sortie audio
 ## et le volume : PipeWire lui répond comme le faisait PulseAudio.

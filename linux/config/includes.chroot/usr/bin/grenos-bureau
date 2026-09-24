@@ -167,6 +167,12 @@ class Bureau(Gtk.Window):
         self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
         self.connect("button-press-event", self.clic_sur_le_vide)
 
+        # Glisser une application du menu jusqu'ici la pose sur le bureau :
+        # c'est le geste qu'on essaie d'instinct.
+        self.drag_dest_set(Gtk.DestDefaults.ALL, [], Gdk.DragAction.COPY)
+        self.drag_dest_add_uri_targets()
+        self.connect("drag-data-received", self.recevoir)
+
         self.image = self.charger_fond()
         self.remplir()
         self.surveiller()
@@ -343,6 +349,34 @@ class Bureau(Gtk.Window):
                 grenosui.lancer(entree["commande"])
                 return
         grenosui.lancer(f"xdg-open {GLib.shell_quote(chemin)}")
+
+    def recevoir(self, _widget, _contexte, x, y, donnees, _info, _temps):
+        """Ce qu'on lâche sur le bureau : un raccourci, posé là où on l'a lâché."""
+        for adresse in donnees.get_uris():
+            try:
+                source = GLib.filename_from_uri(adresse)[0]
+            except (GLib.Error, TypeError):
+                continue
+            if not source or not os.path.exists(source):
+                continue
+            cible = os.path.join(self.dossier, os.path.basename(source))
+            try:
+                if source.endswith(".desktop"):
+                    with open(source, encoding="utf-8") as entree:
+                        contenu = entree.read()
+                    with open(cible, "w", encoding="utf-8") as sortie:
+                        sortie.write(contenu)
+                    os.chmod(cible, 0o755)
+                elif not os.path.exists(cible):
+                    subprocess.run(["cp", "-a", source, cible], check=False)
+            except OSError:
+                continue
+            # Posée là où la souris l'a lâchée, pas au bout de la file.
+            self.positions[os.path.basename(cible)] = [
+                max(0, int(x) - LARGEUR_CASE // 2),
+                max(0, int(y) - HAUTEUR_CASE // 2)]
+            self.ecrire_positions()
+        self.remplir()
 
     # ---- Les menus ---------------------------------------------------------
     def menu_icone(self, nom, chemin, evenement):

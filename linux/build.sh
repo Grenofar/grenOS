@@ -26,6 +26,12 @@ mkdir -p config/includes.chroot/usr/share/grenos
 cp data/catalogue.json config/includes.chroot/usr/share/grenos/catalogue.json
 python3 -c "import json,sys; d=json.load(open('data/catalogue.json')); print(len(d['applications']), 'applications')"
 
+echo "--- nos icones ---"
+# GrenPlace et l'explorateur portaient l'icone generique d'un theme : on leur
+# en dessine une, aux couleurs du systeme.
+mkdir -p config/includes.chroot/usr/share/icons/hicolor/256x256/apps
+python3 tools/icones.py config/includes.chroot/usr/share/icons/hicolor/256x256/apps 256
+
 echo "--- fonds d'écran et logo ---"
 python3 tools/wallpaper.py config/includes.chroot/usr/share/grenos 2560 1440
 # Le logo : le nom, dans la police du système, sur fond transparent. Il sert à

@@ -1,0 +1,301 @@
+#!/usr/bin/env python3
+"""Se connecter : Wi-Fi et Bluetooth, dans une seule fenêtre.
+
+La disposition est celle que tout le monde connaît : un interrupteur en haut,
+la liste de ce qui existe en dessous, et un bouton par ligne. Le mot de passe
+est demandé au moment où il est demandé — pas dans un formulaire rempli
+d'avance dont on ne sait pas s'il sert.
+
+Les recherches et les connexions tournent dans un fil séparé : une fenêtre
+figée pendant qu'une carte Wi-Fi cherche passe pour un plantage.
+"""
+import sys
+import threading
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+import reseau  # noqa: E402
+
+STYLE = """
+.ligne-reseau {
+    background-image: linear-gradient(to bottom, @fond-clair, @fond-haut);
+    border: 1px solid @bord;
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+.ligne-reseau:hover { border-color: @accent; }
+.force { color: @texte-faible; font-family: "Hack", monospace; font-size: 12px; }
+.connecte { color: @reussi; font-weight: 600; }
+"""
+
+
+def barres(force):
+    """La force du signal, en quelque chose qui se lit d'un coup d'œil."""
+    niveaux = min(max(force, 0) // 25 + (1 if force else 0), 4)
+    return "▮" * niveaux + "▯" * (4 - niveaux)
+
+
+class Connexions(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Connexions")
+        self.set_default_size(560, 640)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.connect("destroy", Gtk.main_quit)
+
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        colonne.set_border_width(24)
+        self.add(colonne)
+
+        etat = reseau.etat()
+        sous_titre = (f"Connecté en {etat['par']} à {etat['nom']}."
+                      if etat["connecte"] else "Pas encore connecté.")
+        colonne.pack_start(grenosui.titre("Connexions", sous_titre), False, False, 0)
+
+        onglets = Gtk.Notebook()
+        onglets.set_show_border(False)
+        colonne.pack_start(onglets, True, True, 0)
+
+        onglets.append_page(self.page_wifi(), Gtk.Label(label="Wi-Fi"))
+        onglets.append_page(self.page_bluetooth(), Gtk.Label(label="Bluetooth"))
+
+        self.dire = Gtk.Label(label="", xalign=0)
+        self.dire.get_style_context().add_class("sous")
+        self.dire.set_line_wrap(True)
+        colonne.pack_start(self.dire, False, False, 0)
+
+        self.chercher_wifi()
+
+    # ---- Le Wi-Fi ----------------------------------------------------------
+    def page_wifi(self):
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        boite.set_border_width(12)
+
+        haut = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        haut.pack_start(Gtk.Label(label="Wi-Fi", xalign=0), True, True, 0)
+        self.interrupteur_wifi = Gtk.Switch()
+        self.interrupteur_wifi.set_active(reseau.wifi_allume())
+        self.interrupteur_wifi.connect("notify::active", self.basculer_wifi)
+        haut.pack_end(self.interrupteur_wifi, False, False, 0)
+        haut.pack_end(grenosui.bouton("Rechercher", self.chercher_wifi, "discret"),
+                      False, False, 0)
+        boite.pack_start(haut, False, False, 0)
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.liste_wifi = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        defilement.add(self.liste_wifi)
+        boite.pack_start(defilement, True, True, 0)
+
+        if not reseau.wifi_disponible():
+            note = Gtk.Label(
+                label="Aucune carte Wi-Fi sur cette machine. Le câble, lui, fonctionne "
+                      "sans rien régler.", xalign=0)
+            note.get_style_context().add_class("sous")
+            note.set_line_wrap(True)
+            boite.pack_start(note, False, False, 0)
+        return boite
+
+    def basculer_wifi(self, interrupteur, _param):
+        reseau.allumer_wifi(interrupteur.get_active())
+        GLib.timeout_add_seconds(2, lambda: (self.chercher_wifi(), False)[1])
+
+    def chercher_wifi(self):
+        self.dire.set_text("Recherche des réseaux…")
+        threading.Thread(target=self._chercher_wifi, daemon=True).start()
+
+    def _chercher_wifi(self):
+        trouves = reseau.reseaux()
+        GLib.idle_add(self._poser_wifi, trouves)
+
+    def _poser_wifi(self, trouves):
+        for enfant in self.liste_wifi.get_children():
+            self.liste_wifi.remove(enfant)
+        for reseau_vu in trouves:
+            self.liste_wifi.pack_start(self.ligne_wifi(reseau_vu), False, False, 0)
+        self.liste_wifi.show_all()
+        self.dire.set_text(f"{len(trouves)} réseau{'x' if len(trouves) > 1 else ''} trouvé"
+                           f"{'s' if len(trouves) > 1 else ''}."
+                           if trouves else "Aucun réseau trouvé.")
+        return False
+
+    def ligne_wifi(self, vu):
+        ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        ligne.get_style_context().add_class("ligne-reseau")
+
+        texte = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        nom = Gtk.Label(label=vu["nom"], xalign=0)
+        nom.get_style_context().add_class("entree-titre")
+        details = Gtk.Label(
+            label=("connecté" if vu["connecte"]
+                   else ("protégé par mot de passe" if vu["protege"] else "ouvert")),
+            xalign=0)
+        details.get_style_context().add_class("connecte" if vu["connecte"] else "sous")
+        texte.pack_start(nom, False, False, 0)
+        texte.pack_start(details, False, False, 0)
+        ligne.pack_start(texte, True, True, 0)
+
+        force = Gtk.Label(label=barres(vu["force"]))
+        force.get_style_context().add_class("force")
+        ligne.pack_end(force, False, False, 6)
+
+        if vu["connecte"]:
+            ligne.pack_end(grenosui.bouton("Se déconnecter",
+                                           lambda v=vu: self.deconnecter(v), "discret"),
+                           False, False, 0)
+        else:
+            ligne.pack_end(grenosui.bouton("Se connecter",
+                                           lambda v=vu: self.connecter(v), "principal"),
+                           False, False, 0)
+        return ligne
+
+    def connecter(self, vu):
+        mot = ""
+        if vu["protege"] and not reseau.connu(vu["nom"]):
+            mot = self.demander_mot(vu["nom"])
+            if mot is None:
+                return
+        self.dire.set_text(f"Connexion à {vu['nom']}…")
+        threading.Thread(target=self._connecter, args=(vu, mot), daemon=True).start()
+
+    def _connecter(self, vu, mot):
+        souci = reseau.connecter(vu["nom"], mot)
+        GLib.idle_add(self.dire.set_text, souci or f"Connecté à {vu['nom']}.")
+        GLib.idle_add(self.chercher_wifi)
+
+    def deconnecter(self, vu):
+        souci = reseau.deconnecter(vu["nom"])
+        self.dire.set_text(souci or f"Déconnecté de {vu['nom']}.")
+        GLib.timeout_add_seconds(1, lambda: (self.chercher_wifi(), False)[1])
+
+    def demander_mot(self, nom):
+        """Le mot de passe, demandé au moment où il est demandé."""
+        boite = Gtk.Dialog(title=f"Mot de passe de {nom}", transient_for=self, modal=True)
+        boite.add_buttons("Annuler", Gtk.ResponseType.CANCEL, "Se connecter",
+                          Gtk.ResponseType.OK)
+        boite.set_default_response(Gtk.ResponseType.OK)
+        champ = Gtk.Entry(visibility=False)
+        champ.set_activates_default(True)
+        champ.set_placeholder_text("Mot de passe du réseau")
+        montrer = Gtk.CheckButton(label="Afficher le mot de passe")
+        montrer.connect("toggled", lambda b: champ.set_visibility(b.get_active()))
+        contenu = boite.get_content_area()
+        contenu.set_border_width(16)
+        contenu.set_spacing(10)
+        contenu.pack_start(Gtk.Label(label=f"Réseau : {nom}", xalign=0), False, False, 0)
+        contenu.pack_start(champ, False, False, 0)
+        contenu.pack_start(montrer, False, False, 0)
+        boite.show_all()
+        reponse = boite.run()
+        mot = champ.get_text()
+        boite.destroy()
+        return mot if reponse == Gtk.ResponseType.OK else None
+
+    # ---- Le Bluetooth ------------------------------------------------------
+    def page_bluetooth(self):
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        boite.set_border_width(12)
+
+        haut = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        haut.pack_start(Gtk.Label(label="Bluetooth", xalign=0), True, True, 0)
+        self.interrupteur_bt = Gtk.Switch()
+        self.interrupteur_bt.set_active(reseau.bluetooth_allume())
+        self.interrupteur_bt.connect("notify::active", self.basculer_bt)
+        haut.pack_end(self.interrupteur_bt, False, False, 0)
+        haut.pack_end(grenosui.bouton("Rechercher", self.chercher_bt, "discret"),
+                      False, False, 0)
+        boite.pack_start(haut, False, False, 0)
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.liste_bt = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        defilement.add(self.liste_bt)
+        boite.pack_start(defilement, True, True, 0)
+
+        if not reseau.bluetooth_disponible():
+            note = Gtk.Label(
+                label="Aucun matériel Bluetooth sur cette machine. Dans une machine "
+                      "virtuelle, il faut d'abord le partager depuis l'hôte.", xalign=0)
+            note.get_style_context().add_class("sous")
+            note.set_line_wrap(True)
+            boite.pack_start(note, False, False, 0)
+        else:
+            GLib.timeout_add_seconds(1, lambda: (self.poser_bt(), False)[1])
+        return boite
+
+    def basculer_bt(self, interrupteur, _param):
+        reseau.allumer_bluetooth(interrupteur.get_active())
+        GLib.timeout_add_seconds(2, lambda: (self.poser_bt(), False)[1])
+
+    def chercher_bt(self):
+        self.dire.set_text("Recherche des appareils…")
+        threading.Thread(target=self._chercher_bt, daemon=True).start()
+
+    def _chercher_bt(self):
+        reseau.chercher_appareils()
+        GLib.idle_add(self.poser_bt)
+
+    def poser_bt(self):
+        for enfant in self.liste_bt.get_children():
+            self.liste_bt.remove(enfant)
+        trouves = reseau.appareils()
+        for appareil in trouves:
+            self.liste_bt.pack_start(self.ligne_bt(appareil), False, False, 0)
+        self.liste_bt.show_all()
+        if trouves:
+            self.dire.set_text(f"{len(trouves)} appareil"
+                               f"{'s' if len(trouves) > 1 else ''}.")
+        return False
+
+    def ligne_bt(self, appareil):
+        ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        ligne.get_style_context().add_class("ligne-reseau")
+        texte = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        nom = Gtk.Label(label=appareil["nom"], xalign=0)
+        nom.get_style_context().add_class("entree-titre")
+        adresse = Gtk.Label(label=appareil["adresse"], xalign=0)
+        adresse.get_style_context().add_class("connecte" if appareil["connecte"] else "sous")
+        texte.pack_start(nom, False, False, 0)
+        texte.pack_start(adresse, False, False, 0)
+        ligne.pack_start(texte, True, True, 0)
+
+        if appareil["connecte"]:
+            ligne.pack_end(grenosui.bouton("Déconnecter",
+                                           lambda a=appareil: self.delier(a), "discret"),
+                           False, False, 0)
+        else:
+            ligne.pack_end(grenosui.bouton("Connecter",
+                                           lambda a=appareil: self.lier(a), "principal"),
+                           False, False, 0)
+        return ligne
+
+    def lier(self, appareil):
+        self.dire.set_text(f"Connexion à {appareil['nom']}…")
+        threading.Thread(target=self._lier, args=(appareil,), daemon=True).start()
+
+    def _lier(self, appareil):
+        souci = reseau.lier(appareil["adresse"])
+        GLib.idle_add(self.dire.set_text, souci or f"Connecté à {appareil['nom']}.")
+        GLib.idle_add(self.poser_bt)
+
+    def delier(self, appareil):
+        souci = reseau.delier(appareil["adresse"])
+        self.dire.set_text(souci or f"Déconnecté de {appareil['nom']}.")
+        GLib.timeout_add_seconds(1, lambda: (self.poser_bt(), False)[1])
+
+
+def main():
+    grenosui.habiller()
+    grenosui.ajouter_style(STYLE)
+    fenetre = Connexions()
+    fenetre.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

@@ -22,6 +22,8 @@ from gi.repository import GLib, Gtk  # noqa: E402
 
 import ecran as module_ecran  # noqa: E402
 import grenosui  # noqa: E402
+import heure as module_heure  # noqa: E402
+import maj as module_maj  # noqa: E402
 import materiel  # noqa: E402
 import son as module_son  # noqa: E402
 
@@ -80,6 +82,7 @@ class Reglages(Gtk.Window):
         self.pages.add_titled(self.page_son(), "son", "Son")
         self.pages.add_titled(self.page_reseau(), "reseau", "Réseau")
         self.pages.add_titled(self.page_compte(), "compte", "Compte")
+        self.pages.add_titled(self.page_heure(), "heure", "Heure et date")
         self.pages.add_titled(self.page_maj(), "maj", "Mises à jour")
         self.pages.add_titled(self.page_materiel(), "materiel", "Matériel")
 
@@ -381,18 +384,40 @@ class Reglages(Gtk.Window):
             with open("/etc/os-release", encoding="utf-8") as fichier:
                 for ligne in fichier:
                     if ligne.startswith("PRETTY_NAME="):
-                        version = ligne.split("=", 1)[1].strip().strip('"')
+                        version = ligne.split("=", 1)[1].strip().strip(chr(34))
         except OSError:
             pass
+
+        # Tout se passe dans cette page : ni autre fenêtre, ni terminal. Le
+        # travail tourne derrière, et cette page raconte ce qu'il fait.
+        self.etat_maj = Gtk.Label(label="Prêt.", xalign=0)
+        self.barre_maj = Gtk.ProgressBar()
+        self.bouton_maj = grenosui.bouton("Vérifier et installer",
+                                          self.lancer_maj, "principal")
+
+        self.details_maj = Gtk.Expander(label="Voir le détail")
+        vue = Gtk.ScrolledWindow()
+        vue.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        vue.set_size_request(-1, 180)
+        self.texte_maj = Gtk.TextView()
+        self.texte_maj.set_editable(False)
+        self.texte_maj.set_monospace(True)
+        vue.add(self.texte_maj)
+        self.details_maj.add(vue)
+
+        self.travail_maj = module_maj.Travail(
+            lambda t: GLib.idle_add(self.etat_maj.set_text, t),
+            lambda p: GLib.idle_add(self.barre_maj.set_fraction, min(max(p, 0.0), 1.0)),
+            self.journal_maj, self.fin_maj)
 
         return self.enveloppe(
             grenosui.titre("Mises à jour", version),
             grenosui.carte(
-                self.ligne("grenOS et Debian",
-                           grenosui.bouton("Vérifier et installer",
-                                           lambda: grenosui.lancer("grenos-maj"), "principal")),
+                self.etat_maj, self.barre_maj, self.bouton_maj, self.details_maj,
                 self.note("Les nouveautés de grenOS et les correctifs de sécurité de "
-                          "Debian arrivent ensemble, sans jamais retélécharger l'image."),
+                          "Debian arrivent ensemble, sans jamais retélécharger l'image. "
+                          "Les nouveaux paquets dont le système a besoin sont installés "
+                          "aussi — un pilote de son, par exemple."),
             ),
             grenosui.carte(
                 self.ligne("Applications",
@@ -402,6 +427,90 @@ class Reglages(Gtk.Window):
                           "jour avec le reste du système."),
             ),
         )
+
+    def journal_maj(self, ligne):
+        def ajouter():
+            tampon = self.texte_maj.get_buffer()
+            tampon.insert(tampon.get_end_iter(), ligne + chr(10))
+            return False
+        GLib.idle_add(ajouter)
+
+    def lancer_maj(self):
+        if self.travail_maj.demarrer():
+            self.bouton_maj.set_sensitive(False)
+            self.bouton_maj.get_child().get_children()[-1].set_text("En cours…")
+
+    def fin_maj(self, message, bien):
+        def remettre():
+            self.etat_maj.set_text(message)
+            self.bouton_maj.set_sensitive(True)
+            self.bouton_maj.get_child().get_children()[-1].set_text("Vérifier et installer")
+            if not bien:
+                self.details_maj.set_expanded(True)
+            return False
+        GLib.idle_add(remettre)
+
+    # ---- L'heure -------------------------------------------------------------
+    def page_heure(self):
+        etat = module_heure.etat()
+        self.dire_heure = Gtk.Label(label="", xalign=0)
+        self.dire_heure.get_style_context().add_class("sous")
+
+        self.choix_fuseau = Gtk.ComboBoxText()
+        self.liste_fuseaux = module_heure.fuseaux()
+        for index, nom in enumerate(self.liste_fuseaux):
+            self.choix_fuseau.append_text(nom)
+            if nom == etat["fuseau"]:
+                self.choix_fuseau.set_active(index)
+        if self.choix_fuseau.get_active() < 0 and self.liste_fuseaux:
+            self.choix_fuseau.set_active(0)
+        self.choix_fuseau.connect("changed", self.changer_fuseau)
+
+        self.auto_heure = Gtk.Switch()
+        self.auto_heure.set_active(etat["automatique"])
+        self.auto_heure.connect("notify::active", self.changer_auto)
+
+        self.champ_heure = Gtk.Entry()
+        self.champ_heure.set_placeholder_text("2026-09-23 18:30:00")
+
+        return self.enveloppe(
+            grenosui.titre("Heure et date",
+                           "Réglée par le réseau, ou à la main."),
+            grenosui.carte(
+                self.ligne("Fuseau horaire", self.choix_fuseau),
+                self.ligne("Mise à l'heure automatique", self.auto_heure),
+                self.dire_heure,
+                self.note("Avec la mise à l'heure automatique, la machine demande "
+                          "l'heure au réseau et n'en dévie jamais. Sans réseau, "
+                          "désactive-la et règle-la toi-même."),
+            ),
+            grenosui.carte(
+                self.ligne("Régler à la main", self.champ_heure),
+                grenosui.bouton("Appliquer cette heure", self.regler_heure),
+                self.note("Format : année-mois-jour heures:minutes:secondes."),
+            ),
+        )
+
+    def changer_fuseau(self, combo):
+        nom = combo.get_active_text()
+        if not nom:
+            return
+        souci = module_heure.choisir_fuseau(nom)
+        self.dire_heure.set_text(souci or f"Fuseau : {nom}.")
+
+    def changer_auto(self, interrupteur, _param):
+        souci = module_heure.horloge_automatique(interrupteur.get_active())
+        self.dire_heure.set_text(
+            souci or ("L'heure se règle toute seule." if interrupteur.get_active()
+                      else "L'heure ne se règle plus toute seule."))
+
+    def regler_heure(self):
+        texte = self.champ_heure.get_text().strip()
+        if not texte:
+            self.dire_heure.set_text("Écris une date et une heure.")
+            return
+        souci = module_heure.regler(texte)
+        self.dire_heure.set_text(souci or f"Heure réglée sur {texte}.")
 
     # ---- Le matériel -------------------------------------------------------
     def page_materiel(self):

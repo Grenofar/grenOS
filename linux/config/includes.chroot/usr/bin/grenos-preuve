@@ -24,9 +24,11 @@ dire () {
 
 vu_session=0
 i=0
-# Une heure de veille : au-dela, la machine d'integration a rendu son verdict
-# depuis longtemps, et sur une vraie machine plus personne ne lit.
-while [ "$i" -lt 3600 ]; do
+# Un quart d'heure, et pas davantage. La machine d'integration a rendu son
+# verdict bien avant, et sur la machine de quelqu'un ce service n'a plus rien
+# a dire : le laisser veiller une heure, c'est un processus qui se reveille
+# trois mille six cents fois pour rien.
+while [ "$i" -lt 450 ]; do
     # Les billets deposes par le bureau, dans l'ordre ou ils sont arrives.
     for billet in "$BOITE"/*; do
         [ -f "$billet" ] || continue
@@ -51,6 +53,6 @@ while [ "$i" -lt 3600 ]; do
         fi
     fi
 
-    sleep 1
+    sleep 2
     i=$((i + 1))
 done

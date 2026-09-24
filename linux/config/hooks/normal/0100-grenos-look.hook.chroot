@@ -148,6 +148,7 @@ ecrire_entree parametres "Réglages" "L'apparence, l'écran, le son, le compte, 
 ecrire_entree maj "Mettre à jour grenOS" "Les nouveautés et les correctifs de sécurité" "system-software-update"
 ecrire_entree theme "Jour et nuit" "Changer la lumière du bureau" "weather-clear-night"
 ecrire_entree taches "Gestionnaire de tâches" "Ce qui tourne, et ce que ça consomme" "utilities-system-monitor"
+ecrire_entree connexions "Connexions" "Wi-Fi et Bluetooth" "network-wireless"
 
 # GrenPlace ne suit pas le nommage grenos-* : c'est une marque, pas un outil.
 cat > /usr/share/applications/grenplace.desktop <<'EOF'
@@ -156,10 +157,18 @@ Type=Application
 Name=GrenPlace
 Comment=Ajouter des applications en un clic, Steam compris
 Exec=grenplace
-Icon=system-software-install
+Icon=grenplace
 Terminal=false
 Categories=System;PackageManager;
 EOF
+
+# L'explorateur de fichiers porte notre icône et le nom qu'on lui donne :
+# « PCManFM » ne dit rien à personne.
+if [ -f /usr/share/applications/pcmanfm.desktop ]; then
+    sed -i 's/^Icon=.*/Icon=grenos-fichiers/' /usr/share/applications/pcmanfm.desktop || true
+    sed -i 's/^Name=.*/Name=Fichiers/' /usr/share/applications/pcmanfm.desktop || true
+fi
+gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
 
 # Ce qu'on trouve sur le bureau au premier démarrage : de quoi commencer.
 for raccourci in grenos-bienvenue grenplace; do
@@ -180,9 +189,17 @@ Categories=System;
 EOF
 
 # Ce que personne ne doit trouver dans le menu : outils internes et doublons.
-for cachee in calamares.desktop openbox.desktop debian-uxterm.desktop \
+# Un seul chemin pour installer : le nôtre. Debian en pose d'autres, et trois
+# boutons pour le même geste ne rassurent personne. Les réglages déguisés en
+# applications disparaissent aussi de la liste — ils restent accessibles en
+# tapant leur nom, et ils ont leur place dans les Réglages.
+for cachee in calamares.desktop calamares-install-debian.desktop \
+              install-debian.desktop debian-installer-launcher.desktop \
+              openbox.desktop debian-uxterm.desktop \
               debian-xterm.desktop display-im6.q16.desktop feh.desktop \
-              lightdm-gtk-greeter.desktop; do
+              lightdm-gtk-greeter.desktop pavucontrol.desktop \
+              nm-connection-editor.desktop galculator.desktop vim.desktop \
+              xarchiver.desktop xfce4-terminal-settings.desktop; do
     if [ -f "/usr/share/applications/${cachee}" ]; then
         echo "NoDisplay=true" >> "/usr/share/applications/${cachee}"
     fi

@@ -167,9 +167,21 @@
     <keybind key="W-d">
       <action name="ToggleShowDesktop"/>
     </keybind>
+    <!-- Capture d'ecran : l'ecran entier d'une touche, une zone choisie si
+         l'on tient Maj. Les deux enregistrent dans le dossier Images. -->
     <keybind key="Print">
       <action name="Execute">
-        <command>xfce4-screenshooter</command>
+        <command>xfce4-screenshooter --fullscreen --save</command>
+      </action>
+    </keybind>
+    <keybind key="S-Print">
+      <action name="Execute">
+        <command>xfce4-screenshooter --region</command>
+      </action>
+    </keybind>
+    <keybind key="W-S-s">
+      <action name="Execute">
+        <command>xfce4-screenshooter --region</command>
       </action>
     </keybind>
 
