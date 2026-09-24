@@ -41,13 +41,12 @@ jobs:
       # d'une commande. Le shell les passe alors comme argument, et la commande
       # echoue vingt minutes plus tard, loin de sa cause. Trois secondes ici
       # valent mieux que vingt minutes la-bas.
+      # Ce controle est un fichier a part, et pas un script dans ce YAML : les
+      # sequences d'echappement ne survivent pas a une reecriture, et c'est
+      # precisement l'accident qu'il sert a attraper. Il a ete casse deux fois
+      # en essayant de l'ecrire ici.
       - name: Aucune continuation de ligne perdue
-        run: |
-          if grep -n ' [\]n ' .github/workflows/linux.yml; then
-            echo "::error::Une continuation de ligne a ete perdue dans ce fichier."
-            exit 1
-          fi
-          echo "aucune continuation perdue"
+        run: python3 scripts/verif-flux.py .github/workflows/linux.yml
 
       - name: Faire de la place
         run: |
@@ -343,9 +342,40 @@ jobs:
           python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-shift-esc" || true
           sleep 10
           python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-taches.ppm" || true
-          grep -a 'grenos:' "$RUNNER_TEMP/serial.log" | tail -n 15 || true
 
-          cp "$RUNNER_TEMP/ecran-5min.ppm" "$RUNNER_TEMP/final.ppm" 2>/dev/null ||             python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/final.ppm" || true
+          echo "--- le magasin s ouvre-t-il ---"
+          # GrenPlace est la vitrine, et personne ne l'avait jamais ouvert ici :
+          # il aurait pu ne plus demarrer du tout sans qu'une seule etape ne
+          # rougisse. On l'ouvre comme le ferait une personne — le menu, quatre
+          # lettres, Entree.
+          #
+          # « grenp » ne designe que lui, et ses cinq lettres sont a la meme
+          # place en AZERTY qu'en QWERTY. « a » ne l'est pas : `sendkey a`
+          # donnerait « q » dans la machine, et la recherche ne trouverait rien.
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+          sleep 2
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+          sleep 4
+          for touche in g r e n p ret; do
+            python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+            sleep 1
+          done
+          sleep 20
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-grenplace.ppm" || true
+          # Il dit aussi d'ou vient son catalogue : du reseau, du dernier connu,
+          # ou de celui livre avec l'image. Les trois sont des reponses valables,
+          # et savoir laquelle vaut mieux que de supposer.
+          if grep -aq 'grenplace ouvert' "$RUNNER_TEMP/serial.log"; then
+            grep -a 'grenplace ouvert' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+          else
+            echo "magasin: il ne s est pas annonce (test non bloquant, a affiner)"
+          fi
+
+          grep -a 'grenos:' "$RUNNER_TEMP/serial.log" | tail -n 20 || true
+
+          if ! cp "$RUNNER_TEMP/ecran-5min.ppm" "$RUNNER_TEMP/final.ppm" 2>/dev/null; then
+            python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/final.ppm" || true
+          fi
           python3 scripts/ci-screen.py judge "$RUNNER_TEMP/final.ppm" "$RUNNER_TEMP/final.png" | tee "$RUNNER_TEMP/ecran.log"
           kill $QEMU 2>/dev/null || true
           tail -n 40 "$RUNNER_TEMP/serial.log" || true
@@ -383,7 +413,9 @@ jobs:
           # Rapporte, pas encore bloquant : une etape ne devient obligatoire
           # qu'apres avoir ete vue verte.
           echo "--- cette image peut-elle se mettre a jour ---"
-          grep -a 'grenos: maj:' "$RUNNER_TEMP/serial.log" | sed 's/^.*grenos: //' ||             echo "maj: l image n a rien dit du tout"
+          if ! grep -a 'grenos: maj:' "$RUNNER_TEMP/serial.log" | sed 's/^.*grenos: //'; then
+            echo "maj: l image n a rien dit du tout"
+          fi
 
           # Un bureau couvre son fond de fenetres, d'icones et d'un panneau :
           # sa couleur dominante ne depasse jamais 70 % de l'ecran. Un menu de
@@ -515,4 +547,6 @@ jobs:
           Construit par la CI a partir de \`linux/\`, demarre dans QEMU avant publication.
           NOTES
           sed -i 's/^          //' notes.md
-          gh release create "$TAG" --title "grenOS Linux ${{ steps.vbox.outputs.stamp }}"             --notes-file notes.md "dist/$NAME.iso" "dist/$NAME-virtualbox.zip"
+          # Une seule ligne, sans continuation : c'est elle qui se perd en
+          # chemin, et le garde-fou de la premiere etape la reclame.
+          gh release create "$TAG" --title "grenOS Linux ${{ steps.vbox.outputs.stamp }}" --notes-file notes.md "dist/$NAME.iso" "dist/$NAME-virtualbox.zip"
