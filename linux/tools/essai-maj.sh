@@ -15,7 +15,18 @@
 
 set -eu
 
-echo "--- une Debian nue ---"
+echo "--- une Debian nue, avec les memes sections que grenOS ---"
+# Le conteneur n'a que « main ». Une machine grenOS a aussi contrib, non-free
+# et les micrologiciels — c'est la que vivent le microcode du processeur et les
+# pilotes des cartes Wi-Fi. Sans ces sections, l'essai echouerait sur des
+# paquets qui, eux, s'installent tres bien sur une vraie machine : il serait
+# alors moins fidele que ce qu'il pretend verifier.
+cat > /etc/apt/sources.list <<'FIN'
+deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main contrib non-free non-free-firmware
+FIN
+rm -f /etc/apt/sources.list.d/debian.sources
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl gnupg >/dev/null
 
