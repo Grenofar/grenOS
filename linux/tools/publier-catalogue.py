@@ -77,8 +77,11 @@ def paquets_de_trixie():
 def logo_repond(application):
     """Cette adresse de logo rend-elle bien une image ?
 
-    Trois reponses : oui, non (notre faute, une adresse fausse), ou muette
-    (la leur, ou le reseau). Seule la deuxieme est une erreur de notre part.
+    Trois reponses : oui, non, ou muette. « Non » veut dire que l'adresse est
+    fausse — 404 ou 410, il n'y a rien la-bas, et c'est notre faute. Tout le
+    reste (403, 429, une panne, une coupure) est leur affaire ou celle du
+    reseau : cela ne doit pas faire echouer une publication, sinon une
+    limitation de debit chez Flathub nous priverait d'un catalogue neuf.
     """
     adresse = application.get("logo") or ""
     if not adresse:
@@ -87,9 +90,12 @@ def logo_repond(application):
                                      headers={"User-Agent": "grenOS"})
     try:
         with urllib.request.urlopen(requete, timeout=25) as reponse:
-            return application["slug"], ("oui" if reponse.status == 200 else f"non ({reponse.status})")
+            return application["slug"], ("oui" if reponse.status == 200
+                                         else f"muet ({reponse.status})")
     except urllib.error.HTTPError as souci:
-        return application["slug"], f"non ({souci.code})"
+        if souci.code in (404, 410):
+            return application["slug"], f"non ({souci.code})"
+        return application["slug"], f"muet ({souci.code})"
     except (urllib.error.URLError, OSError, TimeoutError):
         return application["slug"], "muet"
 
@@ -108,15 +114,16 @@ def verifier_aux_sources(applications):
     with concurrent.futures.ThreadPoolExecutor(8) as reunion:
         reponses = sorted(reunion.map(logo_repond, applications))
     faux = [slug for slug, etat in reponses if etat.startswith("non")]
-    muets = [slug for slug, etat in reponses if etat == "muet"]
+    muets = [f"{slug} {etat[4:]}".strip() for slug, etat in reponses
+             if etat.startswith("muet")]
     absents = [slug for slug, etat in reponses if etat == "absent"]
-    bons = len(reponses) - len(faux) - len(muets) - len(absents)
+    bons = sum(1 for _, etat in reponses if etat == "oui")
     print(f"logos : {bons}/{len(reponses)} repondent")
     for titre, liste in (("sans logo", absents), ("injoignables", muets)):
         if liste:
             print(f"  {titre} (tuile dessinee a la place) : {', '.join(liste)}")
     if faux:
-        sys.exit("Ces adresses de logo sont fausses : " + ", ".join(faux))
+        sys.exit("Ces adresses de logo ne menent nulle part : " + ", ".join(faux))
 
 
 def main():
