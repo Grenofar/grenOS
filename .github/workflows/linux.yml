@@ -345,11 +345,19 @@ jobs:
           python3 scripts/ci-screen.py clic "$RUNNER_TEMP/qmp.sock" "$PX" "$PY" "$LARGEUR" "$HAUTEUR" || true
           sleep 5
           python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-clic.ppm" || true
-          APRES=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" || echo 0)
+          # `grep -c` rend « 0 » ET sort en erreur quand il ne trouve rien : le
+          # « || echo 0 » ajoutait un second zero, et la comparaison recevait
+          # « 0 0 ». Cela ne se voyait pas, parce que le `if` avalait l'erreur
+          # et prenait la bonne branche par accident. C'est le meme piege qui
+          # bloquait l'indicateur de mises a jour sur « je ne sais pas ».
+          APRES=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" 2>/dev/null | head -1)
+          APRES=${APRES:-0}
+          CLIC=1
           if [ "$APRES" -gt "$AVANT" ]; then
             echo "souris: le clic sur grenOS a ouvert le menu"
           else
-            echo "souris: le clic n'a rien ouvert (test non bloquant, a affiner)"
+            CLIC=0
+            echo "souris: le clic n'a rien ouvert"
           fi
           python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
           sleep 3
@@ -422,6 +430,15 @@ jobs:
               MUET=1
             fi
           done
+          # Le clic de souris devient obligatoire : vu vert trois fois
+          # (36018497394, 36023450708, 36047160557). La regle tenue depuis le
+          # debut est qu'une etape ne devient exigee qu'apres avoir ete vue
+          # verte — et une barre qui tomberait au premier clic passerait au
+          # vert sans lui, puisque tout le reste se fait au clavier.
+          if [ "$CLIC" != 1 ]; then
+            echo "::error::Le clic sur le bouton grenOS n'ouvre pas le menu : la barre ne repond pas a la souris."
+            MUET=1
+          fi
           if [ "$MUET" = 1 ]; then
             exit 1
           fi
