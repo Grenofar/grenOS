@@ -344,7 +344,16 @@ def charger(fournisseur, css):
 
 
 def habiller(couleurs=None):
-    """Applique le style à tout l'écran : toute fenêtre ouverte ensuite le suit."""
+    """Applique le style à tout l'écran : toute fenêtre ouverte ensuite le suit.
+
+    Et la marque avec. `fenetre()` posait l'icône, mais une seule application
+    s'en servait : les autres construisent leur fenêtre elles-mêmes, et
+    portaient donc l'icône générique de GTK — dans leur barre de titre comme
+    dans la barre des tâches. Le défaut se voyait sur chaque capture sans que
+    personne ne le nomme. Une icône par défaut vaut pour toutes les fenêtres
+    ouvertes ensuite, et chaque programme passe par ici.
+    """
+    Gtk.Window.set_default_icon_name("grenos")
     fournisseur = Gtk.CssProvider()
     charger(fournisseur, feuille(couleurs))
     Gtk.StyleContext.add_provider_for_screen(
