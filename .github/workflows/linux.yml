@@ -118,22 +118,31 @@ jobs:
       # Le catalogue de GrenPlace vit dans notre backend, pas dans l'image :
       # ajouter une application ne demande ni nouvelle image ni mise a jour du
       # systeme. On le republie a chaque construction, c'est idempotent.
+      # Verifie partout, publie seulement depuis `main` : le magasin des vraies
+      # machines n'appartient pas a une branche. Le 24 septembre a 19h38, la
+      # construction d'une branche d'agent a remplace nos 29 applications par
+      # 17 autres, que personne n'avait relues.
       - name: Le catalogue du magasin
         continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python3 linux/tools/publier-catalogue.py
+        run: |
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            python3 linux/tools/publier-catalogue.py
+          else
+            python3 linux/tools/publier-catalogue.py --verifier
+          fi
 
-      - name: Le paquet et le depot APT de grenOS
+      # Fabriquer, oui, depuis n'importe quelle branche : l'image en a besoin.
+      # **Publier**, non — voir l'etape suivante.
+      - name: Le paquet grenOS
         id: apt
         if: steps.key.outputs.ready == 'true'
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           sudo apt-get install -y -qq dpkg-dev python3-numpy
           VERSION="1.0.$(date -u +%Y%m%d%H%M)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           linux/tools/make-deb.sh "$VERSION" dist
           # L'image installe ses propres paquets, au lieu de se contenter d'en
           # copier les fichiers. C'est ce qui manquait pour que la mise a jour
@@ -141,20 +150,32 @@ jobs:
           # rien de grenOS a mettre a jour, et n'apportait que les correctifs
           # Debian. live-build installe ce qui se trouve dans packages.chroot.
           mkdir -p linux/config/packages.chroot
-          cp "dist/grenos-systeme_${VERSION}_all.deb" \
-             "dist/grenos-desktop_${VERSION}_all.deb" linux/config/packages.chroot/
+          cp "dist/grenos-systeme_${VERSION}_all.deb" "dist/grenos-desktop_${VERSION}_all.deb" linux/config/packages.chroot/
           ls -l linux/config/packages.chroot/
           APT_SECRET_KEY="$PWD/secret.asc" linux/tools/make-apt-repo.sh apt "dist/grenos-systeme_${VERSION}_all.deb" "dist/grenos-desktop_${VERSION}_all.deb"
+
+      # Le depot APT est ce que les vraies machines interrogent pour se mettre
+      # a jour. **Seule `main` a le droit d'y ecrire.**
+      #
+      # Le 24 septembre a 19h38, la construction d'une branche d'agent l'a
+      # ecrase : le depot s'est mis a proposer un paquet que personne n'avait
+      # relu, et le catalogue du magasin est passe de nos 29 applications a 17
+      # autres. Une machine qui aurait lance « Mettre a jour grenOS » a ce
+      # moment-la aurait installe le travail en cours d'un agent.
+      #
+      # Fabriquer depuis une branche est utile — cela prouve que le paquet se
+      # construit. Publier ne l'est pas.
+      - name: Publier le depot APT
+        if: steps.key.outputs.ready == 'true' && github.ref == 'refs/heads/main'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
           # Un dépôt APT n'est qu'un ensemble de fichiers : on les dépose un à
           # un dans le bucket public, en écrasant les anciens.
           find apt -type f | while read -r file; do
             target="${file#apt/}"
-            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
-              -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-              -H "x-upsert: true" \
-              -H "cache-control: max-age=60" \
-              --data-binary @"$file" \
-              "$SUPABASE_URL/storage/v1/object/apt/$target")
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "x-upsert: true" -H "cache-control: max-age=60" --data-binary @"$file" "$SUPABASE_URL/storage/v1/object/apt/$target")
             echo "$target : HTTP $code"
             [ "$code" = "200" ] || exit 1
           done

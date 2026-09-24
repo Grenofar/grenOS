@@ -127,7 +127,16 @@ def verifier_aux_sources(applications):
 
 
 def main():
-    url, cle = secrets()
+    # `--verifier` contrôle sans publier, et sans avoir besoin d'aucune clé.
+    #
+    # Le magasin des vraies machines n'appartient pas à une branche. Le
+    # 24 septembre à 19h38, la construction d'une branche d'agent a remplacé
+    # nos 29 applications par 17 autres, que personne n'avait relues. Vérifier
+    # depuis une branche est utile ; publier ne l'est pas.
+    verifier_seulement = "--verifier" in sys.argv[1:]
+    url = cle = ""
+    if not verifier_seulement:
+        url, cle = secrets()
 
     with open(SOURCE, encoding="utf-8") as fichier:
         catalogue = json.load(fichier)
@@ -154,6 +163,10 @@ def main():
     # Puis on interroge les sources elles-mêmes. Une fiche peut être bien
     # formée et pourtant désigner un paquet qui n'existe pas.
     verifier_aux_sources(applications)
+
+    if verifier_seulement:
+        print("catalogue verifie, rien n'a ete publie (ce n'est pas la branche main)")
+        return 0
 
     # Le bucket, créé une seule fois, public en lecture.
     statut, _ = appeler("POST", f"{url}/storage/v1/bucket", cle,
