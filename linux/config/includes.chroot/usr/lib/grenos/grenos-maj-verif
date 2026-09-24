@@ -27,7 +27,18 @@ fi
 # `full-upgrade` et non `upgrade` : c'est la seule forme qui compte aussi les
 # paquets nouveaux. Sans elle, une nouvelle dépendance de grenOS — un pilote,
 # une bibliothèque de son — n'apparaîtrait jamais dans le compte.
-NOMBRE=$(apt-get -s full-upgrade 2>/dev/null | grep -c '^Inst ' || echo 0)
+#
+# Pas de « || echo 0 » : `grep -c` affiche deja « 0 » quand il ne trouve rien,
+# et il sort quand meme en erreur — le repli ajoutait donc un SECOND zero. Le
+# fichier contenait « 0
+0 », `int()` levait une exception, et le bureau
+# restait bloque sur « je ne sais pas » au lieu de dire « a jour ». Le meme
+# piege avait deja coute une etape de la CI le 23 septembre ; il etait reste
+# ici.
+NOMBRE=$(apt-get -s full-upgrade 2>/dev/null | grep -c '^Inst ' || true)
+case "$NOMBRE" in
+    ''|*[!0-9]*) NOMBRE=0 ;;
+esac
 
 printf '%s\n' "$NOMBRE" > "$DOSSIER/maj"
 date -u '+%Y-%m-%d %H:%M' > "$DOSSIER/maj-date"
