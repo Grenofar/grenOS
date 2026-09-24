@@ -143,4 +143,15 @@ else
     echo "(pas de paquet local : l'essai de remplacement est saute)"
 fi
 
+echo "--- l'installateur a-t-il tout ce qu'il lui faut ---"
+# Calamares lit settings.conf, y trouve une suite de modules, et va chercher
+# chacun d'eux sur le disque. Si l'un manque, il s'arrete au lancement avec un
+# message que personne ne comprend — et on ne l'apprendrait que devant l'ecran,
+# au moment d'installer grenOS sur une vraie machine.
+#
+# On ne peut pas le lancer ici : il faudrait un ecran, un disque et une suite
+# de clics. Mais on peut lire sa configuration et demander au disque si chaque
+# morceau qu'elle nomme existe.
+python3 linux/tools/verif-installateur.py
+
 echo "la mise a jour depuis grenOS fonctionne"
