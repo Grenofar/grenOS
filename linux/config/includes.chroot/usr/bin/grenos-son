@@ -234,6 +234,13 @@ def main():
     grenosui.ajouter_style(STYLE)
     panneau = PanneauSon()
     panneau.ouvrir()
+    # Le son est le seul reproche qu'il ait fait et qu'on n'ait pas encore pu
+    # prouver autrement qu'en comptant les sorties. Dire le volume et l'etat
+    # muet montre qu'on sait *lire* l'etat du melangeur, pas seulement lister
+    # des peripheriques — c'est ce que fait le panneau quand on l'ouvre.
+    grenosui.dire("son ouvert, %d sorties, volume %d%%, %s"
+                  % (len(module_son.sorties()), module_son.volume(),
+                     "muet" if module_son.muet() else "actif"))
     Gtk.main()
 
 

@@ -917,10 +917,17 @@ def main():
     grenosui.dire(f"barre prete, {len(panneau.epingles)} epinglees")
 
     def dire_le_bouton():
-        zone = panneau.bouton_menu.get_allocation()
-        x = zone.x + zone.width // 2
-        y = panneau.hauteur - HAUTEUR + zone.y + zone.height // 2
-        grenosui.dire(f"bouton grenos en {x},{y}")
+        # Deux boutons, deux positions. Le menu, pour que la machine
+        # d'integration puisse cliquer dessus au lieu de viser au juge — la
+        # barre est centree, donc sa position depend du nombre d'icones. Et le
+        # son, parce que c'est le seul reproche de Grenofar qu'on n'ait pas
+        # encore pu prouver autrement qu'en comptant les sorties.
+        for nom, bouton in (("grenos", panneau.bouton_menu),
+                            ("son", panneau.bouton_son)):
+            zone = bouton.get_allocation()
+            x = zone.x + zone.width // 2
+            y = panneau.hauteur - HAUTEUR + zone.y + zone.height // 2
+            grenosui.dire(f"bouton {nom} en {x},{y}")
         return False
 
     GLib.timeout_add_seconds(3, dire_le_bouton)

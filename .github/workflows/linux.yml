@@ -408,6 +408,32 @@ jobs:
             echo "magasin: il ne s est pas annonce (test non bloquant, a affiner)"
           fi
 
+          echo "--- le son repond-il ---"
+          # Le seul reproche de Grenofar qu'on n'ait pas encore pu prouver
+          # autrement qu'en comptant les sorties. On clique sur le petit
+          # haut-parleur en bas a gauche — la barre dit ou il est, comme pour
+          # le bouton grenOS — et le panneau annonce ce qu'il lit du melangeur :
+          # combien de sorties, quel volume, muet ou non. Lire l'etat, pas
+          # seulement lister des peripheriques.
+          POINT_SON=$(grep -a 'bouton son en' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/.*en //')
+          if [ -n "$POINT_SON" ]; then
+            SX=${POINT_SON%,*}
+            SY=${POINT_SON#*,}
+            echo "son: le bouton est en $SX,$SY"
+            python3 scripts/ci-screen.py clic "$RUNNER_TEMP/qmp.sock" "$SX" "$SY" "$LARGEUR" "$HAUTEUR" || true
+            sleep 12
+            python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-son.ppm" || true
+            if grep -aq 'son ouvert' "$RUNNER_TEMP/serial.log"; then
+              grep -a 'son ouvert' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+            else
+              echo "son: le panneau ne s est pas annonce (test non bloquant, a affiner)"
+            fi
+            python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+            sleep 2
+          else
+            echo "son: la barre n a pas dit ou est son bouton"
+          fi
+
           echo "--- les reglages s ouvrent-ils ---"
           # C'est la porte des mises a jour, du son et du mot de passe, et
           # personne ne l'avait jamais ouverte ici. Huit pages construites,
