@@ -46,7 +46,6 @@
       "identifiant": "org.prismlauncher.PrismLauncher",
       "site": "https://prismlauncher.org"
     },
-
     {
       "slug": "libreoffice",
       "nom": "LibreOffice",
@@ -91,7 +90,6 @@
       "identifiant": "md.obsidian.Obsidian",
       "site": "https://obsidian.md"
     },
-
     {
       "slug": "gimp",
       "nom": "GIMP",
@@ -169,7 +167,6 @@
       "identifiant": "org.kde.kdenlive",
       "site": "https://kdenlive.org"
     },
-
     {
       "slug": "discord",
       "nom": "Discord",
@@ -198,7 +195,7 @@
       "rayon": "Internet",
       "editeur": "Debian",
       "description": "Le navigateur libre dont Chrome est tiré.",
-      "logo": "",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.chromium.Chromium.png",
       "source": "apt",
       "identifiant": "chromium",
       "site": "https://www.chromium.org"
@@ -236,7 +233,6 @@
       "identifiant": "com.spotify.Client",
       "site": "https://www.spotify.com"
     },
-
     {
       "slug": "vscode",
       "nom": "Visual Studio Code",
@@ -281,7 +277,6 @@
       "identifiant": "nodejs",
       "site": "https://nodejs.org"
     },
-
     {
       "slug": "nvidia",
       "nom": "Pilote NVIDIA",
@@ -321,7 +316,7 @@
       "rayon": "Système",
       "editeur": "Debian",
       "description": "Créer et lancer des machines virtuelles sur cette machine.",
-      "logo": "",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.virt_manager.virt-manager.png",
       "source": "apt",
       "identifiant": "virt-manager",
       "site": "https://virt-manager.org"

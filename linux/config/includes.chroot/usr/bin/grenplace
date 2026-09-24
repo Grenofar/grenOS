@@ -29,6 +29,7 @@ import urllib.request
 
 sys.path.insert(0, "/usr/lib/grenos")
 
+import cairo  # noqa: E402
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")
@@ -54,6 +55,17 @@ ICONES_RAYON = {
     "Internet": ["applications-internet", "web-browser"],
     "Développement": ["applications-development", "text-x-script"],
     "Système": ["preferences-system", "applications-system"],
+}
+
+# Quand meme le theme ne connait pas l'application, sa tuile prend la couleur
+# de son rayon : deux applications voisines restent distinguables.
+COULEURS_RAYON = {
+    "Jeux": "#7c4df0",
+    "Bureautique": "#2563eb",
+    "Création": "#d9488a",
+    "Internet": "#0ea5a3",
+    "Développement": "#f2820c",
+    "Système": "#5a6880",
 }
 
 STYLE = """
@@ -160,13 +172,65 @@ def logo(application, taille=48):
             except GLib.Error:
                 pass
 
+    # Le theme d'icones installe connait la plupart des paquets Debian
+    # (gparted, timeshift, python, node...). Le demander par son nom donne la
+    # vraie icone de l'application, sans rien telecharger.
     theme = Gtk.IconTheme.get_default()
-    for nom in ICONES_RAYON.get(application.get("rayon", ""), []) + ["package-x-generic"]:
+    identifiant = application.get("identifiant", "")
+    propres = [identifiant, identifiant.split(".")[-1].lower(), application["slug"]]
+    for nom in propres:
+        if nom:
+            try:
+                return theme.load_icon(nom, taille, Gtk.IconLookupFlags.FORCE_SIZE)
+            except GLib.Error:
+                continue
+
+    for nom in ICONES_RAYON.get(application.get("rayon", ""), []):
         try:
             return theme.load_icon(nom, taille, Gtk.IconLookupFlags.FORCE_SIZE)
         except GLib.Error:
             continue
-    return None
+
+    return tuile(application, taille)
+
+
+def tuile(application, taille):
+    """Faute de mieux, une tuile dessinee avec l'initiale.
+
+    C'est ce que font les telephones quand un contact n'a pas de photo, et
+    pour la meme raison : une lettre distingue une application d'une autre,
+    alors que la meme icone generique repetee dix fois n'apprend rien.
+    """
+    couleurs = grenosui.palette()
+    fond = COULEURS_RAYON.get(application.get("rayon", ""), couleurs["accent"])
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, taille, taille)
+    dessin = cairo.Context(surface)
+
+    rayon = taille * 0.24
+    dessin.new_sub_path()
+    dessin.arc(taille - rayon, rayon, rayon, -1.5708, 0)
+    dessin.arc(taille - rayon, taille - rayon, rayon, 0, 1.5708)
+    dessin.arc(rayon, taille - rayon, rayon, 1.5708, 3.1416)
+    dessin.arc(rayon, rayon, rayon, 3.1416, 4.7124)
+    dessin.close_path()
+    dessin.set_source_rgb(*_rvb(fond))
+    dessin.fill()
+
+    lettre = (application.get("nom") or "?").strip()[:1].upper()
+    dessin.select_font_face("Inter", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+    dessin.set_font_size(taille * 0.52)
+    _, _, largeur, hauteur, _, _ = dessin.text_extents(lettre)
+    dessin.move_to((taille - largeur) / 2 - 1, (taille + hauteur) / 2)
+    dessin.set_source_rgb(1, 1, 1)
+    dessin.show_text(lettre)
+
+    return Gdk.pixbuf_get_from_surface(surface, 0, 0, taille, taille)
+
+
+def _rvb(couleur):
+    """« #3b82f6 » en trois nombres entre 0 et 1."""
+    couleur = couleur.lstrip("#")
+    return tuple(int(couleur[i:i + 2], 16) / 255 for i in (0, 2, 4))
 
 
 # ---- L'installation --------------------------------------------------------

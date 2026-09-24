@@ -14,11 +14,18 @@ seulement son adresse.
 
     python3 linux/tools/publier-catalogue.py
 """
+import concurrent.futures
+import gzip
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
+
+# Les index de Debian, pour savoir si un paquet existe vraiment.
+DEBIAN = "http://deb.debian.org/debian/dists/trixie"
+SECTIONS = ("main", "contrib", "non-free")
 
 BUCKET = "catalogue"
 OBJET = "magasin.json"
@@ -56,6 +63,62 @@ def appeler(methode, adresse, cle, corps=None, entetes=None):
         return souci.code, souci.read().decode("utf-8", "replace")
 
 
+def paquets_de_trixie():
+    """Les noms de paquets que Debian publie vraiment."""
+    noms = set()
+    for section in SECTIONS:
+        adresse = f"{DEBIAN}/{section}/binary-amd64/Packages.gz"
+        with urllib.request.urlopen(adresse, timeout=180) as reponse:
+            index = gzip.decompress(reponse.read()).decode("utf-8", "replace")
+        noms.update(m.group(1) for m in re.finditer(r"^Package: (.*)$", index, re.M))
+    return noms
+
+
+def logo_repond(application):
+    """Cette adresse de logo rend-elle bien une image ?
+
+    Trois reponses : oui, non (notre faute, une adresse fausse), ou muette
+    (la leur, ou le reseau). Seule la deuxieme est une erreur de notre part.
+    """
+    adresse = application.get("logo") or ""
+    if not adresse:
+        return application["slug"], "absent"
+    requete = urllib.request.Request(adresse, method="HEAD",
+                                     headers={"User-Agent": "grenOS"})
+    try:
+        with urllib.request.urlopen(requete, timeout=25) as reponse:
+            return application["slug"], ("oui" if reponse.status == 200 else f"non ({reponse.status})")
+    except urllib.error.HTTPError as souci:
+        return application["slug"], f"non ({souci.code})"
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return application["slug"], "muet"
+
+
+def verifier_aux_sources(applications):
+    """Chaque fiche tient-elle devant la source qu'elle designe ?"""
+    voulus = sorted({a["identifiant"] for a in applications if a["source"] == "apt"})
+    if voulus:
+        reels = paquets_de_trixie()
+        absents = [nom for nom in voulus if nom not in reels]
+        print(f"paquets Debian : {len(voulus) - len(absents)}/{len(voulus)} existent dans trixie")
+        if absents:
+            sys.exit("Ces paquets n'existent pas dans trixie, "
+                     "le bouton Installer echouerait : " + ", ".join(absents))
+
+    with concurrent.futures.ThreadPoolExecutor(8) as reunion:
+        reponses = sorted(reunion.map(logo_repond, applications))
+    faux = [slug for slug, etat in reponses if etat.startswith("non")]
+    muets = [slug for slug, etat in reponses if etat == "muet"]
+    absents = [slug for slug, etat in reponses if etat == "absent"]
+    bons = len(reponses) - len(faux) - len(muets) - len(absents)
+    print(f"logos : {bons}/{len(reponses)} repondent")
+    for titre, liste in (("sans logo", absents), ("injoignables", muets)):
+        if liste:
+            print(f"  {titre} (tuile dessinee a la place) : {', '.join(liste)}")
+    if faux:
+        sys.exit("Ces adresses de logo sont fausses : " + ", ".join(faux))
+
+
 def main():
     url, cle = secrets()
 
@@ -76,6 +139,14 @@ def main():
         if application["slug"] in vus:
             sys.exit(f"Deux fiches portent le même nom court : {application['slug']}")
         vus.add(application["slug"])
+        cle_source = (application["source"], application["identifiant"])
+        if cle_source in vus:
+            sys.exit(f"Deux fiches installent la même chose : {application['identifiant']}")
+        vus.add(cle_source)
+
+    # Puis on interroge les sources elles-mêmes. Une fiche peut être bien
+    # formée et pourtant désigner un paquet qui n'existe pas.
+    verifier_aux_sources(applications)
 
     # Le bucket, créé une seule fois, public en lecture.
     statut, _ = appeler("POST", f"{url}/storage/v1/bucket", cle,
