@@ -57,13 +57,37 @@ fi
 # ---- Ce qu'on ne veut pas voir dans la liste des applications ---------------
 # Un seul chemin pour installer, et pas de réglage déguisé en application. Ils
 # restent trouvables en tapant leur nom dans la recherche.
-for cachee in calamares.desktop calamares-install-debian.desktop \
-              install-debian.desktop debian-installer-launcher.desktop \
-              openbox.desktop debian-uxterm.desktop debian-xterm.desktop \
-              display-im6.q16.desktop feh.desktop lightdm-gtk-greeter.desktop \
-              pavucontrol.desktop nm-connection-editor.desktop \
-              galculator.desktop vim.desktop xarchiver.desktop \
-              xfce4-terminal-settings.desktop; do
+# On reconnaît une entrée au **programme qu'elle lance**, pas au nom de son
+# fichier. Debian livre `org.pulseaudio.pavucontrol.desktop` et non
+# `pavucontrol.desktop` : « Contrôle du volume » restait donc dans la liste, et
+# on ne s'en apercevait qu'en ouvrant le menu. Un nom de fichier change de
+# version en version ; le programme lancé, non.
+A_CACHER="calamares pavucontrol nm-connection-editor galculator vim gvim
+xarchiver openbox uxterm xterm display-im6.q16 feh lightdm-gtk-greeter
+xfce4-terminal-settings xfce4-about pcmanfm-desktop-pref qv4l2 qvidcap"
+
+for fichier in /usr/share/applications/*.desktop; do
+    if [ ! -f "$fichier" ]; then
+        continue
+    fi
+    if grep -q '^NoDisplay=true' "$fichier"; then
+        continue
+    fi
+    base=$(basename "$fichier" .desktop)
+    lance=$(sed -n 's/^Exec=\([^ ]*\).*/\1/p' "$fichier" | head -1)
+    lance=${lance##*/}
+    for nom in $A_CACHER; do
+        if [ "$base" = "$nom" ] || [ "$lance" = "$nom" ]; then
+            echo "NoDisplay=true" >> "$fichier"
+            break
+        fi
+    done
+done
+
+# L'installateur de Debian, qui porte des noms trop variés pour une liste.
+for cachee in calamares-install-debian.desktop install-debian.desktop \
+              debian-installer-launcher.desktop debian-uxterm.desktop \
+              debian-xterm.desktop; do
     fichier="/usr/share/applications/${cachee}"
     if [ -f "$fichier" ] && ! grep -q '^NoDisplay=true' "$fichier"; then
         echo "NoDisplay=true" >> "$fichier"

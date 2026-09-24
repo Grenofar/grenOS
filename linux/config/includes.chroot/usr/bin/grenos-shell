@@ -50,11 +50,19 @@ EPINGLES_PAR_DEFAUT = [
 # Ce que personne ne cherche dans une liste d'applications : des réglages qui
 # ont leur place dans les Réglages, et des outils qu'on ouvre par un autre
 # chemin. Ils restent accessibles en tapant leur nom dans la recherche.
+#
+# On compare au **programme lancé**, pas au nom du fichier. Debian livre
+# `org.pulseaudio.pavucontrol.desktop`, pas `pavucontrol.desktop` : la liste
+# ratait donc « Contrôle du volume », et on ne s'en apercevait qu'en regardant
+# le menu. Un nom de fichier change de version en version ; `Exec=pavucontrol`
+# ne change pas.
 HORS_LISTE = {
     "pavucontrol", "nm-connection-editor", "galculator", "calamares",
     "grenos-installer", "grenos-theme", "grenos-maj", "xfce4-terminal-settings",
     "xfce4-settings-manager", "vim", "gvim", "xarchiver", "debian-installer",
     "qvidcap", "qdbusviewer", "lstopo", "assistant", "designer", "linguist",
+    "xfce4-about", "openbox", "uxterm", "xterm", "display-im6.q16", "feh",
+    "lightdm-gtk-greeter", "qv4l2", "pcmanfm-desktop-pref",
 }
 
 JOURS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
@@ -182,6 +190,12 @@ def lire_desktop(chemin):
     for code in ("%f", "%F", "%u", "%U", "%i", "%c", "%k"):
         commande = commande.replace(code, "")
     commande = commande.strip()
+    # On reconnaît une entrée à cacher par son nom de fichier ou par le
+    # programme qu'elle lance — le second survit aux changements du premier.
+    programme = os.path.basename(commande.split()[0]) if commande else ""
+    cache = (os.path.splitext(os.path.basename(chemin))[0] in HORS_LISTE
+             or programme in HORS_LISTE)
+
     return {
         "nom": nom,
         "note": champs.get("Comment[fr]") or champs.get("Comment") or "",
@@ -190,7 +204,7 @@ def lire_desktop(chemin):
         "classe": (champs.get("StartupWMClass", "")
                    or os.path.basename(commande.split()[0] if commande else "")),
         "fichier": chemin,
-        "cache": os.path.splitext(os.path.basename(chemin))[0] in HORS_LISTE,
+        "cache": cache,
         "terminal": champs.get("Terminal", "").lower() == "true",
     }
 
@@ -213,11 +227,16 @@ def applications():
 
 
 def image_de(noms, taille=26):
-    """La première icône trouvée parmi plusieurs noms possibles."""
-    if not noms:
-        return None
+    """La première icône trouvée parmi plusieurs noms possibles.
+
+    Le dernier mot revient toujours à notre marque. Une ligne de menu sans
+    icône est un trou que l'œil voit tout de suite — « Gestionnaire de
+    tâches » en avait un, parce que le thème ne connaissait pas le nom
+    demandé. Mieux vaut une icône générique qu'un vide.
+    """
     if isinstance(noms, str):
         noms = [noms]
+    noms = list(noms or []) + ["application-x-executable", "grenos"]
     theme = Gtk.IconTheme.get_default()
     for nom in noms:
         if not nom:
