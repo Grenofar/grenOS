@@ -147,6 +147,43 @@ echo "--- grenOS : verification des styles ---"
 # produire une image dont l'interface ne se chargerait pas.
 python3 /usr/lib/grenos/verif-style.py
 
+echo "--- grenOS : l'installateur est-il complet ---"
+
+# Ce que l'on promet de l'installateur doit être dans l'image. Personne ne
+# lance Calamares en intégration — cela demanderait un disque et une suite de
+# clics — mais rien n'empêche de vérifier que sa configuration y est, et de
+# refuser l'image sinon. C'est moins qu'une preuve, et c'est mieux que rien.
+#
+# Cette vérification reste ici, et pas dans `appliquer-systeme` : c'est un
+# refus de construction. Sur la machine de quelqu'un, un `exit 1` casserait
+# une mise à jour au lieu de protéger quoi que ce soit.
+manque=""
+[ -f /etc/calamares/settings.conf ] || manque="$manque settings.conf"
+grep -q '^branding: grenos' /etc/calamares/settings.conf 2>/dev/null || \
+    manque="$manque branding-grenos"
+[ -f /usr/share/calamares/branding/grenos/branding.desc ] || manque="$manque branding.desc"
+grep -q '^initialPartitioningChoice: erase' /etc/calamares/modules/partition.conf 2>/dev/null || \
+    manque="$manque tout-le-disque"
+grep -q '^allowManualPartitioning: true' /etc/calamares/modules/partition.conf 2>/dev/null || \
+    manque="$manque choix-manuel"
+if [ -n "$manque" ]; then
+    echo "grenos: l'installateur est incomplet :$manque" >&2
+    exit 1
+fi
+echo "grenos: installateur verifie (nos couleurs, tout le disque par defaut, choix manuel possible)"
+
+echo "--- grenOS : le bureau de depart est-il garni ---"
+
+# La CI a dit « bureau pret, 0 icones » et c'est comme cela que j'ai vu que
+# j'avais emporte ce bloc en deplacant les entrees de menu. Un bureau vide au
+# premier demarrage ne fait rougir aucune etape : on le verifie donc ici.
+garnis=$(ls -1 /etc/skel/Bureau 2>/dev/null | wc -l)
+if [ "$garnis" -lt 2 ]; then
+    echo "grenos: le bureau de depart ne contient que $garnis raccourci(s)" >&2
+    exit 1
+fi
+echo "grenos: bureau de depart garni de $garnis raccourcis"
+
 echo "--- grenOS : nos programmes compilent-ils ---"
 
 # Meme lecon que ci-dessus, d'un cran plus bas : une faute de syntaxe empeche

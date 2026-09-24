@@ -70,6 +70,21 @@ for cachee in calamares.desktop calamares-install-debian.desktop \
     fi
 done
 
+# ---- Ce qu'on trouve sur le bureau au premier démarrage ---------------------
+#
+# /etc/skel n'est le dossier de personne : c'est le modèle des comptes à venir,
+# y compris celui que crée l'installation sur disque. Le poser ici plutôt que
+# pendant la construction permet à une mise à jour d'ajouter le raccourci d'une
+# application nouvelle — et c'était tout l'objet. Les bureaux déjà existants ne
+# sont pas touchés : ce que quelqu'un a rangé chez lui lui appartient.
+mkdir -p /etc/skel/Bureau
+for raccourci in grenos-bienvenue grenplace; do
+    if [ -f "/usr/share/applications/${raccourci}.desktop" ]; then
+        install -m 0755 "/usr/share/applications/${raccourci}.desktop" \
+            /etc/skel/Bureau/ || true
+    fi
+done
+
 # ---- L'installateur porte nos couleurs et prend tout le disque --------------
 if [ -d /usr/share/calamares/branding/grenos ] && [ -f /usr/share/grenos/logo.png ]; then
     install -m 0644 /usr/share/grenos/logo.png \

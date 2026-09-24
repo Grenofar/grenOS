@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Les icônes de grenOS, calculées comme les fonds d'écran.
 
-Deux applications sont à nous et n'avaient pas de logo : GrenPlace et
-l'explorateur de fichiers portaient l'icône générique d'un thème, ce qui les
-faisait ressembler à n'importe quoi. Celles-ci sont dessinées par ce script,
+Ce qui est à nous doit porter notre marque. GrenPlace et l'explorateur
+portaient l'icône générique d'un thème, ce qui les faisait ressembler à
+n'importe quoi ; et l'icône `grenos`, que **toutes** nos fenêtres demandent,
+n'existait nulle part — la barre des tâches montrait donc, pour « Bienvenue
+dans grenOS », un dossier avec une maison. Celles-ci sont dessinées par ce script,
 en numpy et zlib, sans bibliothèque d'images — comme les fonds d'écran, elles
 sont produites à la construction de l'ISO et jamais sur la machine de
 quelqu'un.
@@ -218,10 +220,43 @@ def manette(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def marque(chemin, taille):
+    """La marque de grenOS : un G clair sur un ecusson bleu-violet.
+
+    Toutes nos fenetres demandent l'icone nommee `grenos` — et personne ne la
+    dessinait, alors la barre des taches montrait ce que le fichier .desktop
+    declarait a la place. Un anneau ouvert a droite et une barre : c'est ce
+    qui reste lisible a seize pixels, une fois que les details ont disparu.
+    """
+    image, u, v = toile(taille)
+
+    # L'ecusson, au degrade du sac de GrenPlace : la famille doit se voir.
+    fond = rectangle(u, v, 0.06, 0.06, 0.94, 0.94, rayon=0.22)
+    melange = np.clip((u + v - 0.12) / 1.64, 0.0, 1.0)
+    couleur = (np.array(ACCENT, dtype=float)[None, None, :] * (1 - melange[..., None])
+               + np.array(SECOND, dtype=float)[None, None, :] * melange[..., None])
+    alpha = fond[..., None]
+    image[..., :3] = image[..., :3] * (1 - alpha) + couleur * alpha
+    image[..., 3:] = image[..., 3:] * (1 - alpha) + 255.0 * alpha
+
+    # Le G : un anneau epais, ouvert vers la droite.
+    rayon = np.hypot(u - 0.5, v - 0.5)
+    anneau = np.clip((0.085 - np.abs(rayon - 0.255)) / 0.02, 0.0, 1.0)
+    ouverture = (u > 0.52) & (v < 0.52) & (v > 0.30)
+    poser(image, anneau * (~ouverture), CLAIR, 1.0)
+
+    # La barre du G, qui rentre vers le centre : sans elle, c'est un C.
+    barre = rectangle(u, v, 0.50, 0.46, 0.80, 0.585, rayon=0.03)
+    poser(image, barre, CLAIR, 1.0)
+
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
     os.makedirs(dossier, exist_ok=True)
+    marque(os.path.join(dossier, 'grenos.png'), taille)
     grenplace(os.path.join(dossier, 'grenplace.png'), taille)
     fichiers(os.path.join(dossier, 'grenos-fichiers.png'), taille)
     son(os.path.join(dossier, 'grenos-son.png'), taille, niveau=2)

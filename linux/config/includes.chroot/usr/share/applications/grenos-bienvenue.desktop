@@ -3,6 +3,6 @@ Type=Application
 Name=Bienvenue
 Comment=Ce que l'on peut faire, tout de suite
 Exec=grenos-bienvenue
-Icon=user-home
+Icon=grenos
 Terminal=false
 Categories=System;
