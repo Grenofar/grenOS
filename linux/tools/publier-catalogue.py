@@ -64,12 +64,27 @@ def appeler(methode, adresse, cle, corps=None, entetes=None):
 
 
 def paquets_de_trixie():
-    """Les noms de paquets que Debian publie vraiment."""
+    """Les noms de paquets que Debian publie vraiment, ou None si injoignable.
+
+    Chaque index fait une vingtaine de mégaoctets : une coupure en cours de
+    route arrive, et elle ne dit rien du catalogue. On réessaie trois fois,
+    puis on rend None — « je n'ai pas pu vérifier » n'est pas « c'est faux »,
+    et confondre les deux ferait rougir l'étape pour la panne de quelqu'un
+    d'autre.
+    """
     noms = set()
     for section in SECTIONS:
         adresse = f"{DEBIAN}/{section}/binary-amd64/Packages.gz"
-        with urllib.request.urlopen(adresse, timeout=180) as reponse:
-            index = gzip.decompress(reponse.read()).decode("utf-8", "replace")
+        for essai in range(3):
+            try:
+                with urllib.request.urlopen(adresse, timeout=120) as reponse:
+                    index = gzip.decompress(reponse.read()).decode("utf-8", "replace")
+                break
+            except (urllib.error.URLError, OSError, TimeoutError, EOFError) as souci:
+                print(f"  {section} : {souci} (essai {essai + 1}/3)")
+                index = None
+        if index is None:
+            return None
         noms.update(m.group(1) for m in re.finditer(r"^Package: (.*)$", index, re.M))
     return noms
 
@@ -105,11 +120,16 @@ def verifier_aux_sources(applications):
     voulus = sorted({a["identifiant"] for a in applications if a["source"] == "apt"})
     if voulus:
         reels = paquets_de_trixie()
-        absents = [nom for nom in voulus if nom not in reels]
-        print(f"paquets Debian : {len(voulus) - len(absents)}/{len(voulus)} existent dans trixie")
-        if absents:
-            sys.exit("Ces paquets n'existent pas dans trixie, "
-                     "le bouton Installer echouerait : " + ", ".join(absents))
+        if reels is None:
+            print("paquets Debian : les index sont injoignables, controle saute "
+                  "(ce n'est pas un defaut du catalogue)")
+        else:
+            absents = [nom for nom in voulus if nom not in reels]
+            print(f"paquets Debian : {len(voulus) - len(absents)}/{len(voulus)} "
+                  f"existent dans trixie")
+            if absents:
+                sys.exit("Ces paquets n'existent pas dans trixie, "
+                         "le bouton Installer echouerait : " + ", ".join(absents))
 
     with concurrent.futures.ThreadPoolExecutor(8) as reunion:
         reponses = sorted(reunion.map(logo_repond, applications))
