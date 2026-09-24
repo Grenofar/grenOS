@@ -344,6 +344,30 @@ def charger(fournisseur, css):
         return False
 
 
+def nommer():
+    """Chaque programme dit son nom aux fenêtres qu'il ouvre.
+
+    Nos programmes commencent par `#!/usr/bin/env python3`, et GTK annonçait
+    donc **toutes** nos fenêtres sous la même classe : « python3 ». La barre
+    des tâches, qui reconnaît une application à cette classe, les rangeait
+    toutes ensemble — Bienvenue, le gestionnaire de tâches et GrenPlace dans
+    une seule tuile — et aucune ne rejoignait jamais son icône épinglée.
+
+    C'est la cause commune de deux choses qu'il avait signalées : « les apps
+    ouvertes ont leur logo en bas qui n'est pas le leur », et le petit trait
+    sous une application déjà épinglée qui n'apparaissait pas. Vu en comptant
+    les tuiles sur une capture : quatre épinglées, et une seule pour trois
+    fenêtres.
+
+    À appeler avant d'ouvrir quoi que ce soit — la classe est lue quand la
+    fenêtre est créée, pas après.
+    """
+    nom = os.path.basename(sys.argv[0]) or "grenos"
+    GLib.set_prgname(nom)
+    Gdk.set_program_class(nom)
+    return nom
+
+
 def habiller(couleurs=None):
     """Applique le style à tout l'écran : toute fenêtre ouverte ensuite le suit.
 
@@ -354,6 +378,7 @@ def habiller(couleurs=None):
     personne ne le nomme. Une icône par défaut vaut pour toutes les fenêtres
     ouvertes ensuite, et chaque programme passe par ici.
     """
+    nommer()
     Gtk.Window.set_default_icon_name("grenos")
     fournisseur = Gtk.CssProvider()
     charger(fournisseur, feuille(couleurs))

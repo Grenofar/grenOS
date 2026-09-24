@@ -269,6 +269,23 @@ def ecrire_epingles(epingles):
         json.dump(epingles, fichier, ensure_ascii=False, indent=1)
 
 
+def vrai_programme(nom):
+    """Derrière « x-terminal-emulator », le programme qui s'ouvre vraiment.
+
+    La tuile Terminal est épinglée sous `x-terminal-emulator`, et la fenêtre
+    qui s'ouvre s'annonce `xfce4-terminal` : elles ne se reconnaissaient donc
+    jamais, et le terminal ouvert restait à côté de son icône au lieu de la
+    rejoindre. Le système sait déjà qui est derrière le lien ; on le lui
+    demande plutôt que d'écrire une table qui vieillirait.
+    """
+    if not nom.startswith("x-"):
+        return nom
+    try:
+        return os.path.basename(os.path.realpath(f"/usr/bin/{nom}")) or nom
+    except OSError:
+        return nom
+
+
 def meme_application(fenetre, commande, applications_connues):
     """Cette fenêtre appartient-elle à cette application ?
 
@@ -282,7 +299,7 @@ def meme_application(fenetre, commande, applications_connues):
         return False
     groupe = (fenetre.get_class_group_name() or "").lower()
     instance = (fenetre.get_name() or "").lower()
-    candidats = {programme.lower()}
+    candidats = {programme.lower(), vrai_programme(programme).lower()}
     for application in applications_connues:
         if application["commande"] == commande and application["classe"]:
             candidats.add(application["classe"].lower())
@@ -737,11 +754,14 @@ class Panneau(Gtk.Window):
         ouvertes = [f for f in self.ecran_wnck.get_windows() if not f.is_skip_tasklist()]
         active = self.ecran_wnck.get_active_window()
         prises = set()
+        rejointes = []
 
         for epingle in self.epingles:
             miennes = [f for f in ouvertes
                        if meme_application(f, epingle["commande"], self.applications)]
             prises.update(f.get_xid() for f in miennes)
+            if miennes:
+                rejointes.append(epingle["nom"])
             tuile = Tuile(self, epingle["nom"], epingle["commande"],
                           epingle.get("icone", ""), True)
             tuile.marquer(miennes, active)
@@ -755,6 +775,20 @@ class Panneau(Gtk.Window):
                 continue
             groupe = (fenetre.get_class_group_name() or fenetre.get_name() or "?")
             restantes.setdefault(groupe, []).append(fenetre)
+
+        # Qui a rejoint son icône, et qui a sa propre tuile. On ne le dit que
+        # lorsque cela change, sinon la barre parlerait toutes les secondes.
+        #
+        # Sans cette ligne, il fallait compter les tuiles sur une capture pour
+        # s'apercevoir que nos trois fenêtres n'en formaient qu'une — toutes
+        # annoncées sous la classe « python3 ». C'est ainsi qu'on l'a trouvé,
+        # et c'est trop fragile pour le laisser à l'œil.
+        etat = (tuple(rejointes), tuple(sorted(restantes)))
+        if etat != getattr(self, "dernier_etat_tuiles", None):
+            self.dernier_etat_tuiles = etat
+            grenosui.dire("tuiles : rejointes [%s], a part [%s]"
+                          % (", ".join(rejointes) or "aucune",
+                             ", ".join(sorted(restantes)) or "aucune"))
 
         for groupe, fenetres in restantes.items():
             application = self.application_de(groupe)
