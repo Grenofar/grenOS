@@ -98,9 +98,9 @@ const FR = {
   vboxTitle: "Dans VirtualBox",
   vbox: [
     "Télécharger le zip « pour VirtualBox » et l'extraire (clic droit → Extraire tout) : le fichier .vbox, le disque .vdi et l'image .iso sont côte à côte, et doivent le rester.",
-    "Double-cliquer sur le fichier .vbox, ou dans VirtualBox : Machine → Ajouter…, puis le choisir. La machine grenOS apparaît, déjà réglée : 64 bits, 4 Go de mémoire, deux cœurs, 128 Mo de mémoire vidéo, un disque de 25 Go.",
+    "Double-cliquer sur le fichier .vbox, ou dans VirtualBox : Machine → Ajouter…, puis le choisir. La machine grenOS apparaît, déjà réglée : 64 bits, 8 Go de mémoire, quatre cœurs, 256 Mo de mémoire vidéo, un disque de 25 Go.",
     "La démarrer. Le premier écran demande ton nom, puis le bureau s'ouvre — sans mot de passe — et tout ce que tu fais est gardé sur le disque de la machine.",
-    "Pour garder ses fichiers et ses comptes : l'icône « Installer grenOS » sur le bureau. L'installation prend une dizaine de minutes, puis la machine démarre sur son disque.",
+    "Il n'y a rien à installer : le disque de la machine garde déjà tes fichiers, tes réglages et tes applications. grenOS ne propose donc pas de s'installer dans une machine virtuelle — l'icône « Installer grenOS » n'apparaît que sur un vrai PC, où elle est utile.",
   ],
   vboxNote:
     "Une machine 64 bits demande la virtualisation matérielle (VT-x ou AMD-V) activée dans le BIOS du PC. Sans le fichier .vbox : nouvelle machine Debian (64-bit), 4 Go de mémoire, un disque de 25 Go, l'image dans le lecteur optique.",
@@ -185,9 +185,9 @@ const EN: typeof FR = {
   vboxTitle: "In VirtualBox",
   vbox: [
     "Download the zip “for VirtualBox” and extract it (right-click → Extract All): the .vbox file, the .vdi disk and the .iso image sit side by side, and must stay together.",
-    "Double-click the .vbox file, or in VirtualBox: Machine → Add…, and pick it. The grenOS machine appears, already set up: 64-bit, 4 GB of memory, two cores, 128 MB of video memory, a 25 GB disk.",
+    "Double-click the .vbox file, or in VirtualBox: Machine → Add…, and pick it. The grenOS machine appears, already set up: 64-bit, 8 GB of memory, four cores, 256 MB of video memory, a 25 GB disk.",
     "Start it. The first screen asks for your name, then the desktop opens — with no password — and everything you do is kept on the machine's disk.",
-    "To keep your files and accounts: the “Installer grenOS” icon on the desktop. Installing takes about ten minutes, then the machine boots from its disk.",
+    "There is nothing to install: the machine's disk already keeps your files, your settings and your applications. So grenOS does not offer to install itself inside a virtual machine — the “Installer grenOS” icon only appears on a real PC, where it is useful.",
   ],
   vboxNote:
     "A 64-bit machine needs hardware virtualisation (VT-x or AMD-V) enabled in the PC's BIOS. Without the .vbox file: a new Debian (64-bit) machine, 4 GB of memory, a 25 GB disk, the image in the optical drive.",
