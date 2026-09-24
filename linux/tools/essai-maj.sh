@@ -74,4 +74,70 @@ for fichier in /usr/bin/grenos-shell /usr/bin/grenos-maj /usr/bin/grenos-jeux \
 done
 dpkg-query -W -f='${Package} ${Version} ${Status}\n' grenos-desktop grenos-systeme
 
+# ---- Et maintenant, une vraie mise a jour -----------------------------------
+#
+# Ce qui precede prouve une installation neuve. Ce qu'on nous demande est
+# autre chose : qu'une version en remplace une autre, en apportant une
+# nouveaute — « un truc sur l'interface, les processus, etc. » — sans regraver
+# l'image et sans rien perdre. Alors on le fait pour de vrai.
+if ls dist/grenos-desktop_*.deb >/dev/null 2>&1; then
+    echo "--- une version plus recente arrive, comme sur une vraie machine ---"
+    ANCIENNE=$(dpkg-query -W -f='${Version}' grenos-desktop)
+
+    rm -rf /tmp/suite
+    dpkg-deb -R "$(ls dist/grenos-desktop_*.deb | head -1)" /tmp/suite
+    sed -i "s/^Version: .*/Version: ${ANCIENNE}+suite/" /tmp/suite/DEBIAN/control
+
+    # Deux nouveautes que la version installee n'a pas : un service et une
+    # entree de menu. C'est exactement ce qu'une mise a jour « majeure » doit
+    # pouvoir apporter, et ce qui etait impossible tant que le paquet ne
+    # portait que des programmes.
+    mkdir -p /tmp/suite/etc/systemd/system /tmp/suite/usr/share/applications
+    cat > /tmp/suite/etc/systemd/system/grenos-nouveaute.service <<'FIN'
+[Unit]
+Description=Preuve qu une mise a jour peut apporter un service neuf
+[Service]
+Type=oneshot
+ExecStart=/bin/true
+[Install]
+WantedBy=multi-user.target
+FIN
+    cat > /tmp/suite/usr/share/applications/grenos-nouveaute.desktop <<'FIN'
+[Desktop Entry]
+Type=Application
+Name=Nouveaute
+Exec=/bin/true
+Icon=grenplace
+FIN
+
+    # Un reglage partage, efface exprès. S'il revient, c'est que
+    # `appliquer-systeme` s'est execute apres l'installation — et c'est lui qui
+    # branche tout le reste. Sans cette verification, on croirait sur parole
+    # qu'il a tourne.
+    rm -f /etc/xdg/openbox/rc.xml
+
+    dpkg-deb -b /tmp/suite /tmp/grenos-desktop-suite.deb >/dev/null
+    apt-get install -y --no-install-recommends \
+        -o Dpkg::Options::=--force-confdef \
+        -o Dpkg::Options::=--force-confold \
+        /tmp/grenos-desktop-suite.deb
+
+    NOUVELLE=$(dpkg-query -W -f='${Version}' grenos-desktop)
+    echo "version : $ANCIENNE -> $NOUVELLE"
+    [ "$NOUVELLE" != "$ANCIENNE" ] || { echo "la version n'a pas change" >&2; exit 1; }
+
+    for preuve in /etc/systemd/system/grenos-nouveaute.service \
+                  /usr/share/applications/grenos-nouveaute.desktop \
+                  /etc/xdg/openbox/rc.xml; do
+        if [ ! -e "$preuve" ]; then
+            echo "la mise a jour n'a pas apporte : $preuve" >&2
+            exit 1
+        fi
+    done
+    echo "la mise a jour a apporte un service neuf, une entree de menu neuve,"
+    echo "et a repose le reglage partage : appliquer-systeme s'est bien execute"
+else
+    echo "(pas de paquet local : l'essai de remplacement est saute)"
+fi
+
 echo "la mise a jour depuis grenOS fonctionne"
