@@ -188,6 +188,7 @@ class Jeux(Gtk.Window):
         # ---- La carte graphique --------------------------------------------
         self.colonne.pack_start(self.section("CARTE GRAPHIQUE"), False, False, 0)
         marche, detail = jeux.vulkan()
+        self.vulkan_marche = marche
         paquet, conseil = jeux.pilote_propose()
 
         lignes = [
@@ -324,6 +325,13 @@ def main():
     _ = Gdk
     fenetre = Jeux()
     fenetre.show_all()
+    # Le mode Jeux n'avait jamais ete ouvert en integration, et c'est celui
+    # dont il attend le plus. Il dit ce qu'il a trouve : combien de titres, et
+    # si la machine sait faire de la 3D — la reponse qui decide si Rocket
+    # League tournera vraiment.
+    grenosui.dire("jeux ouvert, %d titres, 3D %s"
+                  % (len(jeux.JEUX),
+                     "oui" if getattr(fenetre, "vulkan_marche", False) else "non"))
     Gtk.main()
 
 

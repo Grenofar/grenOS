@@ -92,9 +92,14 @@ def installe(source, identifiant):
 
 def vulkan():
     """La machine sait-elle dessiner en 3D ? Rendu : (oui, ce qu'on a trouvé)."""
+    # Six secondes, pas vingt-cinq : cette question est posée pendant la
+    # construction de la fenêtre, donc **avant** qu'elle s'affiche. Sur une
+    # machine sans pilote, `vulkaninfo` traîne, et la personne restait devant
+    # un écran vide sans savoir si le programme avait démarré. Une machine qui
+    # met plus de six secondes à répondre n'a de toute façon pas de 3D utile.
     try:
         sortie = subprocess.run(["vulkaninfo", "--summary"], capture_output=True,
-                                text=True, timeout=25)
+                                text=True, timeout=6)
     except (OSError, subprocess.SubprocessError):
         return False, "Vulkan n'a pas pu être interrogé."
     if sortie.returncode != 0:
