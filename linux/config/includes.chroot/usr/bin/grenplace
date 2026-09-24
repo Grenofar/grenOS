@@ -387,6 +387,11 @@ class GrenPlace(Gtk.Window):
             self.origine = origine
             self.faire_rayons()
             self.remplir()
+            # Le magasin dit ce qu'il a trouvé, et d'où. La machine
+            # d'intégration ne l'ouvrait jamais : il aurait pu ne plus démarrer
+            # du tout sans que rien ne rougisse — et c'est la vitrine.
+            grenosui.dire(
+                "grenplace ouvert, %d applications (%s)" % (len(applications), origine))
             return False
         GLib.idle_add(poser)
 

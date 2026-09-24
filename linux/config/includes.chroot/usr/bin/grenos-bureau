@@ -493,9 +493,8 @@ def main():
 
     bureau = Bureau()
     bureau.show_all()
-    grenosui.lancer(
-        f"grenos-dire 'bureau pret, {len(bureau.plan.get_children())} icones "
-        f"dans {os.path.basename(bureau.dossier)}'")
+    grenosui.dire(f"bureau pret, {len(bureau.plan.get_children())} icones "
+                  f"dans {os.path.basename(bureau.dossier)}")
 
     # `grenos-fond` prévient d'un changement de thème ou de fond d'écran.
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, bureau.repeindre)

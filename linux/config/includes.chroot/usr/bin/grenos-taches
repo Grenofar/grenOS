@@ -340,8 +340,7 @@ def main():
     grenosui.ajouter_style(STYLE)
     fenetre = Taches()
     fenetre.show_all()
-    grenosui.lancer(
-        f"grenos-dire 'taches ouvert, {len(fenetre.precedents)} processus'")
+    grenosui.dire(f"taches ouvert, {len(fenetre.precedents)} processus")
     _ = time
     Gtk.main()
 

@@ -507,7 +507,7 @@ class Menu(Gtk.Window):
             siege.grab(self.get_window(), Gdk.SeatCapabilities.ALL_POINTING, True,
                        None, None, None, None)
             self.attrape = siege
-        grenosui.lancer(f"grenos-dire 'menu ouvert, {len(self.applications)} applications'")
+        grenosui.dire(f"menu ouvert, {len(self.applications)} applications")
 
     def fermer(self):
         if self.attrape is not None:
@@ -515,7 +515,7 @@ class Menu(Gtk.Window):
             self.attrape = None
         self.hide()
         self.panneau.enfoncer(False)
-        grenosui.lancer("grenos-dire 'menu ferme'")
+        grenosui.dire("menu ferme")
 
 
 def poser_sur_le_bureau(application):
@@ -880,13 +880,13 @@ def main():
 
     panneau = Panneau()
     panneau.show_all()
-    grenosui.lancer(f"grenos-dire 'barre prete, {len(panneau.epingles)} epinglees'")
+    grenosui.dire(f"barre prete, {len(panneau.epingles)} epinglees")
 
     def dire_le_bouton():
         zone = panneau.bouton_menu.get_allocation()
         x = zone.x + zone.width // 2
         y = panneau.hauteur - HAUTEUR + zone.y + zone.height // 2
-        grenosui.lancer(f"grenos-dire 'bouton grenos en {x},{y}'")
+        grenosui.dire(f"bouton grenos en {x},{y}")
         return False
 
     GLib.timeout_add_seconds(3, dire_le_bouton)

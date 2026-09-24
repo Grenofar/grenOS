@@ -16,6 +16,7 @@ Deux principes tiennent tout le reste :
     soignée *et* fluide sur une machine sans accélération 3D.
 """
 import os
+import shlex
 import subprocess
 import sys
 
@@ -399,6 +400,17 @@ def lancer(commande, terminal=False):
     if terminal:
         commande = f"x-terminal-emulator -e {commande}"
     return subprocess.Popen(["/bin/sh", "-c", commande], start_new_session=True)
+
+
+def dire(texte):
+    """Dit une phrase au journal de la machine, quoi qu'elle contienne.
+
+    Chaque programme construisait sa commande à la main, ce qui marche tant
+    que le texte n'a pas d'apostrophe. Le magasin voulait dire « (livré avec
+    l'image) » : cette apostrophe-là fermait la chaîne du shell au milieu de
+    la phrase, et le message se serait perdu sans que rien ne le signale.
+    """
+    return lancer("grenos-dire " + shlex.quote(str(texte)))
 
 
 def icone(nom, taille=24):
