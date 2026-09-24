@@ -32,6 +32,19 @@ OBJET = "magasin.json"
 ICI = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.join(ICI, "..", "data", "catalogue.json")
 
+# Les applications qu'on a retirées exprès. Sans cette liste, le contrôle
+# ci-dessous refuserait à jamais toute suppression volontaire — il doit
+# distinguer « on l'a enlevée » de « on l'a perdue ».
+#
+# Celles-ci viennent de la tâche 69c84239, publiée par accident depuis une
+# branche le 24 septembre au soir. Six sont des outils en ligne de commande, et
+# GrenPlace est une boutique à boutons « Installer » : cliquer sur `tree` ne
+# montre rien. Les autres font double emploi ou ne servent plus guère.
+RETIRES = {
+    "gnome-calculator", "cheese", "xsane", "hardinfo",
+    "inxi", "lm-sensors", "mc", "ncdu", "rsync", "tree",
+}
+
 
 def secrets():
     """L'adresse du projet et la clé de service, jamais affichées."""
@@ -115,6 +128,36 @@ def logo_repond(application):
         return application["slug"], "muet"
 
 
+def rien_n_a_disparu(applications, url):
+    """Le catalogue a-t-il perdu une application en route ?
+
+    Le 24 septembre, un Coder a **remplacé** les 29 fiches par 17 des siennes,
+    alors que sa tâche disait de ne rien enlever. La CI est passée au vert :
+    le fichier se lisait, et ses paquets existaient. Rien ne regardait ce qui
+    avait disparu.
+
+    On compare donc à ce qui est en ligne. Une boutique ne perd pas ses rayons
+    par accident ; si un retrait est voulu, il s'écrit dans RETIRES, et cela se
+    voit dans le diff.
+    """
+    public = f"{url}/storage/v1/object/public/{BUCKET}/{OBJET}"
+    try:
+        with urllib.request.urlopen(public + "?frais=1", timeout=45) as reponse:
+            enligne = json.loads(reponse.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as souci:
+        print(f"catalogue en ligne injoignable ({souci}) : comparaison sautee")
+        return
+
+    avant = {a.get("slug") for a in enligne.get("applications", []) if a.get("slug")}
+    apres = {a["slug"] for a in applications}
+    perdues = sorted(avant - apres - RETIRES)
+    if perdues:
+        sys.exit("Ces applications etaient en ligne et ne sont plus dans le "
+                 "catalogue : " + ", ".join(perdues) + ". Si le retrait est "
+                 "voulu, ajoute-les a RETIRES dans ce fichier.")
+    print(f"aucune application perdue ({len(avant)} en ligne, {len(apres)} ici)")
+
+
 def verifier_aux_sources(applications):
     """Chaque fiche tient-elle devant la source qu'elle designe ?"""
     voulus = sorted({a["identifiant"] for a in applications if a["source"] == "apt"})
@@ -183,6 +226,9 @@ def main():
     # Puis on interroge les sources elles-mêmes. Une fiche peut être bien
     # formée et pourtant désigner un paquet qui n'existe pas.
     verifier_aux_sources(applications)
+    rien_n_a_disparu(applications, url or
+                     os.environ.get("SUPABASE_URL", "").rstrip("/") or
+                     "https://tpqzhzuoyqpfairatdrw.supabase.co")
 
     if verifier_seulement:
         print("catalogue verifie, rien n'a ete publie (ce n'est pas la branche main)")
