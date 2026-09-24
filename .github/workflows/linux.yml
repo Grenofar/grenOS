@@ -375,6 +375,16 @@ jobs:
             exit 1
           fi
 
+          # Cette image peut-elle se mettre a jour ? L'essai en conteneur prouve
+          # que le depot marche ; il ne prouve pas que l'IMAGE le connait. Le
+          # depot arrive par config/archives/grenos.list.binary, et personne
+          # n'avait jamais verifie qu'il atteignait le systeme demarre. Sans
+          # lui, « Mettre a jour grenOS » n'apporte que les correctifs Debian.
+          # Rapporte, pas encore bloquant : une etape ne devient obligatoire
+          # qu'apres avoir ete vue verte.
+          echo "--- cette image peut-elle se mettre a jour ---"
+          grep -a 'grenos: maj:' "$RUNNER_TEMP/serial.log" | sed 's/^.*grenos: //' ||             echo "maj: l image n a rien dit du tout"
+
           # Un bureau couvre son fond de fenetres, d'icones et d'un panneau :
           # sa couleur dominante ne depasse jamais 70 % de l'ecran. Un menu de
           # demarrage, lui, est noir a 90 %.

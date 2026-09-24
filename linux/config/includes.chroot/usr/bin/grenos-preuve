@@ -22,6 +22,42 @@ dire () {
     echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
 }
 
+# ---- Cette image peut-elle se mettre a jour ? -------------------------------
+#
+# Le depot grenOS arrive par config/archives/grenos.list.binary, et rien n'a
+# jamais verifie qu'il atteignait l'image demarree. C'est pourtant le maillon
+# qui decide de tout : sans lui, « Mettre a jour grenOS » ne trouve rien de
+# grenOS a mettre a jour et n'apporte que les correctifs Debian. L'essai en
+# conteneur prouve que le depot marche ; il ne prouve pas que l'image le
+# connait.
+depot=""
+for fichier in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+    if [ -f "$fichier" ] && grep -q 'public/apt' "$fichier" 2>/dev/null; then
+        depot="$fichier"
+        break
+    fi
+done
+if [ -n "$depot" ]; then
+    dire "maj: depot grenOS configure dans $depot"
+else
+    dire "maj: aucun depot grenOS, cette image ne pourra pas se mettre a jour"
+fi
+
+if [ -f /usr/share/keyrings/grenos-apt.gpg ]; then
+    dire "maj: trousseau du depot present"
+else
+    dire "maj: trousseau du depot absent"
+fi
+
+# Et dpkg connait-il nos paquets ? Sans entree dans dpkg, apt n'a rien a
+# comparer, donc rien a mettre a jour — c'est exactement ce qui manquait.
+version=$(dpkg-query -W -f='${Version}' grenos-desktop 2>/dev/null || true)
+if [ -n "$version" ]; then
+    dire "maj: grenos-desktop $version est installe"
+else
+    dire "maj: grenos-desktop n'est pas installe, apt n'aura rien a mettre a jour"
+fi
+
 vu_session=0
 i=0
 # Un quart d'heure, et pas davantage. La machine d'integration a rendu son
