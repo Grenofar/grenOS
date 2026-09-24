@@ -147,6 +147,49 @@ echo "--- grenOS : verification des styles ---"
 # produire une image dont l'interface ne se chargerait pas.
 python3 /usr/lib/grenos/verif-style.py
 
+echo "--- grenOS : nos programmes compilent-ils ---"
+
+# Meme lecon que ci-dessus, d'un cran plus bas : une faute de syntaxe empeche
+# le programme de demarrer, et rien ne rougit pendant la construction. On s'en
+# apercevrait en cliquant sur une icone qui ne fait rien.
+# On lit le fichier sans rien ecrire : `py_compile` deposerait des dossiers
+# __pycache__ jusque dans /usr/bin, que personne ne lirait jamais.
+compiler () {
+    if ! python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1])' "$1"; then
+        echo "grenos: $1 ne compile pas" >&2
+        exit 1
+    fi
+}
+# Nos modules : un fichier .py est du Python, sans avoir a le demander.
+# Ecrit en clair, et pas « [ -f x ] && ... » : avec `set -e`, cette forme en
+# fin de boucle fait sortir le hook en erreur des que le motif ne trouve rien.
+# La lecon est deja dans CLAUDE.md, payee une fois.
+for module in /usr/lib/grenos/*.py; do
+    if [ -f "$module" ]; then
+        compiler "$module"
+    fi
+done
+# Nos programmes : eux portent une ligne #!, et certains sont du shell.
+for programme in /usr/bin/grenos-* /usr/bin/grenplace /usr/lib/grenos/grenos-*; do
+    [ -f "$programme" ] || continue
+    head -1 "$programme" | grep -q python3 || continue
+    compiler "$programme"
+done
+echo "grenos: tous nos programmes compilent"
+
+# Et un programme juste peut manquer d'une bibliotheque : `import cairo` n'a
+# de sens que si le paquet est la. On demande a l'image d'importer ce dont nos
+# programmes ont besoin, plutot que de l'esperer.
+python3 - <<'VERIF'
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("Wnck", "3.0")
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Wnck  # noqa: F401
+import cairo  # noqa: F401
+print("grenos: les bibliotheques de l'interface repondent")
+VERIF
+
 echo "--- grenOS : menage ---"
 
 rm -f /usr/share/applications/xfce4-about.desktop
