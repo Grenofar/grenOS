@@ -557,6 +557,12 @@ jobs:
           done
           python3 -c "import sys, xml.etree.ElementTree as X; X.parse(sys.argv[1]); print('le .vbox est du XML valide')" "dist/$NAME.vbox"
           echo "machine VirtualBox : les trois fichiers sont la, et le .vbox les designe"
+          # Demarre-t-elle sur un PC recent ? Presque aucun ne demarre plus en
+          # BIOS. Le controle est un fichier a part, pas du Python ecrit dans
+          # ce YAML : du code indente dans `python3 -c` leve une erreur
+          # d'indentation, et c'est la lecon deja payee avec le garde-fou.
+          python3 scripts/verif-iso-uefi.py "dist/$NAME.iso"
+
           SIZE=$(stat -c %s "dist/$NAME.iso")
           echo "image : $((SIZE / 1024 / 1024)) Mio"
           if [ "$SIZE" -gt 2100000000 ]; then
