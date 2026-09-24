@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Jeux
+Comment=Pilotes, Steam, Proton, et ce qui tourne vraiment
+Exec=grenos-jeux
+Icon=grenos-jeux
+Terminal=false
+Categories=Game;System;

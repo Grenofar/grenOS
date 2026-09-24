@@ -1,0 +1,96 @@
+#!/bin/sh
+# Brancher grenOS dans le système : services, icônes, entrées de menu.
+#
+# Ce script est le **seul** endroit qui décrit ce branchement, et il est appelé
+# à deux moments : quand l'image se construit, et quand le paquet
+# `grenos-desktop` s'installe ou se met à jour. C'est ce qui permet à une mise
+# à jour d'apporter une vraie nouveauté — un service qui n'existait pas, une
+# entrée de menu, une icône — et pas seulement de remplacer des fichiers.
+#
+# Sans lui, ajouter un service voulait dire regraver une image : le fichier
+# serait bien arrivé, mais personne ne l'aurait allumé.
+#
+# Il ne touche jamais au dossier personnel de qui que ce soit, ni au compte, ni
+# au mot de passe, ni aux réglages déjà choisis : uniquement /usr et /etc.
+
+set -e
+
+echo "grenos: branchement du systeme"
+
+# ---- Les services -----------------------------------------------------------
+# `daemon-reload` d'abord : sans lui, systemd ne voit pas un service nouveau.
+systemctl daemon-reload >/dev/null 2>&1 || true
+
+# Le premier écran ne se rallume pas sur une machine déjà nommée : sa condition
+# (l'absence de /etc/grenos/identite) s'en charge, mais autant être clair.
+for service in grenos-premier.service grenos-preuve.service grenos-maj-verif.timer; do
+    systemctl enable "$service" >/dev/null 2>&1 || true
+done
+
+# L'installation automatique des mises à jour suit ce que la personne a choisi :
+# on ne l'allume jamais de notre propre initiative.
+if [ -e /etc/grenos/maj-automatique ]; then
+    systemctl enable grenos-maj-auto.timer >/dev/null 2>&1 || true
+else
+    systemctl disable grenos-maj-auto.timer >/dev/null 2>&1 || true
+fi
+
+# L'écran de chargement reste jusqu'à l'extinction.
+for service in plymouth-poweroff plymouth-reboot plymouth-halt plymouth-kexec; do
+    systemctl enable "${service}.service" >/dev/null 2>&1 || true
+done
+
+# ---- Nos choix d'applications par défaut ------------------------------------
+if [ -x /usr/bin/xfce4-terminal ]; then
+    update-alternatives --set x-terminal-emulator /usr/bin/xfce4-terminal >/dev/null 2>&1 || true
+fi
+if [ -x /usr/bin/firefox-esr ]; then
+    update-alternatives --set x-www-browser /usr/bin/firefox-esr >/dev/null 2>&1 || true
+fi
+
+# ---- L'explorateur porte notre nom et notre icône ---------------------------
+if [ -f /usr/share/applications/pcmanfm.desktop ]; then
+    sed -i 's/^Icon=.*/Icon=grenos-fichiers/' /usr/share/applications/pcmanfm.desktop || true
+    sed -i 's/^Name=.*/Name=Fichiers/' /usr/share/applications/pcmanfm.desktop || true
+fi
+
+# ---- Ce qu'on ne veut pas voir dans la liste des applications ---------------
+# Un seul chemin pour installer, et pas de réglage déguisé en application. Ils
+# restent trouvables en tapant leur nom dans la recherche.
+for cachee in calamares.desktop calamares-install-debian.desktop \
+              install-debian.desktop debian-installer-launcher.desktop \
+              openbox.desktop debian-uxterm.desktop debian-xterm.desktop \
+              display-im6.q16.desktop feh.desktop lightdm-gtk-greeter.desktop \
+              pavucontrol.desktop nm-connection-editor.desktop \
+              galculator.desktop vim.desktop xarchiver.desktop \
+              xfce4-terminal-settings.desktop; do
+    fichier="/usr/share/applications/${cachee}"
+    if [ -f "$fichier" ] && ! grep -q '^NoDisplay=true' "$fichier"; then
+        echo "NoDisplay=true" >> "$fichier"
+    fi
+done
+
+# ---- L'installateur porte nos couleurs et prend tout le disque --------------
+if [ -d /usr/share/calamares/branding/grenos ] && [ -f /usr/share/grenos/logo.png ]; then
+    install -m 0644 /usr/share/grenos/logo.png \
+        /usr/share/calamares/branding/grenos/logo.png || true
+fi
+if [ -f /etc/calamares/settings.conf ]; then
+    sed -i 's/^branding:.*/branding: grenos/' /etc/calamares/settings.conf || true
+    grep -q '^branding:' /etc/calamares/settings.conf || \
+        echo "branding: grenos" >> /etc/calamares/settings.conf
+fi
+# Le partitionnement par défaut : tout le disque, le choix manuel restant
+# offert. Ce fichier appartient à calamares-settings-debian : on le modifie
+# plutôt que de le remplacer, sinon dpkg se plaindrait d'un conflit.
+if [ -f /etc/calamares/modules/partition.conf ] && \
+   [ -f /usr/share/grenos/partition.conf ]; then
+    cp /usr/share/grenos/partition.conf /etc/calamares/modules/partition.conf || true
+fi
+
+# ---- Les icônes et les menus ------------------------------------------------
+gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
+gtk-update-icon-cache -f /usr/share/icons/Papirus-Dark >/dev/null 2>&1 || true
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+
+echo "grenos: systeme branche"

@@ -74,21 +74,10 @@ greeter-session=lightdm-gtk-greeter
 EOF
 
 # Nos choix d'applications par défaut, plutôt que le hasard de l'installation.
-update-alternatives --set x-terminal-emulator /usr/bin/xfce4-terminal || true
-update-alternatives --set x-www-browser /usr/bin/firefox-esr || true
 
 # LightDM est le seul gestionnaire de connexion, et il ouvre notre session.
 echo "/usr/sbin/lightdm" > /etc/X11/default-display-manager
 
-# Le premier écran (le nom de la machine), puis la preuve que le bureau s'est
-# vraiment ouvert — c'est elle que lit la CI sur le port série.
-systemctl enable grenos-premier.service || true
-systemctl enable grenos-preuve.service || true
-
-# La verification quotidienne des mises a jour. Elle n'installe rien : elle
-# compte, et le bureau le montre. L'installation automatique, elle, reste
-# eteinte tant que la personne ne l'a pas demandee dans les Reglages.
-systemctl enable grenos-maj-verif.timer || true
 
 echo "--- grenOS : le clavier et la langue ---"
 
@@ -123,129 +112,7 @@ if [ -d /usr/share/plymouth/themes/spinner ]; then
     plymouth-set-default-theme spinner >/dev/null 2>&1 || true
 fi
 
-# L'écran de chargement reste aussi à l'extinction et au redémarrage : sinon,
-# éteindre la machine affiche une page de journaux au lieu de la fermer.
-for service in plymouth-poweroff plymouth-reboot plymouth-halt plymouth-kexec; do
-    systemctl enable "${service}.service" >/dev/null 2>&1 || true
-done
-
 update-initramfs -u >/dev/null 2>&1 || true
-
-echo "--- grenOS : les entrees de menu ---"
-
-mkdir -p /usr/share/applications
-
-ecrire_entree () {
-    cat > "/usr/share/applications/grenos-$1.desktop" <<EOF
-[Desktop Entry]
-Type=Application
-Name=$2
-Comment=$3
-Exec=grenos-$1
-Icon=$4
-Terminal=false
-Categories=System;Settings;
-EOF
-}
-
-ecrire_entree bienvenue "Bienvenue" "Ce que l'on peut faire, tout de suite" "user-home"
-ecrire_entree parametres "Réglages" "L'apparence, l'écran, le son, le compte, les mises à jour" "preferences-system"
-ecrire_entree maj "Mettre à jour grenOS" "Les nouveautés et les correctifs de sécurité" "system-software-update"
-ecrire_entree theme "Jour et nuit" "Changer la lumière du bureau" "weather-clear-night"
-ecrire_entree taches "Gestionnaire de tâches" "Ce qui tourne, et ce que ça consomme" "utilities-system-monitor"
-ecrire_entree connexions "Connexions" "Wi-Fi et Bluetooth" "network-wireless"
-ecrire_entree son "Son" "Volume, sortie, et chaque application" "grenos-son"
-ecrire_entree jeux "Jeux" "Pilotes, Steam, Proton, et ce qui tourne vraiment" "grenos-jeux"
-
-# GrenPlace ne suit pas le nommage grenos-* : c'est une marque, pas un outil.
-cat > /usr/share/applications/grenplace.desktop <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=GrenPlace
-Comment=Ajouter des applications en un clic, Steam compris
-Exec=grenplace
-Icon=grenplace
-Terminal=false
-Categories=System;PackageManager;
-EOF
-
-# L'explorateur de fichiers porte notre icône et le nom qu'on lui donne :
-# « PCManFM » ne dit rien à personne.
-if [ -f /usr/share/applications/pcmanfm.desktop ]; then
-    sed -i 's/^Icon=.*/Icon=grenos-fichiers/' /usr/share/applications/pcmanfm.desktop || true
-    sed -i 's/^Name=.*/Name=Fichiers/' /usr/share/applications/pcmanfm.desktop || true
-fi
-gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
-
-# Ce qu'on trouve sur le bureau au premier démarrage : de quoi commencer.
-for raccourci in grenos-bienvenue grenplace; do
-    if [ -f "/usr/share/applications/${raccourci}.desktop" ]; then
-        install -m 0755 "/usr/share/applications/${raccourci}.desktop" /etc/skel/Bureau/
-    fi
-done
-
-cat > /usr/share/applications/grenos-installer.desktop <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=Installer grenOS
-Comment=Poser le système sur le disque de cette machine
-Exec=pkexec calamares
-Icon=drive-harddisk
-Terminal=false
-Categories=System;
-EOF
-
-# Ce que personne ne doit trouver dans le menu : outils internes et doublons.
-# Un seul chemin pour installer : le nôtre. Debian en pose d'autres, et trois
-# boutons pour le même geste ne rassurent personne. Les réglages déguisés en
-# applications disparaissent aussi de la liste — ils restent accessibles en
-# tapant leur nom, et ils ont leur place dans les Réglages.
-for cachee in calamares.desktop calamares-install-debian.desktop \
-              install-debian.desktop debian-installer-launcher.desktop \
-              openbox.desktop debian-uxterm.desktop \
-              debian-xterm.desktop display-im6.q16.desktop feh.desktop \
-              lightdm-gtk-greeter.desktop pavucontrol.desktop \
-              nm-connection-editor.desktop galculator.desktop vim.desktop \
-              xarchiver.desktop xfce4-terminal-settings.desktop; do
-    if [ -f "/usr/share/applications/${cachee}" ]; then
-        echo "NoDisplay=true" >> "/usr/share/applications/${cachee}"
-    fi
-done
-
-echo "--- grenOS : l'installateur ---"
-
-# Calamares porte nos couleurs (l'habillage est dans includes.chroot). Son
-# fichier de marque réclame un logo.png à côté de lui : c'est le nom de grenOS,
-# rendu à la construction par build.sh.
-if [ -d /usr/share/calamares/branding/grenos ] && [ -f /usr/share/grenos/logo.png ]; then
-    install -m 0644 /usr/share/grenos/logo.png \
-        /usr/share/calamares/branding/grenos/logo.png || true
-fi
-
-if [ -f /etc/calamares/settings.conf ]; then
-    sed -i 's/^branding:.*/branding: grenos/' /etc/calamares/settings.conf || true
-    grep -q '^branding:' /etc/calamares/settings.conf || \
-        echo "branding: grenos" >> /etc/calamares/settings.conf
-fi
-
-# Ce que l'on promet de l'installateur doit être dans l'image. Personne ne
-# lance Calamares en intégration — cela demanderait un disque et une suite de
-# clics — mais rien n'empêche de vérifier que sa configuration y est, et de
-# refuser l'image sinon. C'est moins qu'une preuve, et c'est mieux que rien.
-manque=""
-[ -f /etc/calamares/settings.conf ] || manque="$manque settings.conf"
-grep -q '^branding: grenos' /etc/calamares/settings.conf 2>/dev/null || \
-    manque="$manque branding-grenos"
-[ -f /usr/share/calamares/branding/grenos/branding.desc ] || manque="$manque branding.desc"
-grep -q '^initialPartitioningChoice: erase' /etc/calamares/modules/partition.conf 2>/dev/null || \
-    manque="$manque tout-le-disque"
-grep -q '^allowManualPartitioning: true' /etc/calamares/modules/partition.conf 2>/dev/null || \
-    manque="$manque choix-manuel"
-if [ -n "$manque" ]; then
-    echo "grenos: l'installateur est incomplet :$manque" >&2
-    exit 1
-fi
-echo "grenos: installateur verifie (nos couleurs, tout le disque par defaut, choix manuel possible)"
 
 echo "--- grenOS : le magasin ---"
 
@@ -262,16 +129,14 @@ echo "--- grenOS : les icones ---"
 # variantes dont grenOS se sert. Les autres pèsent une centaine de mégaoctets
 # pour rien.
 rm -rf /usr/share/icons/ePapirus /usr/share/icons/ePapirus-Dark        /usr/share/icons/Papirus-Light
-if [ -d /usr/share/icons/Papirus-Dark ]; then
-    for fichier in /etc/gtk-3.0/settings.ini /etc/skel/.config/gtk-3.0/settings.ini; do
-        mkdir -p "$(dirname "$fichier")"
-        if [ -f "$fichier" ]; then
-            sed -i 's/^gtk-icon-theme-name=.*/gtk-icon-theme-name=Papirus-Dark/' "$fichier"
-        fi
-    done
-fi
-gtk-update-icon-cache -f /usr/share/icons/Papirus-Dark >/dev/null 2>&1 || true
-gtk-update-icon-cache -f /usr/share/icons/Adwaita >/dev/null 2>&1 || true
+
+echo "--- grenOS : branchement du systeme ---"
+
+# Une seule description du branchement, appelée ici et après chaque mise à
+# jour du paquet. Deux descriptions auraient divergé au premier oubli — et
+# c'est ce qui arrivait : les entrées de menu écrites ici n'atteignaient
+# jamais une machine déjà installée.
+/usr/lib/grenos/appliquer-systeme
 
 echo "--- grenOS : verification des styles ---"
 

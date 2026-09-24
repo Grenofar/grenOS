@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Jour et nuit
+Comment=Changer la lumière du bureau
+Exec=grenos-theme
+Icon=weather-clear-night
+Terminal=false
+Categories=Settings;

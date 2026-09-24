@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Connexions
+Comment=Wi-Fi et Bluetooth
+Exec=grenos-connexions
+Icon=network-wireless
+Terminal=false
+Categories=System;Settings;

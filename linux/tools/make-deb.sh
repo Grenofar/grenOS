@@ -22,9 +22,19 @@ mkdir -p "$BUILD/DEBIAN" \
          "$BUILD/usr/bin" \
          "$BUILD/usr/lib/grenos" \
          "$BUILD/usr/share/grenos" \
+         "$BUILD/usr/share/applications" \
+         "$BUILD/usr/share/icons/hicolor/256x256/apps" \
          "$BUILD/usr/share/xsessions" \
          "$BUILD/usr/share/themes/grenOS/openbox-3" \
-         "$BUILD/etc/xdg/openbox"
+         "$BUILD/usr/share/calamares/branding/grenos" \
+         "$BUILD/etc/xdg/openbox" \
+         "$BUILD/etc/xdg/pcmanfm/default" \
+         "$BUILD/etc/xdg/libfm" \
+         "$BUILD/etc/gtk-3.0" \
+         "$BUILD/etc/fonts" \
+         "$BUILD/etc/lightdm" \
+         "$BUILD/etc/polkit-1/rules.d" \
+         "$BUILD/etc/systemd/system"
 
 # Les programmes du bureau, tels quels. `grenos-premier` n'en fait pas partie :
 # il ne sert qu'au tout premier démarrage d'une image, et le réinstaller sur
@@ -50,6 +60,64 @@ python3 "$HERE/tools/wallpaper.py" "$BUILD/usr/share/grenos" 2560 1440
 
 # Le catalogue de secours de GrenPlace : celui du réseau l'emporte toujours.
 install -m 0644 "$HERE/data/catalogue.json" "$BUILD/usr/share/grenos/catalogue.json"
+
+# Nos icônes, calculées comme les fonds d'écran.
+python3 "$HERE/tools/icones.py" "$BUILD/usr/share/icons/hicolor/256x256/apps" 256
+
+# ---- Ce qui manquait, et qui rend une vraie mise à jour possible -----------
+#
+# Les services, les entrées de menu, les réglages du système et l'habillage de
+# l'installateur étaient écrits au moment de construire l'image, donc jamais
+# livrés à une machine déjà installée. Ajouter un service ou une application
+# demandait de regraver. Ils font partie du paquet désormais.
+
+# Les services : le premier écran, la preuve de session, la vérification des
+# mises à jour et leur installation automatique.
+for service in grenos-premier.service grenos-preuve.service \
+               grenos-maj-verif.service grenos-maj-verif.timer \
+               grenos-maj-auto.service grenos-maj-auto.timer; do
+    install -m 0644 "$DEDANS/etc/systemd/system/$service" "$BUILD/etc/systemd/system/"
+done
+
+# Les entrées de menu, et le raccourci d'installation.
+install -m 0644 "$DEDANS"/usr/share/applications/*.desktop \
+    "$BUILD/usr/share/applications/"
+
+# Les réglages du système : le rendu du texte, le thème GTK, l'explorateur,
+# l'écran de connexion, et les autorisations.
+install -m 0644 "$DEDANS/etc/gtk-3.0/settings.ini" "$BUILD/etc/gtk-3.0/"
+install -m 0644 "$DEDANS/etc/fonts/local.conf" "$BUILD/etc/fonts/"
+install -m 0644 "$DEDANS/etc/xdg/pcmanfm/default/pcmanfm.conf" "$BUILD/etc/xdg/pcmanfm/default/"
+install -m 0644 "$DEDANS/etc/xdg/libfm/libfm.conf" "$BUILD/etc/xdg/libfm/"
+install -m 0644 "$DEDANS/etc/lightdm/lightdm-gtk-greeter.conf" "$BUILD/etc/lightdm/"
+install -m 0644 "$DEDANS/etc/polkit-1/rules.d/49-grenos-administration.rules" \
+    "$BUILD/etc/polkit-1/rules.d/"
+
+# L'habillage de l'installateur, et le partitionnement qu'il propose. Le
+# fichier de partitionnement va dans /usr/share : celui de /etc appartient à
+# calamares-settings-debian, et deux paquets ne peuvent pas posséder le même.
+install -m 0644 "$DEDANS"/usr/share/calamares/branding/grenos/* \
+    "$BUILD/usr/share/calamares/branding/grenos/"
+install -m 0644 "$DEDANS/usr/share/grenos/partition.conf" "$BUILD/usr/share/grenos/"
+
+# Le script qui branche tout cela dans le système, appelé aussi bien à la
+# construction de l'image qu'après chaque mise à jour.
+install -m 0755 "$DEDANS/usr/lib/grenos/appliquer-systeme" "$BUILD/usr/lib/grenos/"
+install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-verif" "$BUILD/usr/lib/grenos/"
+install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-reglage" "$BUILD/usr/lib/grenos/"
+
+# Ce qui s'exécute après l'installation du paquet. Sans lui, un service
+# nouvellement livré resterait éteint et une icône nouvelle invisible : le
+# fichier serait là, mais rien ne l'aurait branché.
+cat > "$BUILD/DEBIAN/postinst" <<'FIN'
+#!/bin/sh
+set -e
+if [ "$1" = configure ] && [ -x /usr/lib/grenos/appliquer-systeme ]; then
+    /usr/lib/grenos/appliquer-systeme || true
+fi
+exit 0
+FIN
+chmod 0755 "$BUILD/DEBIAN/postinst"
 
 SIZE=$(du -ks "$BUILD" | cut -f1)
 cat > "$BUILD/DEBIAN/control" <<EOF

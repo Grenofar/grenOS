@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Son
+Comment=Volume, sortie, et chaque application
+Exec=grenos-son
+Icon=grenos-son
+Terminal=false
+Categories=Settings;AudioVideo;

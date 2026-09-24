@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=GrenPlace
+Comment=Ajouter des applications en un clic, Steam compris
+Exec=grenplace
+Icon=grenplace
+Terminal=false
+Categories=System;PackageManager;

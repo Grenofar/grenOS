@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Installer grenOS
+Comment=Poser le système sur le disque de cette machine
+Exec=pkexec calamares
+Icon=drive-harddisk
+Terminal=false
+Categories=System;

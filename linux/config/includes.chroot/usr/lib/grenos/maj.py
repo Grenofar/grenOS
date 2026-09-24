@@ -108,9 +108,25 @@ class Travail:
         self.sur_avance(1.0)
         if code != 0:
             return self.sur_fin("L'installation s'est arrêtée. Le détail est ci-dessous.", False)
+        # Une nouvelle barre ou un nouveau bureau viennent d'arriver sur le
+        # disque, mais ceux qui tournent sont les anciens. On les arrête : le
+        # veilleur les relance aussitôt, dans leur nouvelle version. Sans cela,
+        # il faudrait fermer la session pour voir le changement — et personne
+        # ne le ferait, donc personne ne verrait la mise à jour.
+        self._rafraichir_le_bureau()
+
         return self.sur_fin(
             f"{total} paquet{'s' if total > 1 else ''} installé"
             f"{'s' if total > 1 else ''}. C'est à jour.", True)
+
+    def _rafraichir_le_bureau(self):
+        """Relance la barre et le bureau si leur programme a change."""
+        for programme in ("grenos-shell", "grenos-bureau"):
+            try:
+                subprocess.run(["pkill", "-f", programme], capture_output=True,
+                               timeout=20)
+            except (OSError, subprocess.SubprocessError):
+                pass
 
 
 # ---- Ce que la vérification quotidienne a trouvé ----------------------------

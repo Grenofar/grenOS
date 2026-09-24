@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Réglages
+Comment=L'apparence, l'écran, le son, l'heure, le compte, les mises à jour
+Exec=grenos-parametres
+Icon=preferences-system
+Terminal=false
+Categories=System;Settings;

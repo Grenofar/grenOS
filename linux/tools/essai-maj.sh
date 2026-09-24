@@ -42,8 +42,20 @@ apt-get install -y --no-install-recommends \
     grenos-desktop
 
 echo "--- ce qui est arrive ---"
+# Ce que l'on vérifie n'est pas seulement « des fichiers sont arrivés » : c'est
+# qu'une mise à jour peut apporter une VRAIE nouveauté — un service qui
+# n'existait pas, une entrée de menu, une icône. Sans eux, il faudrait regraver
+# une image pour changer autre chose qu'un programme.
 for fichier in /usr/bin/grenos-shell /usr/bin/grenos-maj /usr/bin/grenos-jeux \
-               /usr/lib/grenos/grenosui.py /usr/share/grenos/catalogue.json; do
+               /usr/lib/grenos/grenosui.py /usr/share/grenos/catalogue.json \
+               /usr/lib/grenos/appliquer-systeme \
+               /etc/systemd/system/grenos-maj-verif.timer \
+               /etc/systemd/system/grenos-maj-auto.service \
+               /usr/share/applications/grenos-parametres.desktop \
+               /usr/share/applications/grenos-jeux.desktop \
+               /usr/share/icons/hicolor/256x256/apps/grenplace.png \
+               /etc/xdg/openbox/rc.xml \
+               /etc/polkit-1/rules.d/49-grenos-administration.rules; do
     if [ ! -e "$fichier" ]; then
         echo "manquant : $fichier" >&2
         exit 1
