@@ -31,11 +31,11 @@ mkdir -p "$BUILD/DEBIAN" \
 # une machine déjà nommée n'aurait aucun sens.
 for outil in grenos-shell grenos-session grenos-menu grenos-fond grenos-veilleur \
              grenos-arret grenos-parametres grenplace grenos-bienvenue grenos-bureau \
-             grenos-theme grenos-maj grenos-taches grenos-connexions grenos-dire grenos-son; do
+             grenos-theme grenos-maj grenos-taches grenos-connexions grenos-dire grenos-son grenos-jeux; do
     install -m 0755 "$DEDANS/usr/bin/$outil" "$BUILD/usr/bin/"
 done
 
-for module in grenosui ecran son materiel maj heure clavier reseau; do
+for module in grenosui ecran son materiel maj heure clavier reseau jeux; do
     install -m 0644 "$DEDANS/usr/lib/grenos/$module.py" "$BUILD/usr/lib/grenos/"
 done
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-compte" "$BUILD/usr/lib/grenos/"

@@ -128,6 +128,30 @@ pciutils
 mesa-vulkan-drivers
 mesa-utils
 vulkan-tools
+# Pour jouer : la priorite au jeu pendant qu'il tourne, et le compteur
+# d'images par seconde par-dessus l'ecran.
+gamemode
+mangohud
+
+## Le microcode du processeur. Les deux sont embarques : chacun ne se charge
+## que sur le processeur qui lui correspond, et l'autre dort. Sans lui, une
+## machine recente peut se figer sur des defauts que le fabricant a pourtant
+## corriges — et cela ne se repare pas apres coup.
+intel-microcode
+amd64-microcode
+
+## Les cartes graphiques. Intel et AMD marchent d'emblee : leurs pilotes sont
+## dans le noyau, et Mesa fait le reste, jeux compris. NVIDIA est a part — son
+## pilote est proprietaire et ne peut pas etre embarque ; `nvidia-detect` dit
+## lequel installer, et la page Jeux le propose en un clic.
+firmware-intel-graphics
+firmware-nvidia-graphics
+nvidia-detect
+xserver-xorg-video-ati
+
+## Le son des portables recents : sans ce micrologiciel, beaucoup de machines
+## Intel n'ont aucune sortie audio du tout.
+firmware-sof-signed
 
 ## Micrologiciels : sans eux, beaucoup de cartes Wi-Fi restent muettes sur une
 ## vraie machine, et beaucoup de cartes graphiques AMD n'affichent rien.

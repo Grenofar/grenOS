@@ -165,6 +165,59 @@ def son(chemin, taille, niveau=2):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def nuage(chemin, taille):
+    """Le jeu en nuage : un nuage, et le triangle qu'on connait."""
+    image, u, v = toile(taille)
+
+    # Trois cercles et une base plate : c'est ainsi qu'on dessine un nuage.
+    forme = np.zeros_like(u)
+    for cx, cy, rayon in ((0.36, 0.48, 0.15), (0.54, 0.42, 0.19), (0.68, 0.50, 0.14)):
+        forme = np.maximum(forme, np.clip((rayon - np.hypot(u - cx, v - cy)) / 0.012,
+                                          0.0, 1.0))
+    forme = np.maximum(forme, rectangle(u, v, 0.28, 0.48, 0.74, 0.64, rayon=0.07))
+
+    melange = np.clip((u - 0.28) / 0.46, 0.0, 1.0)
+    couleur = (np.array(ACCENT, dtype=float)[None, None, :] * (1 - melange[..., None])
+               + np.array(SECOND, dtype=float)[None, None, :] * melange[..., None])
+    alpha = forme[..., None]
+    image[..., :3] = image[..., :3] * (1 - alpha) + couleur * alpha
+    image[..., 3:] = image[..., 3:] * (1 - alpha) + 255.0 * alpha
+
+    # Le triangle de lecture, au centre du nuage.
+    dans = ((u > 0.46) & (u < 0.60)
+            & (np.abs(v - 0.50) < (0.60 - u) * 0.72))
+    poser(image, dans.astype(float), CLAIR, 0.95)
+
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
+def manette(chemin, taille):
+    """La manette de la page Jeux : un corps large et deux poignees."""
+    image, u, v = toile(taille)
+
+    corps = rectangle(u, v, 0.16, 0.38, 0.84, 0.66, rayon=0.14)
+    for cx in (0.26, 0.74):
+        corps = np.maximum(corps, np.clip(
+            (0.13 - np.hypot((u - cx) * 1.0, (v - 0.60) * 0.85)) / 0.012, 0.0, 1.0))
+
+    melange = np.clip((u - 0.16) / 0.68, 0.0, 1.0)
+    couleur = (np.array(ACCENT, dtype=float)[None, None, :] * (1 - melange[..., None])
+               + np.array(SECOND, dtype=float)[None, None, :] * melange[..., None])
+    alpha = corps[..., None]
+    image[..., :3] = image[..., :3] * (1 - alpha) + couleur * alpha
+    image[..., 3:] = image[..., 3:] * (1 - alpha) + 255.0 * alpha
+
+    # La croix a gauche, deux boutons a droite.
+    croix = np.maximum(rectangle(u, v, 0.26, 0.475, 0.40, 0.515, rayon=0.012),
+                       rectangle(u, v, 0.31, 0.425, 0.35, 0.565, rayon=0.012))
+    poser(image, croix, CLAIR, 0.95)
+    for cx, cy in ((0.64, 0.46), (0.72, 0.53)):
+        point = np.clip((0.035 - np.hypot(u - cx, v - cy)) / 0.010, 0.0, 1.0)
+        poser(image, point, CLAIR, 0.95)
+
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
@@ -174,6 +227,8 @@ def main():
     son(os.path.join(dossier, 'grenos-son.png'), taille, niveau=2)
     son(os.path.join(dossier, 'grenos-son-faible.png'), taille, niveau=1)
     son(os.path.join(dossier, 'grenos-son-muet.png'), taille, niveau=0)
+    nuage(os.path.join(dossier, 'grenos-nuage.png'), taille)
+    manette(os.path.join(dossier, 'grenos-jeux.png'), taille)
 
 
 if __name__ == '__main__':

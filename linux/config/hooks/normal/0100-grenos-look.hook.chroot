@@ -155,6 +155,7 @@ ecrire_entree theme "Jour et nuit" "Changer la lumière du bureau" "weather-clea
 ecrire_entree taches "Gestionnaire de tâches" "Ce qui tourne, et ce que ça consomme" "utilities-system-monitor"
 ecrire_entree connexions "Connexions" "Wi-Fi et Bluetooth" "network-wireless"
 ecrire_entree son "Son" "Volume, sortie, et chaque application" "grenos-son"
+ecrire_entree jeux "Jeux" "Pilotes, Steam, Proton, et ce qui tourne vraiment" "grenos-jeux"
 
 # GrenPlace ne suit pas le nommage grenos-* : c'est une marque, pas un outil.
 cat > /usr/share/applications/grenplace.desktop <<'EOF'

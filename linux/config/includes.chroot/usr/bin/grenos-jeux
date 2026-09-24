@@ -1,0 +1,331 @@
+#!/usr/bin/env python3
+"""Jouer sur grenOS : ce que la machine sait faire, et ce qu'il lui manque.
+
+Une page, trois blocs. Ce que la carte graphique sait faire et le pilote qu'il
+lui faudrait. Ce qu'il faut installer pour jouer, avec un bouton par ligne. Et
+les jeux qu'on a demandés, avec la vérité sur chacun : celui qui marche, et
+celui qui ne marche pas — avec le chemin qui, lui, marche.
+
+Cette dernière franchise est le cœur de la page. Promettre qu'un jeu tourne
+alors que son éditeur refuse Linux ferait perdre une soirée à quelqu'un.
+"""
+import os
+import re
+import subprocess
+import sys
+import threading
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+import jeux  # noqa: E402
+import materiel  # noqa: E402
+
+STYLE = """
+.carte-jeu {
+    background-image: linear-gradient(to bottom, @fond-clair, @fond-haut);
+    border: 1px solid @bord;
+    border-radius: 14px;
+    padding: 16px;
+}
+.marche { color: @reussi; font-weight: 700; }
+.nuage { color: @accent-clair; font-weight: 700; }
+.avertissement {
+    background-image: linear-gradient(135deg, alpha(@danger, 0.18), alpha(@danger, 0.10));
+    border: 1px solid alpha(@danger, 0.45);
+    border-radius: 14px;
+    padding: 16px;
+}
+"""
+
+
+def lanceur():
+    if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode == 0:
+        return ["sudo", "-n"]
+    return ["pkexec"]
+
+
+class Installation(Gtk.Window):
+    """La même fenêtre d'installation que GrenPlace : une barre, et le détail."""
+
+    def __init__(self, parent, nom, source, identifiant, fini):
+        super().__init__(title=f"Installation de {nom}")
+        self.set_default_size(620, 360)
+        self.set_transient_for(parent)
+        self.set_position(Gtk.WindowPosition.CENTER_ON_PARENT)
+        self.nom, self.source, self.identifiant, self.fini = nom, source, identifiant, fini
+
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        colonne.set_border_width(24)
+        self.add(colonne)
+        colonne.pack_start(grenosui.titre(nom, "Installation en cours."), False, False, 0)
+
+        self.etat = Gtk.Label(label="Préparation…", xalign=0)
+        self.barre = Gtk.ProgressBar()
+        colonne.pack_start(grenosui.carte(self.etat, self.barre), False, False, 0)
+
+        self.details = Gtk.Expander(label="Voir le détail")
+        vue = Gtk.ScrolledWindow()
+        vue.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        vue.set_size_request(-1, 160)
+        self.texte = Gtk.TextView()
+        self.texte.set_editable(False)
+        self.texte.set_monospace(True)
+        vue.add(self.texte)
+        self.details.add(vue)
+        colonne.pack_start(self.details, True, True, 0)
+
+        self.fermer = grenosui.bouton("Fermer", self.destroy)
+        self.fermer.set_sensitive(False)
+        colonne.pack_start(self.fermer, False, False, 0)
+        threading.Thread(target=self.travailler, daemon=True).start()
+
+    def journal(self, ligne):
+        def ajouter():
+            tampon = self.texte.get_buffer()
+            tampon.insert(tampon.get_end_iter(), ligne + "\n")
+            return False
+        GLib.idle_add(ajouter)
+
+    def travailler(self):
+        GLib.idle_add(self.etat.set_text, "Téléchargement et installation…")
+        ligne = jeux.commande_installation(self.source, self.identifiant)
+        commande = (["flatpak", "remote-add", "--if-not-exists", "flathub",
+                     "https://dl.flathub.org/repo/flathub.flatpakrepo"]
+                    if self.source == "flatpak" else None)
+        if commande:
+            subprocess.run(commande, capture_output=True)
+            processus = subprocess.Popen(
+                ["flatpak", "install", "-y", "--noninteractive", "flathub",
+                 self.identifiant],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        else:
+            processus = subprocess.Popen(
+                lanceur() + ["sh", "-c", ligne],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+                env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+
+        faits = 0
+        for sortie in processus.stdout:
+            sortie = sortie.rstrip()
+            if not sortie:
+                continue
+            self.journal(sortie)
+            trouve = re.search(r"(\d+)%", sortie)
+            if trouve:
+                GLib.idle_add(self.barre.set_fraction, int(trouve.group(1)) / 100)
+            elif re.match(r"^(Unpacking|Dépaquetage|Setting up|Paramétrage|Installing)",
+                          sortie):
+                faits += 1
+                GLib.idle_add(self.barre.set_fraction, min(0.15 + faits / 30, 0.95))
+        processus.wait()
+
+        GLib.idle_add(self.barre.set_fraction, 1.0)
+        if processus.returncode == 0:
+            GLib.idle_add(self.etat.set_text, f"{self.nom} est installé.")
+        else:
+            GLib.idle_add(self.etat.set_text, "L'installation s'est arrêtée.")
+            GLib.idle_add(self.details.set_expanded, True)
+        GLib.idle_add(self.fermer.set_sensitive, True)
+        GLib.idle_add(self.fini)
+
+
+class Jeux(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Jeux")
+        self.set_default_size(900, 720)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.connect("destroy", Gtk.main_quit)
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.add(defilement)
+
+        self.colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        self.colonne.set_border_width(28)
+        defilement.add(self.colonne)
+
+        self.dire = Gtk.Label(label="", xalign=0)
+        self.dire.get_style_context().add_class("sous")
+        self.dire.set_line_wrap(True)
+
+        self.remplir()
+
+    def remplir(self):
+        for enfant in self.colonne.get_children():
+            self.colonne.remove(enfant)
+
+        infos = materiel.resume()
+        self.colonne.pack_start(
+            grenosui.titre("Jeux", f"{infos['coeurs']} cœurs, "
+                                   f"{infos['memoire']:.1f} Go de mémoire."),
+            False, False, 0)
+
+        # ---- L'avertissement qui décide de tout ----------------------------
+        virtuelle = jeux.machine_virtuelle()
+        if virtuelle:
+            texte = Gtk.Label(
+                label="Cette machine est virtuelle : elle n'a pas de vraie carte "
+                      "graphique, et aucun jeu récent n'y tournera. Pour jouer, "
+                      "installe grenOS sur le disque de ton ordinateur — c'est la "
+                      "seule façon d'avoir la 3D.",
+                xalign=0)
+            texte.set_line_wrap(True)
+            bloc = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            bloc.get_style_context().add_class("avertissement")
+            titre = Gtk.Label(label="À LIRE AVANT DE COMMENCER", xalign=0)
+            titre.get_style_context().add_class("section")
+            bloc.pack_start(titre, False, False, 0)
+            bloc.pack_start(texte, False, False, 0)
+            self.colonne.pack_start(bloc, False, False, 0)
+
+        # ---- La carte graphique --------------------------------------------
+        self.colonne.pack_start(self.section("CARTE GRAPHIQUE"), False, False, 0)
+        marche, detail = jeux.vulkan()
+        paquet, conseil = jeux.pilote_propose()
+
+        lignes = [
+            self.ligne("Carte", infos["carte"][:56]),
+            self.ligne("Pilote en cours", infos["pilote"][:56]),
+            self.ligne("3D (Vulkan)", detail if marche else "aucune"),
+        ]
+        if conseil:
+            note = Gtk.Label(label=conseil, xalign=0)
+            note.get_style_context().add_class("sous")
+            note.set_line_wrap(True)
+            lignes.append(note)
+        if paquet:
+            lignes.append(grenosui.bouton(
+                "Installer le pilote NVIDIA",
+                lambda: self.installer("Pilote NVIDIA", "apt", self.paquet_nvidia()),
+                "principal"))
+        self.colonne.pack_start(grenosui.carte(*lignes), False, False, 0)
+
+        # ---- Ce qu'il faut pour jouer ---------------------------------------
+        self.colonne.pack_start(self.section("POUR JOUER"), False, False, 0)
+        for outil in jeux.OUTILS:
+            self.colonne.pack_start(self.ligne_outil(outil), False, False, 0)
+
+        # ---- Les jeux --------------------------------------------------------
+        self.colonne.pack_start(self.section("LES JEUX QUE TU AS DEMANDÉS"),
+                                False, False, 0)
+        for jeu in jeux.JEUX:
+            self.colonne.pack_start(self.carte_jeu(jeu), False, False, 0)
+
+        self.colonne.pack_start(self.dire, False, False, 0)
+        self.colonne.show_all()
+
+    def section(self, texte):
+        etiquette = Gtk.Label(label=texte, xalign=0)
+        etiquette.get_style_context().add_class("section")
+        return etiquette
+
+    def ligne(self, nom, valeur):
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        boite.pack_start(Gtk.Label(label=nom, xalign=0), False, False, 0)
+        valeur_etiquette = Gtk.Label(label=valeur, xalign=1)
+        valeur_etiquette.get_style_context().add_class("sous")
+        boite.pack_end(valeur_etiquette, False, False, 0)
+        return boite
+
+    def paquet_nvidia(self):
+        """Le paquet exact que Debian conseille pour cette carte."""
+        try:
+            sortie = subprocess.run(["nvidia-detect"], capture_output=True, text=True,
+                                    timeout=30).stdout
+        except (OSError, subprocess.SubprocessError):
+            return "nvidia-driver"
+        trouve = re.search(r"(nvidia-\S*driver\S*)", sortie)
+        return trouve.group(1) if trouve else "nvidia-driver"
+
+    def ligne_outil(self, outil):
+        ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        texte = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        nom = Gtk.Label(label=outil["nom"], xalign=0)
+        nom.get_style_context().add_class("entree-titre")
+        note = Gtk.Label(label=outil["note"], xalign=0)
+        note.get_style_context().add_class("sous")
+        note.set_line_wrap(True)
+        texte.pack_start(nom, False, False, 0)
+        texte.pack_start(note, False, False, 0)
+        ligne.pack_start(texte, True, True, 0)
+
+        if jeux.installe(outil["source"], outil["identifiant"]):
+            etat = Gtk.Label(label="Installé")
+            etat.get_style_context().add_class("marche")
+            ligne.pack_end(etat, False, False, 8)
+        else:
+            ligne.pack_end(grenosui.bouton(
+                "Installer",
+                lambda o=outil: self.installer(o["nom"], o["source"], o["identifiant"]),
+                "principal"), False, False, 0)
+        return grenosui.carte(ligne)
+
+    def carte_jeu(self, jeu):
+        bloc = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        bloc.get_style_context().add_class("carte-jeu")
+
+        entete = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        nom = Gtk.Label(label=jeu["nom"], xalign=0)
+        nom.get_style_context().add_class("entree-titre")
+        entete.pack_start(nom, True, True, 0)
+        etat = Gtk.Label(label="fonctionne" if jeu["etat"] == "marche" else "en nuage")
+        etat.get_style_context().add_class("marche" if jeu["etat"] == "marche" else "nuage")
+        entete.pack_end(etat, False, False, 0)
+        bloc.pack_start(entete, False, False, 0)
+
+        note = Gtk.Label(label=jeu["note"], xalign=0)
+        note.get_style_context().add_class("sous")
+        note.set_line_wrap(True)
+        bloc.pack_start(note, False, False, 0)
+
+        if jeu["action"] == "steam":
+            bloc.pack_start(grenosui.bouton(
+                "Ouvrir dans Steam",
+                lambda a=jeu["adresse"]: grenosui.lancer(f"xdg-open {a}"), "principal"),
+                False, False, 0)
+        else:
+            if jeux.fortnite_pose():
+                bloc.pack_start(grenosui.bouton(
+                    "Ouvrir Fortnite",
+                    lambda: grenosui.lancer("gtk-launch grenos-fortnite"), "principal"),
+                    False, False, 0)
+            else:
+                bloc.pack_start(grenosui.bouton(
+                    "Installer Fortnite en nuage", self.poser_fortnite, "principal"),
+                    False, False, 0)
+        return bloc
+
+    def poser_fortnite(self):
+        manque = jeux.poser_fortnite()
+        if manque == "chromium":
+            self.dire.set_text("Il faut d'abord un navigateur Chromium : le service de "
+                               "Microsoft refuse Firefox. Installation en cours…")
+            self.installer("Chromium", "apt", "chromium")
+            return
+        self.dire.set_text("Fortnite est posé sur le bureau et dans le menu. "
+                           "Il s'ouvre comme une application, sans barre d'adresse.")
+        self.remplir()
+
+    def installer(self, nom, source, identifiant):
+        fenetre = Installation(self, nom, source, identifiant, self.remplir)
+        fenetre.show_all()
+
+
+def main():
+    grenosui.habiller()
+    grenosui.ajouter_style(STYLE)
+    _ = Gdk
+    fenetre = Jeux()
+    fenetre.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()
