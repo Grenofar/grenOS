@@ -378,8 +378,13 @@ def habiller(couleurs=None):
     personne ne le nomme. Une icône par défaut vaut pour toutes les fenêtres
     ouvertes ensuite, et chaque programme passe par ici.
     """
-    nommer()
-    Gtk.Window.set_default_icon_name("grenos")
+    # Chaque application porte sa propre marque quand elle en a une, et celle
+    # du système sinon. On le décide en demandant au thème s'il connaît une
+    # icône du nom du programme — une liste écrite à la main vieillirait au
+    # premier programme ajouté, et personne ne s'en apercevrait.
+    nom = nommer()
+    marque = nom if Gtk.IconTheme.get_default().has_icon(nom) else "grenos"
+    Gtk.Window.set_default_icon_name(marque)
     fournisseur = Gtk.CssProvider()
     charger(fournisseur, feuille(couleurs))
     Gtk.StyleContext.add_provider_for_screen(
