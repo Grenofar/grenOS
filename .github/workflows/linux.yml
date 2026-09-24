@@ -515,6 +515,32 @@ jobs:
           python3 scripts/make-vbox.py "$NAME.iso" "dist/$NAME.vbox" --linux --disk "dist/$NAME.vdi" "$NAME.vdi"
           (cd dist && zip -q -9 "$NAME-virtualbox.zip" "$NAME.iso" "$NAME.vbox" "$NAME.vdi")
           ls -la dist
+
+          # Ce qu'il ouvre vraiment, c'est ce zip, et personne ne l'avait
+          # jamais regarde. Un fichier que `zip` aurait saute, ou un nom qui ne
+          # correspond pas, se verrait chez lui et pas ici.
+          echo "--- ce que contient la machine VirtualBox ---"
+          unzip -l "dist/$NAME-virtualbox.zip"
+          manque=""
+          for attendu in "$NAME.iso" "$NAME.vbox" "$NAME.vdi"; do
+            unzip -l "dist/$NAME-virtualbox.zip" | grep -q "$attendu" || manque="$manque $attendu"
+          done
+          if [ -n "$manque" ]; then
+            echo "::error::La machine VirtualBox est incomplete :$manque"
+            exit 1
+          fi
+          # Le .vbox doit designer ses deux fichiers par le nom qu'ils portent
+          # dans le zip : une fois decompresse, VirtualBox les cherche a cote.
+          # Et il doit etre du XML valide, sinon VirtualBox refuse la machine
+          # sans expliquer pourquoi.
+          for attendu in "$NAME.iso" "$NAME.vdi"; do
+            if ! grep -q "$attendu" "dist/$NAME.vbox"; then
+              echo "::error::Le .vbox ne designe pas $attendu"
+              exit 1
+            fi
+          done
+          python3 -c "import sys, xml.etree.ElementTree as X; X.parse(sys.argv[1]); print('le .vbox est du XML valide')" "dist/$NAME.vbox"
+          echo "machine VirtualBox : les trois fichiers sont la, et le .vbox les designe"
           SIZE=$(stat -c %s "dist/$NAME.iso")
           echo "image : $((SIZE / 1024 / 1024)) Mio"
           if [ "$SIZE" -gt 2100000000 ]; then
