@@ -27,12 +27,7 @@ mkdir -p "$BUILD/DEBIAN" \
          "$BUILD/usr/share/xsessions" \
          "$BUILD/usr/share/themes/grenOS/openbox-3" \
          "$BUILD/usr/share/calamares/branding/grenos" \
-         "$BUILD/etc/xdg/openbox" \
-         "$BUILD/etc/xdg/pcmanfm/default" \
-         "$BUILD/etc/xdg/libfm" \
-         "$BUILD/etc/gtk-3.0" \
-         "$BUILD/etc/fonts" \
-         "$BUILD/etc/lightdm" \
+         "$BUILD/usr/share/grenos/modeles" \
          "$BUILD/etc/polkit-1/rules.d" \
          "$BUILD/etc/systemd/system"
 
@@ -53,7 +48,6 @@ install -m 0755 "$DEDANS/usr/lib/grenos/grenos-compte" "$BUILD/usr/lib/grenos/"
 install -m 0644 "$DEDANS/usr/share/xsessions/grenos.desktop" "$BUILD/usr/share/xsessions/"
 install -m 0644 "$DEDANS/usr/share/themes/grenOS/openbox-3/themerc" \
     "$BUILD/usr/share/themes/grenOS/openbox-3/"
-install -m 0644 "$DEDANS/etc/xdg/openbox/rc.xml" "$BUILD/etc/xdg/openbox/"
 
 # Les fonds d'écran, calculés ici comme à la construction de l'image.
 python3 "$HERE/tools/wallpaper.py" "$BUILD/usr/share/grenos" 2560 1440
@@ -83,13 +77,20 @@ done
 install -m 0644 "$DEDANS"/usr/share/applications/*.desktop \
     "$BUILD/usr/share/applications/"
 
-# Les réglages du système : le rendu du texte, le thème GTK, l'explorateur,
-# l'écran de connexion, et les autorisations.
-install -m 0644 "$DEDANS/etc/gtk-3.0/settings.ini" "$BUILD/etc/gtk-3.0/"
-install -m 0644 "$DEDANS/etc/fonts/local.conf" "$BUILD/etc/fonts/"
-install -m 0644 "$DEDANS/etc/xdg/pcmanfm/default/pcmanfm.conf" "$BUILD/etc/xdg/pcmanfm/default/"
-install -m 0644 "$DEDANS/etc/xdg/libfm/libfm.conf" "$BUILD/etc/xdg/libfm/"
-install -m 0644 "$DEDANS/etc/lightdm/lightdm-gtk-greeter.conf" "$BUILD/etc/lightdm/"
+# Les réglages du système, livrés comme **modèles**. Deux paquets ne peuvent
+# pas posséder le même fichier, et ceux-ci appartiennent déjà a openbox, a
+# l'explorateur, a la bibliotheque de fichiers et a l'ecran de connexion :
+# dpkg refuse le notre s'il les reclame. `appliquer-systeme` les pose apres
+# l'installation — une mise a jour peut donc toujours les changer, ce qui
+# etait tout l'objet.
+install -m 0644 "$DEDANS/etc/gtk-3.0/settings.ini" "$BUILD/usr/share/grenos/modeles/gtk-settings.ini"
+install -m 0644 "$DEDANS/etc/fonts/local.conf" "$BUILD/usr/share/grenos/modeles/fonts-local.conf"
+install -m 0644 "$DEDANS/etc/xdg/pcmanfm/default/pcmanfm.conf" "$BUILD/usr/share/grenos/modeles/pcmanfm.conf"
+install -m 0644 "$DEDANS/etc/xdg/libfm/libfm.conf" "$BUILD/usr/share/grenos/modeles/libfm.conf"
+install -m 0644 "$DEDANS/etc/lightdm/lightdm-gtk-greeter.conf" "$BUILD/usr/share/grenos/modeles/lightdm-gtk-greeter.conf"
+install -m 0644 "$DEDANS/etc/xdg/openbox/rc.xml" "$BUILD/usr/share/grenos/modeles/openbox-rc.xml"
+
+# Celui-ci est bien le notre : personne d'autre ne le reclame.
 install -m 0644 "$DEDANS/etc/polkit-1/rules.d/49-grenos-administration.rules" \
     "$BUILD/etc/polkit-1/rules.d/"
 

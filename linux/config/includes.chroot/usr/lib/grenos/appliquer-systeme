@@ -88,6 +88,31 @@ if [ -f /etc/calamares/modules/partition.conf ] && \
     cp /usr/share/grenos/partition.conf /etc/calamares/modules/partition.conf || true
 fi
 
+# ---- Les réglages que nous posons chez les autres ---------------------------
+#
+# Ces fichiers appartiennent à openbox, à l'explorateur, à la bibliothèque de
+# fichiers et à l'écran de connexion. Notre paquet ne peut donc pas les
+# posséder — deux paquets ne peuvent pas posséder le même chemin. Il les livre
+# comme modèles, et c'est ici qu'ils sont posés. Une mise à jour peut ainsi
+# changer l'apparence des fenêtres ou le comportement de l'explorateur, ce qui
+# était impossible tant que ces fichiers n'arrivaient qu'avec l'image.
+poser () {
+    modele="/usr/share/grenos/modeles/$1"
+    cible="$2"
+    [ -f "$modele" ] || return 0
+    mkdir -p "$(dirname "$cible")"
+    if ! cmp -s "$modele" "$cible"; then
+        cp "$modele" "$cible" || true
+    fi
+}
+
+poser openbox-rc.xml            /etc/xdg/openbox/rc.xml
+poser pcmanfm.conf              /etc/xdg/pcmanfm/default/pcmanfm.conf
+poser libfm.conf                /etc/xdg/libfm/libfm.conf
+poser lightdm-gtk-greeter.conf  /etc/lightdm/lightdm-gtk-greeter.conf
+poser gtk-settings.ini          /etc/gtk-3.0/settings.ini
+poser fonts-local.conf          /etc/fonts/local.conf
+
 # ---- Les icônes et les menus ------------------------------------------------
 gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
 gtk-update-icon-cache -f /usr/share/icons/Papirus-Dark >/dev/null 2>&1 || true
