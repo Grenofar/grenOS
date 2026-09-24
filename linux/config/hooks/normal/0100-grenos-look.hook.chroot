@@ -172,6 +172,25 @@ if [ -n "$manque" ]; then
 fi
 echo "grenos: installateur verifie (nos couleurs, tout le disque par defaut, choix manuel possible)"
 
+echo "--- grenOS : le magasin s'appelle-t-il encore GrenPlace ---"
+
+# Grenofar a demande « fais grenplace au lieu de magasin », et le nom est
+# revenu tout seul : le 24 septembre, un agent travaillant depuis une base
+# ancienne a ressuscite grenos-magasin.desktop et magasin.html. Personne ne
+# l'aurait vu avant de regarder le menu de l'image publiee.
+revenus=""
+for mort in /usr/share/applications/grenos-magasin.desktop \
+            /usr/share/grenos/magasin.html; do
+    if [ -e "$mort" ]; then
+        revenus="$revenus $mort"
+    fi
+done
+if [ -n "$revenus" ]; then
+    echo "grenos: le « Magasin » est revenu :$revenus" >&2
+    exit 1
+fi
+echo "grenos: le magasin s'appelle bien GrenPlace"
+
 echo "--- grenOS : le bureau de depart est-il garni ---"
 
 # La CI a dit « bureau pret, 0 icones » et c'est comme cela que j'ai vu que
