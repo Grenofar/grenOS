@@ -14,18 +14,32 @@ couvre plus de 90 %. Un kernel qui ne dessine rien laisse du noir, ou le menu
 de Limine sur du noir : une couleur dépasse alors 90 %.
 
 Le même moniteur sert à *entrer* quelque chose (D-035) : `send` lui passe des
-commandes HMP, dont `mouse_move`, `mouse_button` et `sendkey`, qui arrivent au
-kernel comme une vraie souris PS/2 et un vrai clavier. C'est ainsi que la CI
-vérifie que la souris marche, et pas seulement que l'écran est dessiné.
+commandes HMP, dont `sendkey`, qui arrivent au système comme un vrai clavier.
+
+Le **clic**, lui, ne peut pas passer par là, et c'est ce qui a coûté trois
+tentatives. Le `mouse_move` du moniteur finit toujours par un déplacement
+*relatif*, quoi qu'on lui donne, et `qemu_input_find_handler` ne remet un
+événement qu'à un périphérique dont le masque le reconnaît. Une tablette USB
+est *absolue* : son masque ne contient pas REL. L'ordre partait donc à la
+souris PS/2, en disant « avance de 15900 pixels », et le pointeur allait
+s'écraser dans un coin.
+
+`clic` passe donc par QMP et `input-send-event`, qui porte de vraies
+coordonnées absolues, « 0 à 0x7fff » (qapi/ui.json). C'est le seul chemin qui
+arrive à la tablette.
 
     python3 scripts/ci-screen.py grab <socket du moniteur> <sortie.ppm>
     python3 scripts/ci-screen.py judge <capture.ppm> [<apercu.png>]
     python3 scripts/ci-screen.py send <socket du moniteur> <commande HMP>...
+    python3 scripts/ci-screen.py clic <socket QMP> <x> <y> <largeur> <hauteur>
+    python3 scripts/ci-screen.py taille <capture.ppm>
 
 `judge` sort en 0 si l'écran est dessiné, 2 s'il ne l'est pas, 1 sans capture.
+`clic` sort en 0 si QEMU a accepté chaque ordre, 1 sinon.
 """
 
 import collections
+import json
 import os
 import socket
 import struct
@@ -166,9 +180,10 @@ def grab(monitor: str, out: str, wait: float = 10.0) -> bool:
 def send(monitor: str, commands: list) -> bool:
     """Passe des commandes au moniteur de QEMU, une par une.
 
-    `mouse_move dx dy`, `mouse_button 1|0` et `sendkey <touche>` entrent par la
-    couche d'entrée de QEMU : le kernel reçoit des octets PS/2 comme d'une vraie
-    souris et d'un vrai clavier, IRQ comprises. Une pause entre deux commandes,
+    `sendkey <touche>` entre par la couche d'entrée de QEMU : le système reçoit
+    des octets comme d'un vrai clavier, IRQ comprises. Le clic, lui, passe par
+    `clic` et QMP, pour la raison dite en tête de fichier. Une pause entre deux
+    commandes,
     sinon QEMU les avale pendant que le kernel dort encore.
     """
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
@@ -185,13 +200,101 @@ def send(monitor: str, commands: list) -> bool:
     return True
 
 
+def qmp(chemin: str, demandes: list, pause: float = 0.0) -> list:
+    """Parle QMP à QEMU et rend sa réponse à chaque demande.
+
+    QMP salue, attend qu'on accepte ses capacités, puis répond une ligne JSON
+    par demande. Les *événements* qu'il envoie de lui-même s'intercalent : on
+    les saute, sinon on lirait un événement à la place d'une réponse.
+    """
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as prise:
+        prise.settimeout(15)
+        prise.connect(chemin)
+        canal = prise.makefile("rwb")
+        canal.readline()  # la salutation
+        reponses = []
+        for rang, demande in enumerate([{"execute": "qmp_capabilities"}] + demandes):
+            canal.write((json.dumps(demande) + "\n").encode())
+            canal.flush()
+            while True:
+                ligne = canal.readline()
+                if not ligne:
+                    raise OSError("QMP s'est tu")
+                reponse = json.loads(ligne.decode("utf-8", "replace"))
+                if "event" in reponse:
+                    continue
+                break
+            if rang:
+                reponses.append(reponse)
+            if pause:
+                time.sleep(pause)
+    return reponses
+
+
+def clic(chemin: str, x: int, y: int, largeur: int, hauteur: int) -> bool:
+    """Un vrai clic, à un vrai endroit de l'écran.
+
+    L'écran parle en pixels, la tablette en 0 à 0x7fff : on convertit. Et l'on
+    demande d'abord à QEMU ce qu'il a comme pointeur — une réponse qu'on n'a
+    jamais regardée, et qui aurait montré tout de suite que nos ordres
+    n'allaient pas à la tablette.
+    """
+    tx = min(0x7FFF, max(0, x * 0x7FFF // largeur))
+    ty = min(0x7FFF, max(0, y * 0x7FFF // hauteur))
+    bouger = {"execute": "input-send-event", "arguments": {"events": [
+        {"type": "abs", "data": {"axis": "x", "value": tx}},
+        {"type": "abs", "data": {"axis": "y", "value": ty}}]}}
+    appuyer = {"execute": "input-send-event", "arguments": {"events": [
+        {"type": "btn", "data": {"button": "left", "down": True}}]}}
+    relacher = {"execute": "input-send-event", "arguments": {"events": [
+        {"type": "btn", "data": {"button": "left", "down": False}}]}}
+
+    reponses = qmp(chemin, [{"execute": "query-mice"}, bouger, appuyer, relacher],
+                   pause=0.5)
+
+    pointeurs = reponses[0].get("return", [])
+    for pointeur in pointeurs:
+        print("souris: QEMU a « {} »{}{}".format(
+            pointeur.get("name", "?"),
+            " (absolue)" if pointeur.get("absolute") else " (relative)",
+            " [celle qui recoit]" if pointeur.get("current") else ""))
+    if not any(p.get("absolute") for p in pointeurs):
+        print("souris: aucune tablette absolue, le clic ne peut pas viser")
+
+    bon = True
+    for nom, reponse in zip(["deplacement", "appui", "relachement"], reponses[1:]):
+        if "error" in reponse:
+            print(f"souris: {nom} refuse par QEMU : {reponse['error'].get('desc')}")
+            bon = False
+    if bon:
+        print(f"souris: clic en {x},{y} (tablette {tx},{ty})")
+    return bon
+
+
 def main(argv) -> int:
+    if len(argv) == 7 and argv[1] == "clic":
+        try:
+            ok = clic(argv[2], int(argv[3]), int(argv[4]), int(argv[5]), int(argv[6]))
+        except (OSError, ValueError, json.JSONDecodeError) as souci:
+            print(f"souris: QMP n'a pas repondu ({souci})")
+            return 1
+        return 0 if ok else 1
+
     if len(argv) >= 4 and argv[1] == "send":
         try:
             send(argv[2], argv[3:])
         except OSError as exc:
             print(f"input: the QEMU monitor did not answer ({exc})")
             return 1
+        return 0
+
+    if len(argv) == 3 and argv[1] == "taille":
+        try:
+            with open(argv[2], "rb") as f:
+                width, height, _ = read_ppm(f.read())
+        except (OSError, ValueError):
+            return 1
+        print(width, height)
         return 0
 
     if len(argv) == 4 and argv[1] == "grab":

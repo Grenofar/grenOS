@@ -213,6 +213,7 @@ jobs:
             -device intel-hda -device hda-duplex,audiodev=silence \
             -serial file:"$RUNNER_TEMP/serial.log" \
             -monitor unix:"$RUNNER_TEMP/monitor.sock",server,nowait \
+            -qmp unix:"$RUNNER_TEMP/qmp.sock",server,nowait \
             -no-reboot &
           QEMU=$!
           # QEMU a-t-il seulement demarre ? Une option mal ecrite le fait
@@ -273,11 +274,16 @@ jobs:
           # barre qui tombe au premier clic passerait au vert — c'est ce qui a
           # failli arriver le 23 septembre.
           echo "--- la souris, pour de vrai ---"
-          # Le bouton grenOS est au centre de la barre, tout en bas. Les
-          # coordonnees de la tablette vont de 0 a 32767 : le centre horizontal
-          # est donc 16384, et le bas de l'ecran 32400. Ce test ne bloque pas
-          # encore la publication — on ne rend une etape obligatoire qu'apres
-          # l'avoir vue verte.
+          # Le clic passe par QMP, pas par le moniteur. La source de QEMU est
+          # sans appel : `hmp_mouse_move` finit toujours par un deplacement
+          # RELATIF, et `qemu_input_find_handler` ne remet un evenement qu'a un
+          # peripherique dont le masque le reconnait. Une tablette USB est
+          # ABSOLUE : son masque ne contient pas REL. Nos trois tentatives
+          # parlaient donc a la souris PS/2, et lui disaient « avance de 15900
+          # pixels » — le pointeur partait dans un coin. `input-send-event`,
+          # lui, porte de vraies coordonnees absolues.
+          # Ce test ne bloque pas encore la publication : on ne rend une etape
+          # obligatoire qu'apres l'avoir vue verte.
           # `grep -c` rend 0 et sort en erreur quand il ne trouve rien : le
           # « || echo 0 » ajoutait alors un second zero, et la comparaison
           # d'entiers plus bas recevait « 0 0 ». On prend la premiere ligne.
@@ -299,23 +305,24 @@ jobs:
           # tombait n'importe ou — sans que rien ne le dise.
           POINT=$(grep -a 'bouton grenos en' "$RUNNER_TEMP/serial.log" \
                   | tail -1 | tr -d '\r' | sed 's/.*en //')
+          # La taille de l'ecran se lit dans la capture, au lieu de la supposer :
+          # X ne choisit pas forcement la resolution qu'on croit, et un clic
+          # converti avec la mauvaise taille tombe a cote sans rien dire.
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/avant-clic.ppm" || true
+          TAILLE=$(python3 scripts/ci-screen.py taille "$RUNNER_TEMP/avant-clic.ppm" || echo "1280 800")
+          LARGEUR=${TAILLE%% *}
+          HAUTEUR=${TAILLE##* }
+          echo "souris: l ecran fait ${LARGEUR}x${HAUTEUR}"
           if [ -n "$POINT" ]; then
             PX=${POINT%,*}
             PY=${POINT#*,}
-            # La tablette parle en 0-32767, l'ecran en pixels : on convertit.
-            TX=$(( PX * 32767 / 1280 ))
-            TY=$(( PY * 32767 / 800 ))
-            echo "souris: le bouton est en $PX,$PY (tablette $TX,$TY)"
+            echo "souris: le bouton grenOS est en $PX,$PY"
           else
-            TX=15900
-            TY=32400
+            PX=$(( LARGEUR / 2 ))
+            PY=$(( HAUTEUR - 24 ))
             echo "souris: position inconnue, on vise le centre de la barre"
           fi
-          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "mouse_move $TX $TY" || true
-          sleep 1
-          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "mouse_button 1" || true
-          sleep 1
-          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "mouse_button 0" || true
+          python3 scripts/ci-screen.py clic "$RUNNER_TEMP/qmp.sock" "$PX" "$PY" "$LARGEUR" "$HAUTEUR" || true
           sleep 5
           python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-clic.ppm" || true
           APRES=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" || echo 0)
