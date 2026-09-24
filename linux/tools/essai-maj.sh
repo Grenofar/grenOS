@@ -87,6 +87,9 @@ if ls dist/grenos-desktop_*.deb >/dev/null 2>&1; then
     rm -rf /tmp/suite
     dpkg-deb -R "$(ls dist/grenos-desktop_*.deb | head -1)" /tmp/suite
     sed -i "s/^Version: .*/Version: ${ANCIENNE}+suite/" /tmp/suite/DEBIAN/control
+    # Les sommes de controle d'origine ne couvriraient pas les fichiers qu'on
+    # ajoute : mieux vaut aucune somme qu'une somme fausse.
+    rm -f /tmp/suite/DEBIAN/md5sums
 
     # Deux nouveautes que la version installee n'a pas : un service et une
     # entree de menu. C'est exactement ce qu'une mise a jour « majeure » doit
