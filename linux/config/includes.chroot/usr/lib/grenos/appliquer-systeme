@@ -120,10 +120,16 @@ if [ -f /etc/calamares/settings.conf ]; then
         echo "branding: grenos" >> /etc/calamares/settings.conf
 fi
 # Le partitionnement par défaut : tout le disque, le choix manuel restant
-# offert. Ce fichier appartient à calamares-settings-debian : on le modifie
-# plutôt que de le remplacer, sinon dpkg se plaindrait d'un conflit.
-if [ -f /etc/calamares/modules/partition.conf ] && \
-   [ -f /usr/share/grenos/partition.conf ]; then
+# offert.
+#
+# `calamares-settings-debian` livre le **dossier** /etc/calamares/modules, et
+# aucun partition.conf dedans — vérifié dans le paquet lui-même. J'exigeais
+# pourtant que le fichier existe déjà avant de le remplacer : la copie était
+# donc sautée en silence, et l'installateur ne proposait plus « tout le
+# disque ». C'est la vérification restaurée le même jour qui l'a dit, à la
+# construction suivante.
+if [ -f /usr/share/grenos/partition.conf ]; then
+    mkdir -p /etc/calamares/modules
     cp /usr/share/grenos/partition.conf /etc/calamares/modules/partition.conf || true
 fi
 
