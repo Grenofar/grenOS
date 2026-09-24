@@ -665,7 +665,18 @@ class Panneau(Gtk.Window):
         self.centre = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         boite.pack_start(self.centre, False, False, 0)
 
-        self.bouton_menu = Gtk.ToggleButton(label="grenOS")
+        # Le bouton porte la marque, puisqu'elle existe enfin : c'est « le logo
+        # grenOS » qu'on cherche en bas de l'écran. On ne la met que si le thème
+        # la connaît vraiment — un repli générique à côté du mot « grenOS »
+        # serait pire que le mot seul.
+        self.bouton_menu = Gtk.ToggleButton()
+        etiquette = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        if Gtk.IconTheme.get_default().has_icon("grenos"):
+            etiquette.pack_start(
+                Gtk.Image.new_from_icon_name("grenos", Gtk.IconSize.LARGE_TOOLBAR),
+                False, False, 0)
+        etiquette.pack_start(Gtk.Label(label="grenOS"), False, False, 0)
+        self.bouton_menu.add(etiquette)
         self.bouton_menu.set_name("bouton-menu")
         self.bouton_menu.set_tooltip_text("Menu grenOS")
         self.poignee = self.bouton_menu.connect("clicked", self.sur_le_bouton)
