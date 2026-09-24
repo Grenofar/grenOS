@@ -47,6 +47,14 @@ class Travail:
         self.fil.start()
         return True
 
+    # dpkg demande quoi faire quand un fichier de configuration a ete modifie
+    # a la main. Sans personne devant l'ecran, cette question bloque
+    # l'installation indefiniment. « confdef » puis « confold » repondent pour
+    # nous : le fichier qu'on a modifie soi-meme est garde, les autres sont
+    # remplaces par la nouvelle version.
+    SANS_QUESTION = ["-o", "Dpkg::Options::=--force-confdef",
+                     "-o", "Dpkg::Options::=--force-confold"]
+
     def _courir(self, commande, sur_sortie=None):
         processus = subprocess.Popen(
             lanceur() + commande, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -95,7 +103,8 @@ class Travail:
         # d'installer un paquet nouveau. Sans elle, une nouvelle dépendance de
         # grenos-desktop — un pilote, une bibliothèque de son — est annoncée
         # puis jamais posée, et la mise à jour ne change rien.
-        code = self._courir(["apt-get", "-y", "--with-new-pkgs", "full-upgrade"], suivre)
+        code = self._courir(["apt-get", "-y", "--with-new-pkgs"]
+                            + self.SANS_QUESTION + ["full-upgrade"], suivre)
         self.sur_avance(1.0)
         if code != 0:
             return self.sur_fin("L'installation s'est arrêtée. Le détail est ci-dessous.", False)

@@ -14,7 +14,7 @@ ConditionPathExists=/etc/grenos/maj-automatique
 Type=oneshot
 Environment=DEBIAN_FRONTEND=noninteractive
 ExecStart=/usr/bin/apt-get update -qq
-ExecStart=/usr/bin/apt-get -y --with-new-pkgs full-upgrade
+ExecStart=/usr/bin/apt-get -y --with-new-pkgs -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold full-upgrade
 ExecStartPost=/usr/lib/grenos/grenos-maj-verif
 TimeoutStartSec=3600
 Nice=10

@@ -54,3 +54,6 @@ desktop.ini
 
 # Python
 __pycache__/
+
+# Les paquets que la CI depose pour que l image les installe elle-meme.
+linux/config/packages.chroot/

@@ -136,6 +136,15 @@ jobs:
           sudo apt-get install -y -qq dpkg-dev python3-numpy
           VERSION="1.0.$(date -u +%Y%m%d%H%M)"
           linux/tools/make-deb.sh "$VERSION" dist
+          # L'image installe ses propres paquets, au lieu de se contenter d'en
+          # copier les fichiers. C'est ce qui manquait pour que la mise a jour
+          # fonctionne : sans entree dans dpkg, « apt full-upgrade » ne trouvait
+          # rien de grenOS a mettre a jour, et n'apportait que les correctifs
+          # Debian. live-build installe ce qui se trouve dans packages.chroot.
+          mkdir -p linux/config/packages.chroot
+          cp "dist/grenos-systeme_${VERSION}_all.deb" \
+             "dist/grenos-desktop_${VERSION}_all.deb" linux/config/packages.chroot/
+          ls -l linux/config/packages.chroot/
           APT_SECRET_KEY="$PWD/secret.asc" linux/tools/make-apt-repo.sh apt "dist/grenos-systeme_${VERSION}_all.deb" "dist/grenos-desktop_${VERSION}_all.deb"
           # Un dépôt APT n'est qu'un ensemble de fichiers : on les dépose un à
           # un dans le bucket public, en écrasant les anciens.
@@ -151,6 +160,21 @@ jobs:
             [ "$code" = "200" ] || exit 1
           done
           echo "depot publie : $SUPABASE_URL/storage/v1/object/public/apt"
+
+      # La mise a jour depuis l'OS est la promesse qui evite de regraver une
+      # image a chaque nouveaute. Elle merite donc d'etre exercee, pas
+      # seulement ecrite : on part d'une Debian nue, on ajoute notre depot
+      # comme le fait l'image, et on installe. Si cela echoue ici, aucune
+      # machine ne pourra se mettre a jour — et rien ne sera publie.
+      - name: La mise a jour fonctionne-t-elle
+        id: maj
+        if: steps.key.outputs.ready == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work \
+            -e DEBIAN_FRONTEND=noninteractive -e DEPOT="$SUPABASE_URL/storage/v1/object/public/apt" \
+            debian:trixie sh /work/linux/tools/essai-maj.sh
 
       # live-build monte des systèmes de fichiers et fait un debootstrap : cela
       # se passe dans un conteneur Debian privilégié, jamais sur le runner.
@@ -456,7 +480,10 @@ jobs:
           [ "$code" = "201" ] || { cat response.json; exit 1; }
 
       - name: Publier la Release
-        if: steps.boot.outcome == 'success' && (github.ref == 'refs/heads/main' || inputs.publish)
+        # Rien n'est publie sans les deux preuves : un bureau qui s'ouvre, et
+        # une mise a jour qui s'installe depuis notre depot. Une image qu'on ne
+        # peut pas mettre a jour obligerait a tout regraver.
+        if: steps.boot.outcome == 'success' && steps.maj.outcome == 'success' && (github.ref == 'refs/heads/main' || inputs.publish)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
