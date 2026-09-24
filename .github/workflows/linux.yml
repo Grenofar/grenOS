@@ -122,7 +122,7 @@ jobs:
           sudo apt-get install -y -qq dpkg-dev python3-numpy
           VERSION="1.0.$(date -u +%Y%m%d%H%M)"
           linux/tools/make-deb.sh "$VERSION" dist
-          APT_SECRET_KEY="$PWD/secret.asc" linux/tools/make-apt-repo.sh apt dist/grenos-desktop_${VERSION}_all.deb
+          APT_SECRET_KEY="$PWD/secret.asc" linux/tools/make-apt-repo.sh apt \n            dist/grenos-systeme_${VERSION}_all.deb \n            dist/grenos-desktop_${VERSION}_all.deb
           # Un dépôt APT n'est qu'un ensemble de fichiers : on les dépose un à
           # un dans le bucket public, en écrasant les anciens.
           find apt -type f | while read -r file; do
@@ -240,7 +240,11 @@ jobs:
           # est donc 16384, et le bas de l'ecran 32400. Ce test ne bloque pas
           # encore la publication — on ne rend une etape obligatoire qu'apres
           # l'avoir vue verte.
-          AVANT=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" || echo 0)
+          # `grep -c` rend 0 et sort en erreur quand il ne trouve rien : le
+          # « || echo 0 » ajoutait alors un second zero, et la comparaison
+          # d'entiers plus bas recevait « 0 0 ». On prend la premiere ligne.
+          AVANT=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" 2>/dev/null | head -1)
+          AVANT=${AVANT:-0}
           # La barre dit ou se trouve son bouton : on vise ce point plutot que
           # de deviner. Elle est centree, donc sa position depend du nombre
           # d'icones — un clic au juge tombe a cote, et c'est ce qui est arrive.
@@ -251,7 +255,12 @@ jobs:
             grep -aq 'bouton grenos en' "$RUNNER_TEMP/serial.log" && break
             sleep 2
           done
-          POINT=$(grep -a 'bouton grenos en' "$RUNNER_TEMP/serial.log" | tail -1 | sed 's/.*en //')
+          # `tr -d` enleve le retour chariot : une console serie termine ses
+          # lignes par CR LF, et « 774 » arrivait ici en « 774\r ». Le calcul
+          # echouait, la souris recevait une abscisse sans ordonnee, et le clic
+          # tombait n'importe ou — sans que rien ne le dise.
+          POINT=$(grep -a 'bouton grenos en' "$RUNNER_TEMP/serial.log" \
+                  | tail -1 | tr -d '\r' | sed 's/.*en //')
           if [ -n "$POINT" ]; then
             PX=${POINT%,*}
             PY=${POINT#*,}

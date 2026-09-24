@@ -68,3 +68,45 @@ def muet():
 
 def basculer_muet():
     _pactl("set-sink-mute", "@DEFAULT_SINK@", "toggle")
+
+
+def applications_qui_jouent():
+    """Ce qui fait du bruit en ce moment, et à quel volume.
+
+    Rendu : [{'index', 'nom', 'volume'}]. C'est le mélangeur : régler le
+    volume de la machine ne suffit pas quand une seule application crie.
+    """
+    trouvees = []
+    brut = _pactl("list", "sink-inputs")
+    index, nom, volume = "", "", 0
+    for ligne in brut.splitlines():
+        depouille = ligne.strip()
+        if depouille.startswith("Sink Input #"):
+            if index:
+                trouvees.append({"index": index, "nom": nom or "Application",
+                                 "volume": volume})
+            index = depouille.split("#", 1)[1].strip()
+            nom, volume = "", 0
+        elif depouille.startswith("application.name ="):
+            nom = depouille.split("=", 1)[1].strip().strip('"')
+        elif depouille.startswith("Volume:") and not volume:
+            trouve = re.search(r"(\d+)%", depouille)
+            if trouve:
+                volume = int(trouve.group(1))
+    if index:
+        trouvees.append({"index": index, "nom": nom or "Application", "volume": volume})
+    return trouvees
+
+
+def regler_application(index, pourcentage):
+    """Le volume d'une seule application."""
+    _pactl("set-sink-input-volume", str(index), f"{int(pourcentage)}%")
+
+
+def nom_lisible(identifiant):
+    """Le nom d'une sortie, tel qu'on le dirait : « Haut-parleurs », pas une
+    suite de chiffres et de points."""
+    for nom, description in sorties():
+        if nom == identifiant:
+            return description
+    return identifiant

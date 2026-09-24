@@ -1,0 +1,17 @@
+# Une fois par jour, et cinq minutes après le démarrage.
+#
+# `Persistent` rattrape la vérification manquée quand la machine était
+# éteinte : sans lui, un ordinateur allumé deux heures par jour ne
+# vérifierait jamais rien.
+
+[Unit]
+Description=grenOS : chercher les mises a jour, chaque jour
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1d
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+#!/bin/sh
+# Y a-t-il quelque chose à installer ? Regardé toutes les nuits, en fond.
+#
+# Ce service tourne en root parce que lire les dépôts en demande le droit. Il
+# n'installe rien : il compte, et il écrit le résultat là où le bureau peut le
+# lire sans droit particulier. Décider d'installer appartient à la personne —
+# ou au réglage qu'elle a choisi.
+#
+# Le compte est écrit dans /run, qui vit en mémoire : au redémarrage il
+# disparaît, et la première vérification le refait. C'est voulu : un chiffre
+# vieux de trois semaines induirait en erreur.
+
+set -u
+
+DOSSIER=/run/grenos
+mkdir -p "$DOSSIER"
+chmod 0755 "$DOSSIER"
+
+export DEBIAN_FRONTEND=noninteractive
+
+if ! apt-get update -qq >/dev/null 2>&1; then
+    # Sans réseau, on ne sait rien — et « rien » n'est pas « zéro ».
+    echo "inconnu" > "$DOSSIER/maj"
+    exit 0
+fi
+
+# `full-upgrade` et non `upgrade` : c'est la seule forme qui compte aussi les
+# paquets nouveaux. Sans elle, une nouvelle dépendance de grenOS — un pilote,
+# une bibliothèque de son — n'apparaîtrait jamais dans le compte.
+NOMBRE=$(apt-get -s full-upgrade 2>/dev/null | grep -c '^Inst ' || echo 0)
+
+printf '%s\n' "$NOMBRE" > "$DOSSIER/maj"
+date -u '+%Y-%m-%d %H:%M' > "$DOSSIER/maj-date"
+chmod 0644 "$DOSSIER/maj" "$DOSSIER/maj-date"
+
+# La liste, pour que les Réglages puissent dire *quoi* sans relancer apt.
+apt-get -s full-upgrade 2>/dev/null | sed -n 's/^Inst \([^ ]*\).*/\1/p' \
+    > "$DOSSIER/maj-liste" 2>/dev/null || true
+chmod 0644 "$DOSSIER/maj-liste" 2>/dev/null || true
+
+echo "grenos: ${NOMBRE} mises a jour disponibles" > /dev/ttyS0 2>/dev/null || true

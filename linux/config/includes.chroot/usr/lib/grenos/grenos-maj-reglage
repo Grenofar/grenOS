@@ -1,0 +1,39 @@
+#!/bin/sh
+# Activer ou couper l'installation automatique des mises à jour.
+#
+# Lancé en root par les Réglages, jamais directement. C'est un fichier qui
+# décide : le service d'installation automatique ne démarre pas s'il n'existe
+# pas. Un interrupteur qui se lit dans le système de fichiers vaut mieux qu'un
+# réglage caché dans une base.
+#
+#   grenos-maj-reglage activer|couper|etat
+
+set -eu
+
+MARQUE=/etc/grenos/maj-automatique
+
+case "${1:-etat}" in
+activer)
+    mkdir -p /etc/grenos
+    printf 'Les mises a jour de grenOS et de Debian sont installees chaque jour.\n' \
+        > "$MARQUE"
+    systemctl enable --now grenos-maj-auto.timer >/dev/null 2>&1 || true
+    echo activer
+    ;;
+couper)
+    rm -f "$MARQUE"
+    systemctl disable --now grenos-maj-auto.timer >/dev/null 2>&1 || true
+    echo couper
+    ;;
+maintenant)
+    # Vérifier tout de suite, sans attendre le minuteur.
+    /usr/lib/grenos/grenos-maj-verif
+    ;;
+etat)
+    if [ -e "$MARQUE" ]; then echo activer; else echo couper; fi
+    ;;
+*)
+    echo "usage: grenos-maj-reglage activer|couper|maintenant|etat" >&2
+    exit 2
+    ;;
+esac

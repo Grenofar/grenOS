@@ -17,7 +17,6 @@ OUT="${2:-dist}"
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 DEDANS="$HERE/config/includes.chroot"
 BUILD=$(mktemp -d)
-trap 'rm -rf "$BUILD"' EXIT
 
 mkdir -p "$BUILD/DEBIAN" \
          "$BUILD/usr/bin" \
@@ -32,7 +31,7 @@ mkdir -p "$BUILD/DEBIAN" \
 # une machine déjà nommée n'aurait aucun sens.
 for outil in grenos-shell grenos-session grenos-menu grenos-fond grenos-veilleur \
              grenos-arret grenos-parametres grenplace grenos-bienvenue grenos-bureau \
-             grenos-theme grenos-maj grenos-taches grenos-connexions grenos-dire; do
+             grenos-theme grenos-maj grenos-taches grenos-connexions grenos-dire grenos-son; do
     install -m 0755 "$DEDANS/usr/bin/$outil" "$BUILD/usr/bin/"
 done
 
@@ -60,7 +59,7 @@ Section: x11
 Priority: optional
 Architecture: all
 Maintainer: grenOS <grenos@grenos-dev.vercel.app>
-Depends: python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, xcvt, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils, dbus-user-session, pipewire-audio, wireplumber, xdg-user-dirs
+Depends: grenos-systeme (= $VERSION), python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, xcvt, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils, dbus-user-session, pipewire-audio, wireplumber, xdg-user-dirs
 Recommends: flatpak, lightdm, pcmanfm, xfce4-terminal, xfce4-taskmanager, papirus-icon-theme
 Installed-Size: $SIZE
 Homepage: https://grenos-dev.vercel.app
@@ -71,7 +70,41 @@ Description: Le bureau de grenOS
  applications. Ce paquet se met à jour depuis le système comme un autre.
 EOF
 
+# ---- Le metapaquet : tout ce que l'image contient --------------------------
+#
+# C'est la piece qui evite de reinstaller le systeme a chaque nouveaute. Quand
+# l'image gagne un paquet — un pilote, une bibliotheque de son, un theme
+# d'icones —, ce metapaquet le declare, et « Mettre a jour grenOS » l'installe
+# sur une machine deja posee. Sans lui, la mise a jour n'apporterait que nos
+# propres fichiers, et il faudrait regraver une image pour le reste.
+META=$(mktemp -d)
+trap 'rm -rf "$BUILD" "$META"' EXIT
+mkdir -p "$META/DEBIAN"
+
+DEPENDANCES=$(grep -v '^#' "$HERE/config/package-lists/grenos.list.chroot"     | grep -v '^[[:space:]]*$' | paste -sd, - | sed 's/,/, /g')
+
+cat > "$META/DEBIAN/control" <<EOF
+Package: grenos-systeme
+Version: $VERSION
+Section: metapackages
+Priority: optional
+Architecture: all
+Maintainer: grenOS <grenos@grenos-dev.vercel.app>
+Depends: $DEPENDANCES
+Installed-Size: 16
+Homepage: https://grenos-dev.vercel.app
+Description: Tout ce que grenOS installe
+ Ce paquet ne contient aucun fichier : il nomme les paquets dont grenOS est
+ fait. Sa raison d'etre est la mise a jour — quand l'image gagne un paquet,
+ une machine deja installee le recoit en mettant a jour, sans avoir a
+ reinstaller le systeme.
+EOF
+
 mkdir -p "$OUT"
+DEB_META="$OUT/grenos-systeme_${VERSION}_all.deb"
+dpkg-deb --build --root-owner-group "$META" "$DEB_META"
+echo "$DEB_META"
+
 DEB="$OUT/grenos-desktop_${VERSION}_all.deb"
 dpkg-deb --build --root-owner-group "$BUILD" "$DEB"
 dpkg-deb --info "$DEB" | head -12

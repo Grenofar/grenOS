@@ -410,8 +410,35 @@ class Reglages(Gtk.Window):
             lambda p: GLib.idle_add(self.barre_maj.set_fraction, min(max(p, 0.0), 1.0)),
             self.journal_maj, self.fin_maj)
 
+        # Ce que la verification quotidienne a trouve, et le reglage qui decide
+        # si la machine se met a jour toute seule.
+        attendus = module_maj.disponibles()
+        quand = module_maj.derniere_verification()
+        if attendus is None:
+            resume = "Aucune vérification depuis le démarrage, ou pas de réseau."
+        elif attendus == 0:
+            resume = f"Rien à installer. Dernière vérification : {quand} UTC."
+        else:
+            resume = (f"{attendus} paquet{'s' if attendus > 1 else ''} à installer. "
+                      f"Vérifié le {quand} UTC.")
+
+        self.auto_maj = Gtk.Switch()
+        self.auto_maj.set_active(module_maj.automatique())
+        self.auto_maj.connect("notify::active", self.changer_auto_maj)
+        self.dire_auto = Gtk.Label(label="", xalign=0)
+        self.dire_auto.get_style_context().add_class("sous")
+
         return self.enveloppe(
             grenosui.titre("Mises à jour", version),
+            grenosui.carte(
+                self.note(resume),
+                self.ligne("Installer automatiquement, chaque jour", self.auto_maj),
+                grenosui.bouton("Vérifier maintenant", self.verifier_maj, "discret"),
+                self.dire_auto,
+                self.note("La vérification quotidienne ne fait que regarder : rien ne "
+                          "s'installe sans que tu le demandes, sauf si tu actives "
+                          "l'installation automatique ci-dessus."),
+            ),
             grenosui.carte(
                 self.etat_maj, self.barre_maj, self.bouton_maj, self.details_maj,
                 self.note("Les nouveautés de grenOS et les correctifs de sécurité de "
@@ -427,6 +454,25 @@ class Reglages(Gtk.Window):
                           "jour avec le reste du système."),
             ),
         )
+
+    def changer_auto_maj(self, interrupteur, _param):
+        souci = module_maj.regler_automatique(interrupteur.get_active())
+        self.dire_auto.set_text(
+            souci or ("Les mises à jour s'installeront toutes seules, chaque jour."
+                      if interrupteur.get_active()
+                      else "Les mises à jour ne s'installeront plus toutes seules."))
+
+    def verifier_maj(self):
+        self.dire_auto.set_text("Vérification en cours…")
+        souci = module_maj.verifier_maintenant()
+        nombre = module_maj.disponibles()
+        if souci:
+            self.dire_auto.set_text(souci)
+        elif nombre:
+            self.dire_auto.set_text(
+                f"{nombre} paquet{'s' if nombre > 1 else ''} à installer.")
+        else:
+            self.dire_auto.set_text("Rien à installer : tout est à jour.")
 
     def journal_maj(self, ligne):
         def ajouter():

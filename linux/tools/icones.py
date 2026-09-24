@@ -123,12 +123,57 @@ def fichiers(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def son(chemin, taille, niveau=2):
+    """Le haut-parleur de la barre : un trapeze et des ondes.
+
+    Dessine plutot qu'emprunte a un emoji : un emoji depend de la police
+    installee, change de style d'une machine a l'autre, et ne se teinte pas.
+    Celui-ci est clair, plat, et lisible a seize pixels de cote.
+
+    `niveau` donne le nombre d'ondes : 0 pour le silence (une croix), 1 ou 2
+    pour un son faible ou fort.
+    """
+    image, u, v = toile(taille)
+
+    # Le corps du haut-parleur : un carre, puis le pavillon en triangle.
+    corps = rectangle(u, v, 0.18, 0.40, 0.34, 0.60, rayon=0.03)
+    poser(image, corps, CLAIR, 1.0)
+
+    # Le pavillon : tout ce qui est a droite de 0.30 et dans le triangle.
+    largeur = np.clip((u - 0.30) / 0.22, 0.0, 1.0)
+    dans = (np.abs(v - 0.50) < 0.06 + largeur * 0.26) & (u > 0.30) & (u < 0.53)
+    poser(image, dans.astype(float), CLAIR, 1.0)
+
+    if niveau <= 0:
+        # Le silence : une croix, plutot qu'un haut-parleur barre qu'on ne
+        # distingue pas d'un haut-parleur normal en petit.
+        for pente in (1.0, -1.0):
+            trait = np.clip(
+                (0.035 - np.abs((v - 0.50) - pente * (u - 0.72))) / 0.014, 0.0, 1.0)
+            trait *= ((u > 0.60) & (u < 0.86)).astype(float)
+            poser(image, trait, CLAIR, 0.95)
+    else:
+        rayon = np.hypot((u - 0.40) * 1.0, (v - 0.50) * 1.0)
+        for index, (distance, epaisseur) in enumerate(((0.23, 0.022), (0.37, 0.022))):
+            if index >= niveau:
+                break
+            onde = np.clip((epaisseur - np.abs(rayon - distance)) / 0.013, 0.0, 1.0)
+            # Seulement la partie droite : une onde complete ferait un anneau.
+            onde *= ((u > 0.52) & (np.abs(v - 0.50) < distance * 0.85)).astype(float)
+            poser(image, onde, CLAIR, 0.95 - index * 0.12)
+
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
     os.makedirs(dossier, exist_ok=True)
     grenplace(os.path.join(dossier, 'grenplace.png'), taille)
     fichiers(os.path.join(dossier, 'grenos-fichiers.png'), taille)
+    son(os.path.join(dossier, 'grenos-son.png'), taille, niveau=2)
+    son(os.path.join(dossier, 'grenos-son-faible.png'), taille, niveau=1)
+    son(os.path.join(dossier, 'grenos-son-muet.png'), taille, niveau=0)
 
 
 if __name__ == '__main__':

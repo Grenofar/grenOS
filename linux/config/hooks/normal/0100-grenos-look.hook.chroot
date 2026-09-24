@@ -85,6 +85,11 @@ echo "/usr/sbin/lightdm" > /etc/X11/default-display-manager
 systemctl enable grenos-premier.service || true
 systemctl enable grenos-preuve.service || true
 
+# La verification quotidienne des mises a jour. Elle n'installe rien : elle
+# compte, et le bureau le montre. L'installation automatique, elle, reste
+# eteinte tant que la personne ne l'a pas demandee dans les Reglages.
+systemctl enable grenos-maj-verif.timer || true
+
 echo "--- grenOS : le clavier et la langue ---"
 
 cat > /etc/default/keyboard <<'EOF'
@@ -149,6 +154,7 @@ ecrire_entree maj "Mettre à jour grenOS" "Les nouveautés et les correctifs de 
 ecrire_entree theme "Jour et nuit" "Changer la lumière du bureau" "weather-clear-night"
 ecrire_entree taches "Gestionnaire de tâches" "Ce qui tourne, et ce que ça consomme" "utilities-system-monitor"
 ecrire_entree connexions "Connexions" "Wi-Fi et Bluetooth" "network-wireless"
+ecrire_entree son "Son" "Volume, sortie, et chaque application" "grenos-son"
 
 # GrenPlace ne suit pas le nommage grenos-* : c'est une marque, pas un outil.
 cat > /usr/share/applications/grenplace.desktop <<'EOF'

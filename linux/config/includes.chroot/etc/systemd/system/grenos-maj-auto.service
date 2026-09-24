@@ -1,0 +1,21 @@
+# Installer les mises à jour tout seul — seulement si la personne l'a demandé.
+#
+# La condition est un fichier, écrit par les Réglages. Tant qu'il n'existe pas,
+# ce service ne fait rien : une machine qui s'installe des choses sans qu'on le
+# lui ait demandé n'est pas une machine à soi.
+
+[Unit]
+Description=grenOS : installer les mises a jour
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/grenos/maj-automatique
+
+[Service]
+Type=oneshot
+Environment=DEBIAN_FRONTEND=noninteractive
+ExecStart=/usr/bin/apt-get update -qq
+ExecStart=/usr/bin/apt-get -y --with-new-pkgs full-upgrade
+ExecStartPost=/usr/lib/grenos/grenos-maj-verif
+TimeoutStartSec=3600
+Nice=10
+IOSchedulingClass=idle

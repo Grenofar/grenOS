@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Le son, en un clic : le volume, la sortie, et chaque application.
+
+Un panneau qui s'ouvre au-dessus de la barre, en bas à gauche, et se referme
+dès qu'on clique ailleurs. Trois choses, dans cet ordre d'usage :
+
+  - le volume de la machine, et le silence d'un clic ;
+  - par où le son sort — les enceintes, un casque, l'écran par HDMI ;
+  - le volume de chaque application qui joue. C'est le mélangeur : baisser
+    toute la machine parce qu'une seule application crie est une mauvaise
+    réponse à un vrai problème.
+
+Il se relit tout seul toutes les deux secondes : brancher un casque ou lancer
+une vidéo change la liste sans qu'on ait à rouvrir le panneau.
+"""
+import sys
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+import son as module_son  # noqa: E402
+
+LARGEUR = 380
+HAUTEUR_BARRE = 52
+
+STYLE = """
+#panneau-son {
+    background-color: @fond;
+    border: 1px solid @bord-clair;
+    border-radius: 14px;
+}
+.bloc-son { padding: 14px 16px; }
+.separateur-son { background-color: @bord; min-height: 1px; }
+.nom-app { font-size: 13px; }
+"""
+
+
+class PanneauSon(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_name("panneau-son")
+        self.set_decorated(False)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+        self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+        self.set_keep_above(True)
+        self.set_size_request(LARGEUR, -1)
+        self.attrape = None
+        self.en_train = False
+
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(colonne)
+
+        # ---- Le volume de la machine ---------------------------------------
+        haut = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        haut.get_style_context().add_class("bloc-son")
+
+        titre = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.image = Gtk.Image()
+        titre.pack_start(self.image, False, False, 0)
+        self.valeur = Gtk.Label(label="", xalign=0)
+        self.valeur.get_style_context().add_class("entree-titre")
+        titre.pack_start(self.valeur, True, True, 0)
+        self.bouton_muet = grenosui.bouton("Couper", self.basculer_muet, "discret")
+        titre.pack_end(self.bouton_muet, False, False, 0)
+        haut.pack_start(titre, False, False, 0)
+
+        self.curseur = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.curseur.set_draw_value(False)
+        self.curseur.connect("value-changed", self.changer_volume)
+        haut.pack_start(self.curseur, False, False, 0)
+        colonne.pack_start(haut, False, False, 0)
+
+        colonne.pack_start(self.trait(), False, False, 0)
+
+        # ---- La sortie -----------------------------------------------------
+        milieu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        milieu.get_style_context().add_class("bloc-son")
+        etiquette = Gtk.Label(label="SORTIE", xalign=0)
+        etiquette.get_style_context().add_class("section")
+        milieu.pack_start(etiquette, False, False, 0)
+        self.choix = Gtk.ComboBoxText()
+        self.choix.connect("changed", self.changer_sortie)
+        milieu.pack_start(self.choix, False, False, 0)
+        colonne.pack_start(milieu, False, False, 0)
+
+        colonne.pack_start(self.trait(), False, False, 0)
+
+        # ---- Le mélangeur --------------------------------------------------
+        self.bas = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.bas.get_style_context().add_class("bloc-son")
+        etiquette = Gtk.Label(label="APPLICATIONS", xalign=0)
+        etiquette.get_style_context().add_class("section")
+        self.bas.pack_start(etiquette, False, False, 0)
+        self.liste = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.bas.pack_start(self.liste, False, False, 0)
+        colonne.pack_start(self.bas, False, False, 0)
+
+        self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        self.connect("button-press-event", self.clic)
+        self.connect("key-press-event", self.touche)
+
+        self.sorties = []
+        self.relire()
+        GLib.timeout_add_seconds(2, self.relire)
+
+    def trait(self):
+        ligne = Gtk.Box()
+        ligne.get_style_context().add_class("separateur-son")
+        return ligne
+
+    # ---- Lire l'état ------------------------------------------------------
+    def relire(self):
+        """Relit le son sans écraser ce que la personne est en train de régler."""
+        if self.en_train:
+            return True
+
+        volume = module_son.volume()
+        muet = module_son.muet()
+        self.curseur.set_value(volume)
+        self.valeur.set_text("Silence" if muet else f"Volume {volume} %")
+        nom_image = ("grenos-son-muet" if muet
+                     else ("grenos-son-faible" if volume < 45 else "grenos-son"))
+        self.image.set_from_icon_name(nom_image, Gtk.IconSize.LARGE_TOOLBAR)
+        self.bouton_muet.get_child().get_children()[-1].set_text(
+            "Rétablir" if muet else "Couper")
+
+        nouvelles = module_son.sorties()
+        if [n for n, _ in nouvelles] != [n for n, _ in self.sorties]:
+            self.sorties = nouvelles
+            courante = module_son.sortie_actuelle()
+            self.choix.remove_all()
+            for index, (nom, description) in enumerate(nouvelles):
+                self.choix.append_text(description)
+                if nom == courante:
+                    self.choix.set_active(index)
+            if nouvelles and self.choix.get_active() < 0:
+                self.choix.set_active(0)
+
+        self.poser_applications()
+        return True
+
+    def poser_applications(self):
+        qui_jouent = module_son.applications_qui_jouent()
+        for enfant in self.liste.get_children():
+            self.liste.remove(enfant)
+        if not qui_jouent:
+            vide = Gtk.Label(label="Rien ne joue en ce moment.", xalign=0)
+            vide.get_style_context().add_class("sous")
+            self.liste.pack_start(vide, False, False, 0)
+        for application in qui_jouent:
+            ligne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            nom = Gtk.Label(label=application["nom"], xalign=0)
+            nom.get_style_context().add_class("nom-app")
+            ligne.pack_start(nom, False, False, 0)
+            curseur = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+            curseur.set_draw_value(False)
+            curseur.set_value(application["volume"])
+            curseur.connect("button-press-event", self.commencer)
+            curseur.connect("button-release-event", self.finir)
+            curseur.connect("value-changed",
+                            lambda c, i=application["index"]:
+                            module_son.regler_application(i, c.get_value()))
+            ligne.pack_start(curseur, False, False, 0)
+            self.liste.pack_start(ligne, False, False, 0)
+        self.liste.show_all()
+
+    # ---- Agir -------------------------------------------------------------
+    def commencer(self, *_):
+        self.en_train = True
+        return False
+
+    def finir(self, *_):
+        self.en_train = False
+        return False
+
+    def changer_volume(self, curseur):
+        module_son.regler_volume(curseur.get_value())
+
+    def basculer_muet(self):
+        module_son.basculer_muet()
+        self.relire()
+
+    def changer_sortie(self, combo):
+        index = combo.get_active()
+        if 0 <= index < len(self.sorties):
+            module_son.choisir_sortie(self.sorties[index][0])
+
+    # ---- S'ouvrir et se refermer ------------------------------------------
+    def touche(self, _widget, evenement):
+        if Gdk.keyval_name(evenement.keyval) == "Escape":
+            Gtk.main_quit()
+            return True
+        return False
+
+    def clic(self, _widget, evenement):
+        largeur, hauteur = self.get_size()
+        if not (0 <= evenement.x < largeur and 0 <= evenement.y < hauteur):
+            Gtk.main_quit()
+            return True
+        return False
+
+    def ouvrir(self):
+        ecran = Gdk.Screen.get_default()
+        self.show_all()
+        _, hauteur = self.get_size()
+        # En bas à gauche, juste au-dessus de la barre : là où se trouve
+        # l'icône qui l'ouvre.
+        self.move(10, ecran.get_height() - HAUTEUR_BARRE - hauteur - 8)
+        self.present()
+
+        siege = Gdk.Display.get_default().get_default_seat()
+        if siege is not None and self.get_window() is not None:
+            siege.grab(self.get_window(), Gdk.SeatCapabilities.ALL_POINTING, True,
+                       None, None, None, None)
+            self.attrape = siege
+        self.connect("destroy", self.lacher)
+
+    def lacher(self, *_):
+        if self.attrape is not None:
+            self.attrape.ungrab()
+            self.attrape = None
+        Gtk.main_quit()
+
+
+def main():
+    grenosui.habiller()
+    grenosui.ajouter_style(STYLE)
+    panneau = PanneauSon()
+    panneau.ouvrir()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

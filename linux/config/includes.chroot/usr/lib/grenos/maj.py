@@ -102,3 +102,73 @@ class Travail:
         return self.sur_fin(
             f"{total} paquet{'s' if total > 1 else ''} installé"
             f"{'s' if total > 1 else ''}. C'est à jour.", True)
+
+
+# ---- Ce que la vérification quotidienne a trouvé ----------------------------
+COMPTE = "/run/grenos/maj"
+DATE = "/run/grenos/maj-date"
+LISTE = "/run/grenos/maj-liste"
+REGLAGE = "/usr/lib/grenos/grenos-maj-reglage"
+
+
+def disponibles():
+    """Combien de paquets attendent, d'après la dernière vérification.
+
+    Rend un entier, ou None quand on ne sait pas — sans réseau, « rien » et
+    « zéro » ne sont pas la même chose, et les confondre ferait dire au bureau
+    que tout est à jour alors qu'il n'en sait rien.
+    """
+    try:
+        with open(COMPTE, encoding="utf-8") as fichier:
+            texte = fichier.read().strip()
+        return int(texte)
+    except (OSError, ValueError):
+        return None
+
+
+def derniere_verification():
+    try:
+        with open(DATE, encoding="utf-8") as fichier:
+            return fichier.read().strip()
+    except OSError:
+        return ""
+
+
+def paquets_en_attente():
+    try:
+        with open(LISTE, encoding="utf-8") as fichier:
+            return [l.strip() for l in fichier if l.strip()]
+    except OSError:
+        return []
+
+
+def _reglage(action):
+    sans_mot_de_passe = subprocess.run(["sudo", "-n", "true"],
+                                       capture_output=True).returncode == 0
+    lanceur_ = ["sudo", "-n"] if sans_mot_de_passe else ["pkexec"]
+    try:
+        return subprocess.run(lanceur_ + [REGLAGE, action],
+                              capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def automatique():
+    """Les mises à jour s'installent-elles toutes seules ?"""
+    return os.path.exists("/etc/grenos/maj-automatique")
+
+
+def regler_automatique(actif):
+    """Allume ou coupe l'installation automatique. Rend l'erreur, ou rien."""
+    resultat = _reglage("activer" if actif else "couper")
+    if resultat is None or resultat.returncode != 0:
+        return "Le système a refusé ce réglage."
+    return ""
+
+
+def verifier_maintenant():
+    """Relance la vérification sans attendre le minuteur."""
+    resultat = _reglage("maintenant")
+    if resultat is None or resultat.returncode != 0:
+        return "La vérification n'a pas pu être lancée."
+    return ""

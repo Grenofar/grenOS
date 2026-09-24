@@ -1,0 +1,17 @@
+# Regarder s'il y a quelque chose à installer. N'installe rien.
+#
+# Lancé par son minuteur, jamais au démarrage immédiat : les premières minutes
+# d'une machine qui s'allume appartiennent à la personne, pas à nous.
+
+[Unit]
+Description=grenOS : chercher les mises a jour
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-maj-verif
+# Une vérification qui traîne ne doit pas retenir la machine.
+TimeoutStartSec=300
+Nice=10
+IOSchedulingClass=idle

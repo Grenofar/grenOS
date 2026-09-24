@@ -11,7 +11,9 @@ polkit.addRule(function (action, subject) {
         "org.freedesktop.packagekit.",
         "org.debian.apt.",
         "org.freedesktop.Flatpak.",
-        "io.calamares.calamares."
+        "io.calamares.calamares.",
+        "org.freedesktop.systemd1.",
+        "org.freedesktop.timedate1."
     ];
     if (!subject.isInGroup("sudo")) {
         return polkit.Result.NOT_HANDLED;
