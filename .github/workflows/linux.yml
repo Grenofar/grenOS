@@ -215,10 +215,44 @@ jobs:
       - name: Construire l'image
         id: build
         run: |
+          # `commande | tail` rend le code de TAIL, qui reussit toujours.
+          # C'etait ecrit douze lignes plus bas, pour l'etape UEFI, et pourtant
+          # ici meme : la construction pouvait echouer sans que l'etape rougisse,
+          # et TOUS les controles du hook — icones en 24x24, « Magasin » revenu,
+          # tailles de fenetre en dur, autorisations polkit — etaient donc sans
+          # dents. Ils refusaient une image que personne n'ecoutait.
+          #
+          # Le journal complet part dans un fichier, garde en artefact : `tail`
+          # coupait a 200 lignes, et le hook parle bien avant la fin, donc ses
+          # messages n'arrivaient jamais jusqu'a moi.
+          set -o pipefail
+          RATE=0
           docker run --privileged --rm \
             -v "$PWD:/work" -w /work \
             -e LB_PARENT_MIRROR_BOOTSTRAP=http://deb.debian.org/debian \
-            debian:trixie sh /work/linux/build.sh 2>&1 | tail -n 200
+            debian:trixie sh /work/linux/build.sh \
+            > "$RUNNER_TEMP/construction.log" 2>&1 || RATE=1
+
+          # Le journal entier fait des dizaines de milliers de lignes — 770
+          # paquets qui se telechargent. On garde en artefact ce qui se lit :
+          # nos propres lignes, et la fin.
+          {
+            echo "--- ce que grenOS a verifie pendant la construction ---"
+            grep -a "grenos:" "$RUNNER_TEMP/construction.log" || echo "(aucune ligne grenos:)"
+            echo "--- les 400 dernieres lignes ---"
+            tail -n 400 "$RUNNER_TEMP/construction.log"
+          } > "$RUNNER_TEMP/construction-resume.log"
+          rm -f "$RUNNER_TEMP/construction.log"
+
+          # Ce que le hook a verifie, en clair : c'est la seule facon de savoir
+          # qu'un controle a vraiment tourne plutot que d'etre saute en silence.
+          grep -a "grenos:" "$RUNNER_TEMP/construction-resume.log" || true
+          if [ "$RATE" = 1 ]; then
+            echo "::error::La construction de l'image a echoue."
+            tail -n 200 "$RUNNER_TEMP/construction-resume.log"
+            exit 1
+          fi
+          tail -n 60 "$RUNNER_TEMP/construction-resume.log"
           # Le conteneur ecrit en root ; la suite (lien, zip, artefact) tourne
           # sous le compte du runner.
           sudo chown -R "$(id -u):$(id -g)" linux || true
