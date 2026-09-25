@@ -419,6 +419,39 @@
       "source": "flatpak",
       "identifiant": "org.gnome.Connections",
       "site": "https://apps.gnome.org/Connections"
+    },
+    {
+      "slug": "agenda",
+      "nom": "Agenda",
+      "rayon": "Bureautique",
+      "editeur": "GNOME",
+      "description": "Tes rendez-vous, au jour, à la semaine ou au mois.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Calendar.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Calendar",
+      "site": "https://apps.gnome.org/Calendar"
+    },
+    {
+      "slug": "loupe",
+      "nom": "Images",
+      "rayon": "Création",
+      "editeur": "GNOME",
+      "description": "Regarder ses photos, les faire tourner, les recadrer.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Loupe.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Loupe",
+      "site": "https://apps.gnome.org/Loupe"
+    },
+    {
+      "slug": "meteo",
+      "nom": "Météo",
+      "rayon": "Internet",
+      "editeur": "GNOME",
+      "description": "Le temps qu'il fera, là où tu es et ailleurs.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Weather.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Weather",
+      "site": "https://apps.gnome.org/Weather"
     }
   ]
 }
