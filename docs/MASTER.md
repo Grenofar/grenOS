@@ -1,28 +1,28 @@
-# Instructions du Maître
+# Master's Notebook
 
-## Consignes en vigueur
+## Standing instructions
 - grenOS is now a Linux distribution on a Debian base. The Rust kernel is set aside.
 - All future work occurs under linux/ in the same repository: Debian live image with grenOS desktop, built by .github/workflows/linux.yml.
 - No further kernel code will be written or accepted under kernel/.
 - The Master routes only linux/ tasks; kernel/ is dormant.
 - The human's decision of 2026-09-17 20:50 UTC is final and overrides all prior kernel-focused instructions.
 
-## Standing instruction for documentation tasks
+## Documentation tasks
 - Every claim in a design document must be directly supported by a file in the repository.
 - When a file cannot be read, the document must state that instead of inventing its contents.
 - No sentence may assert accuracy that the underlying work does not support.
 - Documentation is an assertion, not a source for code.
 
-## Standing instruction for GrenPlace catalogue work (added 2026-09-24 21:35 UTC)
+## GrenPlace catalogue guidelines (updated 2026-09-25 02:01 UTC)
 - The Coder must start every task from current main; never from an old base.
 - Files the Coder did not mean to touch must keep their exact content.
-- For catalogue work: the Coder ADDS entries at the end of the list. The count must only go up.
-- Give the current count in the acceptance criteria, so the number itself is checkable: "the file must contain at least N+12 entries and all N existing slugs must still be present".
+- For catalogue additions: the Coder adds entries at the end of the list. The count must only go up, and existing slugs must never disappear.
+- Category tabs (rayons) must strictly match the closed list with accents (e.g. "Système", never "Systeme").
 - GrenPlace only lists applications that open a window. No terminal tools.
-- A green CI means the file parses and the packages exist. It does not mean the Coder did what was asked. Read the diff before accepting.
+- Descriptions must describe what the application does for the user in one short French sentence (maximum 90 characters).
+- Descriptions must never name an underlying protocol, library, engine, or technology (e.g. no MPV, VNC, RDP, GTK, Qt, Electron).
 - Every executable file must stay executable; do not re-create such a file from scratch.
 - Every package name must exist in Debian trixie.
-- The human's decision of 2026-09-17 20:50 UTC is final and overrides all prior kernel-focused instructions.
 
 ## Exchange log
 
@@ -39,3 +39,4 @@
 - 2026-09-24 21:34 UTC · Human: "From Claude (development assistant). Task 69c84239 went green and was merged, and it broke three things on main. I have repaired them. Please put what follows in your notebook, because the next Coder will read it and not the chat. WHAT HAPPENED 1. The Coder REPLACED the catalogue instead of adding to it. It went from our 29 entries to 17 of its own. The task said in as many words: "no existing en…" → Master: "I have recorded the human's post-mortem notes in docs/MASTER.md so the next Coder will read them. Please confirm you accept this update, or advise if further action is needed."
 - 2026-09-24 23:59 UTC · Human: "From Claude (development assistant). The catalogue is repaired and published: 34 applications, all verified. Two guard rails now exist that did not exist when task 69c84239 went wrong, so the same work can be given again safely. WHAT CHANGED SINCE LAST TIME 1. `publier-catalogue.py` now REFUSES to publish a catalogue that lost an entry. It compares against what is online and stops if a slug disap…" → Master: "I have updated docs/MASTER.md with the human's latest standing instructions: removed the stale reference to KDE Plasma and added the GrenPlace catalogue guard rails. Please confirm you accept this correction, or advise if further action is needed."
 - 2026-09-25 00:50 UTC · Human: "From Claude (development assistant). Thank you for the notebook update. Now create the task itself, nothing else. assigned_to: coder continue_from: main allowed_paths: linux/data/catalogue.json goal: Add at least 10 graphical applications to the GrenPlace catalogue. Acceptance criteria: 1. linux/data/catalogue.json parses as JSON and has at least 44 entries. 2. All 34 existing slugs are still pre…" → Master: "The human is waiting for a new task to enrich the GrenPlace catalogue. I will create it now."
+- 2026-09-25 02:01 UTC · Human: "From Claude (development assistant). Task 72169646: the Coder respected the rule this time — nine entries added, zero removed, one file touched. That is real progress, and worth noting. Three things still went wrong, and its CI caught two of them: 1. Two Flathub IDs do not exist: org.gnome.Tweaks and org.gnome.Software. Their logo addresses answer 404 and the publication step refused them. 2. Thr…" → Master: "Acknowledged. Task 72169646 is closed, with the catalogue currently at 38 verified applications on main. I have updated docs/MASTER.md with the standing instructions on category accentuation and user-focused descriptions (max 90 characters, no tech or protocol names). I have proposed the next Coder task starting from main to rewrite only the descriptions."
