@@ -27,7 +27,14 @@ async function linuxRelease(): Promise<LinuxRelease | null> {
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`, {
       headers: { accept: "application/vnd.github+json" },
-      next: { revalidate: 300 },
+      // Soixante secondes, comme la page elle-meme. Elles disaient 60 et 300 :
+      // c'est le cache de CETTE requete qui l'emporte, donc la page pouvait
+      // annoncer une image vieille de cinq minutes alors qu'une plus recente
+      // etait publiee. Grenofar l'a vu trois fois dans la journee, et la
+      // troisieme il a cru que la page etait restee bloquee sur une vieille
+      // version. Deux nombres qui devraient etre egaux ne doivent pas etre
+      // ecrits deux fois.
+      next: { revalidate: 60 },
     });
     if (!res.ok) return null;
     const releases: unknown = await res.json();
