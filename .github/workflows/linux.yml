@@ -399,6 +399,29 @@ jobs:
           python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-menu-ouvert.ppm" || true
           python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
           sleep 4
+
+          echo "--- la touche Windows ouvre-t-elle le menu ---"
+          # Grenofar : « quand on clique sur le bouton windows de notre clavier,
+          # c'est comme si on ouvrait le menu deroulant grenOS ». Savoir que
+          # xcape a demarre ne prouve rien : il faut appuyer sur la touche.
+          #
+          # `sendkey meta_l` envoie l'appui ET le relachement sans autre touche
+          # entre les deux — exactement la condition que xcape attend pour
+          # emettre. Si le menu s'ouvre, la promesse est tenue.
+          AVANT_META=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" 2>/dev/null | head -1)
+          AVANT_META=${AVANT_META:-0}
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey meta_l" || true
+          sleep 6
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-touche-windows.ppm" || true
+          APRES_META=$(grep -ac 'menu ouvert' "$RUNNER_TEMP/serial.log" 2>/dev/null | head -1)
+          APRES_META=${APRES_META:-0}
+          if [ "$APRES_META" -gt "$AVANT_META" ]; then
+            echo "windows: la touche Windows a ouvert le menu"
+          else
+            echo "::warning::La touche Windows n a pas ouvert le menu."
+          fi
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+          sleep 3
           python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-shift-esc" || true
           sleep 10
           python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-taches.ppm" || true
