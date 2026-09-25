@@ -93,9 +93,80 @@ def verifier(chemin):
         print("PyYAML absent : la lecture du YAML n'est pas verifiee")
     else:
         try:
-            yaml.safe_load(texte)
+            arbre = yaml.safe_load(texte)
         except Exception as souci:
             fautes.append((0, "le YAML ne se lit pas : " + str(souci).split("\n")[0]))
+        else:
+            fautes += fautes_de_github(arbre, texte)
+
+    return fautes
+
+
+# Des clés du schéma d'une étape. Tout le reste ferait refuser le fichier par
+# GitHub, avec pour seul symptôme un run sans aucun job et un workflow dont le
+# nom devient son propre chemin.
+CLES_ETAPE = {
+    "name", "run", "uses", "with", "if", "id", "env", "shell",
+    "working-directory", "continue-on-error", "timeout-minutes",
+}
+
+
+def fautes_de_github(arbre, texte):
+    """Ce que PyYAML accepte volontiers et que GitHub rejette.
+
+    PyYAML lit un fichier de flux comme n'importe quel YAML : il ne connaît
+    rien au schéma des actions. Un identifiant d'étape en double, une clé qui
+    n'existe pas, une expression `${{` jamais fermée — il ne dira rien, et
+    GitHub refusera le fichier sans aucun job, avec pour seul indice un nom de
+    workflow remplacé par son chemin. C'est un quart d'heure a chercher.
+    """
+    fautes = []
+
+    # 1. Les expressions ${{ … }}, comptées ligne par ligne.
+    for numero, ligne in enumerate(texte.split("\n"), 1):
+        if ligne.count("${{") != ligne.count("}}"):
+            fautes.append((numero, "expression ${{ }} non fermee sur cette ligne"))
+
+    if not isinstance(arbre, dict):
+        return fautes
+
+    emplois = arbre.get("jobs")
+    if not isinstance(emplois, dict):
+        fautes.append((0, "aucun bloc « jobs »"))
+        return fautes
+
+    for nom_emploi, emploi in emplois.items():
+        if not isinstance(emploi, dict):
+            continue
+        etapes = emploi.get("steps") or []
+        vus = {}
+        for rang, etape in enumerate(etapes, 1):
+            if not isinstance(etape, dict):
+                fautes.append((0, f"{nom_emploi} : l'etape {rang} n'est pas un bloc"))
+                continue
+
+            # 2. Un identifiant d'etape ne sert qu'une fois par emploi.
+            identifiant = etape.get("id")
+            if identifiant is not None:
+                if identifiant in vus:
+                    fautes.append((0, f"{nom_emploi} : deux etapes portent "
+                                      f"l'identifiant « {identifiant} » "
+                                      f"({vus[identifiant]} et {rang})"))
+                vus[identifiant] = rang
+
+            # 3. Une etape fait quelque chose : elle lance, ou elle emploie.
+            if "run" not in etape and "uses" not in etape:
+                fautes.append((0, f"{nom_emploi} : l'etape {rang} n'a ni "
+                                  f"« run » ni « uses »"))
+            if "run" in etape and "uses" in etape:
+                fautes.append((0, f"{nom_emploi} : l'etape {rang} a « run » "
+                                  f"ET « uses »"))
+
+            # 4. Aucune cle inventee.
+            for cle in etape:
+                if cle not in CLES_ETAPE:
+                    fautes.append((0, f"{nom_emploi} : l'etape {rang} porte la "
+                                      f"cle inconnue « {cle} »"))
 
     return fautes
 
