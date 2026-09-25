@@ -1,8 +1,13 @@
 # grenOS, édition Linux
 
-Une image live Debian **trixie** avec le bureau **KDE Plasma** habillé aux
-couleurs de grenOS, le français et le clavier AZERTY, et l'installateur
-**Calamares** pour la poser sur un disque.
+Une image live Debian **trixie** avec **notre propre bureau** — barre, menu,
+Réglages, magasin et accueil sont écrits pour grenOS —, le français et le
+clavier AZERTY, et l'installateur **Calamares** pour la poser sur un disque.
+
+> KDE Plasma a été retiré le 18 septembre 2026. Il composait l'écran par le
+> GPU, ce qui donnait trois images par seconde dans une machine virtuelle sans
+> accélération 3D. À la place : X11 **sans composition**, openbox pour placer
+> les fenêtres, et nos programmes par-dessus.
 
 ## Construire
 

@@ -466,13 +466,23 @@ jobs:
         run: |
           NAME="${{ steps.vbox.outputs.name }}"
           TAG="linux-${{ steps.vbox.outputs.stamp }}"
+          # Ces notes disaient « bureau KDE Plasma » — retire le 18 septembre,
+          # et l'inverse exact de ce que grenOS revendique. Chaque Release
+          # publiee depuis une semaine annoncait donc le contraire de la verite.
           cat > notes.md <<NOTES
-          grenOS sur Debian trixie, bureau KDE Plasma, installateur Calamares.
+          grenOS sur Debian trixie. Le bureau est le notre : barre, menu,
+          Reglages, magasin et accueil sont ecrits pour grenOS, sur X11 sans
+          composition — c'est ce qui le garde fluide sans carte graphique.
 
           - \`$NAME.iso\` : l'image a graver, a copier sur une cle USB ou a monter dans une machine virtuelle.
           - \`$NAME-virtualbox.zip\` : la machine VirtualBox deja reglee, son disque et l'image.
 
-          Construit par la CI a partir de \`linux/\`, demarre dans QEMU avant publication.
+          Avant d'etre publiee, cette image a ete construite, puis DEMARREE
+          dans QEMU en 1280x720, avec un vrai clic de souris sur la barre. La
+          construction refuse de publier si le bureau ne s'ouvre pas, si une
+          fenetre deborde de l'ecran, si la touche Windows n'ouvre pas le menu,
+          si le magasin ne trouve pas son catalogue, ou si la mise a jour ne
+          s'installe pas depuis notre depot.
           NOTES
           sed -i 's/^          //' notes.md
           # Une seule ligne, sans continuation : c'est elle qui se perd en
