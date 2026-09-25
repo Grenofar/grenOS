@@ -189,7 +189,35 @@ if [ -n "$revenus" ]; then
     echo "grenos: le « Magasin » est revenu :$revenus" >&2
     exit 1
 fi
-echo "grenos: le magasin s'appelle bien GrenPlace"
+
+# Le nom peut aussi revenir dans un TEXTE, sans qu'aucun fichier ne
+# reapparaisse. C'est ce qui s'est passe : le diaporama de l'installateur
+# disait encore « Un magasin, et Steam » et « Le magasin installe les
+# applications » — dans le seul ecran qu'un nouveau venu ne peut pas eviter.
+# Trouve le 2026-09-25, quatre jours apres le renommage.
+#
+# On ne regarde que ce qui s'affiche : le nom d'une entree de menu, et le texte
+# du diaporama. Le mot reste libre dans les commentaires du code, ou il n'est
+# qu'un nom commun francais.
+dits=""
+for entree in /usr/share/applications/*.desktop; do
+    [ -f "$entree" ] || continue
+    if grep -qi '^Name\(\[[^]]*\]\)\?=.*[Mm]agasin' "$entree"; then
+        dits="$dits $entree"
+    fi
+done
+for diapo in /usr/share/calamares/branding/grenos/show.qml; do
+    [ -f "$diapo" ] || continue
+    if grep -qi 'text:.*[Mm]agasin' "$diapo"; then
+        dits="$dits $diapo"
+    fi
+done
+if [ -n "$dits" ]; then
+    echo "grenos: « Magasin » s'affiche encore dans :$dits" >&2
+    echo "grenos: la boutique s'appelle GrenPlace partout ou quelqu'un la lit" >&2
+    exit 1
+fi
+echo "grenos: le magasin s'appelle bien GrenPlace, fichiers et textes compris"
 
 echo "--- grenOS : le bureau de depart est-il garni ---"
 

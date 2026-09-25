@@ -199,16 +199,31 @@ def etat_barre():
     return {"lien": "aucun", "barres": 0, "interface": ""}
 
 
+# Ce que dit l'infobulle, par nombre de barres. Écrit ici plutôt que dans une
+# expression conditionnelle : la version d'avant tenait sur une seule ligne de
+# cent trente caractères, et deux de ces phrases avaient perdu leurs accents
+# sans que personne ne les relise.
+FORCE = {
+    0: "connecté, signal très faible",
+    1: "signal faible",
+    2: "signal moyen",
+    3: "bon signal",
+}
+
+
 def icone_barre(etat_lu=None):
-    """Le nom de l'icone qui dit cet etat-la, et la phrase de l'infobulle."""
+    """Le nom de l'icône qui dit cet état-là, et la phrase de l'infobulle."""
     etat_lu = etat_lu or etat_barre()
+    interface = etat_lu["interface"]
+
     if etat_lu["lien"] == "cable":
-        return "grenos-reseau-cable", f"Connecte par cable ({etat_lu['interface']})"
+        return "grenos-reseau-cable", f"Connecté par câble ({interface})"
+
     if etat_lu["lien"] == "wifi":
         barres = etat_lu["barres"]
-        mot = ("signal faible", "signal moyen", "bon signal")[max(0, barres - 1)]             if barres else "connecte, signal tres faible"
-        return (f"grenos-reseau-wifi-{barres}",
-                f"Wi-Fi : {mot} ({etat_lu['interface']})")
+        phrase = FORCE.get(barres, FORCE[3])
+        return f"grenos-reseau-wifi-{barres}", f"Wi-Fi : {phrase} ({interface})"
+
     return "grenos-reseau-aucun", "Aucune connexion"
 
 

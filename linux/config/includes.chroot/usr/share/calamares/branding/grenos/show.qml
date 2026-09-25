@@ -59,7 +59,7 @@ Presentation {
                 spacing: 18
                 width: parent.width * 0.8
                 Text {
-                    text: "Un magasin, et Steam"
+                    text: "GrenPlace, et Steam"
                     color: "#ffffff"
                     font.pixelSize: 34
                     font.bold: true
@@ -67,7 +67,7 @@ Presentation {
                     width: parent.width
                 }
                 Text {
-                    text: "Le magasin installe les applications en un clic, paquets Debian comme Flatpak. Steam s'y trouve, et les pilotes qui vont avec."
+                    text: "GrenPlace installe tes applications en un clic, paquets Debian comme Flatpak. Steam s'y trouve, et les pilotes qui vont avec."
                     color: "#9aa7bd"
                     font.pixelSize: 18
                     wrapMode: Text.WordWrap
@@ -87,7 +87,7 @@ Presentation {
                 spacing: 18
                 width: parent.width * 0.8
                 Text {
-                    text: "Les mises à jour viennent à vous"
+                    text: "Les mises à jour viennent à toi"
                     color: "#ffffff"
                     font.pixelSize: 34
                     font.bold: true
@@ -95,7 +95,7 @@ Presentation {
                     width: parent.width
                 }
                 Text {
-                    text: "« Mise à jour de grenOS » apporte les nouveautés du système et les correctifs de sécurité de Debian. Plus jamais d'image à retélécharger."
+                    text: "« Mettre à jour grenOS » apporte les nouveautés du système et les correctifs de sécurité de Debian. Plus jamais d'image à retélécharger."
                     color: "#9aa7bd"
                     font.pixelSize: 18
                     wrapMode: Text.WordWrap

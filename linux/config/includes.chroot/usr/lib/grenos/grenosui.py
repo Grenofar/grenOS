@@ -594,19 +594,39 @@ def poser_taille(cadre, largeur, hauteur):
 
 
 def _dire_la_taille(cadre, _evenement):
-    """Une fois la fenêtre à l'écran, dire si elle y tient vraiment.
+    """Une fois la fenêtre à l'écran : la remonter s'il le faut, puis le dire.
 
     Demander une taille n'est pas l'obtenir : GTK agrandit une fenêtre au-delà
     de ce qu'on demande dès qu'un enfant exige plus de place. La seule mesure
     qui compte est celle d'après l'affichage — et c'est celle-là qu'on écrit
     sur le port série, pour que la CI puisse la juger au lieu de nous croire.
+
+    Et tenir ne suffit pas : `Gtk.WindowPosition.CENTER` centre sur **l'écran
+    entier**, barre comprise. Une fenêtre de la bonne taille finissait donc
+    quand même avec son bas caché derrière la barre — vu sur la capture de la
+    construction en 720p, où la page Jeux dépassait de quelques pixels. On la
+    remonte, une seule fois, au premier affichage : après, la fenêtre
+    appartient à la personne, et on ne déplace plus ce qu'elle a placé.
     """
+    if getattr(cadre, "_deja_place", False):
+        return False
+    cadre._deja_place = True
+
     largeur, hauteur = cadre.get_size()
     utile_l, utile_h = ecran_utile()
-    tient = largeur <= utile_l and hauteur <= utile_h
-    dire("fenetre %s %dx%d dans %dx%d : %s"
-         % (cadre.get_title() or "sans nom", largeur, hauteur, utile_l, utile_h,
-            "tient" if tient else "DEBORDE"))
+
+    x, y = cadre.get_position()
+    # La barre de titre que le gestionnaire de fenêtres ajoute au-dessus : elle
+    # n'est pas dans get_size(), et c'est pourtant elle qui pousse le bas.
+    bas = y + hauteur
+    if bas > utile_h:
+        y = max(TITRE, utile_h - hauteur)
+        cadre.move(x, y)
+
+    tient = largeur <= utile_l and (y + hauteur) <= utile_h
+    dire("fenetre %s %dx%d en %d,%d dans %dx%d : %s"
+         % (cadre.get_title() or "sans nom", largeur, hauteur, x, y,
+            utile_l, utile_h, "tient" if tient else "DEBORDE"))
     return False
 
 

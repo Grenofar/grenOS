@@ -119,6 +119,11 @@ class PanneauSon(Gtk.Window):
         milieu.pack_start(etiquette, False, False, 0)
         self.choix = Gtk.ComboBoxText()
         self.choix.connect("changed", self.changer_sortie)
+        # La liste deroulante est une fenetre a part : elle prend le focus en
+        # s'ouvrant. Sans ce drapeau, le panneau se fermerait au moment precis
+        # ou l'on va choisir sa sortie audio — c'est-a-dire au pire moment.
+        self.deroule = False
+        self.choix.connect("notify::popup-shown", self.suivre_deroule)
         milieu.pack_start(self.choix, False, False, 0)
         colonne.pack_start(milieu, False, False, 0)
 
@@ -238,6 +243,10 @@ class PanneauSon(Gtk.Window):
             return True
         return False
 
+    def suivre_deroule(self, widget, _parametre):
+        self.deroule = widget.get_property("popup-shown")
+        return False
+
     def sortir_du_focus(self, *_):
         """Deuxieme filet : le panneau part des qu'il n'est plus la fenetre active.
 
@@ -246,7 +255,13 @@ class PanneauSon(Gtk.Window):
         cours de deplacement —, et alors le panneau restait la, par-dessus
         tout, jusqu'a ce qu'on le retrouve pour le fermer. Perdre le focus est
         un signal que rien ne peut nous refuser.
+
+        Sauf pendant qu'une liste deroulante est ouverte : elle est elle-meme
+        une fenetre, et le focus lui revient. Fermer a ce moment-la, ce serait
+        fermer le panneau au moment ou l'on va choisir sa sortie audio.
         """
+        if self.deroule:
+            return False
         Gtk.main_quit()
         return False
 

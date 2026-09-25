@@ -48,6 +48,14 @@ jobs:
       - name: Aucune continuation de ligne perdue
         run: python3 scripts/verif-flux.py .github/workflows/linux.yml
 
+      # Une phrase sans accents se lit encore : c'est pour cela qu'elle passe
+      # les relectures. Le 24 septembre, le catalogue en portait deux depuis
+      # une semaine ; le 25, l'infobulle du reseau en portait trois, ecrites
+      # une heure plus tot, dans un texte que je venais de relire moi-meme.
+      # Trois secondes ici, contre une faute d'orthographe dans l'image publiee.
+      - name: Les textes affiches ont leurs accents
+        run: python3 linux/tools/verif-accents.py
+
       - name: Faire de la place
         run: |
           df -h /

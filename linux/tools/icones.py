@@ -328,20 +328,23 @@ def cable(chemin, taille):
     """
     image, u, v = toile(taille)
 
-    # Le corps : nettement plus large que haut.
-    corps = rectangle(u, v, 0.12, 0.30, 0.88, 0.62, rayon=0.05)
+    # Le corps : plus large que haut, et **ramasse vers le milieu**. Tout le
+    # dessin tient entre 0.22 et 0.78 en hauteur : quel que soit l'endroit ou
+    # la barre centre l'icone, il lui reste de la marge. La version d'avant
+    # descendait jusqu'a 0.74 et sa languette touchait le bas de l'ecran.
+    corps = rectangle(u, v, 0.12, 0.26, 0.88, 0.56, rayon=0.05)
     poser(image, corps, ACCENT, 1.0)
 
-    # Les huit contacts, en traits fins sous le bord haut. Huit, parce qu'une
-    # RJ45 en a huit — et parce qu'a cette largeur ils font une texture qu'on
-    # reconnait avant de les compter.
-    for i in range(8):
-        x = 0.185 + i * 0.079
-        contact = rectangle(u, v, x, 0.345, x + 0.034, 0.465, rayon=0.012)
+    # Quatre contacts EPAIS, pas huit fins. A vingt pixels, huit traits fins ne
+    # se comptent pas : ils se fondent en rayures, et l'icone ressemble a un
+    # code-barres. Vu sur la capture de la barre, agrandie six fois.
+    for i in range(4):
+        x = 0.235 + i * 0.155
+        contact = rectangle(u, v, x, 0.315, x + 0.085, 0.435, rayon=0.02)
         poser(image, contact, CLAIR, 0.95)
 
-    # La languette, large et basse : le trait qui acheve la silhouette.
-    languette = rectangle(u, v, 0.36, 0.60, 0.64, 0.74, rayon=0.035)
+    # La languette, large et courte : le trait qui acheve la silhouette.
+    languette = rectangle(u, v, 0.37, 0.54, 0.63, 0.70, rayon=0.035)
     poser(image, languette, SECOND, 1.0)
 
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
