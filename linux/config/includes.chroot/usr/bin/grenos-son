@@ -232,14 +232,14 @@ class PanneauSon(Gtk.Window):
     # ---- S'ouvrir et se refermer ------------------------------------------
     def touche(self, _widget, evenement):
         if Gdk.keyval_name(evenement.keyval) == "Escape":
-            Gtk.main_quit()
+            self.partir()
             return True
         return False
 
     def clic(self, _widget, evenement):
         largeur, hauteur = self.get_size()
         if not (0 <= evenement.x < largeur and 0 <= evenement.y < hauteur):
-            Gtk.main_quit()
+            self.partir()
             return True
         return False
 
@@ -262,7 +262,7 @@ class PanneauSon(Gtk.Window):
         """
         if self.deroule:
             return False
-        Gtk.main_quit()
+        self.partir()
         return False
 
     def decouper(self, *_):
@@ -301,7 +301,7 @@ class PanneauSon(Gtk.Window):
         # jusqu'à ce que la fenêtre soit affichable.
         self.pris = False
         self.attrape = grenosui.Attrape(self, self.dire_attrape)
-        self.connect("destroy", self.lacher)
+        self.connect("destroy", self.partir)
 
     def dire_attrape(self, pris):
         """Le port série dit si l'attrape a pris. C'est ce qui manquait."""
@@ -309,10 +309,23 @@ class PanneauSon(Gtk.Window):
         grenosui.dire("son : le pointeur est %s"
                       % ("attrape" if pris else "refuse, on compte sur le focus"))
 
-    def lacher(self, *_):
-        # Le panneau dit qu'il part, et par quoi. Sans cette ligne, on ne peut
-        # pas prouver la demande de Grenofar — « fais en sorte que si on clique
-        # autre part ca disparaisse » — autrement qu'en le croyant.
+    def partir(self, *_):
+        """Le seul chemin de sortie, et il dit toujours qu'il part.
+
+        Il y en avait quatre — Échap, le clic à côté, la perte du focus, la
+        destruction de la fenêtre — et trois appelaient `Gtk.main_quit()` tout
+        droit. Or `main_quit()` ne détruit pas la fenêtre : il sort de la
+        boucle, le programme se termine, et `destroy` n'arrive jamais. La
+        phrase « son ferme » vivait dans ce `destroy`.
+
+        Résultat : le panneau se fermait bien au clic — la capture de la
+        construction `36112644255` le montre, il n'est plus là — mais il ne le
+        disait pas, et la CI concluait qu'il ne s'était pas fermé. **Le défaut
+        était dans la preuve, pas dans le bureau.**
+        """
+        if getattr(self, "parti", False):
+            return
+        self.parti = True
         grenosui.dire("son ferme")
         if self.attrape is not None:
             self.attrape.lacher()
