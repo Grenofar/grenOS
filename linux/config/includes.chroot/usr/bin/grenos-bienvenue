@@ -23,37 +23,58 @@ import materiel  # noqa: E402
 
 GESTES = [
     ("GrenPlace", "Ajouter des applications en un clic — Steam, un traitement de "
-     "texte, un éditeur de code.", "grenplace", "system-software-install"),
-    ("Réglages", "Le thème jour et nuit, l'écran, le son, le mot de passe, "
-     "les mises à jour.", "grenos-parametres", "preferences-system"),
+     "texte, un éditeur de code.", "grenplace", ["grenplace", "system-software-install"]),
+    ("Jeux", "Ce que cette machine sait faire tourner, et ce qu'il lui manque. "
+     "La vérité sur chaque jeu, y compris ceux qui ne marchent pas.",
+     "grenos-jeux", ["grenos-jeux", "applications-games"]),
+    ("Connexions", "Le Wi-Fi et le Bluetooth, dans une fenêtre.",
+     "grenos-connexions", ["grenos-connexions", "network-wireless"]),
+    ("Réglages", "Le thème jour et nuit, l'écran, le son, l'heure, le mot de passe, "
+     "les mises à jour.", "grenos-parametres", ["preferences-system"]),
     ("Mettre à jour", "Les nouveautés de grenOS et les correctifs de sécurité, "
-     "sans retélécharger l'image.", "grenos-maj", "system-software-update"),
+     "sans retélécharger l'image.", "grenos-maj", ["system-software-update"]),
     ("Naviguer", "Firefox est là, avec ses onglets et ses favoris.",
-     "firefox-esr", "web-browser"),
+     "firefox-esr", ["firefox-esr", "web-browser"]),
     ("Tes fichiers", "Ouvrir, renommer, copier, supprimer — et tout ce que tu poses "
-     "sur le bureau reste là.", "pcmanfm", "system-file-manager"),
+     "sur le bureau reste là.", "pcmanfm", ["grenos-fichiers", "system-file-manager"]),
     ("Terminal", "Pour qui veut taper des commandes. Les autres n'en ont pas besoin.",
-     "x-terminal-emulator", "utilities-terminal"),
+     "x-terminal-emulator", ["utilities-terminal"]),
 ]
 
 INSTALLER = ("Installer grenOS", "Poser le système sur le disque de ce PC, à côté ou à "
              "la place de ce qui s'y trouve. Rien n'est touché avant que tu ne valides.",
-             "pkexec calamares", "drive-harddisk")
+             "pkexec calamares", ["drive-harddisk"])
 
 ASTUCES = [
     "Clic droit sur le bureau : créer un dossier, un fichier, changer le fond.",
+    "Glisser une application du menu vers le bureau en fait un raccourci ; "
+    "clic droit sur une icône de la barre pour l'y épingler ou l'en retirer.",
     "Alt+Tab passe d'une fenêtre à l'autre, Alt+F4 ferme celle du dessus.",
-    "Ctrl+Maj+Échap ouvre le moniteur des tâches, Meta+T bascule jour et nuit.",
+    "Impr. écran capture tout l'écran, Maj+Impr. écran une zone choisie ; "
+    "les images vont dans le dossier Images.",
+    "Ctrl+Maj+Échap ouvre le gestionnaire de tâches, Meta+I les Réglages, "
+    "Meta+E tes fichiers, Meta+T bascule jour et nuit.",
 ]
 
 
-def image_de(nom_icone, taille=32):
-    try:
-        pixbuf = Gtk.IconTheme.get_default().load_icon(
-            nom_icone, taille, Gtk.IconLookupFlags.FORCE_SIZE)
-        return Gtk.Image.new_from_pixbuf(pixbuf)
-    except GLib.Error:
-        return None
+def image_de(noms, taille=32):
+    """La premiere icone trouvee parmi plusieurs noms.
+
+    On cite la notre d'abord, celle du theme ensuite. Depuis qu'on dessine nos
+    marques, l'accueil montrait encore les icones generiques d'un theme
+    pendant que la barre des taches et le menu montraient les notres : la meme
+    application n'avait pas le meme visage a deux endroits.
+    """
+    if isinstance(noms, str):
+        noms = [noms]
+    theme = Gtk.IconTheme.get_default()
+    for nom in noms:
+        try:
+            return Gtk.Image.new_from_pixbuf(
+                theme.load_icon(nom, taille, Gtk.IconLookupFlags.FORCE_SIZE))
+        except GLib.Error:
+            continue
+    return None
 
 
 def carte_geste(nom, note, commande, icone):
