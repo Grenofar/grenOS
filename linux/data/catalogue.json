@@ -375,6 +375,105 @@
       "source": "apt",
       "identifiant": "gufw",
       "site": "https://help.ubuntu.com/community/Gufw"
+    },
+    {
+      "slug": "celluloid",
+      "nom": "Celluloid",
+      "rayon": "Internet",
+      "editeur": "Celluloid",
+      "description": "Un lecteur vidéo simple basé sur MPV.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/io.github.celluloid_player.Celluloid.png",
+      "source": "flatpak",
+      "identifiant": "io.github.celluloid_player.Celluloid",
+      "site": "https://github.com/celluloid-player/celluloid"
+    },
+    {
+      "slug": "gnome-maps",
+      "nom": "GNOME Maps",
+      "rayon": "Internet",
+      "editeur": "GNOME",
+      "description": "Explorer le monde et préparer ses déplacements.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Maps.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Maps",
+      "site": "https://wiki.gnome.org/Apps/Maps"
+    },
+    {
+      "slug": "gnome-calculator",
+      "nom": "GNOME Calculator",
+      "rayon": "Bureautique",
+      "editeur": "GNOME",
+      "description": "Effectuer des calculs simples ou scientifiques.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Calculator.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Calculator",
+      "site": "https://wiki.gnome.org/Apps/Calculator"
+    },
+    {
+      "slug": "gnome-characters",
+      "nom": "GNOME Characters",
+      "rayon": "Bureautique",
+      "editeur": "GNOME",
+      "description": "Explorer et insérer des caractères spéciaux.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Characters.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Characters",
+      "site": "https://wiki.gnome.org/Apps/Characters"
+    },
+    {
+      "slug": "gnome-logs",
+      "nom": "GNOME Logs",
+      "rayon": "Systeme",
+      "editeur": "GNOME",
+      "description": "Consulter et filtrer les journaux du système.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Logs.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Logs",
+      "site": "https://wiki.gnome.org/Apps/Logs"
+    },
+    {
+      "slug": "gnome-connections",
+      "nom": "GNOME Connections",
+      "rayon": "Internet",
+      "editeur": "GNOME",
+      "description": "Se connecter à des ordinateurs distants via VNC ou RDP.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Connections.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Connections",
+      "site": "https://wiki.gnome.org/Apps/Connections"
+    },
+    {
+      "slug": "gnome-boxes",
+      "nom": "GNOME Boxes",
+      "rayon": "Systeme",
+      "editeur": "GNOME",
+      "description": "Créer et gérer des machines virtuelles simplement.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Boxes.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Boxes",
+      "site": "https://wiki.gnome.org/Apps/Boxes"
+    },
+    {
+      "slug": "gnome-tweaks",
+      "nom": "GNOME Tweaks",
+      "rayon": "Systeme",
+      "editeur": "GNOME",
+      "description": "Ajuster des paramètres avancés du bureau.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Tweaks.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Tweaks",
+      "site": "https://wiki.gnome.org/Apps/Tweaks"
+    },
+    {
+      "slug": "gnome-software",
+      "nom": "GNOME Logiciels",
+      "rayon": "Internet",
+      "editeur": "GNOME",
+      "description": "Découvrir et installer des applications depuis des dépôts.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Software.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Software",
+      "site": "https://wiki.gnome.org/Apps/Software"
     }
   ]
 }
