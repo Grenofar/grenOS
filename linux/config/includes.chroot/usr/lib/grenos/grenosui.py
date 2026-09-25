@@ -368,6 +368,35 @@ def nommer():
     return nom
 
 
+def marque_du_programme(nom):
+    """L'icône qu'une fenêtre de ce programme doit porter.
+
+    Trois réponses, dans cet ordre : une icône qui porte son nom si nous en
+    avons dessiné une ; sinon celle que déclare son entrée de menu ; sinon la
+    marque du système.
+
+    Le deuxième cas manquait, et cela se voyait : les Réglages portaient une
+    clé à molette dans la barre des tâches — l'icône de leur `.desktop` — et
+    le G de grenOS dans leur barre de titre. La même application avec deux
+    visages, c'est-à-dire exactement ce que Grenofar reprochait.
+    """
+    theme = Gtk.IconTheme.get_default()
+    if theme.has_icon(nom):
+        return nom
+    entree = f"/usr/share/applications/{nom}.desktop"
+    try:
+        with open(entree, encoding="utf-8") as fichier:
+            for ligne in fichier:
+                if ligne.startswith("Icon="):
+                    declare = ligne.split("=", 1)[1].strip()
+                    if declare and theme.has_icon(declare):
+                        return declare
+                    break
+    except OSError:
+        pass
+    return "grenos"
+
+
 def habiller(couleurs=None):
     """Applique le style à tout l'écran : toute fenêtre ouverte ensuite le suit.
 
@@ -382,9 +411,7 @@ def habiller(couleurs=None):
     # du système sinon. On le décide en demandant au thème s'il connaît une
     # icône du nom du programme — une liste écrite à la main vieillirait au
     # premier programme ajouté, et personne ne s'en apercevrait.
-    nom = nommer()
-    marque = nom if Gtk.IconTheme.get_default().has_icon(nom) else "grenos"
-    Gtk.Window.set_default_icon_name(marque)
+    Gtk.Window.set_default_icon_name(marque_du_programme(nommer()))
     fournisseur = Gtk.CssProvider()
     charger(fournisseur, feuille(couleurs))
     Gtk.StyleContext.add_provider_for_screen(
