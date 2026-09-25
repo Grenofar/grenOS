@@ -630,6 +630,62 @@ def _dire_la_taille(cadre, _evenement):
     return False
 
 
+class Attrape:
+    """Attrape le pointeur pour une fenêtre, dès qu'elle est vraiment affichée.
+
+    Pourquoi ce n'est pas une ligne de code : `present()` rend la main **avant**
+    que X ait affiché la fenêtre. Une attrape demandée dans la foulée reçoit
+    `GDK_GRAB_NOT_VIEWABLE` — X refuse de donner le pointeur à une fenêtre qu'il
+    n'a pas encore mise à l'écran. L'erreur était ignorée, et le panneau du son
+    comme le menu vivaient depuis toujours sans attrape : cliquer à côté ne les
+    fermait pas.
+
+    Ce n'est pas une supposition. La construction `36109710684` l'a écrit noir
+    sur blanc : « clic ailleurs par le focus seul », puis, quand la CI a enfin
+    cliqué à côté pour de vrai, « Un clic a cote n a pas referme le panneau ».
+    Deux mois de fenêtres qui ne se fermaient qu'à Échap, pour une course entre
+    deux appels.
+
+    On réessaie donc, toutes les trente millisecondes, jusqu'à ce que la fenêtre
+    soit affichable — puis on attrape. Et si l'attrape échoue quand même, la
+    perte du focus reste le second filet.
+    """
+
+    def __init__(self, cadre, quand_pris=None, essais=40):
+        self.cadre = cadre
+        self.siege = None
+        self.restants = essais
+        self.quand_pris = quand_pris
+        GLib.timeout_add(30, self._essayer)
+
+    def _essayer(self):
+        self.restants -= 1
+        fenetre = self.cadre.get_window()
+        if fenetre is None or not fenetre.is_viewable():
+            return self.restants > 0
+
+        siege = Gdk.Display.get_default().get_default_seat()
+        if siege is None:
+            return False
+        pris = siege.grab(fenetre, Gdk.SeatCapabilities.ALL_POINTING, True,
+                          None, None, None, None)
+        if pris == Gdk.GrabStatus.SUCCESS:
+            self.siege = siege
+            if self.quand_pris is not None:
+                self.quand_pris(True)
+            return False
+        if self.restants > 0:
+            return True
+        if self.quand_pris is not None:
+            self.quand_pris(False)
+        return False
+
+    def lacher(self):
+        if self.siege is not None:
+            self.siege.ungrab()
+            self.siege = None
+
+
 def fenetre(nom, largeur=820, hauteur=600):
     """Une fenêtre ordinaire de grenOS, déjà habillée et centrée."""
     habiller()

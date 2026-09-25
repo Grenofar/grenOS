@@ -295,18 +295,19 @@ class PanneauSon(Gtk.Window):
         self.connect("size-allocate", self.decouper)
         self.connect("focus-out-event", self.sortir_du_focus)
 
-        siege = Gdk.Display.get_default().get_default_seat()
-        pris = Gdk.GrabStatus.FAILED
-        if siege is not None and self.get_window() is not None:
-            pris = siege.grab(self.get_window(), Gdk.SeatCapabilities.ALL_POINTING,
-                              True, None, None, None, None)
-            if pris == Gdk.GrabStatus.SUCCESS:
-                self.attrape = siege
-        # On le dit sur le port serie : quand le panneau refusera de se fermer
-        # au clic, la premiere question sera « l'attrape a-t-elle pris ? », et
-        # la reponse sera deja dans le journal.
-        self.pris = pris == Gdk.GrabStatus.SUCCESS
+        # L'attrape ne peut pas se demander dans la foulée de `present()` : X
+        # affiche la fenêtre de façon asynchrone et refuse le pointeur à une
+        # fenêtre qu'il n'a pas encore mise à l'écran. Elle réessaie donc
+        # jusqu'à ce que la fenêtre soit affichable.
+        self.pris = False
+        self.attrape = grenosui.Attrape(self, self.dire_attrape)
         self.connect("destroy", self.lacher)
+
+    def dire_attrape(self, pris):
+        """Le port série dit si l'attrape a pris. C'est ce qui manquait."""
+        self.pris = pris
+        grenosui.dire("son : le pointeur est %s"
+                      % ("attrape" if pris else "refuse, on compte sur le focus"))
 
     def lacher(self, *_):
         # Le panneau dit qu'il part, et par quoi. Sans cette ligne, on ne peut
@@ -314,7 +315,7 @@ class PanneauSon(Gtk.Window):
         # autre part ca disparaisse » — autrement qu'en le croyant.
         grenosui.dire("son ferme")
         if self.attrape is not None:
-            self.attrape.ungrab()
+            self.attrape.lacher()
             self.attrape = None
         Gtk.main_quit()
 
@@ -328,12 +329,10 @@ def main():
     # prouver autrement qu'en comptant les sorties. Dire le volume et l'etat
     # muet montre qu'on sait *lire* l'etat du melangeur, pas seulement lister
     # des peripheriques — c'est ce que fait le panneau quand on l'ouvre.
-    grenosui.dire("son ouvert, %d sorties, volume %d%%, %s, panneau %dx%d, "
-                  "clic ailleurs %s"
+    grenosui.dire("son ouvert, %d sorties, volume %d%%, %s, panneau %dx%d"
                   % (len(module_son.sorties()), module_son.volume(),
                      "muet" if module_son.muet() else "actif",
-                     *panneau.get_size(),
-                     "attrape" if panneau.pris else "par le focus seul"))
+                     *panneau.get_size()))
     Gtk.main()
 
 

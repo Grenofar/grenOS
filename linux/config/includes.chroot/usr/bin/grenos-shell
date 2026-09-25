@@ -561,16 +561,16 @@ class Menu(Gtk.Window):
         self.recherche.grab_focus()
         self.panneau.enfoncer(True)
 
-        siege = Gdk.Display.get_default().get_default_seat()
-        if siege is not None and self.get_window() is not None:
-            siege.grab(self.get_window(), Gdk.SeatCapabilities.ALL_POINTING, True,
-                       None, None, None, None)
-            self.attrape = siege
+        # Le menu souffrait du même défaut que le panneau du son, et personne
+        # ne l'avait vu : on le ferme à Échap ou en recliquant sur le bouton,
+        # presque jamais en cliquant à côté. L'attrape demandée juste après
+        # `present()` échouait — X n'avait pas encore affiché la fenêtre.
+        self.attrape = grenosui.Attrape(self)
         grenosui.dire(f"menu ouvert, {len(self.applications)} applications")
 
     def fermer(self):
         if self.attrape is not None:
-            self.attrape.ungrab()
+            self.attrape.lacher()
             self.attrape = None
         self.hide()
         self.panneau.enfoncer(False)
