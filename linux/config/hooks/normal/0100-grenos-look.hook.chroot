@@ -242,6 +242,19 @@ if [ -n "$petites" ]; then
 fi
 echo "grenos: nos icones existent en 24x24, la barre ne debordera pas"
 
+echo "--- grenOS : les commandes que nos programmes appellent existent-elles ---"
+# Trois fois la meme faute en un jour : ca-certificates absent (ni Flathub ni
+# notre depot ne repondaient), puis libgtk-3-bin (le cache d'icones jamais
+# rafraichi, le bouton Fortnite inerte), puis desktop-file-utils (la base du
+# menu jamais reconstruite apres une mise a jour).
+#
+# A chaque fois la meme forme : un paquet seulement RECOMMANDE, donc absent
+# puisqu'on construit sans les recommandes ; un appel dont l'echec est avale
+# par un « || true » ; et personne ne le sait avant d'appuyer sur le bouton.
+#
+# Ce controle tourne ICI, dans l'image, ou `which` repond pour de vrai.
+python3 /usr/lib/grenos/verif-commandes.py
+
 echo "--- grenOS : nos autorisations designent-elles de vraies actions ---"
 # Une regle polkit qui nomme une action inexistante n'autorise rien, et ne le
 # dit pas. La notre portait « io.calamares.calamares. » ; le paquet calamares

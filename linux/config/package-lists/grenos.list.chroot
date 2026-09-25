@@ -123,6 +123,21 @@ flatpak
 ## l'image, elle, ne pouvait pas atteindre. Un essai qui ameliore son
 ## environnement ne teste plus le produit.
 ca-certificates
+## `gtk-update-icon-cache` et `gtk-launch`, tous deux dans libgtk-3-bin.
+##
+## Rien ne les tirait. Consequences, silencieuses toutes les deux :
+##   - `appliquer-systeme` rafraichit le cache d'icones apres chaque mise a
+##     jour, avec un `|| true` au bout : l'appel echouait sans rien dire, donc
+##     une icone neuve pouvait ne pas apparaitre ;
+##   - le bouton « Ouvrir Fortnite » de la page Jeux lance `gtk-launch` : il ne
+##     faisait rien du tout.
+libgtk-3-bin
+## `update-desktop-database`, dans desktop-file-utils. Seulement RECOMMANDE par
+## flatpak, donc absent comme ca-certificates l'etait. `appliquer-systeme`
+## reconstruit la base du menu apres une mise a jour — en vain : une entree de
+## menu neuve pouvait ne jamais apparaitre. C'est pourtant exactement ce qu'une
+## mise a jour doit savoir apporter.
+desktop-file-utils
 
 ## L'installation sur le disque, en un clic depuis le live.
 calamares
