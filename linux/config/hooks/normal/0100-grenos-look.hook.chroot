@@ -242,6 +242,60 @@ if [ -n "$petites" ]; then
 fi
 echo "grenos: nos icones existent en 24x24, la barre ne debordera pas"
 
+echo "--- grenOS : nos autorisations designent-elles de vraies actions ---"
+# Une regle polkit qui nomme une action inexistante n'autorise rien, et ne le
+# dit pas. La notre portait « io.calamares.calamares. » ; le paquet calamares
+# declare « com.github.calamares.calamares.pkexec.run ». Resultat : « Installer
+# grenOS » lancait pkexec, polkit demandait un mot de passe, et sur une machine
+# grenOS par defaut il n'y en a pas. **L'installateur ne pouvait pas demarrer.**
+#
+# Personne ne s'en etait apercu parce que personne n'avait jamais clique dessus,
+# et que l'icone est cachee dans les machines virtuelles — donc dans la machine
+# d'essai. Ce controle ferme cet angle mort : chaque prefixe permis doit
+# correspondre a au moins une action reellement declaree sur le disque.
+python3 - <<'POLKIT'
+import glob
+import re
+import sys
+
+regle = "/etc/polkit-1/rules.d/49-grenos-administration.rules"
+try:
+    with open(regle, encoding="utf-8") as fichier:
+        texte = fichier.read()
+except OSError:
+    print("grenos: la regle d'administration est absente", file=sys.stderr)
+    sys.exit(1)
+
+# Les prefixes de la liste « permis », tels qu'ils sont ecrits.
+bloc = texte.split("var permis = [", 1)[1].split("]", 1)[0]
+prefixes = re.findall(r'"([^"]+)"', bloc)
+if not prefixes:
+    print("grenos: aucune action permise : la regle ne sert a rien", file=sys.stderr)
+    sys.exit(1)
+
+# Toutes les actions que le systeme declare vraiment.
+actions = []
+for chemin in glob.glob("/usr/share/polkit-1/actions/*.policy"):
+    with open(chemin, encoding="utf-8", errors="replace") as fichier:
+        actions += re.findall(r'<action id="([^"]+)"', fichier.read())
+
+print("grenos: %d actions declarees sur cette image" % len(actions))
+orphelins = []
+for prefixe in prefixes:
+    combien = sum(1 for a in actions if a.startswith(prefixe))
+    print("grenos:   %-34s %d action(s)" % (prefixe, combien))
+    if combien == 0:
+        orphelins.append(prefixe)
+
+if orphelins:
+    print("grenos: ces prefixes ne designent AUCUNE action : " + ", ".join(orphelins),
+          file=sys.stderr)
+    print("grenos: une regle qui n'autorise rien est pire qu'une regle absente, "
+          "parce qu'elle rassure", file=sys.stderr)
+    sys.exit(1)
+print("grenos: chaque autorisation designe une action qui existe")
+POLKIT
+
 echo "--- grenOS : le bureau de depart est-il garni ---"
 
 # La CI a dit « bureau pret, 0 icones » et c'est comme cela que j'ai vu que

@@ -6,12 +6,43 @@
 // magasin demanderait un mot de passe qui n'existe pas, et rien ne se
 // passerait. La règle ne couvre que les paquets, les Flatpak et
 // l'installation du système — pas l'exécution de n'importe quoi en root.
+//
+// ---------------------------------------------------------------------------
+// Un nom d'action écrit de mémoire ne permet rien du tout.
+//
+// Cette liste portait « io.calamares.calamares. ». Ce nom n'existe nulle part :
+// le paquet `calamares` 3.3.14-1 déclare
+// `com.github.calamares.calamares.pkexec.run`, avec `allow_active = auth_admin`.
+// Lu dans le .deb, dans
+// /usr/share/polkit-1/actions/com.github.calamares.calamares.policy — pas
+// deviné.
+//
+// La conséquence était sérieuse et invisible : « Installer grenOS » lance
+// `pkexec calamares`, polkit demandait un mot de passe, et sur une machine
+// grenOS par défaut il n'y en a pas. **L'installateur ne pouvait pas démarrer**,
+// et personne ne s'en était aperçu parce que personne n'avait jamais cliqué
+// dessus — l'icône est même cachée dans les machines virtuelles, donc dans la
+// machine d'essai.
+//
+// Le hook de construction refuse désormais une image où l'un de ces préfixes
+// ne correspond à aucune action déclarée : une règle qui n'autorise rien est
+// pire qu'une règle absente, parce qu'elle rassure.
+// ---------------------------------------------------------------------------
 polkit.addRule(function (action, subject) {
+    // Chacun de ces prefixes correspond a une action REELLEMENT declaree sur
+    // cette image, verifiee dans les paquets :
+    //   flatpak   -> org.freedesktop.Flatpak.policy
+    //   calamares -> com.github.calamares.calamares.policy
+    //   systemd   -> org.freedesktop.systemd1.policy, org.freedesktop.timedate1.policy
+    //
+    // « org.freedesktop.packagekit. » et « org.debian.apt. » ont ete retires :
+    // nous n'installons ni packagekit ni aptdaemon, et le magasin comme les
+    // mises a jour passent par `sudo -n`, jamais par polkit. Reclamer des
+    // droits pour un logiciel absent ne protege de rien et fait croire que
+    // quelque chose est couvert.
     var permis = [
-        "org.freedesktop.packagekit.",
-        "org.debian.apt.",
         "org.freedesktop.Flatpak.",
-        "io.calamares.calamares.",
+        "com.github.calamares.calamares.",
         "org.freedesktop.systemd1.",
         "org.freedesktop.timedate1."
     ];
