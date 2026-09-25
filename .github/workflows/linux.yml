@@ -16,6 +16,7 @@ on:
       # caracteres d'un « run: ». Sans cette ligne, le modifier ne
       # declencherait aucune construction.
       - "scripts/ci-demarrage.sh"
+      - "scripts/verif-vbox-promesse.py"
   workflow_dispatch:
     inputs:
       publish:
@@ -383,6 +384,12 @@ jobs:
           done
           python3 -c "import sys, xml.etree.ElementTree as X; X.parse(sys.argv[1]); print('le .vbox est du XML valide')" "dist/$NAME.vbox"
           echo "machine VirtualBox : les trois fichiers sont la, et le .vbox les designe"
+          # La page /download promet quatre nombres — 8 Go, quatre coeurs,
+          # 256 Mo de video, un disque de 25 Go — que quelqu'un verifiera d'un
+          # coup d'oeil dans VirtualBox. Rien ne verifiait la correspondance :
+          # changer make-vbox.py sans toucher la page, ou l'inverse, passait
+          # sans un mot. Une promesse chiffree est soit tenue, soit fausse.
+          python3 scripts/verif-vbox-promesse.py "dist/$NAME.vbox" "dist/$NAME.vdi"
           # Demarre-t-elle sur un PC recent ? Presque aucun ne demarre plus en
           # BIOS. Le controle est un fichier a part, pas du Python ecrit dans
           # ce YAML : du code indente dans `python3 -c` leve une erreur
