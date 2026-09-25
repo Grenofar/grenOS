@@ -107,6 +107,22 @@ rsync
 ## par là que Steam s'installe, en Flatpak — donc sans activer i386 ni toucher
 ## au système.
 flatpak
+## Les certificats racines. Sans eux, AUCUNE connexion TLS verifiee ne marche.
+##
+## Ils manquaient. `flatpak` ne fait que les RECOMMANDER, et on construit avec
+## `--apt-recommends false` : aucun paquet de la liste n'en dependait vraiment.
+## Consequences, toutes constatees par Grenofar sur l'image 1350 :
+##   - installer une application depuis GrenPlace echoue sur une erreur SSL,
+##     parce que flatpak ne peut pas verifier le certificat de Flathub ;
+##   - « Mettre a jour grenOS » ne rapporte que les correctifs Debian, parce
+##     que notre depot est en https et qu'apt ne peut pas le verifier non plus.
+##     Debian, lui, passe en http : c'est pourquoi la moitie marchait.
+##
+## Ce qui a cache le defaut pendant une semaine : `essai-maj.sh` installe
+## lui-meme ca-certificates dans son conteneur. Il prouvait donc un depot que
+## l'image, elle, ne pouvait pas atteindre. Un essai qui ameliore son
+## environnement ne teste plus le produit.
+ca-certificates
 
 ## L'installation sur le disque, en un clic depuis le live.
 calamares

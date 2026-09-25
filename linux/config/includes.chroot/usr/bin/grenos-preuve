@@ -49,6 +49,42 @@ else
     dire "maj: trousseau du depot absent"
 fi
 
+# Le depot est-il JOIGNABLE, et pas seulement configure ?
+#
+# C'est la question qui manquait, et elle a coute une semaine. Notre depot est
+# en https ; sans certificats racines, apt ne peut pas verifier le serveur et
+# l'abandonne en silence — « Mettre a jour grenOS » n'apporte alors que les
+# correctifs Debian, qui eux passent en http. La meme cause empeche flatpak
+# d'installer quoi que ce soit depuis Flathub.
+#
+# `essai-maj.sh` ne pouvait pas le voir : il installe ca-certificates dans son
+# conteneur avant de commencer. Il prouvait un depot que l'image n'atteignait
+# pas. On pose donc la question a l'image, sur l'image.
+racines=$(ls /etc/ssl/certs/*.pem 2>/dev/null | wc -l)
+if [ "${racines:-0}" -lt 10 ]; then
+    dire "maj: AUCUN certificat racine : ni Flathub ni notre depot ne repondront"
+else
+    dire "maj: $racines certificats racines"
+fi
+# On interroge le depot avec apt, pas avec curl : curl n'est pas dans l'image,
+# et un controle garde derriere `command -v` serait reste muet — c'est-a-dire
+# inutile precisement le jour ou il aurait servi.
+#
+# `Dir::Etc::sourceparts=/dev/null` ne garde que notre fichier : on veut savoir
+# si NOTRE depot repond, pas si Debian repond. C'est exactement l'operation que
+# fait « Mettre a jour grenOS », signature comprise.
+if [ -n "$depot" ]; then
+    if apt-get update -qq \
+            -o Dir::Etc::sourcelist="$depot" \
+            -o Dir::Etc::sourceparts=/dev/null \
+            -o APT::Get::List-Cleanup=0 > /tmp/grenos-apt 2>&1; then
+        dire "maj: depot joignable et signature acceptee"
+    else
+        dire "maj: depot INJOIGNABLE : $(tr -d "\n" < /tmp/grenos-apt | cut -c1-110)"
+    fi
+    rm -f /tmp/grenos-apt
+fi
+
 # Et dpkg connait-il nos paquets ? Sans entree dans dpkg, apt n'a rien a
 # comparer, donc rien a mettre a jour — c'est exactement ce qui manquait.
 version=$(dpkg-query -W -f='${Version}' grenos-desktop 2>/dev/null || true)

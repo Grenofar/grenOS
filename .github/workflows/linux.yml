@@ -61,6 +61,14 @@ jobs:
       - name: Les textes affiches ont leurs accents
         run: python3 linux/tools/verif-accents.py
 
+      # Trois fois la meme faute : la page Jeux attendait vulkaninfo vingt-cinq
+      # secondes avant de s'afficher, et Connexions interrogeait nmcli et
+      # bluetoothctl cinq fois dans son constructeur — DEUX MINUTES d'ecran
+      # vide, mesurees par Grenofar le 25 septembre. La fenetre finissait par
+      # s'ouvrir, donc rien ne rougissait.
+      - name: Aucune fenetre n interroge le materiel en se dessinant
+        run: python3 linux/tools/verif-fenetres.py
+
       - name: Faire de la place
         run: |
           df -h /

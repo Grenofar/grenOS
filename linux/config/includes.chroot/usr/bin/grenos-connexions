@@ -52,10 +52,20 @@ class Connexions(Gtk.Window):
         colonne.set_border_width(24)
         self.add(colonne)
 
-        etat = reseau.etat()
-        sous_titre = (f"Connecté en {etat['par']} à {etat['nom']}."
-                      if etat["connecte"] else "Pas encore connecté.")
-        colonne.pack_start(grenosui.titre("Connexions", sous_titre), False, False, 0)
+        # Rien de bloquant ici. Cette fenêtre mettait DEUX MINUTES à s'ouvrir,
+        # et la cause tenait en cinq lignes : `reseau.etat()`,
+        # `wifi_allume()`, `wifi_disponible()`, `bluetooth_allume()` et
+        # `bluetooth_disponible()` étaient appelés pendant la construction,
+        # chacun lançant `nmcli` ou `bluetoothctl` avec vingt secondes de
+        # patience. Sur une machine sans Bluetooth, `bluetoothctl` attend son
+        # délai entier — cent secondes avant le premier pixel.
+        #
+        # C'est la même faute que la page Jeux, qui appelait `vulkaninfo` avant
+        # de s'afficher. La règle, maintenant écrite : **on n'interroge jamais
+        # le matériel pendant qu'on construit une fenêtre.** On montre la
+        # fenêtre, puis on remplit.
+        self.entete = grenosui.titre("Connexions", "Lecture de l'état…")
+        colonne.pack_start(self.entete, False, False, 0)
 
         onglets = Gtk.Notebook()
         onglets.set_show_border(False)
@@ -69,7 +79,53 @@ class Connexions(Gtk.Window):
         self.dire.set_line_wrap(True)
         colonne.pack_start(self.dire, False, False, 0)
 
+        # L'état réel arrive d'un fil, et la fenêtre est déjà à l'écran.
+        threading.Thread(target=self._lire_etat, daemon=True).start()
         self.chercher_wifi()
+
+    # ---- L'état du matériel, hors du fil qui dessine ------------------------
+    def _lire_etat(self):
+        """Interroge nmcli et bluetoothctl, loin de la boucle graphique."""
+        etat = reseau.etat()
+        lu = {
+            "etat": etat,
+            "wifi_la": reseau.wifi_disponible(),
+            "wifi_on": reseau.wifi_allume(),
+            "bt_la": reseau.bluetooth_disponible(),
+            "bt_on": reseau.bluetooth_allume(),
+        }
+        GLib.idle_add(self._poser_etat, lu)
+
+    def _poser_etat(self, lu):
+        etat = lu["etat"]
+        sous = (f"Connecté en {etat['par']} à {etat['nom']}."
+                if etat["connecte"] else "Pas encore connecté.")
+        # Le sous-titre est la seconde étiquette du bloc de titre.
+        enfants = self.entete.get_children()
+        if len(enfants) > 1:
+            enfants[1].set_text(sous)
+
+        # `set_active` émettrait « notify::active » et allumerait vraiment la
+        # radio : on bloque le gestionnaire le temps de refléter l'état lu.
+        for interrupteur, poignee, valeur in (
+                (self.interrupteur_wifi, self.poignee_wifi, lu["wifi_on"]),
+                (self.interrupteur_bt, self.poignee_bt, lu["bt_on"])):
+            interrupteur.handler_block(poignee)
+            interrupteur.set_active(valeur)
+            interrupteur.handler_unblock(poignee)
+
+        if not lu["wifi_la"]:
+            self.note_wifi.set_text("Aucune carte Wi-Fi sur cette machine. Le câble, "
+                                    "lui, fonctionne sans rien régler.")
+            self.note_wifi.show()
+        if not lu["bt_la"]:
+            self.note_bt.set_text("Aucun matériel Bluetooth sur cette machine. Dans "
+                                  "une machine virtuelle, il faut d'abord le partager "
+                                  "depuis l'hôte.")
+            self.note_bt.show()
+        else:
+            self.poser_bt()
+        return False
 
     # ---- Le Wi-Fi ----------------------------------------------------------
     def page_wifi(self):
@@ -79,8 +135,8 @@ class Connexions(Gtk.Window):
         haut = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         haut.pack_start(Gtk.Label(label="Wi-Fi", xalign=0), True, True, 0)
         self.interrupteur_wifi = Gtk.Switch()
-        self.interrupteur_wifi.set_active(reseau.wifi_allume())
-        self.interrupteur_wifi.connect("notify::active", self.basculer_wifi)
+        self.poignee_wifi = self.interrupteur_wifi.connect("notify::active",
+                                                           self.basculer_wifi)
         haut.pack_end(self.interrupteur_wifi, False, False, 0)
         haut.pack_end(grenosui.bouton("Rechercher", self.chercher_wifi, "discret"),
                       False, False, 0)
@@ -92,13 +148,14 @@ class Connexions(Gtk.Window):
         defilement.add(self.liste_wifi)
         boite.pack_start(defilement, True, True, 0)
 
-        if not reseau.wifi_disponible():
-            note = Gtk.Label(
-                label="Aucune carte Wi-Fi sur cette machine. Le câble, lui, fonctionne "
-                      "sans rien régler.", xalign=0)
-            note.get_style_context().add_class("sous")
-            note.set_line_wrap(True)
-            boite.pack_start(note, False, False, 0)
+        # La note reste vide et cachée tant qu'on ne sait pas : dire « aucune
+        # carte Wi-Fi » avant d'avoir regardé serait un mensonge, et l'afficher
+        # puis la retirer ferait sauter la fenêtre sous les yeux.
+        self.note_wifi = Gtk.Label(label="", xalign=0)
+        self.note_wifi.get_style_context().add_class("sous")
+        self.note_wifi.set_line_wrap(True)
+        self.note_wifi.set_no_show_all(True)
+        boite.pack_start(self.note_wifi, False, False, 0)
         return boite
 
     def basculer_wifi(self, interrupteur, _param):
@@ -204,8 +261,8 @@ class Connexions(Gtk.Window):
         haut = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         haut.pack_start(Gtk.Label(label="Bluetooth", xalign=0), True, True, 0)
         self.interrupteur_bt = Gtk.Switch()
-        self.interrupteur_bt.set_active(reseau.bluetooth_allume())
-        self.interrupteur_bt.connect("notify::active", self.basculer_bt)
+        self.poignee_bt = self.interrupteur_bt.connect("notify::active",
+                                                       self.basculer_bt)
         haut.pack_end(self.interrupteur_bt, False, False, 0)
         haut.pack_end(grenosui.bouton("Rechercher", self.chercher_bt, "discret"),
                       False, False, 0)
@@ -217,15 +274,11 @@ class Connexions(Gtk.Window):
         defilement.add(self.liste_bt)
         boite.pack_start(defilement, True, True, 0)
 
-        if not reseau.bluetooth_disponible():
-            note = Gtk.Label(
-                label="Aucun matériel Bluetooth sur cette machine. Dans une machine "
-                      "virtuelle, il faut d'abord le partager depuis l'hôte.", xalign=0)
-            note.get_style_context().add_class("sous")
-            note.set_line_wrap(True)
-            boite.pack_start(note, False, False, 0)
-        else:
-            GLib.timeout_add_seconds(1, lambda: (self.poser_bt(), False)[1])
+        self.note_bt = Gtk.Label(label="", xalign=0)
+        self.note_bt.get_style_context().add_class("sous")
+        self.note_bt.set_line_wrap(True)
+        self.note_bt.set_no_show_all(True)
+        boite.pack_start(self.note_bt, False, False, 0)
         return boite
 
     def basculer_bt(self, interrupteur, _param):
