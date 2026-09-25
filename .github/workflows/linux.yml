@@ -593,6 +593,56 @@ jobs:
             exit 1
           fi
 
+      # Presque aucun PC vendu depuis dix ans ne demarre en BIOS, et c'est
+      # pourtant le seul mode que la machine d'essai avait jamais essaye. On
+      # verifiait que la partition EFI existe ; on ne verifiait pas qu'elle
+      # demarre. Un firmware UEFI qui refuse l'image dit « aucun support
+      # amorcable » et rien d'autre : la panne serait pour lui, pas pour nous.
+      #
+      # Quatre-vingt-dix secondes suffisent : on ne cherche pas le bureau, on
+      # cherche la preuve que le chargeur a pris la main et que le noyau
+      # dessine. Un shell UEFI, lui, reste noir avec du texte blanc — deux
+      # couleurs, et le noir couvre tout : le juge le refuse.
+      - name: L'image demarre-t-elle en UEFI
+        id: uefi
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y -qq ovmf
+          CODE=$(ls /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd 2>/dev/null | head -1)
+          VARS=$(ls /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd 2>/dev/null | head -1)
+          if [ -z "$CODE" ] || [ -z "$VARS" ]; then
+            echo "::warning::OVMF introuvable : le demarrage UEFI n'a pas pu etre essaye."
+            exit 0
+          fi
+          echo "firmware : $CODE"
+          cp "$VARS" "$RUNNER_TEMP/uefi-vars.fd"
+          ACCEL=""
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then ACCEL="-enable-kvm -cpu host"; fi
+          qemu-system-x86_64 $ACCEL -m 2048 -smp 2 -drive if=pflash,format=raw,readonly=on,file="$CODE" -drive if=pflash,format=raw,file="$RUNNER_TEMP/uefi-vars.fd" -cdrom "$ISO_UEFI" -boot d -display none -vga std -serial file:"$RUNNER_TEMP/serial-uefi.log" -monitor unix:"$RUNNER_TEMP/uefi.sock",server,nowait -no-reboot &
+          QEMU=$!
+          sleep 3
+          if ! kill -0 "$QEMU" 2>/dev/null; then
+            echo "::error::QEMU n'a pas demarre en UEFI : sa ligne de commande est fautive."
+            exit 1
+          fi
+          sleep 90
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/uefi.sock" "$RUNNER_TEMP/ecran-uefi.ppm" || true
+          kill $QEMU 2>/dev/null || true
+          # Le verdict se lit dans la sortie, pas dans le code de retour d'un
+          # tube : `commande | tail` rend le code de `tail`, qui reussit
+          # toujours. C'est le meme piege que le « grep -c » qui laissait
+          # passer un test de souris muet.
+          python3 scripts/ci-screen.py judge "$RUNNER_TEMP/ecran-uefi.ppm" "$RUNNER_TEMP/uefi.png" > "$RUNNER_TEMP/uefi-juge.log" 2>&1 || true
+          tail -3 "$RUNNER_TEMP/uefi-juge.log" || true
+          if grep -q "screen: PASS" "$RUNNER_TEMP/uefi-juge.log"; then
+            echo "uefi: le chargeur a pris la main et le noyau dessine"
+          else
+            echo "uefi: l ecran est reste vide (test non bloquant, a affiner)"
+          fi
+        env:
+          ISO_UEFI: ${{ steps.build.outputs.iso }}
+
       - name: Garder les captures
         if: always()
         continue-on-error: true
@@ -602,8 +652,7 @@ jobs:
           path: |
             ${{ runner.temp }}/*.ppm
             ${{ runner.temp }}/*.png
-            ${{ runner.temp }}/ecran.log
-            ${{ runner.temp }}/serial.log
+            ${{ runner.temp }}/*.log
           if-no-files-found: ignore
           retention-days: 14
 
