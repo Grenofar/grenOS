@@ -43,58 +43,6 @@ const FR = {
   zipButton: "Télécharger pour VirtualBox",
   none: "La première image Linux est en cours de construction. Elle arrive.",
   checked: "Construite et démarrée par la CI avant publication, captures d'écran à l'appui.",
-  nowTitle: "Ce qu'il y a dedans",
-  quoi: [
-    {
-      titre: "Un bureau écrit pour grenOS",
-      texte:
-        "Notre barre, notre menu, nos Réglages, notre thème et notre fond d'écran. Rien d'emprunté à un autre système.",
-    },
-    {
-      titre: "Fluide sans carte graphique",
-      texte:
-        "L'écran n'est pas composé par le GPU : le pointeur suit la main, même dans une machine virtuelle sans accélération 3D.",
-    },
-    {
-      titre: "Ton nom dès le premier écran",
-      texte: "Il devient ton compte et ton adresse sur la machine : entrer « lea » donne lea@grenos.",
-    },
-    {
-      titre: "Un bureau où l'on pose des choses",
-      texte:
-        "Fichiers, dossiers et raccourcis restent où tu les laisses. Clic droit pour créer, renommer, changer le fond.",
-    },
-    {
-      titre: "Les applications d'un système complet",
-      texte:
-        "Firefox et ses onglets, explorateur de fichiers, éditeur de texte, terminal, images, archives, capture d'écran, calculatrice.",
-    },
-    {
-      titre: "GrenPlace",
-      texte:
-        "Les applications s'installent en un clic, paquets Debian comme Flatpak — Steam compris — dans une fenêtre, jamais dans un terminal.",
-    },
-    {
-      titre: "Des Réglages qui règlent vraiment",
-      texte:
-        "Jour et nuit, définition de l'écran et images par seconde, sortie audio et volume, mot de passe, mises à jour.",
-    },
-    {
-      titre: "Les raccourcis que tu connais",
-      texte:
-        "Alt+Tab change de fenêtre, Alt+F4 ferme, Ctrl+Maj+Échap ouvre les tâches, Meta+T bascule le jour et la nuit.",
-    },
-    {
-      titre: "Rien à installer pour commencer",
-      texte:
-        "La machine livrée avec l'image garde déjà tout sur son disque : fichiers, réglages, applications, mot de passe.",
-    },
-    {
-      titre: "Les mises à jour depuis l'OS",
-      texte:
-        "Nos nouveautés et les correctifs de sécurité Debian arrivent ensemble, sans jamais retélécharger l'image.",
-    },
-  ],
   vboxTitle: "Dans VirtualBox",
   vbox: [
     "Télécharger le zip « pour VirtualBox » et l'extraire (clic droit → Extraire tout) : le fichier .vbox, le disque .vdi et l'image .iso sont côte à côte, et doivent le rester.",
@@ -129,59 +77,6 @@ const EN: typeof FR = {
   zipButton: "Download for VirtualBox",
   none: "The first Linux image is being built. It is on its way.",
   checked: "Built and booted by CI before publication, with screenshots to show for it.",
-  nowTitle: "What is inside",
-  quoi: [
-    {
-      titre: "A desktop written for grenOS",
-      texte:
-        "Our own panel, menu, Settings, theme and wallpaper. Nothing borrowed from another system.",
-    },
-    {
-      titre: "Smooth without a graphics card",
-      texte:
-        "The screen is not composed on the GPU: the pointer follows your hand, even in a virtual machine with no 3D acceleration.",
-    },
-    {
-      titre: "Your name on the very first screen",
-      texte:
-        "It becomes your account and your address on the machine: typing “lea” gives lea@grenos.",
-    },
-    {
-      titre: "A desktop you can put things on",
-      texte:
-        "Files, folders and shortcuts stay where you leave them. Right-click to create, rename, change the wallpaper.",
-    },
-    {
-      titre: "The applications of a complete system",
-      texte:
-        "Firefox with its tabs, a file manager, a text editor, a terminal, images, archives, a screenshot tool, a calculator.",
-    },
-    {
-      titre: "GrenPlace",
-      texte:
-        "Applications install in one click, Debian packages as well as Flatpaks — Steam included — in a window, never in a terminal.",
-    },
-    {
-      titre: "Settings that actually settle things",
-      texte:
-        "Day and night, screen resolution and refresh rate, audio output and volume, password, updates.",
-    },
-    {
-      titre: "The shortcuts you already know",
-      texte:
-        "Alt+Tab switches windows, Alt+F4 closes, Ctrl+Shift+Esc opens the task monitor, Meta+T switches day and night.",
-    },
-    {
-      titre: "Nothing to install to begin with",
-      texte:
-        "The machine shipped with the image already keeps everything on its disk: files, settings, applications, password.",
-    },
-    {
-      titre: "Updates from inside the OS",
-      texte:
-        "Our own changes and Debian's security fixes arrive together, without ever downloading the image again.",
-    },
-  ],
   vboxTitle: "In VirtualBox",
   vbox: [
     "Download the zip “for VirtualBox” and extract it (right-click → Extract All): the .vbox file, the .vdi disk and the .iso image sit side by side, and must stay together.",
@@ -262,20 +157,6 @@ export function DownloadView({ linux = null, repo }: { linux?: LinuxRelease | nu
             </p>
           </div>
         )}
-      </section>
-
-      <section>
-        <h2>{c.nowTitle}</h2>
-        {/* Une grille de points courts : un pavé de deux cents mots, personne
-            ne le lit, et c'est pourtant ce que regarde quelqu'un qui hésite. */}
-        <div className="dl-quoi">
-          {c.quoi.map((point) => (
-            <div className="card" key={point.titre}>
-              <b>{point.titre}</b>
-              <span>{point.texte}</span>
-            </div>
-          ))}
-        </div>
       </section>
 
       <section className="grid cols-2">

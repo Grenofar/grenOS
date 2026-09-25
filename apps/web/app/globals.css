@@ -550,13 +550,6 @@ button.google-btn:hover { background: #f7f8f8; filter: none; }
   box-shadow: 0 0 0 4px rgba(91, 156, 255, 0.16);
 }
 
-/* « Ce qu'il y a dedans » : une grille de points courts. Un paragraphe de
-   deux cents mots, personne ne le lit. */
-.dl-quoi { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-.dl-quoi .card { display: flex; flex-direction: column; gap: 5px; }
-.dl-quoi b { color: var(--text); font-size: 14px; font-weight: 650; }
-.dl-quoi span { color: var(--text-dim); font-size: 13.2px; line-height: 1.5; }
-
 @media (max-width: 720px) {
   .dl-hero { padding: 28px 20px 24px; }
   .dl-hero h1 { font-size: 30px; }
