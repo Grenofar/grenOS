@@ -219,7 +219,10 @@ APRES_META=${APRES_META:-0}
 if [ "$APRES_META" -gt "$AVANT_META" ]; then
   echo "windows: la touche Windows a ouvert le menu"
 else
-  echo "::warning::La touche Windows n a pas ouvert le menu."
+  # EXIGE depuis le 25 septembre : vu vert trois fois. Grenofar l'a demande
+  # explicitement, et c'est un geste qu'on fait cent fois par jour.
+  echo "::error::La touche Windows n a pas ouvert le menu."
+  exit 1
 fi
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
 sleep 3
@@ -418,13 +421,28 @@ echo "--- les fenetres tiennent-elles dans l ecran ---"
 # sa taille REELLE une fois affichee — demander une taille n'est pas
 # l'obtenir, GTK agrandit des qu'un enfant exige plus de place.
 grep -a 'grenos: fenetre ' "$RUNNER_TEMP/serial.log" | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' | sort -u
+#
+# EXIGE depuis le 25 septembre : vu vert trois fois (36106248502, 36112644255,
+# 36115432806). Le laisser facultatif reviendrait a pouvoir publier une image
+# ou l'interface est de nouveau cassee en 720p — le defaut meme qu'il a
+# signale. Une etape ne devient obligatoire qu'apres avoir ete vue verte ; elle
+# l'a ete.
 DEBORDE=$(grep -ac 'grenos: fenetre .*DEBORDE' "$RUNNER_TEMP/serial.log" || true)
 DEBORDE=$(echo "$DEBORDE" | head -1)
 if [ "${DEBORDE:-0}" -gt 0 ]; then
-  echo "::warning::$DEBORDE fenetre(s) depassent l ecran en 720p."
-else
-  echo "aucune fenetre ne deborde en 720p"
+  grep -a 'grenos: fenetre .*DEBORDE' "$RUNNER_TEMP/serial.log" | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+  echo "::error::$DEBORDE fenetre(s) depassent l ecran en 720p."
+  exit 1
 fi
+# Et il faut qu'au moins une fenetre ait parle : zero ligne « fenetre »
+# signifierait que le controle lui-meme est tombe, pas que tout va bien.
+VUES=$(grep -ac 'grenos: fenetre ' "$RUNNER_TEMP/serial.log" || true)
+VUES=$(echo "$VUES" | head -1)
+if [ "${VUES:-0}" -lt 3 ]; then
+  echo "::error::Seules ${VUES:-0} fenetres ont dit leur taille : le controle du 720p ne juge rien."
+  exit 1
+fi
+echo "aucune fenetre ne deborde en 720p (${VUES} fenetres mesurees)"
 
 # Cette image peut-elle se mettre a jour ? L'essai en conteneur prouve
 # que le depot marche ; il ne prouve pas que l'IMAGE le connait. Le
