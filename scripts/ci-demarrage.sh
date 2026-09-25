@@ -449,6 +449,19 @@ if [ "${VUES:-0}" -lt 3 ]; then
 fi
 echo "aucune fenetre ne deborde en 720p (${VUES} fenetres mesurees)"
 
+echo "--- l installateur pourrait-il seulement demarrer ---"
+# « Installer grenOS » lance `pkexec calamares`. Notre regle polkit a longtemps
+# nomme une action qui n'existe pas, et polkit demandait donc un mot de passe
+# qu'une machine grenOS par defaut n'a pas : le bouton ne pouvait pas marcher.
+# La session pose la question a polkit avec `pkcheck`, sans rien lancer.
+# Rapporte, pas encore bloquant : vu vert zero fois pour l'instant.
+grep -a 'grenos: installateur :' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
+if grep -aq 'grenos: installateur : autorise sans mot de passe' "$RUNNER_TEMP/serial.log"; then
+  echo "installateur: le bouton pourra demarrer sans mot de passe"
+else
+  echo "::warning::polkit n autorise pas l installateur sans mot de passe."
+fi
+
 # Cette image peut-elle se mettre a jour ? L'essai en conteneur prouve
 # que le depot marche ; il ne prouve pas que l'IMAGE le connait. Le
 # depot arrive par config/archives/grenos.list.binary, et personne

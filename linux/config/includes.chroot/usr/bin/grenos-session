@@ -138,6 +138,32 @@ grenos-veilleur grenos-shell &
     fi
 ) &
 
+# L'installateur pourrait-il seulement demarrer ?
+#
+# « Installer grenOS » lance `pkexec calamares`, et pkexec demande a polkit
+# l'action que le paquet declare. Notre regle a longtemps nomme
+# « io.calamares.calamares. », qui ne correspond a rien : polkit demandait donc
+# un mot de passe, et sur une machine grenOS par defaut il n'y en a pas.
+# L'installateur etait injoignable, et personne ne s'en etait apercu parce que
+# l'icone est cachee dans les machines virtuelles — donc dans la machine
+# d'essai.
+#
+# `pkcheck` pose la question sans rien lancer : sans
+# `--allow-user-interaction`, il sort en erreur des qu'une authentification
+# serait demandee. Repondre « autorise » ici, c'est repondre « le bouton
+# marchera » — la seule preuve possible tant que personne n'a de vrai disque a
+# installer.
+(
+    ACTION=com.github.calamares.calamares.pkexec.run
+    if ! command -v pkcheck >/dev/null 2>&1; then
+        grenos-dire "installateur : pkcheck absent, impossible de verifier"
+    elif pkcheck --action-id "$ACTION" --process $$ >/dev/null 2>&1; then
+        grenos-dire "installateur : autorise sans mot de passe"
+    else
+        grenos-dire "installateur : polkit demande une authentification impossible"
+    fi
+) &
+
 # L'accueil, une seule fois, à la première ouverture.
 if [ ! -e "$CONFIG/accueil-vu" ]; then
     touch "$CONFIG/accueil-vu"
