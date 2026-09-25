@@ -545,6 +545,16 @@ jobs:
             echo "disques : l image n a rien dit"
           fi
 
+          echo "--- le clavier choisi est-il celui en place ---"
+          # Le premier ecran ecrit /etc/default/keyboard, mais le service qui
+          # le lit a peut-etre deja tourne au demarrage. Si la session garde un
+          # clavier americain alors que la France a ete choisie, la personne
+          # s'en apercoit a la premiere apostrophe. Rapporte, pas encore
+          # bloquant.
+          if ! grep -a 'grenos: clavier :' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'; then
+            echo "clavier : l image n a rien dit"
+          fi
+
           echo "--- cette image peut-elle se mettre a jour ---"
           if ! grep -a 'grenos: maj:' "$RUNNER_TEMP/serial.log" | sed 's/^.*grenos: //'; then
             echo "maj: l image n a rien dit du tout"

@@ -99,6 +99,26 @@ grenos-veilleur grenos-shell &
     grenos-dire "son, $SORTIES sorties, courante ${COURANTE:-aucune}"
 ) &
 
+# Le clavier vraiment en place, et pas celui qu'on croit avoir choisi.
+#
+# Le premier écran écrit /etc/default/keyboard, mais le service qui le lit a
+# peut-être déjà tourné au démarrage : la session pourrait garder un clavier
+# américain alors que la personne a choisi la France. Elle s'en apercevrait à
+# la première apostrophe. On compare donc ce que X utilise à ce qui a été
+# demandé, au lieu de le supposer.
+(
+    VOULU=$(sed -n 's/^clavier=//p' /etc/grenos/identite 2>/dev/null | head -1)
+    # `xprop` plutot que `setxkbmap` : il est deja dans l'image (la barre s'en
+    # sert pour reserver sa bande), alors que x11-xkb-utils n'y est pas. La
+    # troisieme valeur de _XKB_RULES_NAMES est la disposition.
+    EN_PLACE=$(xprop -root _XKB_RULES_NAMES 2>/dev/null | sed 's/.*= //' | cut -d'"' -f6)
+    if [ -n "$VOULU" ] && [ -n "$EN_PLACE" ] && [ "$VOULU" != "$EN_PLACE" ]; then
+        grenos-dire "clavier : ${EN_PLACE} en place alors que ${VOULU} a ete choisi"
+    else
+        grenos-dire "clavier : ${EN_PLACE:-inconnu} en place, ${VOULU:-aucun} choisi"
+    fi
+) &
+
 # L'accueil, une seule fois, à la première ouverture.
 if [ ! -e "$CONFIG/accueil-vu" ]; then
     touch "$CONFIG/accueil-vu"
