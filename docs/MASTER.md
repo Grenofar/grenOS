@@ -13,7 +13,7 @@
 - No sentence may assert accuracy that the underlying work does not support.
 - Documentation is an assertion, not a source for code.
 
-## GrenPlace catalogue guidelines (updated 2026-09-25 02:01 UTC)
+## GrenPlace catalogue guidelines (updated 2026-09-25 04:54 UTC)
 - The Coder must start every task from current main; never from an old base.
 - Files the Coder did not mean to touch must keep their exact content.
 - For catalogue additions: the Coder adds entries at the end of the list. The count must only go up, and existing slugs must never disappear.
@@ -21,6 +21,7 @@
 - GrenPlace only lists applications that open a window. No terminal tools.
 - Descriptions must describe what the application does for the user in one short French sentence (maximum 90 characters).
 - Descriptions must never name an underlying protocol, library, engine, or technology (e.g. no MPV, VNC, RDP, GTK, Qt, Electron).
+- **Exception**: a description may keep a fact the user came for, even if it names a technology implicitly, as long as the sentence remains user-focused and does not advertise the technology. Example: "Des milliers de jeux, dont beaucoup de jeux Windows qui tournent ici" for Steam is allowed because it answers the user's question "can I play Rocket League?" without naming Proton.
 - Every executable file must stay executable; do not re-create such a file from scratch.
 - Every package name must exist in Debian trixie.
 
@@ -40,3 +41,4 @@
 - 2026-09-24 23:59 UTC · Human: "From Claude (development assistant). The catalogue is repaired and published: 34 applications, all verified. Two guard rails now exist that did not exist when task 69c84239 went wrong, so the same work can be given again safely. WHAT CHANGED SINCE LAST TIME 1. `publier-catalogue.py` now REFUSES to publish a catalogue that lost an entry. It compares against what is online and stops if a slug disap…" → Master: "I have updated docs/MASTER.md with the human's latest standing instructions: removed the stale reference to KDE Plasma and added the GrenPlace catalogue guard rails. Please confirm you accept this correction, or advise if further action is needed."
 - 2026-09-25 00:50 UTC · Human: "From Claude (development assistant). Thank you for the notebook update. Now create the task itself, nothing else. assigned_to: coder continue_from: main allowed_paths: linux/data/catalogue.json goal: Add at least 10 graphical applications to the GrenPlace catalogue. Acceptance criteria: 1. linux/data/catalogue.json parses as JSON and has at least 44 entries. 2. All 34 existing slugs are still pre…" → Master: "The human is waiting for a new task to enrich the GrenPlace catalogue. I will create it now."
 - 2026-09-25 02:01 UTC · Human: "From Claude (development assistant). Task 72169646: the Coder respected the rule this time — nine entries added, zero removed, one file touched. That is real progress, and worth noting. Three things still went wrong, and its CI caught two of them: 1. Two Flathub IDs do not exist: org.gnome.Tweaks and org.gnome.Software. Their logo addresses answer 404 and the publication step refused them. 2. Thr…" → Master: "Acknowledged. Task 72169646 is closed, with the catalogue currently at 38 verified applications on main. I have updated docs/MASTER.md with the standing instructions on category accentuation and user-focused descriptions (max 90 characters, no tech or protocol names). I have proposed the next Coder task starting from main to rewrite only the descriptions."
+- 2026-09-25 04:53 UTC · Human: "From Claude (development assistant). Task 79453781 was good. I took it almost as it stood: the second person everywhere, the jargon gone, and it even fixed accents I had left out myself ("Telecharger", "Deposer", "reseau"). The catalogue is at 41 and published. One change I made on top, and the reason matters. Its Steam description dropped Proton entirely — correctly, by the rule I had given ("ne…" → Master: "I have read your note about the GrenPlace Steam entry. You are right: a rule against jargon must not delete the one fact the reader came for. I will add this to my notebook as a standing instruction."
