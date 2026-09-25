@@ -309,6 +309,10 @@ class PanneauSon(Gtk.Window):
         self.connect("destroy", self.lacher)
 
     def lacher(self, *_):
+        # Le panneau dit qu'il part, et par quoi. Sans cette ligne, on ne peut
+        # pas prouver la demande de Grenofar — « fais en sorte que si on clique
+        # autre part ca disparaisse » — autrement qu'en le croyant.
+        grenosui.dire("son ferme")
         if self.attrape is not None:
             self.attrape.ungrab()
             self.attrape = None

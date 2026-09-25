@@ -494,6 +494,29 @@ jobs:
             else
               echo "son: le panneau ne s est pas annonce (test non bloquant, a affiner)"
             fi
+
+            # « fais en sorte que si on clique autre part ca disparait ».
+            # C'est un geste, pas un reglage : on le fait. Un clic loin du
+            # panneau — en haut a droite, sur le bureau vide — doit le fermer.
+            #
+            # Ce controle vaut double depuis que l'image a dit « clic ailleurs
+            # par le focus seul » : l'attrape du pointeur n'a PAS pris, et donc
+            # ne prenait sans doute jamais. C'est le filet du focus qui travaille,
+            # et il n'avait jamais ete exerce.
+            AVANT_SON=$(grep -ac 'son ferme' "$RUNNER_TEMP/serial.log" 2>/dev/null | head -1)
+            AVANT_SON=${AVANT_SON:-0}
+            python3 scripts/ci-screen.py clic "$RUNNER_TEMP/qmp.sock" \
+                "$(( LARGEUR - 120 ))" 90 "$LARGEUR" "$HAUTEUR" || true
+            sleep 6
+            python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-son-ferme.ppm" || true
+            APRES_SON=$(grep -ac 'son ferme' "$RUNNER_TEMP/serial.log" 2>/dev/null | head -1)
+            APRES_SON=${APRES_SON:-0}
+            if [ "$APRES_SON" -gt "$AVANT_SON" ]; then
+              echo "son: un clic a cote a referme le panneau"
+            else
+              echo "::warning::Un clic a cote n a pas referme le panneau de son."
+            fi
+
             python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
             sleep 2
           else
