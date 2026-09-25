@@ -318,7 +318,12 @@ if [ -n "$POINT_SON" ]; then
   if [ "$APRES_SON" -gt "$AVANT_SON" ]; then
     echo "son: un clic a cote a referme le panneau"
   else
-    echo "::warning::Un clic a cote n a pas referme le panneau de son."
+    # EXIGE depuis le 25 septembre : vu vert quatre fois (36118645589,
+  # 36122009013, 36125176677, 36127986281). C'est la demande de Grenofar mot
+  # pour mot, et elle a deja echoue une fois pour de vraies raisons — l'attrape
+  # du pointeur qui ne prenait jamais.
+  echo "::error::Un clic a cote n a pas referme le panneau de son."
+  exit 1
   fi
 
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
