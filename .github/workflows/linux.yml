@@ -59,7 +59,9 @@ jobs:
       - name: Outils de l'hôte
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-x86 qemu-utils zip python3
+          # gdisk et e2fsprogs servent au disque de persistance, construit avant
+          # le demarrage : la machine d'essai doit partir sur celui qu'on livre.
+          sudo apt-get install -y -qq qemu-system-x86 qemu-utils zip python3 gdisk e2fsprogs
           # Le peripherique existe sur les runners, mais appartient au groupe
           # kvm : sans droit d'ecriture, QEMU refuse de demarrer au lieu de se
           # rabattre sur l'emulation.
@@ -225,16 +227,28 @@ jobs:
           else
             echo "sans KVM : l'emulation est lente, le bureau met plusieurs minutes"
           fi
-          # Un vrai disque, sur un controleur SATA comme en a un PC et comme en
-          # donne VirtualBox. Sans lui, l'installateur n'aurait rien a proposer
-          # — et nous ne saurions meme pas si le systeme voit un disque du
-          # tout. C'est le premier pas verifiable vers « installer grenOS ».
+          # Deux disques, sur un controleur SATA comme en a un PC et comme en
+          # donne VirtualBox.
+          #
+          # Le premier est **celui qu'on livre** : une partition ext4 etiquetee
+          # « persistence », avec le fichier que live-boot y cherche. C'est ce
+          # qui fait tenir la promesse de la page de telechargement — « tout ce
+          # que tu fais est garde ». Personne ne l'avait jamais verifie : la
+          # machine d'essai demarrait sans disque, donc live-boot cherchait une
+          # persistance, n'en trouvait pas, et continuait. Le chemin que
+          # Grenofar emprunte vraiment n'etait pas celui qu'on testait.
+          #
+          # Le second est vierge : c'est celui que l'installateur proposerait.
+          sudo linux/tools/make-disk.sh "$RUNNER_TEMP/persistence.vdi" 8
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/persistence.vdi"
           qemu-img create -f qcow2 "$RUNNER_TEMP/disque.qcow2" 20G
           qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
             -cdrom "$ISO" -boot d \
+            -drive file="$RUNNER_TEMP/persistence.vdi",format=vdi,if=none,id=garde \
             -drive file="$RUNNER_TEMP/disque.qcow2",format=qcow2,if=none,id=dur \
             -device ahci,id=sata \
-            -device ide-hd,drive=dur,bus=sata.0 \
+            -device ide-hd,drive=garde,bus=sata.0 \
+            -device ide-hd,drive=dur,bus=sata.1 \
             -display none -vga std \
             -usb -device usb-tablet \
             -audiodev none,id=silence \
@@ -543,6 +557,15 @@ jobs:
           # devant l'ecran de Calamares, sur la machine de quelqu'un.
           if ! grep -a 'grenos: disques' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'; then
             echo "disques : l image n a rien dit"
+          fi
+
+          echo "--- ce que la personne ecrit est-il garde ---"
+          # La promesse de la machine VirtualBox, jamais verifiee : la machine
+          # d'essai demarrait sans disque, donc live-boot ne trouvait aucune
+          # persistance et continuait. Elle demarre maintenant sur le disque
+          # qu'on livre.
+          if ! grep -a 'grenos: persistance' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'; then
+            echo "persistance : l image n a rien dit"
           fi
 
           echo "--- le clavier choisi est-il celui en place ---"

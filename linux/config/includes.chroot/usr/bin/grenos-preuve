@@ -71,6 +71,23 @@ else
     dire "disques : aucun, l'installateur n'aurait rien a proposer"
 fi
 
+# ---- Ce que la personne ecrit est-il garde ? --------------------------------
+#
+# C'est la promesse de la machine VirtualBox, ecrite sur la page de
+# telechargement : « tout ce que tu fais est garde sur le disque de la
+# machine ». Elle tient a une partition ext4 etiquetee « persistence » que
+# live-boot doit trouver au demarrage. Si elle ne la trouve pas, rien ne le
+# dit : le bureau s'ouvre normalement, et tout disparait a l'extinction.
+# `xargs echo` met tout sur une ligne sans qu'on ait à écrire une séquence
+# d'échappement : celles-ci ne survivent pas toujours à une réécriture, et
+# c'est la quatrième fois aujourd'hui que j'en perds une.
+garde=$(ls /run/live/persistence 2>/dev/null | head -2 | xargs echo)
+if [ -n "$garde" ]; then
+    dire "persistance : active sur $garde"
+else
+    dire "persistance : aucune, ce qui sera ecrit disparaitra a l'extinction"
+fi
+
 vu_session=0
 i=0
 # Un quart d'heure, et pas davantage. La machine d'integration a rendu son
