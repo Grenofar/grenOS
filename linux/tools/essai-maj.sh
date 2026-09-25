@@ -65,6 +65,8 @@ for fichier in /usr/bin/grenos-shell /usr/bin/grenos-maj /usr/bin/grenos-jeux \
                /usr/share/applications/grenos-parametres.desktop \
                /usr/share/applications/grenos-jeux.desktop \
                /usr/share/icons/hicolor/256x256/apps/grenplace.png \
+               /usr/share/icons/hicolor/24x24/apps/grenplace.png \
+               /usr/share/icons/hicolor/24x24/apps/grenos.png \
                /etc/xdg/openbox/rc.xml \
                /etc/polkit-1/rules.d/49-grenos-administration.rules; do
     if [ ! -e "$fichier" ]; then

@@ -29,8 +29,24 @@ python3 -c "import json,sys; d=json.load(open('data/catalogue.json')); print(len
 echo "--- nos icones ---"
 # GrenPlace et l'explorateur portaient l'icone generique d'un theme : on leur
 # en dessine une, aux couleurs du systeme.
-mkdir -p config/includes.chroot/usr/share/icons/hicolor/256x256/apps
-python3 tools/icones.py config/includes.chroot/usr/share/icons/hicolor/256x256/apps 256
+# Nos icones, dans TOUTES les tailles que le theme sait chercher.
+#
+# Elles n'existaient qu'en 256x256. GTK cherche alors un 24x24, ne trouve que
+# le 256, et le rend **tel quel** : dans la barre, le logo grenOS, le
+# haut-parleur et l'icone du reseau faisaient quarante-huit pixels au lieu de
+# vingt-quatre, et passaient sous le bas de l'ecran. Vu sur la capture de la
+# construction en 720p, agrandie quatre fois — la ligne serie ne pouvait pas
+# le dire.
+#
+# On dessine chaque taille plutot que de laisser GTK reduire la grande : nos
+# icones sont calculees, pas photographiees, et un trait de deux pixels reste
+# net quand il est calcule pour deux pixels.
+for taille in 16 22 24 32 48 64 128 256; do
+    dossier="config/includes.chroot/usr/share/icons/hicolor/${taille}x${taille}/apps"
+    mkdir -p "$dossier"
+    python3 tools/icones.py "$dossier" "$taille" > /dev/null
+done
+echo "grenos: icones dessinees en 16 22 24 32 48 64 128 256"
 
 echo "--- fonds d'écran et logo ---"
 python3 tools/wallpaper.py config/includes.chroot/usr/share/grenos 2560 1440

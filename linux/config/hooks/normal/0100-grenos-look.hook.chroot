@@ -219,6 +219,29 @@ if [ -n "$dits" ]; then
 fi
 echo "grenos: le magasin s'appelle bien GrenPlace, fichiers et textes compris"
 
+echo "--- grenOS : nos icones existent-elles en petite taille ---"
+# Elles n'existaient qu'en 256x256. GTK cherche alors un 24x24, ne trouve que
+# le 256, et le rend TEL QUEL : dans la barre, le logo grenOS, le haut-parleur
+# et l'icone du reseau faisaient quarante-huit pixels au lieu de vingt-quatre,
+# et passaient sous le bas de l'ecran.
+#
+# Aucune ligne serie ne pouvait le dire — il a fallu agrandir la capture quatre
+# fois pour le voir. D'ou ce controle : la prochaine fois, la construction
+# refusera avant la publication.
+petites=""
+for nom in grenos grenplace grenos-fichiers grenos-taches grenos-jeux \
+           grenos-son grenos-son-muet grenos-reseau-cable grenos-reseau-aucun; do
+    if [ ! -f "/usr/share/icons/hicolor/24x24/apps/$nom.png" ]; then
+        petites="$petites $nom"
+    fi
+done
+if [ -n "$petites" ]; then
+    echo "grenos: ces icones manquent en 24x24 :$petites" >&2
+    echo "grenos: sans petite taille, GTK rend le 256 tel quel et la barre deborde" >&2
+    exit 1
+fi
+echo "grenos: nos icones existent en 24x24, la barre ne debordera pas"
+
 echo "--- grenOS : le bureau de depart est-il garni ---"
 
 # La CI a dit « bureau pret, 0 icones » et c'est comme cela que j'ai vu que
