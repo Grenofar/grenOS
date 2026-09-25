@@ -143,8 +143,13 @@ nouveautés de grenOS et les correctifs Debian arrivent ensemble.
 
 ## 7. Ce que la CI prouve, et ce qu'elle ne prouve pas
 
-`.github/workflows/linux.yml` construit l'image, la démarre dans QEMU, tape un
-nom au premier écran, puis **parle au bureau** et exige sur le port série :
+`.github/workflows/linux.yml` construit l'image, la démarre dans QEMU **avec
+les deux disques qu'on livre** — celui de persistance et un disque vierge —,
+tape un nom au premier écran, **clique** sur le bouton grenOS, ouvre le menu,
+le gestionnaire de tâches, GrenPlace, les Jeux, le son et les Réglages, puis
+la redémarre une seconde fois sous un firmware UEFI.
+
+Ce qui est **exigé** : sans l'une de ces lignes, rien n'est publié.
 
 ```
 grenos: premier ecran affiche, il demande un nom
@@ -153,10 +158,36 @@ grenos: session de bureau ouverte
 grenos: barre prete, N epinglees
 grenos: menu ouvert, N applications
 grenos: taches ouvert, N processus
+grenos: grenplace ouvert, N applications (<origine>)
+grenos: maj: depot grenOS configure dans <fichier>
+grenos: maj: trousseau du depot present
+grenos: maj: grenos-desktop <version> est installe
+grenos: disques : <liste>          (et « aucun » est refusé)
+souris: le clic sur grenOS a ouvert le menu
 ```
 
-Si l'une manque, **rien n'est publié**.
+Ce qui est **rapporté sans bloquer**, en attendant d'avoir été vu vert
+plusieurs fois : la persistance, le clavier réellement en place, l'ouverture
+du son, des Jeux et des Réglages, et le démarrage UEFI.
 
-Ce qu'elle ne prouve **pas**, à ce jour : l'installation sur disque
-(Calamares), le son sur une vraie carte, le clic de souris (seuls des
-raccourcis clavier sont envoyés), et la mise à jour d'une machine installée.
+Sont aussi vérifiés, ailleurs dans le même flux :
+
+- **la mise à jour**, dans un conteneur Debian nu : le dépôt est lu, le paquet
+  installé avec ses dépendances, puis **une version plus récente en remplace
+  une autre** en apportant un service et une entrée de menu qui n'existaient
+  pas — et un réglage partagé effacé exprès revient, ce qui prouve que
+  `appliquer-systeme` s'est exécuté ;
+- **l'installateur** : les trente-quatre modules de la suite Calamares sont
+  présents, l'habillage est le nôtre, le partitionnement propose tout le
+  disque et laisse le choix manuel ;
+- **le catalogue** : chaque paquet apt existe dans trixie, chaque adresse de
+  logo répond, aucun rayon n'est mal écrit, et **aucune fiche n'a disparu** ;
+- **l'image** : elle porte une partition EFI, donc elle démarre sur un PC
+  récent, et la machine VirtualBox contient bien ses trois fichiers ;
+- **nos programmes** : les dix modules et les douze programmes sont lus
+  pendant la construction, et l'image importe Gtk, Gdk, Wnck et cairo.
+
+Ce qu'elle ne prouve **toujours pas**, et il faut le dire : entendre le son
+sur une vraie carte, une installation Calamares menée jusqu'au redémarrage sur
+le disque, et une mise à jour lancée depuis une machine installée. Ces trois-là
+demandent du matériel.
