@@ -120,10 +120,20 @@ FIN
     rm -f /etc/xdg/openbox/rc.xml
 
     dpkg-deb -b /tmp/suite /tmp/grenos-desktop-suite.deb >/dev/null
+
+    # Les deux paquets ensemble, et pas seulement l'un d'eux.
+    #
+    # `grenos-desktop` exige `grenos-systeme` a la version exacte construite en
+    # meme temps que lui. Sur `main`, le depot vient d'etre publie avec cette
+    # version-la, donc apt la trouve. Sur une branche, le depot porte encore
+    # celle de main, et apt refusait : « Depends: grenos-systeme (= …0208) but
+    # …0134 is to be installed ». **Toutes les taches d'agent paraissaient donc
+    # echouer**, et personne ne voyait que c'etait l'essai qui avait tort.
+    SYSTEME=$(ls dist/grenos-systeme_*_all.deb 2>/dev/null | head -1)
     apt-get install -y --no-install-recommends \
         -o Dpkg::Options::=--force-confdef \
         -o Dpkg::Options::=--force-confold \
-        /tmp/grenos-desktop-suite.deb
+        /tmp/grenos-desktop-suite.deb ${SYSTEME:+"./$SYSTEME"}
 
     NOUVELLE=$(dpkg-query -W -f='${Version}' grenos-desktop)
     echo "version : $ANCIENNE -> $NOUVELLE"
