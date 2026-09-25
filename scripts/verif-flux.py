@@ -168,6 +168,28 @@ def fautes_de_github(arbre, texte):
                     fautes.append((0, f"{nom_emploi} : l'etape {rang} porte la "
                                       f"cle inconnue « {cle} »"))
 
+            # 5. Un « run » ne depasse pas 21 000 caracteres.
+            #
+            # C'est ecrit dans la documentation de GitHub, et c'est brutal :
+            # « Runs command-line programs that do not exceed 21,000
+            # characters ». Au-dela, GitHub refuse le FICHIER ENTIER. Aucun
+            # job ne demarre, aucune annotation n'apparait, et le seul indice
+            # est le nom du workflow remplace par son propre chemin.
+            #
+            # Le 25 septembre, une etape est passee de 20 387 a 21 486
+            # caracteres en gagnant vingt-trois lignes. Deux constructions
+            # perdues, et un long moment a chercher une faute de syntaxe dans
+            # un fichier qui n'en avait aucune. Le script est desormais dans
+            # `scripts/ci-demarrage.sh` — un fichier, lui, n'a pas de limite.
+            script = etape.get("run") or ""
+            if len(script) > 20000:
+                nom_etape = etape.get("name") or f"etape {rang}"
+                gravite = "depasse" if len(script) > 21000 else "approche"
+                fautes.append((0, f"{nom_emploi} : « {nom_etape} » {gravite} la "
+                                  f"limite de GitHub — {len(script)} caracteres "
+                                  f"pour 21000. Deplace-le dans un fichier de "
+                                  f"scripts/ et appelle-le."))
+
     return fautes
 
 
