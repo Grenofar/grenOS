@@ -449,6 +449,19 @@ if [ "${VUES:-0}" -lt 3 ]; then
 fi
 echo "aucune fenetre ne deborde en 720p (${VUES} fenetres mesurees)"
 
+echo "--- le magasin peut-il vraiment installer ---"
+# La CI ouvrait GrenPlace et comptait ses applications. Elle n'a jamais appuye
+# sur « Installer » — et c'est exactement par la que le defaut du 25 septembre
+# est passe : sans certificats racines, flatpak ne pouvait pas verifier
+# Flathub, et AUCUNE application ne s'installait. Grenofar l'a trouve en une
+# minute d'usage ; la CI regardait une vitrine sans jamais entrer.
+grep -a 'grenos: magasin :' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
+if grep -aq "grenos: magasin : Flathub repond" "$RUNNER_TEMP/serial.log"; then
+  echo "magasin: une application peut s installer"
+else
+  echo "::warning::Flathub ne repond pas : le magasin ne pourra rien installer."
+fi
+
 echo "--- l installateur pourrait-il seulement demarrer ---"
 # « Installer grenOS » lance `pkexec calamares`. Notre regle polkit a longtemps
 # nomme une action qui n'existe pas, et polkit demandait donc un mot de passe

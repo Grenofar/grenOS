@@ -94,6 +94,31 @@ else
     dire "maj: grenos-desktop n'est pas installe, apt n'aura rien a mettre a jour"
 fi
 
+# ---- Le magasin peut-il vraiment installer ? --------------------------------
+#
+# La machine d'integration ouvrait GrenPlace et comptait ses applications. Elle
+# n'a jamais appuye sur « Installer ». C'est exactement par la que le defaut du
+# 25 septembre est passe : sans `ca-certificates`, flatpak ne pouvait pas
+# verifier le certificat de Flathub, et **aucune application ne s'installait**.
+# Grenofar l'a trouve en une minute d'usage ; la CI ne pouvait pas le voir,
+# parce qu'elle regardait une vitrine sans jamais entrer dans le magasin.
+#
+# On n'installe rien pour de vrai — ce serait des centaines de megaoctets et
+# plusieurs minutes. On demande a Flathub les metadonnees d'une application du
+# catalogue : cela exerce le reseau, le TLS et le depot, c'est-a-dire tout ce
+# qui cassait.
+if command -v flatpak >/dev/null 2>&1; then
+    if timeout 90 flatpak remote-info flathub com.valvesoftware.Steam \
+            > /tmp/grenos-flathub 2>&1; then
+        dire "magasin : Flathub repond, une application peut s'installer"
+    else
+        dire "magasin : FLATHUB INJOIGNABLE : $(tr -d "\n" < /tmp/grenos-flathub | cut -c1-110)"
+    fi
+    rm -f /tmp/grenos-flathub
+else
+    dire "magasin : flatpak absent, le magasin ne pourra rien installer"
+fi
+
 # ---- Y a-t-il un disque ou s'installer ? ------------------------------------
 #
 # L'installateur ne peut rien proposer si le systeme ne voit aucun disque, et
