@@ -80,7 +80,29 @@ lb clean --purge >/dev/null 2>&1 || true
 lb config
 
 echo "--- construction ---"
-lb build 2>&1 | tail -n 60
+# `lb build 2>&1 | tail -n 60` : deux fautes dans une seule ligne.
+#
+# 1. Le statut d'un tube est celui de `tail`, qui reussit toujours. live-build
+#    pouvait echouer sans que `set -e` ne s'en apercoive.
+# 2. Soixante lignes ne gardent que la fin. Or le hook parle au milieu de
+#    l'etape chroot : AUCUNE de ses lignes n'arrivait jusqu'au journal de la
+#    CI. Je croyais que mes controles de construction protegeaient quelque
+#    chose ; je ne pouvais meme pas savoir s'ils avaient tourne.
+#
+# Le journal complet part dans un fichier, et on en ressort nos propres lignes.
+JOURNAL=lb-build.log
+if ! lb build > "$JOURNAL" 2>&1; then
+    echo "--- ce que grenOS a verifie avant d'echouer ---"
+    grep -a "grenos:" "$JOURNAL" || echo "(aucune ligne grenos: : le hook n'a pas parle)"
+    echo "--- les 120 dernieres lignes de live-build ---"
+    tail -n 120 "$JOURNAL"
+    echo "live-build a echoue" >&2
+    exit 1
+fi
+echo "--- ce que grenOS a verifie pendant la construction ---"
+grep -a "grenos:" "$JOURNAL" || echo "(aucune ligne grenos: : le hook n'a pas parle)"
+echo "--- les 40 dernieres lignes de live-build ---"
+tail -n 40 "$JOURNAL"
 
 ls -la *.iso
 echo "--- taille ---"
