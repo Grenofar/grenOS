@@ -408,6 +408,26 @@ jobs:
             echo "magasin: il ne s est pas annonce (test non bloquant, a affiner)"
           fi
 
+          echo "--- le mode Jeux s ouvre-t-il ---"
+          # La page dont il attend le plus, et la derniere qui n'avait jamais
+          # ete ouverte ici. « jeux » ne designe qu'elle dans le menu, et ses
+          # quatre lettres sont a la meme place en AZERTY qu'en QWERTY.
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+          sleep 4
+          for touche in j e u x ret; do
+            python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+            sleep 1
+          done
+          sleep 20
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-jeux.ppm" || true
+          if grep -aq 'jeux ouvert' "$RUNNER_TEMP/serial.log"; then
+            grep -a 'jeux ouvert' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+          else
+            echo "jeux: la page ne s est pas annoncee (test non bloquant, a affiner)"
+          fi
+          python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+          sleep 2
+
           echo "--- le son repond-il ---"
           # Le seul reproche de Grenofar qu'on n'ait pas encore pu prouver
           # autrement qu'en comptant les sorties. On clique sur le petit
@@ -487,6 +507,23 @@ jobs:
           # vert sans lui, puisque tout le reste se fait au clavier.
           if [ "$CLIC" != 1 ]; then
             echo "::error::Le clic sur le bouton grenOS n'ouvre pas le menu : la barre ne repond pas a la souris."
+            MUET=1
+          fi
+
+          # Ce qui a ete vu vert plusieurs fois devient exige. La regle n'a pas
+          # change : une etape ne devient obligatoire qu'apres avoir ete vue
+          # verte — mais une fois qu'elle l'a ete, la laisser facultative
+          # reviendrait a publier une image ou le magasin ne s'ouvre plus.
+          for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau du depot present" "maj: grenos-desktop" "disques : "; do
+            if grep -aq "grenos: $preuve" "$RUNNER_TEMP/serial.log"; then
+              echo "prouve: $preuve"
+            else
+              echo "::error::L'image n'a jamais dit « $preuve »."
+              MUET=1
+            fi
+          done
+          if grep -aq 'grenos: disques : aucun' "$RUNNER_TEMP/serial.log"; then
+            echo "::error::Le systeme ne voit aucun disque : l'installateur n'aurait rien a proposer."
             MUET=1
           fi
           if [ "$MUET" = 1 ]; then
