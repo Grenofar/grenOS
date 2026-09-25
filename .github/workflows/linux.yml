@@ -528,7 +528,7 @@ jobs:
           # change : une etape ne devient obligatoire qu'apres avoir ete vue
           # verte — mais une fois qu'elle l'a ete, la laisser facultative
           # reviendrait a publier une image ou le magasin ne s'ouvre plus.
-          for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau du depot present" "maj: grenos-desktop" "disques : "; do
+          for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau du depot present" "maj: grenos-desktop" "disques : " "persistance : active" "son ouvert" "reglages ouvert" "jeux ouvert"; do
             if grep -aq "grenos: $preuve" "$RUNNER_TEMP/serial.log"; then
               echo "prouve: $preuve"
             else
@@ -538,6 +538,14 @@ jobs:
           done
           if grep -aq 'grenos: disques : aucun' "$RUNNER_TEMP/serial.log"; then
             echo "::error::Le systeme ne voit aucun disque : l'installateur n'aurait rien a proposer."
+            MUET=1
+          fi
+          # Le clavier ne se contente pas d'exister : il doit etre celui qu'on a
+          # choisi. La session dit « X en place alors que Y a ete choisi » quand
+          # les deux different, et cette phrase-la est un echec.
+          if grep -aq 'grenos: clavier :.*alors que' "$RUNNER_TEMP/serial.log"; then
+            grep -a 'grenos: clavier :' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+            echo "::error::Le clavier choisi au premier ecran n'est pas celui que la session utilise."
             MUET=1
           fi
           if [ "$MUET" = 1 ]; then
@@ -635,10 +643,16 @@ jobs:
           # passer un test de souris muet.
           python3 scripts/ci-screen.py judge "$RUNNER_TEMP/ecran-uefi.ppm" "$RUNNER_TEMP/uefi.png" > "$RUNNER_TEMP/uefi-juge.log" 2>&1 || true
           tail -3 "$RUNNER_TEMP/uefi-juge.log" || true
+          # Exige depuis le 2026-09-25 : vu vert trois constructions de suite, et
+          # la capture montrait mieux que la ligne ne le dit — la machine etait
+          # arrivee jusqu'au premier ecran de grenOS. Presque aucun PC vendu
+          # depuis dix ans ne demarre autrement : publier une image qui ne
+          # demarre pas en UEFI serait publier une image que personne n'allume.
           if grep -q "screen: PASS" "$RUNNER_TEMP/uefi-juge.log"; then
             echo "uefi: le chargeur a pris la main et le noyau dessine"
           else
-            echo "uefi: l ecran est reste vide (test non bloquant, a affiner)"
+            echo "::error::L'image ne demarre pas en UEFI : l'ecran est reste vide apres 90 s."
+            exit 1
           fi
         env:
           ISO_UEFI: ${{ steps.build.outputs.iso }}
@@ -779,7 +793,7 @@ jobs:
         # Rien n'est publie sans les deux preuves : un bureau qui s'ouvre, et
         # une mise a jour qui s'installe depuis notre depot. Une image qu'on ne
         # peut pas mettre a jour obligerait a tout regraver.
-        if: steps.boot.outcome == 'success' && steps.maj.outcome == 'success' && (github.ref == 'refs/heads/main' || inputs.publish)
+        if: steps.boot.outcome == 'success' && steps.maj.outcome == 'success' && steps.uefi.outcome == 'success' && (github.ref == 'refs/heads/main' || inputs.publish)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
