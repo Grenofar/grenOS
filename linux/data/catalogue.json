@@ -375,6 +375,138 @@
       "source": "apt",
       "identifiant": "gufw",
       "site": "https://help.ubuntu.com/community/Gufw"
+    },
+    {
+      "slug": "gnome-calculator",
+      "nom": "Calculatrice",
+      "rayon": "Bureautique",
+      "editeur": "GNOME",
+      "description": "Calculatrice simple, scientifique et financière.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Calculator.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Calculator",
+      "site": "https://apps.gnome.org/Calculator"
+    },
+    {
+      "slug": "gnome-calendar",
+      "nom": "Calendrier",
+      "rayon": "Bureautique",
+      "editeur": "GNOME",
+      "description": "Un agenda clair, relié à tes comptes en ligne.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Calendar.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Calendar",
+      "site": "https://apps.gnome.org/Calendar"
+    },
+    {
+      "slug": "gnome-weather",
+      "nom": "Météo",
+      "rayon": "Internet",
+      "editeur": "GNOME",
+      "description": "La météo d'aujourd'hui et des jours qui viennent, ville par ville.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Weather.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Weather",
+      "site": "https://apps.gnome.org/Weather"
+    },
+    {
+      "slug": "evince",
+      "nom": "Visionneur de documents",
+      "rayon": "Bureautique",
+      "editeur": "GNOME",
+      "description": "Lire des PDF et d'autres documents, simplement.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Evince.png",
+      "source": "apt",
+      "identifiant": "evince",
+      "site": "https://apps.gnome.org/Evince"
+    },
+    {
+      "slug": "gnome-text-editor",
+      "nom": "Éditeur de texte",
+      "rayon": "Développement",
+      "editeur": "GNOME",
+      "description": "Écrire et modifier du texte et du code, avec coloration.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.TextEditor.png",
+      "source": "apt",
+      "identifiant": "gnome-text-editor",
+      "site": "https://apps.gnome.org/TextEditor"
+    },
+    {
+      "slug": "loupe",
+      "nom": "Visionneur d'images",
+      "rayon": "Création",
+      "editeur": "GNOME",
+      "description": "Regarder ses photos, zoomer, tourner, trier.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Loupe.png",
+      "source": "apt",
+      "identifiant": "loupe",
+      "site": "https://apps.gnome.org/Loupe"
+    },
+    {
+      "slug": "gnome-clocks",
+      "nom": "Horloges",
+      "rayon": "Bureautique",
+      "editeur": "GNOME",
+      "description": "L'heure dans le monde, des alarmes, un minuteur et un chronomètre.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Clocks.png",
+      "source": "apt",
+      "identifiant": "gnome-clocks",
+      "site": "https://apps.gnome.org/Clocks"
+    },
+    {
+      "slug": "gnome-maps",
+      "nom": "Cartes",
+      "rayon": "Internet",
+      "editeur": "GNOME",
+      "description": "Chercher un lieu, voir la carte, calculer un trajet.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Maps.png",
+      "source": "apt",
+      "identifiant": "gnome-maps",
+      "site": "https://apps.gnome.org/Maps"
+    },
+    {
+      "slug": "fragments",
+      "nom": "Fragments",
+      "rayon": "Internet",
+      "editeur": "GNOME",
+      "description": "Télécharger par torrent, avec une fenêtre toute simple.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/de.haeckerfelix.Fragments.png",
+      "source": "apt",
+      "identifiant": "fragments",
+      "site": "https://apps.gnome.org/Fragments"
+    },
+    {
+      "slug": "gnome-sound-recorder",
+      "nom": "Enregistreur de sons",
+      "rayon": "Création",
+      "editeur": "GNOME",
+      "description": "Enregistrer sa voix ou un son, et réécouter.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.SoundRecorder.png",
+      "source": "apt",
+      "identifiant": "gnome-sound-recorder",
+      "site": "https://apps.gnome.org/SoundRecorder"
+    },
+    {
+      "slug": "gnome-disk-utility",
+      "nom": "Disques",
+      "rayon": "Système",
+      "editeur": "GNOME",
+      "description": "Voir, formater et partitionner les disques.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.DiskUtility.png",
+      "source": "apt",
+      "identifiant": "gnome-disk-utility",
+      "site": "https://apps.gnome.org/DiskUtility"
+    },
+    {
+      "slug": "gnome-system-monitor",
+      "nom": "Moniteur système",
+      "rayon": "Système",
+      "editeur": "GNOME",
+      "description": "Voir ce que fait la machine : processeur, mémoire, processus.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.SystemMonitor.png",
+      "source": "apt",
+      "identifiant": "gnome-system-monitor",
+      "site": "https://apps.gnome.org/SystemMonitor"
     }
   ]
 }
