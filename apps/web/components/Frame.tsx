@@ -13,7 +13,10 @@ import { Shell } from "@/components/Shell";
  * everybody. A public page shows no project data — nothing it renders comes
  * from Supabase — so it needs neither a session nor the operators' sidebar.
  */
-const PUBLIC = ["/download"];
+// `/beta` est publique pour la meme raison que `/download` : elle ne montre
+// aucune donnee du projet, seulement des images publiees sur GitHub. Demander
+// une session pour telecharger son propre systeme n'aurait pas de sens.
+const PUBLIC = ["/download", "/beta"];
 
 export function Frame({ children }: { children: ReactNode }) {
   const path = usePathname() ?? "/";

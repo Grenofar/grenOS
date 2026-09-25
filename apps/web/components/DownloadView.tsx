@@ -61,6 +61,7 @@ const FR = {
   qemuTitle: "QEMU",
   qemu: "Pour essayer sans rien écrire sur un disque :",
   source: "Code source",
+  beta: "Les images de la veille, et celle d'il y a dix minutes",
 };
 
 const EN: typeof FR = {
@@ -95,6 +96,7 @@ const EN: typeof FR = {
   qemuTitle: "QEMU",
   qemu: "To try it without writing to any disk:",
   source: "Source code",
+  beta: "Yesterday's images, and the one from ten minutes ago",
 };
 
 const TEXT = { fr: FR, en: EN };
@@ -192,6 +194,8 @@ export function DownloadView({ linux = null, repo }: { linux?: LinuxRelease | nu
 
       <p className="faint">
         <a href={`https://github.com/${repo}`}>{c.source}</a>
+        {" · "}
+        <a href="/beta">{c.beta}</a>
       </p>
     </>
   );

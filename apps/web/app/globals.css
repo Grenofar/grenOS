@@ -573,6 +573,17 @@ a.dl-button {
 }
 a.dl-button:hover { filter: brightness(1.1); text-decoration: none; }
 
+/* L'espace beta : une ligne par image, la plus recente traitee a part. */
+.beta-liste { display: grid; gap: 8px; }
+.beta-ligne {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
 .dl-steps { margin: 6px 0 0; padding-left: 20px; color: var(--text-dim); font-size: 13.5px; }
 .dl-steps li { margin-bottom: 6px; }
 pre.dl-code {
