@@ -25,7 +25,7 @@ import maj  # noqa: E402
 class Maj(Gtk.Window):
     def __init__(self):
         super().__init__(title="Mise à jour de grenOS")
-        self.set_default_size(680, 430)
+        grenosui.poser_taille(self, 680, 430)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
 

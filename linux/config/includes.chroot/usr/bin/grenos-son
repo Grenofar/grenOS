@@ -17,6 +17,7 @@ import sys
 
 sys.path.insert(0, "/usr/lib/grenos")
 
+import cairo  # noqa: E402
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")
@@ -39,6 +40,37 @@ STYLE = """
 .separateur-son { background-color: @bord; min-height: 1px; }
 .nom-app { font-size: 13px; }
 """
+
+
+RAYON = 14
+
+
+def region_arrondie(largeur, hauteur, rayon):
+    """Un rectangle aux coins arrondis, decoupe ligne par ligne.
+
+    X11 tourne ici **sans composition** : c'est ce qui rend la souris fluide
+    sans carte 3D, et c'est un choix qu'on ne revient pas dessus. Mais sans
+    composition il n'y a pas de transparence : un `border-radius` ne fait que
+    *ne pas peindre* les coins, et ce qui apparait dessous est le noir de la
+    fenetre. Grenofar l'a vu du premier coup d'oeil : « les bords sont noirs
+    dans l'overlay ».
+
+    La seule facon d'avoir de vrais coins arrondis sans composition est de
+    retirer les coins **de la fenetre elle-meme**. C'est ce que fait un masque
+    de forme : les pixels hors de la region n'appartiennent plus a la fenetre,
+    et c'est le bureau qu'on voit a travers, pas du noir.
+    """
+    region = cairo.Region()
+    for y in range(hauteur):
+        if y < rayon:
+            ecart = rayon - 1 - y
+        elif y >= hauteur - rayon:
+            ecart = y - (hauteur - rayon)
+        else:
+            ecart = 0
+        creux = rayon - int((rayon * rayon - ecart * ecart) ** 0.5) if ecart else 0
+        region.union(cairo.RectangleInt(creux, y, max(1, largeur - 2 * creux), 1))
+    return region
 
 
 class PanneauSon(Gtk.Window):
@@ -206,6 +238,34 @@ class PanneauSon(Gtk.Window):
             return True
         return False
 
+    def sortir_du_focus(self, *_):
+        """Deuxieme filet : le panneau part des qu'il n'est plus la fenetre active.
+
+        L'attrape du pointeur suffit *quand elle reussit*. Elle echoue quand une
+        autre fenetre tient deja le pointeur — un menu ouvert, une fenetre en
+        cours de deplacement —, et alors le panneau restait la, par-dessus
+        tout, jusqu'a ce qu'on le retrouve pour le fermer. Perdre le focus est
+        un signal que rien ne peut nous refuser.
+        """
+        Gtk.main_quit()
+        return False
+
+    def decouper(self, *_):
+        """Redonne au masque de forme la taille reelle de la fenetre.
+
+        A faire a chaque changement de taille : le melangeur grandit quand une
+        application se met a jouer, et un masque calcule pour l'ancienne
+        hauteur couperait le bas du panneau.
+        """
+        cadre = self.get_window()
+        if cadre is None:
+            return
+        largeur, hauteur = self.get_size()
+        if (largeur, hauteur) == getattr(self, "decoupe", None):
+            return
+        self.decoupe = (largeur, hauteur)
+        cadre.shape_combine_region(region_arrondie(largeur, hauteur, RAYON), 0, 0)
+
     def ouvrir(self):
         ecran = Gdk.Screen.get_default()
         self.show_all()
@@ -215,11 +275,22 @@ class PanneauSon(Gtk.Window):
         self.move(10, ecran.get_height() - HAUTEUR_BARRE - hauteur - 8)
         self.present()
 
+        self.decoupe = None
+        self.decouper()
+        self.connect("size-allocate", self.decouper)
+        self.connect("focus-out-event", self.sortir_du_focus)
+
         siege = Gdk.Display.get_default().get_default_seat()
+        pris = Gdk.GrabStatus.FAILED
         if siege is not None and self.get_window() is not None:
-            siege.grab(self.get_window(), Gdk.SeatCapabilities.ALL_POINTING, True,
-                       None, None, None, None)
-            self.attrape = siege
+            pris = siege.grab(self.get_window(), Gdk.SeatCapabilities.ALL_POINTING,
+                              True, None, None, None, None)
+            if pris == Gdk.GrabStatus.SUCCESS:
+                self.attrape = siege
+        # On le dit sur le port serie : quand le panneau refusera de se fermer
+        # au clic, la premiere question sera « l'attrape a-t-elle pris ? », et
+        # la reponse sera deja dans le journal.
+        self.pris = pris == Gdk.GrabStatus.SUCCESS
         self.connect("destroy", self.lacher)
 
     def lacher(self, *_):
@@ -238,9 +309,12 @@ def main():
     # prouver autrement qu'en comptant les sorties. Dire le volume et l'etat
     # muet montre qu'on sait *lire* l'etat du melangeur, pas seulement lister
     # des peripheriques — c'est ce que fait le panneau quand on l'ouvre.
-    grenosui.dire("son ouvert, %d sorties, volume %d%%, %s"
+    grenosui.dire("son ouvert, %d sorties, volume %d%%, %s, panneau %dx%d, "
+                  "clic ailleurs %s"
                   % (len(module_son.sorties()), module_son.volume(),
-                     "muet" if module_son.muet() else "actif"))
+                     "muet" if module_son.muet() else "actif",
+                     *panneau.get_size(),
+                     "attrape" if panneau.pris else "par le focus seul"))
     Gtk.main()
 
 

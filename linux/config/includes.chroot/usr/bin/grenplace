@@ -255,7 +255,7 @@ class Installation(Gtk.Window):
 
     def __init__(self, parent, application, fini):
         super().__init__(title=f"Installation de {application['nom']}")
-        self.set_default_size(640, 380)
+        grenosui.poser_taille(self, 640, 380)
         self.set_transient_for(parent)
         self.set_position(Gtk.WindowPosition.CENTER_ON_PARENT)
         self.application = application
@@ -348,7 +348,7 @@ class Installation(Gtk.Window):
 class GrenPlace(Gtk.Window):
     def __init__(self):
         super().__init__(title="GrenPlace")
-        self.set_default_size(980, 720)
+        grenosui.poser_taille(self, 980, 720)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
         self.rayon = "Tout"

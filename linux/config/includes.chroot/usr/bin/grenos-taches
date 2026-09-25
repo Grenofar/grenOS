@@ -178,7 +178,7 @@ def processus():
 class Taches(Gtk.Window):
     def __init__(self):
         super().__init__(title="Gestionnaire de tâches")
-        self.set_default_size(900, 640)
+        grenosui.poser_taille(self, 900, 640)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
         self.connect("key-press-event", self.touche)

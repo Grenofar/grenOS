@@ -33,6 +33,7 @@ from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Wnck  # noqa: E402
 
 import grenosui  # noqa: E402
 import maj  # noqa: E402
+import reseau  # noqa: E402
 import son  # noqa: E402
 
 HAUTEUR = 52
@@ -313,6 +314,45 @@ def meme_application(fenetre, commande, applications_connues):
     return False
 
 
+def basculer(programme):
+    """Ouvre un panneau, ou le referme s'il est deja la.
+
+    Sans cela, chaque clic sur l'icone du son en empilait un de plus : on en
+    ouvrait trois sans le voir, et fermer le dessus en decouvrait un autre.
+    Un bouton de barre bascule — c'est ce que fait Windows, et c'est ce qu'on
+    attend sans y penser.
+    """
+    # `pgrep -x` compare au NOM du processus, et le noyau appelle les notres
+    # « python3 » : la recherche ne trouvait jamais rien et le panneau
+    # s'empilait quand meme. C'est la ligne de commande complete qu'il faut
+    # lire — elle, elle contient bien /usr/bin/grenos-son.
+    chemin = "/usr/bin/" + programme
+    moi = str(os.getuid())
+    deja = subprocess.run(["pgrep", "-f", "-u", moi, chemin],
+                          capture_output=True, text=True)
+    if deja.returncode == 0 and deja.stdout.strip():
+        subprocess.run(["pkill", "-f", "-u", moi, chemin], check=False)
+        return
+    grenosui.lancer(programme)
+
+
+def taille_menu():
+    """La taille du menu sur cet écran-là.
+
+    640 × 640 était écrit en dur. En 1280×720 le menu occupait alors toute la
+    hauteur libre au pixel près, et la moindre ligne de plus le poussait sous
+    la barre. Il prend désormais au plus la moitié de la largeur et ce qui
+    reste au-dessus de la barre, marges comprises — sur un grand écran, rien
+    ne change.
+    """
+    ecran = Gdk.Screen.get_default()
+    if ecran is None:
+        return MENU_LARGEUR, MENU_HAUTEUR
+    largeur = max(420, min(MENU_LARGEUR, ecran.get_width() - 24))
+    hauteur = max(360, min(MENU_HAUTEUR, ecran.get_height() - HAUTEUR - 24))
+    return largeur, hauteur
+
+
 class Menu(Gtk.Window):
     """Le menu grenOS : les épinglées en grand, puis tout le reste."""
 
@@ -320,7 +360,7 @@ class Menu(Gtk.Window):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.panneau = panneau
         self.set_name("menu")
-        self.set_size_request(MENU_LARGEUR, MENU_HAUTEUR)
+        self.set_size_request(*taille_menu())
         self.set_decorated(False)
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
@@ -509,8 +549,10 @@ class Menu(Gtk.Window):
 
     def ouvrir(self):
         ecran = Gdk.Screen.get_default()
-        x = max(12, (ecran.get_width() - MENU_LARGEUR) // 2)
-        self.move(x, ecran.get_height() - HAUTEUR - MENU_HAUTEUR - 8)
+        largeur, hauteur = taille_menu()
+        self.set_size_request(largeur, hauteur)
+        x = max(8, (ecran.get_width() - largeur) // 2)
+        self.move(x, max(8, ecran.get_height() - HAUTEUR - hauteur - 8))
         self.applications = applications()
         self.remplir()
         self.show_all()
@@ -674,7 +716,7 @@ class Panneau(Gtk.Window):
         self.image_son = Gtk.Image()
         self.bouton_son.add(self.image_son)
         self.bouton_son.set_tooltip_text("Son : volume, sortie, applications")
-        self.bouton_son.connect("clicked", lambda _: grenosui.lancer("grenos-son"))
+        self.bouton_son.connect("clicked", lambda _: basculer("grenos-son"))
         boite.pack_start(self.bouton_son, False, False, 0)
 
         boite.pack_start(Gtk.Box(), True, True, 0)
@@ -711,13 +753,8 @@ class Panneau(Gtk.Window):
         # Les connexions, a portee de clic : c'est le geste qu'on cherche en
         # premier sur une machine neuve. Le reste des reglages est dans le menu.
         self.bouton_reseau = Gtk.Button()
-        image = image_de(["network-wireless", "network-workgroup",
-                          "network-transmit-receive"], 20)
-        if image is not None:
-            self.bouton_reseau.add(image)
-        else:
-            self.bouton_reseau.add(Gtk.Label(label="Réseau"))
-        self.bouton_reseau.set_tooltip_text("Connexions : Wi-Fi et Bluetooth")
+        self.image_reseau = Gtk.Image()
+        self.bouton_reseau.add(self.image_reseau)
         self.bouton_reseau.connect("clicked",
                                    lambda _: grenosui.lancer("grenos-connexions"))
         boite.pack_end(self.bouton_reseau, False, False, 0)
@@ -742,6 +779,8 @@ class Panneau(Gtk.Window):
         self.tic()
         GLib.timeout_add_seconds(3, self.relire_son)
         self.relire_son()
+        GLib.timeout_add_seconds(4, self.relire_reseau)
+        self.relire_reseau()
         GLib.timeout_add_seconds(60, self.relire_maj)
         self.relire_maj()
 
@@ -871,6 +910,25 @@ class Panneau(Gtk.Window):
             self.bouton_maj.show()
         else:
             self.bouton_maj.hide()
+        return True
+
+    def relire_reseau(self):
+        """L'icone du reseau dit par quoi on est relie, et a quelle force.
+
+        Comme sur Windows : les arcs du Wi-Fi avec le nombre de barres, la
+        prise quand c'est un cable, une croix quand rien ne passe. Une icone
+        figee ne distingue pas une machine en ligne d'une machine coupee — et
+        c'est justement ce qu'on regarde en premier quand plus rien ne charge.
+
+        Rien ici ne lance de programme : tout se lit dans /sys et /proc. Un
+        `nmcli` dans cette minuterie figerait la barre le temps qu'il reponde.
+        """
+        try:
+            nom, phrase = reseau.icone_barre()
+        except Exception:
+            nom, phrase = "grenos-reseau-aucun", "Connexions : Wi-Fi et Bluetooth"
+        self.image_reseau.set_from_icon_name(nom, Gtk.IconSize.LARGE_TOOLBAR)
+        self.bouton_reseau.set_tooltip_text(phrase + " — cliquer pour les connexions")
         return True
 
     def relire_son(self):

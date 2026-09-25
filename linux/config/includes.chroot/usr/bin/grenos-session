@@ -75,6 +75,25 @@ for agent in /usr/lib/mate-polkit/polkit-mate-authentication-agent-1 \
     fi
 done
 
+# La touche Windows ouvre le menu grenOS, comme sur Windows.
+#
+# Pourquoi un programme a part plutot qu'une ligne dans openbox : openbox ne
+# declenche une action que sur une **combinaison**. Lier « Super_L » tout seul
+# ferait ouvrir le menu aussi pour Super+T, Super+E et les six autres raccourcis
+# qui commencent par Super — la touche partirait avant la seconde.
+#
+# `xcape` sait faire la difference : il n'emet quelque chose que si la touche
+# est relachee SANS qu'aucune autre n'ait ete pressee entre-temps. On lui fait
+# emettre Ctrl+Echap, qui ouvre deja le menu et que la CI verifie a chaque
+# construction — autant reutiliser le chemin qui est prouve plutot que d'en
+# ouvrir un second.
+if command -v xcape >/dev/null 2>&1; then
+    xcape -e 'Super_L=Control_L|Escape' 2>/dev/null &
+    grenos-dire "touche windows branchee sur le menu"
+else
+    grenos-dire "touche windows : xcape absent, la touche ne fera rien"
+fi
+
 # Le bureau : le fond d'écran et ce qu'on pose dessus.
 grenos-veilleur grenos-bureau &
 

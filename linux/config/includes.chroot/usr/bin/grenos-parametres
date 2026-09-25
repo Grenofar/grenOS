@@ -52,7 +52,7 @@ def en_root(arguments, entree=""):
 class Reglages(Gtk.Window):
     def __init__(self, page=""):
         super().__init__(title="Réglages de grenOS")
-        self.set_default_size(960, 660)
+        grenosui.poser_taille(self, 960, 660)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
         self.identite = grenosui.identite()

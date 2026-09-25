@@ -5,6 +5,7 @@ déjà. Rien n'est réinventé : ce module traduit leurs réponses en quelque ch
 qu'une fenêtre peut afficher, et rend les erreurs telles quelles plutôt que de
 les masquer — « le mot de passe est refusé » est une information utile.
 """
+import os
 import re
 import subprocess
 
@@ -107,6 +108,108 @@ def etat():
                     "par": "Wi-Fi" if champs[0] == "wifi" else "câble",
                     "nom": champs[2]}
     return {"connecte": False, "par": "", "nom": ""}
+
+
+# ---- Ce que la barre affiche ------------------------------------------------
+#
+# Tout ce qui precede passe par `nmcli`, et c'est bien pour une fenetre qu'on
+# ouvre. Pas pour la barre : elle se relit toutes les trois secondes dans la
+# boucle GTK, et un `nmcli` qui met deux secondes a repondre fige la barre
+# pendant deux secondes. Une barre qui saccade est exactement le reproche qui a
+# fait retirer Plasma.
+#
+# Ce qui suit ne lance donc aucun programme : le noyau publie deja tout dans
+# /sys et /proc, et le lire coute quelques microsecondes.
+
+CARTES = "/sys/class/net"
+
+
+def _lignes(chemin):
+    try:
+        with open(chemin, encoding="utf-8", errors="replace") as fichier:
+            return fichier.read()
+    except OSError:
+        return ""
+
+
+def _force_wifi(interface):
+    """La qualite du lien Wi-Fi, de 0 a 3 barres.
+
+    /proc/net/wireless donne « link », que le pilote exprime le plus souvent
+    sur 70. On ne divise pas par un maximum suppose : on compare a des seuils,
+    parce qu'un pilote qui rendrait /100 donnerait alors plus de barres, jamais
+    moins — se tromper vers l'optimisme est moins grave que d'afficher « pas de
+    signal » a quelqu'un qui navigue.
+    """
+    for ligne in _lignes("/proc/net/wireless").splitlines():
+        if not ligne.strip().startswith(interface + ":"):
+            continue
+        champs = ligne.split(":", 1)[1].split()
+        if len(champs) < 2:
+            break
+        try:
+            lien = float(champs[1].rstrip("."))
+        except ValueError:
+            break
+        if lien >= 55:
+            return 3
+        if lien >= 35:
+            return 2
+        if lien >= 12:
+            return 1
+        return 0
+    # Pas de ligne : connecte, mais le pilote ne dit pas la force. Plein
+    # signal est le moindre mal — l'inverse ferait clignoter « aucun reseau »
+    # sur une machine qui marche.
+    return 3
+
+
+def etat_barre():
+    """Par quoi la machine est reliee, et a quelle force.
+
+    Rendu : {'lien': 'cable' | 'wifi' | 'aucun', 'barres': 0-3, 'interface'}
+    """
+    cable, sans_fil = None, None
+    try:
+        interfaces = sorted(os.listdir(CARTES))
+    except OSError:
+        return {"lien": "aucun", "barres": 0, "interface": ""}
+
+    for interface in interfaces:
+        if interface == "lo":
+            continue
+        # « up » ne suffit pas : une carte peut etre allumee sans rien au bout.
+        # `carrier` dit s'il y a vraiment un lien physique.
+        if _lignes(f"{CARTES}/{interface}/operstate").strip() != "up":
+            continue
+        if _lignes(f"{CARTES}/{interface}/carrier").strip() != "1":
+            continue
+        if os.path.isdir(f"{CARTES}/{interface}/wireless"):
+            sans_fil = sans_fil or interface
+        else:
+            cable = cable or interface
+
+    # Le cable l'emporte : quand les deux sont branches, c'est lui qui porte
+    # le trafic, et c'est lui qu'il faut montrer.
+    if cable:
+        return {"lien": "cable", "barres": 3, "interface": cable}
+    if sans_fil:
+        return {"lien": "wifi", "barres": _force_wifi(sans_fil),
+                "interface": sans_fil}
+    return {"lien": "aucun", "barres": 0, "interface": ""}
+
+
+def icone_barre(etat_lu=None):
+    """Le nom de l'icone qui dit cet etat-la, et la phrase de l'infobulle."""
+    etat_lu = etat_lu or etat_barre()
+    if etat_lu["lien"] == "cable":
+        return "grenos-reseau-cable", f"Connecte par cable ({etat_lu['interface']})"
+    if etat_lu["lien"] == "wifi":
+        barres = etat_lu["barres"]
+        mot = ("signal faible", "signal moyen", "bon signal")[max(0, barres - 1)]             if barres else "connecte, signal tres faible"
+        return (f"grenos-reseau-wifi-{barres}",
+                f"Wi-Fi : {mot} ({etat_lu['interface']})")
+    return "grenos-reseau-aucun", "Aucune connexion"
 
 
 # ---- Le Bluetooth -----------------------------------------------------------

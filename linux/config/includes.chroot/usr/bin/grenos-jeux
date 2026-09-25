@@ -56,7 +56,7 @@ class Installation(Gtk.Window):
 
     def __init__(self, parent, nom, source, identifiant, fini):
         super().__init__(title=f"Installation de {nom}")
-        self.set_default_size(620, 360)
+        grenosui.poser_taille(self, 620, 360)
         self.set_transient_for(parent)
         self.set_position(Gtk.WindowPosition.CENTER_ON_PARENT)
         self.nom, self.source, self.identifiant, self.fini = nom, source, identifiant, fini
@@ -139,7 +139,7 @@ class Installation(Gtk.Window):
 class Jeux(Gtk.Window):
     def __init__(self):
         super().__init__(title="Jeux")
-        self.set_default_size(900, 720)
+        grenosui.poser_taille(self, 900, 720)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
 
@@ -287,10 +287,30 @@ class Jeux(Gtk.Window):
         bloc.pack_start(note, False, False, 0)
 
         if jeu["action"] == "steam":
-            bloc.pack_start(grenosui.bouton(
-                "Ouvrir dans Steam",
-                lambda a=jeu["adresse"]: grenosui.lancer(f"xdg-open {a}"), "principal"),
-                False, False, 0)
+            # « Ouvrir dans Steam » ne suffisait pas. Le jeu marche sous Linux,
+            # mais seulement avec Proton Experimental — et personne ne devine
+            # qu'il faut aller le choisir dans les propriétés du jeu. Sans ce
+            # réglage, EAC refuse le multijoueur, et on en conclut que le
+            # système ne sait pas jouer. Le bouton fait donc le réglage.
+            ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            if jeux.rocket_league_prete():
+                ligne.pack_start(grenosui.bouton(
+                    "Jouer", lambda a=jeu["adresse"]:
+                    grenosui.lancer(f"xdg-open {a}"), "principal"),
+                    False, False, 0)
+                prete = Gtk.Label(label="Proton Experimental est réglé pour ce jeu.",
+                                  xalign=0)
+                prete.get_style_context().add_class("sous")
+                ligne.pack_start(prete, True, True, 0)
+            else:
+                ligne.pack_start(grenosui.bouton(
+                    "Préparer et jouer", self.preparer_rocket, "principal"),
+                    False, False, 0)
+                ligne.pack_start(grenosui.bouton(
+                    "Ouvrir la fiche", lambda a=jeu["adresse"]:
+                    grenosui.lancer(f"xdg-open {a}"), "discret"),
+                    False, False, 0)
+            bloc.pack_start(ligne, False, False, 0)
         else:
             if jeux.fortnite_pose():
                 bloc.pack_start(grenosui.bouton(
@@ -302,6 +322,40 @@ class Jeux(Gtk.Window):
                     "Installer Fortnite en nuage", self.poser_fortnite, "principal"),
                     False, False, 0)
         return bloc
+
+    def preparer_rocket(self):
+        """Installe ce qui manque, pose Proton Experimental, ouvre le jeu.
+
+        Chaque refus dit quoi faire ensuite. « Ça n'a pas marché » n'est pas
+        une réponse : quand Steam n'a jamais été lancé, il n'a pas encore de
+        fichier de configuration, et aucun réglage n'est possible avant qu'il
+        l'écrive une première fois.
+        """
+        manque = jeux.preparer_rocket_league()
+        if manque == "steam":
+            self.dire.set_text("Steam n'est pas là : il arrive, puis relance "
+                               "« Préparer et jouer ».")
+            self.installer("Steam", "flatpak", "com.valvesoftware.Steam")
+            return
+        if manque == "jamais":
+            self.dire.set_text("Lance Steam une fois et connecte-toi : il écrit "
+                               "sa configuration à ce moment-là, et c'est elle "
+                               "qu'il faut régler. Reviens ensuite ici.")
+            grenosui.lancer("xdg-open steam://open/main")
+            return
+        if manque == "ouvert":
+            self.dire.set_text("Ferme Steam d'abord : il réécrit sa configuration "
+                               "en se fermant, et effacerait le réglage.")
+            return
+        if manque == "illisible":
+            self.dire.set_text("La configuration de Steam n'a pas la forme attendue. "
+                               "Rien n'a été modifié. Dans Steam : Rocket League → "
+                               "Propriétés → Compatibilité → Proton Experimental.")
+            return
+        self.dire.set_text("Proton Experimental est réglé pour Rocket League. "
+                           "Steam le téléchargera au premier lancement.")
+        grenosui.lancer("xdg-open steam://store/252950")
+        self.remplir()
 
     def poser_fortnite(self):
         manque = jeux.poser_fortnite()

@@ -532,11 +532,89 @@ def bouton(texte, action=None, genre="", nom_icone="", taille_icone=18):
     return widget
 
 
+# La barre mange le bas de l'écran, et le gestionnaire de fenêtres ajoute une
+# barre de titre en haut. Une fenêtre qui demande toute la hauteur de l'écran
+# déborde donc des deux côtés. Ces deux nombres sont les mêmes que ceux de
+# `grenos-shell` et du thème openbox ; s'ils y changent, ils changent ici.
+BARRE = 52
+TITRE = 30
+
+
+def ecran_utile():
+    """Ce qui reste vraiment à une fenêtre, en pixels.
+
+    Rien dans grenOS n'a le droit de supposer un écran de 1920×1080. Grenofar
+    a démarré grenOS en 1280×720 et « on ne voit pas tout » : les Réglages
+    demandaient 660 pixels de haut, la page Jeux et GrenPlace 720, et la
+    hauteur disponible sous la barre n'est que de 668 — moins la barre de
+    titre, 638. Les boutons du bas tombaient sous l'écran, là où aucune souris
+    ne va les chercher.
+
+    On lit la zone de travail que le gestionnaire de fenêtres annonce
+    (`_NET_WORKAREA`, que notre barre pose elle-même) ; si X ne la donne pas,
+    on retranche la barre à la main plutôt que de deviner.
+    """
+    ecran = Gdk.Screen.get_default()
+    if ecran is None:
+        return 1280, 668
+    largeur, hauteur = ecran.get_width(), ecran.get_height()
+    # La hauteur sous la barre, calculee a la main. Elle sert de plafond : la
+    # zone de travail annoncee vaut parfois tout l'ecran, parce que la barre
+    # n'a pas encore pose sa bande (`_NET_WM_STRUT`) quand une fenetre s'ouvre
+    # tot dans la session. Prendre la plus petite des deux evite de croire a
+    # une place qui n'existera plus une seconde plus tard.
+    sous_la_barre = max(240, hauteur - BARRE)
+    try:
+        zone = ecran.get_monitor_workarea(ecran.get_primary_monitor())
+        if zone.width > 0 and zone.height > 0:
+            return min(largeur, zone.width), min(sous_la_barre, zone.height)
+    except (AttributeError, TypeError):
+        pass
+    return largeur, sous_la_barre
+
+
+def poser_taille(cadre, largeur, hauteur):
+    """La taille voulue, ramenée à ce que l'écran peut montrer.
+
+    On ne rétrécit **que** ce qui déborde : sur un grand écran, une fenêtre
+    garde exactement la taille pensée pour elle. Sur un petit, elle prend tout
+    ce qu'il y a et pas un pixel de plus — et comme le contenu de nos fenêtres
+    est dans une zone qui défile, rien n'est perdu, seulement à faire défiler.
+    """
+    utile_l, utile_h = ecran_utile()
+    largeur = max(320, min(largeur, utile_l - 16))
+    hauteur = max(240, min(hauteur, utile_h - TITRE))
+    cadre.set_default_size(largeur, hauteur)
+    # Sans cela, un contenu qui exige plus de place que l'écran rouvre la
+    # fenêtre trop grande malgré la taille demandée : GTK respecte toujours le
+    # minimum de ce qu'il contient, et la taille par défaut n'est qu'un vœu.
+    cadre.set_resizable(True)
+    cadre.connect("map-event", _dire_la_taille)
+    return largeur, hauteur
+
+
+def _dire_la_taille(cadre, _evenement):
+    """Une fois la fenêtre à l'écran, dire si elle y tient vraiment.
+
+    Demander une taille n'est pas l'obtenir : GTK agrandit une fenêtre au-delà
+    de ce qu'on demande dès qu'un enfant exige plus de place. La seule mesure
+    qui compte est celle d'après l'affichage — et c'est celle-là qu'on écrit
+    sur le port série, pour que la CI puisse la juger au lieu de nous croire.
+    """
+    largeur, hauteur = cadre.get_size()
+    utile_l, utile_h = ecran_utile()
+    tient = largeur <= utile_l and hauteur <= utile_h
+    dire("fenetre %s %dx%d dans %dx%d : %s"
+         % (cadre.get_title() or "sans nom", largeur, hauteur, utile_l, utile_h,
+            "tient" if tient else "DEBORDE"))
+    return False
+
+
 def fenetre(nom, largeur=820, hauteur=600):
     """Une fenêtre ordinaire de grenOS, déjà habillée et centrée."""
     habiller()
     cadre = Gtk.Window(title=nom)
-    cadre.set_default_size(largeur, hauteur)
+    poser_taille(cadre, largeur, hauteur)
     cadre.set_position(Gtk.WindowPosition.CENTER)
     cadre.set_icon_name("grenos")
     cadre.connect("destroy", Gtk.main_quit)

@@ -250,6 +250,7 @@ jobs:
             -device ide-hd,drive=garde,bus=sata.0 \
             -device ide-hd,drive=dur,bus=sata.1 \
             -display none -vga std \
+            -global VGA.xres=1280 -global VGA.yres=720 \
             -usb -device usb-tablet \
             -audiodev none,id=silence \
             -device intel-hda -device hda-duplex,audiodev=silence \
@@ -550,6 +551,24 @@ jobs:
           fi
           if [ "$MUET" = 1 ]; then
             exit 1
+          fi
+
+          echo "--- les fenetres tiennent-elles dans l ecran ---"
+          # Grenofar a demarre grenOS en 1280x720 : « il est casse, on voit pas
+          # tout ». Il avait raison — les Reglages demandaient 660 pixels de
+          # haut, la page Jeux et GrenPlace 720, et sous la barre il n'en reste
+          # que 668. Les boutons du bas tombaient hors de l'ecran.
+          #
+          # La machine d'essai demarre desormais en 720p, et chaque fenetre dit
+          # sa taille REELLE une fois affichee — demander une taille n'est pas
+          # l'obtenir, GTK agrandit des qu'un enfant exige plus de place.
+          grep -a 'grenos: fenetre ' "$RUNNER_TEMP/serial.log" | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' | sort -u
+          DEBORDE=$(grep -ac 'grenos: fenetre .*DEBORDE' "$RUNNER_TEMP/serial.log" || true)
+          DEBORDE=$(echo "$DEBORDE" | head -1)
+          if [ "${DEBORDE:-0}" -gt 0 ]; then
+            echo "::warning::$DEBORDE fenetre(s) depassent l ecran en 720p."
+          else
+            echo "aucune fenetre ne deborde en 720p"
           fi
 
           # Cette image peut-elle se mettre a jour ? L'essai en conteneur prouve

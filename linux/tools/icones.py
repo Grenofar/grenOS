@@ -281,6 +281,103 @@ def connexions(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def wifi(chemin, taille, barres=3):
+    """Le Wi-Fi, avec sa force : les arcs allumes, et les autres en creux.
+
+    C'est l'icone de Windows, et ce n'est pas un hasard : trois arcs au-dessus
+    d'un point se lisent sans legende, et le nombre d'arcs vifs dit la force du
+    signal d'un coup d'oeil. Les arcs eteints restent dessines, faiblement —
+    sans eux, une icone a une barre ressemble a une icone cassee.
+
+    `barres` va de 0 (vu, mais pas connecte) a 3 (plein signal).
+    """
+    image, u, v = toile(taille)
+
+    rayon = np.hypot(u - 0.5, v - 0.78)
+    vers_le_haut = v < 0.74
+    for i, (distance, epaisseur) in enumerate(((0.22, 0.090), (0.39, 0.100),
+                                               (0.56, 0.110))):
+        arc = (np.clip((epaisseur / 2 - np.abs(rayon - distance)) / 0.016, 0.0, 1.0)
+               * vers_le_haut)
+        if i < barres:
+            melange = i / 2.0
+            couleur = tuple(ACCENT[c] * (1 - melange) + SECOND[c] * melange
+                            for c in range(3))
+            poser(image, arc, couleur, 1.0)
+        else:
+            # L'arc eteint : la meme forme, presque effacee. On voit qu'il
+            # existe et qu'il n'est pas atteint.
+            poser(image, arc, CLAIR, 0.22)
+
+    source = np.clip((0.075 - np.hypot(u - 0.5, v - 0.78)) / 0.014, 0.0, 1.0)
+    poser(image, source, CLAIR if barres else (0x94, 0xA1, 0xBA), 1.0)
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
+def cable(chemin, taille):
+    """L'Ethernet : la prise RJ45 vue de face, large, avec sa languette.
+
+    Quand le cable est branche, montrer des arcs de Wi-Fi est un mensonge poli.
+    Windows montre une prise ; on montre une prise.
+
+    Deux essais ont ete jetes avant celui-ci, et pour la meme raison a chaque
+    fois : un corps plus haut que large surmontant une tige se lit comme une
+    **spatule**, pas comme une prise. Ce qui fait la prise, c'est d'etre large
+    et basse, avec la languette qui deborde dessous. Pas de fil : le fil est
+    precisement ce qui faisait le manche.
+    """
+    image, u, v = toile(taille)
+
+    # Le corps : nettement plus large que haut.
+    corps = rectangle(u, v, 0.12, 0.30, 0.88, 0.62, rayon=0.05)
+    poser(image, corps, ACCENT, 1.0)
+
+    # Les huit contacts, en traits fins sous le bord haut. Huit, parce qu'une
+    # RJ45 en a huit — et parce qu'a cette largeur ils font une texture qu'on
+    # reconnait avant de les compter.
+    for i in range(8):
+        x = 0.185 + i * 0.079
+        contact = rectangle(u, v, x, 0.345, x + 0.034, 0.465, rayon=0.012)
+        poser(image, contact, CLAIR, 0.95)
+
+    # La languette, large et basse : le trait qui acheve la silhouette.
+    languette = rectangle(u, v, 0.36, 0.60, 0.64, 0.74, rayon=0.035)
+    poser(image, languette, SECOND, 1.0)
+
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
+def sans_reseau(chemin, taille):
+    """Aucune connexion : les arcs eteints, barres d'une croix.
+
+    Ne rien dessiner du tout laisserait croire a une icone manquante. Les arcs
+    en creux disent « le Wi-Fi existe », la croix dit « il ne passe pas ».
+    """
+    image, u, v = toile(taille)
+
+    rayon = np.hypot(u - 0.5, v - 0.78)
+    vers_le_haut = v < 0.74
+    for distance, epaisseur in ((0.22, 0.090), (0.39, 0.100), (0.56, 0.110)):
+        arc = (np.clip((epaisseur / 2 - np.abs(rayon - distance)) / 0.016, 0.0, 1.0)
+               * vers_le_haut)
+        poser(image, arc, CLAIR, 0.22)
+
+    # La croix, en bas a droite, comme une pastille — pas en travers de tout.
+    # Barrer l'icone entiere effacait les arcs : on ne voyait plus qu'une croix,
+    # et l'icone ne disait plus de quoi elle parlait. Vu sur la planche.
+    pastille = np.clip((0.235 - np.hypot(u - 0.74, v - 0.74)) / 0.02, 0.0, 1.0)
+    poser(image, pastille, (0x14, 0x1B, 0x2D), 1.0)
+    pastille = np.clip((0.205 - np.hypot(u - 0.74, v - 0.74)) / 0.02, 0.0, 1.0)
+    poser(image, pastille, (0xEF, 0x4D, 0x5E), 1.0)
+    for pente in (1.0, -1.0):
+        trait = np.clip(
+            (0.032 - np.abs((v - 0.74) - pente * (u - 0.74))) / 0.014, 0.0, 1.0)
+        trait *= (np.hypot(u - 0.74, v - 0.74) < 0.115).astype(float)
+        poser(image, trait, CLAIR, 1.0)
+
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def taches(chemin, taille):
     """Le gestionnaire de taches : trois barres, comme ce qu'il montre.
 
@@ -316,6 +413,13 @@ def main():
     nuage(os.path.join(dossier, 'grenos-nuage.png'), taille)
     manette(os.path.join(dossier, 'grenos-jeux.png'), taille)
     connexions(os.path.join(dossier, 'grenos-connexions.png'), taille)
+    # Le reseau de la barre dit ce qui est VRAI : par quel lien, et a quelle
+    # force. Une icone fixe ne distingue pas un cable branche d'un Wi-Fi mort.
+    for barres in range(4):
+        wifi(os.path.join(dossier, f'grenos-reseau-wifi-{barres}.png'), taille,
+             barres=barres)
+    cable(os.path.join(dossier, 'grenos-reseau-cable.png'), taille)
+    sans_reseau(os.path.join(dossier, 'grenos-reseau-aucun.png'), taille)
     taches(os.path.join(dossier, 'grenos-taches.png'), taille)
 
 

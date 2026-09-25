@@ -11,6 +11,7 @@ rien. Mieux vaut le dire et proposer le chemin qui marche que promettre et
 décevoir.
 """
 import os
+import re
 import subprocess
 
 import materiel
@@ -59,9 +60,11 @@ JEUX = [
         "cle": "rocket-league",
         "nom": "Rocket League",
         "etat": "marche",
-        "note": "Fonctionne sur Linux depuis le 28 avril 2026 : Psyonix a activé la "
-                "version Linux d'Easy Anti-Cheat, parties classées comprises. Il faut "
-                "Proton Experimental ou un GE-Proton récent, à choisir dans Steam.",
+        "note": "Fonctionne sur Linux depuis avril 2026 : Psyonix a activé la version "
+                "Linux d'Easy Anti-Cheat, parties classées comprises. Une seule "
+                "condition, que personne ne devine : le jeu doit tourner sous Proton "
+                "Experimental, sans quoi l'anti-triche refuse le multijoueur. "
+                "« Préparer et jouer » pose ce réglage à ta place.",
         "action": "steam",
         "adresse": "steam://store/252950",
     },
@@ -182,6 +185,186 @@ def poser_fortnite():
         except OSError:
             pass
     return ""
+
+
+# ---- Rocket League : le rendre jouable, pas seulement l'annoncer ------------
+#
+# Psyonix a activé la version Linux d'Easy Anti-Cheat en avril 2026, et le jeu
+# marche — à une condition que personne ne devine : il faut lui dire d'employer
+# **Proton Experimental**. Avec le Proton par défaut, EAC refuse le
+# multijoueur, et la personne en conclut que grenOS ne sait pas jouer.
+#
+# Ce réglage vit dans un seul fichier, `config.vdf`, sous une rubrique
+# `CompatToolMapping`. On peut l'écrire à sa place. C'est toute la différence
+# entre « c'est possible » et « ça marche ».
+
+ROCKET = "252950"
+PROTON = "proton_experimental"
+
+STEAM_RACINES = [
+    "~/.var/app/com.valvesoftware.Steam/.steam/steam",   # le Flatpak, le nôtre
+    "~/.steam/steam",
+    "~/.local/share/Steam",
+]
+
+
+def steam_racine():
+    """Où Steam range sa configuration sur cette machine, s'il y est."""
+    for racine in STEAM_RACINES:
+        chemin = os.path.expanduser(racine)
+        if os.path.isdir(os.path.join(chemin, "config")):
+            return chemin
+    return ""
+
+
+def steam_tourne():
+    """Steam réécrit config.vdf en se fermant : le modifier en marche ne sert à rien."""
+    return subprocess.run(["pgrep", "-f", "steam"], capture_output=True).returncode == 0
+
+
+def _bloc(texte, depart):
+    """Les bornes du bloc { … } qui suit `depart`, accolades imbriquées comprises."""
+    ouvre = texte.find("{", depart)
+    if ouvre < 0:
+        return -1, -1
+    niveau, index = 0, ouvre
+    while index < len(texte):
+        if texte[index] == "{":
+            niveau += 1
+        elif texte[index] == "}":
+            niveau -= 1
+            if niveau == 0:
+                return ouvre, index
+        index += 1
+    return -1, -1
+
+
+def _entree(application, outil, creux):
+    """Le bloc VDF d'un jeu, indenté comme Steam le fait lui-même."""
+    t = "\t" * creux
+    return (t + '"' + application + '"\n'
+            + t + "{\n"
+            + t + '\t"name"\t\t"' + outil + '"\n'
+            + t + '\t"config"\t\t""\n'
+            + t + '\t"priority"\t\t"250"\n'
+            + t + "}\n")
+
+
+def regler_proton(texte, application=ROCKET, outil=PROTON):
+    """Écrit « ce jeu-là tourne avec cet outil-là » dans le texte de config.vdf.
+
+    Un vrai analyseur VDF serait plus élégant, et bien plus dangereux : ce
+    fichier porte les comptes, les serveurs et les dépôts de quelqu'un, et le
+    réécrire en entier à partir d'une structure qu'on aurait mal comprise lui
+    coûterait sa session Steam. On touche donc au texte, au seul endroit
+    concerné, et on rend `None` dès que le fichier ne ressemble pas à ce qu'on
+    attend : mieux vaut ne rien faire, et le dire.
+    """
+    marque = '"CompatToolMapping"'
+    place = texte.find(marque)
+
+    if place < 0:
+        # La rubrique n'existe pas encore : on la crée dans le bloc « Steam ».
+        pere = texte.find('"Steam"')
+        if pere < 0:
+            return None
+        ouvre, ferme = _bloc(texte, pere)
+        if ouvre < 0:
+            return None
+        ajout = ('\t\t\t\t"CompatToolMapping"\n\t\t\t\t{\n'
+                 + _entree(application, outil, 5)
+                 + "\t\t\t\t}\n")
+        return texte[:ferme] + ajout + texte[ferme:]
+
+    ouvre, ferme = _bloc(texte, place)
+    if ouvre < 0:
+        return None
+    dedans = texte[ouvre + 1:ferme]
+
+    ou = dedans.find('"' + application + '"')
+    if ou >= 0:
+        # Déjà une entrée pour ce jeu : on ne remplace que l'outil nommé.
+        sous_ouvre, sous_ferme = _bloc(dedans, ou)
+        if sous_ouvre < 0:
+            return None
+        avant = dedans[sous_ouvre:sous_ferme + 1]
+        apres, combien = re.subn(r'("name"\s*)"[^"]*"',
+                                 lambda m: m.group(1) + '"' + outil + '"',
+                                 avant, count=1)
+        if not combien:
+            apres = avant[:-1] + '\t\t\t\t\t\t"name"\t\t"' + outil + '"\n\t\t\t\t\t}'
+        dedans = dedans[:sous_ouvre] + apres + dedans[sous_ferme + 1:]
+    else:
+        dedans = (dedans.rstrip(" \t\n") + "\n"
+                  + _entree(application, outil, 5) + "\t\t\t\t")
+    return texte[:ouvre + 1] + dedans + texte[ferme:]
+
+
+def preparer_rocket_league():
+    """Tout ce qu'il faut pour que Rocket League démarre, fait à sa place.
+
+    Rendu : "" si c'est prêt, sinon ce qui manque —
+      "steam"     : Steam n'est pas installé ;
+      "jamais"    : Steam n'a jamais été lancé, il n'a pas de configuration ;
+      "ouvert"    : Steam tourne, il écraserait le réglage en se fermant ;
+      "illisible" : son fichier ne ressemble pas à ce qu'on sait modifier.
+    """
+    if not installe("flatpak", "com.valvesoftware.Steam") \
+            and not installe("apt", "steam"):
+        return "steam"
+    racine = steam_racine()
+    if not racine:
+        return "jamais"
+    if steam_tourne():
+        return "ouvert"
+
+    chemin = os.path.join(racine, "config", "config.vdf")
+    try:
+        with open(chemin, encoding="utf-8", errors="replace") as fichier:
+            avant = fichier.read()
+    except OSError:
+        return "jamais"
+
+    apres = regler_proton(avant)
+    if apres is None:
+        return "illisible"
+    if apres == avant:
+        return ""
+
+    # Une copie avant d'y toucher : ce fichier porte la session de quelqu'un.
+    try:
+        with open(chemin + ".avant-grenos", "w", encoding="utf-8") as copie:
+            copie.write(avant)
+        with open(chemin, "w", encoding="utf-8") as fichier:
+            fichier.write(apres)
+    except OSError:
+        return "illisible"
+    return ""
+
+
+def rocket_league_prete():
+    """Le réglage est-il déjà posé ?"""
+    racine = steam_racine()
+    if not racine:
+        return False
+    try:
+        with open(os.path.join(racine, "config", "config.vdf"),
+                  encoding="utf-8", errors="replace") as fichier:
+            texte = fichier.read()
+    except OSError:
+        return False
+    place = texte.find('"CompatToolMapping"')
+    if place < 0:
+        return False
+    ouvre, ferme = _bloc(texte, place)
+    if ouvre < 0:
+        return False
+    dedans = texte[ouvre:ferme]
+    ou = dedans.find('"' + ROCKET + '"')
+    if ou < 0:
+        return False
+    sous_ouvre, sous_ferme = _bloc(dedans, ou)
+    return sous_ouvre >= 0 and PROTON in dedans[sous_ouvre:sous_ferme]
 
 
 def fortnite_pose():

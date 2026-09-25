@@ -233,6 +233,57 @@ for programme in /usr/bin/grenos-* /usr/bin/grenplace /usr/lib/grenos/grenos-*; 
 done
 echo "grenos: tous nos programmes compilent"
 
+# Aucune fenetre ne suppose la taille de l'ecran.
+#
+# Grenofar a demarre grenOS en 1280x720 : « il est casse, en 720p on voit pas
+# tout ». Les Reglages demandaient 660 pixels de haut, la page Jeux et
+# GrenPlace 720, et sous la barre il n'en reste que 668 : les boutons du bas
+# tombaient hors de l'ecran, la ou aucune souris ne va les chercher.
+#
+# Ces tailles passent desormais par `grenosui.poser_taille`, qui les ramene a
+# ce que l'ecran offre. Ce controle empeche la prochaine d'y echapper : un
+# nombre ecrit en dur dans `set_default_size` refuse la construction.
+python3 - <<'TAILLES'
+import ast
+import glob
+import sys
+
+fautes = []
+for chemin in sorted(glob.glob("/usr/bin/grenos-*") + ["/usr/bin/grenplace"]):
+    try:
+        with open(chemin, encoding="utf-8") as fichier:
+            tete = fichier.readline()
+            if "python3" not in tete:
+                continue
+            fichier.seek(0)
+            arbre = ast.parse(fichier.read(), chemin)
+    except (OSError, SyntaxError):
+        continue
+    for noeud in ast.walk(arbre):
+        if not isinstance(noeud, ast.Call):
+            continue
+        cible = noeud.func
+        if not isinstance(cible, ast.Attribute) or cible.attr != "set_default_size":
+            continue
+        # Une taille CALCULEE est legitime : la barre prend la largeur de
+        # l'ecran, le premier ecran le prend en entier. Ce qu'on refuse, c'est
+        # un nombre ecrit a la main.
+        durs = [a for a in noeud.args
+                if isinstance(a, ast.Constant) and isinstance(a.value, int)]
+        if durs:
+            fautes.append("%s ligne %d : set_default_size(%s)"
+                          % (chemin, noeud.lineno,
+                             ", ".join(str(a.value) for a in durs)))
+
+if fautes:
+    for faute in fautes:
+        print("grenos: taille en dur — " + faute, file=sys.stderr)
+    print("grenos: passe par grenosui.poser_taille(), qui tient compte de l ecran",
+          file=sys.stderr)
+    sys.exit(1)
+print("grenos: aucune fenetre ne suppose la taille de l ecran")
+TAILLES
+
 # Et un programme juste peut manquer d'une bibliotheque : `import cairo` n'a
 # de sens que si le paquet est la. On demande a l'image d'importer ce dont nos
 # programmes ont besoin, plutot que de l'esperer.
