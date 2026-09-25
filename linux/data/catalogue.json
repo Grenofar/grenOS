@@ -375,6 +375,50 @@
       "source": "apt",
       "identifiant": "gufw",
       "site": "https://help.ubuntu.com/community/Gufw"
+    },
+    {
+      "slug": "celluloid",
+      "nom": "Celluloid",
+      "rayon": "Internet",
+      "editeur": "Celluloid",
+      "description": "Un lecteur vidéo léger, quand VLC en fait trop.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/io.github.celluloid_player.Celluloid.png",
+      "source": "flatpak",
+      "identifiant": "io.github.celluloid_player.Celluloid",
+      "site": "https://celluloid-player.github.io"
+    },
+    {
+      "slug": "gnome-maps",
+      "nom": "Cartes",
+      "rayon": "Internet",
+      "editeur": "GNOME",
+      "description": "Chercher un lieu, préparer un trajet, regarder une ville.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Maps.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Maps",
+      "site": "https://apps.gnome.org/Maps"
+    },
+    {
+      "slug": "gnome-calculator",
+      "nom": "Calculatrice",
+      "rayon": "Bureautique",
+      "editeur": "GNOME",
+      "description": "Du calcul de tous les jours aux conversions et aux fonctions.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Calculator.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Calculator",
+      "site": "https://apps.gnome.org/Calculator"
+    },
+    {
+      "slug": "bureau-distant",
+      "nom": "Bureau à distance",
+      "rayon": "Internet",
+      "editeur": "GNOME",
+      "description": "Prendre la main sur un autre ordinateur, chez toi ou au travail.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Connections.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Connections",
+      "site": "https://apps.gnome.org/Connections"
     }
   ]
 }

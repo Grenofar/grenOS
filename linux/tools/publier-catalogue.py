@@ -40,6 +40,13 @@ SOURCE = os.path.join(ICI, "..", "data", "catalogue.json")
 # branche le 24 septembre au soir. Six sont des outils en ligne de commande, et
 # GrenPlace est une boutique à boutons « Installer » : cliquer sur `tree` ne
 # montre rien. Les autres font double emploi ou ne servent plus guère.
+# Les rayons, écrits une fois pour toutes. GrenPlace fabrique ses onglets à
+# partir de ce que le catalogue contient : une fiche rangée dans « Systeme »
+# sans accent ajoute un **deuxième** onglet à côté de « Système », et la
+# personne se demande pourquoi ses applications sont coupées en deux. Un Coder
+# l'a fait le 2026-09-25 sur trois fiches, et rien ne l'aurait vu.
+RAYONS = {"Jeux", "Bureautique", "Création", "Internet", "Développement", "Système"}
+
 RETIRES = {
     "gnome-calculator", "cheese", "xsane", "hardinfo",
     "inxi", "lm-sensors", "mc", "ncdu", "rsync", "tree",
@@ -215,6 +222,10 @@ def main():
                 sys.exit(f"Fiche incomplète : {application.get('slug', '?')} sans {champ}")
         if application["source"] not in ("flatpak", "apt"):
             sys.exit(f"Source inconnue pour {application['slug']} : {application['source']}")
+        if application["rayon"] not in RAYONS:
+            sys.exit(f"Rayon inconnu pour {application['slug']} : « {application['rayon']} ». "
+                     f"Les rayons sont " + ", ".join(sorted(RAYONS)) +
+                     " — un accent oublié ajoute un onglet en double dans le magasin.")
         if application["slug"] in vus:
             sys.exit(f"Deux fiches portent le même nom court : {application['slug']}")
         vus.add(application["slug"])
