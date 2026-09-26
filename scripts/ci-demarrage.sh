@@ -61,8 +61,8 @@ qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -display none -vga std \
   -global VGA.xres=1280 -global VGA.yres=720 \
   -usb -device usb-tablet \
-  -audiodev none,id=silence \
-  -device intel-hda -device hda-duplex,audiodev=silence \
+  -audiodev wav,id=son,path="$RUNNER_TEMP/son.wav" \
+  -device intel-hda -device hda-duplex,audiodev=son \
   -serial file:"$RUNNER_TEMP/serial.log" \
   -monitor unix:"$RUNNER_TEMP/monitor.sock",server,nowait \
   -qmp unix:"$RUNNER_TEMP/qmp.sock",server,nowait \
@@ -534,6 +534,55 @@ echo "--- le clavier choisi est-il celui en place ---"
 if ! grep -a 'grenos: clavier :' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'; then
   echo "clavier : l image n a rien dit"
 fi
+
+echo "--- a-t-on ENTENDU quelque chose ---"
+# Jusqu'ici on comptait des profils ALSA et des sorties PipeWire. C'est compter
+# des tuyaux, pas ecouter l'eau : une pile impeccable peut rester muette, et
+# c'est exactement ce qui est arrive a Grenofar.
+#
+# QEMU ecrit dans un WAV ce que la carte emet. La session joue un son apres
+# avoir reveille PipeWire ; si les echantillons sont tous a zero, rien n'est
+# sorti. Ce controle RAPPORTE, il ne bloque pas encore : on ne rend une etape
+# obligatoire qu'apres l'avoir vue verte, et celle-ci n'a jamais tourne.
+python3 - "$RUNNER_TEMP/son.wav" <<'ECOUTER'
+import os
+import struct
+import sys
+
+chemin = sys.argv[1]
+if not os.path.exists(chemin):
+    print("son : QEMU n a ecrit aucun fichier — la carte n a jamais joue")
+    raise SystemExit(0)
+
+brut = open(chemin, "rb").read()
+# QEMU ecrit un entete WAV de 44 octets, et n en corrige la longueur qu en se
+# fermant proprement. On ne lit donc pas les champs de longueur : on prend
+# tout ce qui suit l entete comme des echantillons 16 bits signes.
+donnees = brut[44:]
+if len(donnees) < 4:
+    print("son : le fichier est vide (%d octets) — rien n est sorti" % len(brut))
+    raise SystemExit(0)
+
+pics = 0
+crete = 0
+paires = len(donnees) // 2
+for valeur in struct.unpack("<%dh" % paires, donnees[:paires * 2]):
+    valeur = abs(valeur)
+    if valeur > crete:
+        crete = valeur
+    if valeur > 512:
+        pics += 1
+
+secondes = paires / 2.0 / 44100.0
+print("son : %.1f s enregistrees, crete %d sur 32767, %d echantillons audibles"
+      % (secondes, crete, pics))
+if crete == 0:
+    print("son : silence complet — la chaine ne sort rien")
+elif pics < 100:
+    print("son : presque silencieux, a regarder")
+else:
+    print("son : grenOS a ete ENTENDU")
+ECOUTER
 
 echo "--- cette image peut-elle se mettre a jour ---"
 if ! grep -a 'grenos: maj:' "$RUNNER_TEMP/serial.log" | sed 's/^.*grenos: //'; then

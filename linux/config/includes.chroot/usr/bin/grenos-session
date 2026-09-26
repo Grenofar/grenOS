@@ -116,6 +116,24 @@ grenos-veilleur grenos-shell &
     SORTIES=$(pactl list short sinks 2>/dev/null | wc -l)
     COURANTE=$(pactl info 2>/dev/null | sed -n 's/^Default Sink: //p')
     grenos-dire "son, $SORTIES sorties, courante ${COURANTE:-aucune}"
+
+    # Et maintenant on JOUE. Compter les sorties prouve que PipeWire repond ;
+    # cela ne prouve pas qu'un son sort, et c'est toute la difference entre ce
+    # qu'on croyait savoir et ce que Grenofar a entendu — rien.
+    #
+    # Le fichier vient d'alsa-utils (verifie dans le .deb), et paplay de
+    # pulseaudio-utils : les deux sont sur l'image. On passe par paplay, donc
+    # par PipeWire, pour exercer la chaine entiere plutot qu'ALSA seul.
+    ESSAI=/usr/share/sounds/alsa/Front_Center.wav
+    if [ -r "$ESSAI" ] && command -v paplay >/dev/null 2>&1; then
+        if paplay "$ESSAI" 2>/dev/null; then
+            grenos-dire "son : un son a ete joue par PipeWire"
+        else
+            grenos-dire "son : paplay a refuse de jouer"
+        fi
+    else
+        grenos-dire "son : pas de quoi essayer (fichier ou paplay absent)"
+    fi
 ) &
 
 # Le clavier vraiment en place, et pas celui qu'on croit avoir choisi.
