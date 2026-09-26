@@ -82,6 +82,41 @@ dpkg-query -W -f='${Package} ${Version} ${Status}\n' grenos-desktop grenos-syste
 # autre chose : qu'une version en remplace une autre, en apportant une
 # nouveaute — « un truc sur l'interface, les processus, etc. » — sans regraver
 # l'image et sans rien perdre. Alors on le fait pour de vrai.
+echo "--- la commande du bouton est-elle seulement acceptee par apt ---"
+# Le trou par lequel un defaut est passe jusqu'a la machine de Grenofar.
+#
+# Il a ecrit : « quand j'essaie de mettre a jour il dit error command line
+# --with-new-pkgs is not understood ». apt n'accepte cette option que pour
+# `upgrade` ; avec `full-upgrade` il refuse la ligne ENTIERE, donc « Mettre a
+# jour grenOS » ne demarrait meme pas. Le service de mise a jour automatique
+# portait la meme option, donc il n'avait jamais tourne non plus.
+#
+# Pourquoi rien ne l'a vu : cet essai appelait `apt-get install` ecrit a la
+# main. Il prouvait que le DEPOT marche — et c'est vrai, il marche — mais
+# jamais que le BOUTON marche. Une CI verte disait oui a une commande que
+# personne n'avait jamais lancee.
+#
+# On lit donc la commande dans le module qui la lance vraiment, et on
+# l'execute. Si apt la refuse, l'etape rougit ici et non chez lui.
+COMMANDE=$(python3 -c "
+import sys
+sys.path.insert(0, '/usr/lib/grenos')
+import maj
+print(' '.join(maj.COMMANDE_MAJ))
+" 2>/dev/null || echo "")
+if [ -z "$COMMANDE" ]; then
+    echo "maj : impossible de lire COMMANDE_MAJ dans /usr/lib/grenos/maj.py" >&2
+    exit 1
+fi
+echo "maj : le bouton lance « $COMMANDE »"
+# shellcheck disable=SC2086
+if ! $COMMANDE; then
+    echo "apt a refuse la commande que lance « Mettre a jour grenOS »." >&2
+    echo "C'est exactement ce que voit quelqu'un qui appuie sur le bouton." >&2
+    exit 1
+fi
+echo "maj : apt accepte la commande du bouton, et elle va au bout"
+
 if ls dist/grenos-desktop_*.deb >/dev/null 2>&1; then
     echo "--- une version plus recente arrive, comme sur une vraie machine ---"
     ANCIENNE=$(dpkg-query -W -f='${Version}' grenos-desktop)

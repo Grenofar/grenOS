@@ -22,6 +22,19 @@ def lanceur():
     return ["pkexec"]
 
 
+# La commande exacte que lance « Mettre à jour grenOS ».
+#
+# Elle est ici, au niveau du module, pour une raison précise : la machine
+# d'intégration l'exécute telle quelle. Tant qu'elle était écrite à l'intérieur
+# de la fenêtre, l'essai de la CI lançait un `apt-get install` de son cru — et
+# une option refusée par apt (`--with-new-pkgs`) est passée jusque chez
+# Grenofar sans qu'une seule étape ne rougisse.
+COMMANDE_MAJ = ["apt-get", "-y",
+                "-o", "Dpkg::Options::=--force-confdef",
+                "-o", "Dpkg::Options::=--force-confold",
+                "full-upgrade"]
+
+
 class Travail:
     """Une mise à jour en cours, et ce qu'elle raconte.
 
@@ -103,8 +116,22 @@ class Travail:
         # d'installer un paquet nouveau. Sans elle, une nouvelle dépendance de
         # grenos-desktop — un pilote, une bibliothèque de son — est annoncée
         # puis jamais posée, et la mise à jour ne change rien.
-        code = self._courir(["apt-get", "-y", "--with-new-pkgs"]
-                            + self.SANS_QUESTION + ["full-upgrade"], suivre)
+        #
+        # Et surtout **sans `--with-new-pkgs`**, qui faisait tout échouer.
+        #
+        # Grenofar : « quand j'essaie de mettre à jour il dit error command
+        # line --with-new-pkgs is not understood ». apt n'accepte cette option
+        # que pour `upgrade` ; avec `full-upgrade` il refuse la ligne ENTIÈRE,
+        # donc la mise à jour ne démarrait même pas. Elle était de toute façon
+        # inutile ici : `full-upgrade` installe les paquets nouveaux par
+        # définition — c'est exactement ce que dit le commentaire ci-dessus, et
+        # je l'avais quand même ajoutée par précaution.
+        #
+        # Personne ne l'avait vu parce que l'essai de la CI appelle
+        # `apt-get install`, jamais la commande que cette fenêtre lance
+        # vraiment. Une CI verte prouvait que le dépôt marche, pas que le
+        # bouton marche.
+        code = self._courir(COMMANDE_MAJ, suivre)
         self.sur_avance(1.0)
         if code != 0:
             return self.sur_fin("L'installation s'est arrêtée. Le détail est ci-dessous.", False)

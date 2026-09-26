@@ -467,6 +467,55 @@ if [ -n "$manque" ]; then
 fi
 echo "grenos: l installateur saura rendre le disque amorcable, en BIOS et en UEFI"
 
+echo "--- grenOS : le bouton et le service de maj disent-ils la meme chose ---"
+# Deux endroits lancent apt pour mettre grenOS a jour : la fenetre « Mettre a
+# jour grenOS » (maj.py) et le service automatique. Ils portaient TOUS LES DEUX
+# `--with-new-pkgs`, que apt refuse avec `full-upgrade` — donc ni l'un ni
+# l'autre n'a jamais pu s'executer, et Grenofar l'a decouvert en appuyant sur
+# le bouton.
+#
+# Corriger les deux ne suffit pas : rien n'empeche qu'ils divergent a nouveau.
+# Le service doit donc porter exactement les memes options que la commande du
+# module, qui est desormais la seule source.
+python3 - <<'MAJ'
+import re
+import sys
+
+sys.path.insert(0, "/usr/lib/grenos")
+try:
+    import maj
+except Exception as souci:
+    print("grenos: impossible de lire maj.py : %s" % souci, file=sys.stderr)
+    raise SystemExit(1)
+
+# Tout ce qui suit `apt-get`, valeurs comprises : un `-o` dont la valeur
+# differe est une divergence comme une autre.
+attendu = list(maj.COMMANDE_MAJ[1:])
+print("grenos: le bouton lance : %s" % " ".join(maj.COMMANDE_MAJ))
+
+service = "/etc/systemd/system/grenos-maj-auto.service"
+try:
+    texte = open(service, encoding="utf-8").read()
+except OSError:
+    print("grenos: le service de mise a jour automatique est absent", file=sys.stderr)
+    raise SystemExit(1)
+
+ligne = [l for l in texte.split("\n")
+         if l.startswith("ExecStart=") and "full-upgrade" in l]
+if not ligne:
+    print("grenos: le service n'a aucune ligne full-upgrade", file=sys.stderr)
+    raise SystemExit(1)
+
+trouve = ligne[0].split("apt-get", 1)[1].split()
+if trouve != attendu:
+    print("grenos: le service et le bouton ne lancent pas la meme chose",
+          file=sys.stderr)
+    print("grenos:   bouton  : %s" % " ".join(attendu), file=sys.stderr)
+    print("grenos:   service : %s" % " ".join(trouve), file=sys.stderr)
+    raise SystemExit(1)
+print("grenos: le service automatique lance exactement la meme commande")
+MAJ
+
 echo "--- grenOS : le bureau de depart est-il garni ---"
 
 # La CI a dit « bureau pret, 0 icones » et c'est comme cela que j'ai vu que
