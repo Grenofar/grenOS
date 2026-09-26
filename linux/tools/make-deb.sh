@@ -60,6 +60,12 @@ install -m 0644 "$DEDANS/etc/pipewire/pipewire.conf.d/10-grenos-tampon.conf" \
 mkdir -p "$BUILD/etc/security/limits.d"
 install -m 0644 "$DEDANS/etc/security/limits.d/95-grenos-audio.conf" \
     "$BUILD/etc/security/limits.d/"
+
+# Et surtout celles-ci : PipeWire est un service `systemd --user`, qui n'herite
+# PAS des limites PAM. C'est `user@.service` qui decide, et il lit ce fichier.
+mkdir -p "$BUILD/etc/systemd/user.conf.d"
+install -m 0644 "$DEDANS/etc/systemd/user.conf.d/10-grenos-audio.conf" \
+    "$BUILD/etc/systemd/user.conf.d/"
 install -m 0644 "$DEDANS/usr/share/themes/grenOS/openbox-3/themerc" \
     "$BUILD/usr/share/themes/grenOS/openbox-3/"
 
