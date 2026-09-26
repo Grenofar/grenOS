@@ -46,6 +46,21 @@ SANS_ACCENT = re.compile(
     r"disponible\w*s?|necessaire\w*|energie|memoire|duree|etat|elements?"
     r")\b", re.I)
 
+# Le « à » écrit « a ». C'est la faute d'accent la plus courante du français, et
+# la liste de mots ci-dessus ne pouvait pas l'attraper : elle cherche des mots
+# entiers, or ici le mot fautif fait une seule lettre.
+#
+# On ne peut pas interdire « a » tout court — « il a », « on a », « elle a »
+# sont justes, et un contrôle qui crie à tort finit par être ignoré. Mais dans
+# ces locutions-là, « a » est TOUJOURS la préposition : aucune phrase française
+# n'écrit « mise a jour » ni « a partir de ».
+#
+# Trouvé le 26 septembre dans la pastille de la barre — « 3 mises a jour »,
+# affiché à tout le monde, passé sous tous les contrôles depuis des jours.
+LOCUTIONS = re.compile(
+    r"\b(?:mises? a jour|est a jour|a jour|a partir|a cote|a nouveau|"
+    r"a distance|a droite|a gauche|a propos|a venir|a suivre|jusqu a)\b", re.I)
+
 # Ce par quoi un texte arrive sous les yeux de quelqu'un.
 AFFICHEURS = {
     "set_tooltip_text", "set_text", "set_label", "set_title",
@@ -65,8 +80,9 @@ def fautes_du_texte(texte):
     # « grenos-parametres », « notify::active ». Ce n'est pas une phrase.
     if " " not in texte.strip():
         return []
-    return [mot for mot in SANS_ACCENT.findall(texte)
-            if not re.search(r"[éèêëàâäîïôöûùüç]", mot)]
+    fautes = [mot for mot in SANS_ACCENT.findall(texte)
+              if not re.search(r"[éèêëàâäîïôöûùüç]", mot)]
+    return fautes + LOCUTIONS.findall(texte)
 
 
 def textes_affiches(arbre):

@@ -902,16 +902,36 @@ class Panneau(Gtk.Window):
                        check=False)
 
     def relire_maj(self):
-        """Ce que la verification quotidienne a trouve, s'il y a lieu."""
+        """Ce que la verification quotidienne a trouve, s'il y a lieu.
+
+        Et ce qu'une mise a jour appliquee au demarrage a donne : quand elle
+        echoue, la machine s'ouvre quand meme — c'est voulu, une machine qui ne
+        revient pas serait la pire des pannes — mais il faut alors le DIRE.
+        Sans cela, quelqu'un choisit « Mettre a jour et redemarrer », attend, et
+        retrouve son bureau sans savoir que rien n'a ete installe.
+        """
+        try:
+            resultat = open("/run/grenos/maj-resultat", encoding="utf-8").read().split()
+        except OSError:
+            resultat = []
+        if resultat and resultat[0] == "echec":
+            self.bouton_maj.set_label("mise à jour échouée")
+            self.bouton_maj.set_tooltip_text(
+                "La dernière mise à jour au démarrage ne s'est pas faite. "
+                "Cliquer pour réessayer et voir pourquoi.")
+            self.bouton_maj.show()
+            return True
+
         try:
             nombre = maj.disponibles()
         except Exception:
             return True
         if nombre:
             self.bouton_maj.set_label(
-                f"{nombre} mise{'s' if nombre > 1 else ''} a jour")
+                "%d mise%s à jour" % (nombre, "s" if nombre > 1 else ""))
             self.bouton_maj.set_tooltip_text(
-                "Cliquer pour installer les mises a jour de grenOS et de Debian")
+                "Cliquer pour installer les mises à jour de grenOS et de Debian, "
+                "ou choisir « Mettre à jour et redémarrer » dans l'écran d'arrêt.")
             self.bouton_maj.show()
         else:
             self.bouton_maj.hide()

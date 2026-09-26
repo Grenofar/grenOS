@@ -1,0 +1,83 @@
+#!/bin/sh
+# Installer les mises à jour AVANT que le bureau ne s'ouvre, comme Windows.
+#
+# Pourquoi hors session, et pas dans une fenêtre :
+#
+#   1. Jusqu'ici on remplaçait `grenos-desktop` **pendant que le bureau
+#      tourne**, ce qui obligeait à relancer la barre et le bureau au milieu
+#      du travail de la personne. C'est un bricolage, et il se voit.
+#   2. Une session fermée en plein `dpkg` — la machine qui s'endort, quelqu'un
+#      qui clique sur Éteindre — est la façon classique de casser un système.
+#      Ici, rien d'autre ne tourne : ni bureau, ni navigateur, ni jeu.
+#
+# Demandé mot pour mot : « qu'on doive par exemple redémarrer le PC pour mettre
+# à jour comme Windows ».
+#
+# Ce script ne décide rien : il s'exécute parce que quelqu'un a choisi
+# « Mettre à jour et redémarrer ». Le service se désactive tout seul ensuite,
+# donc un démarrage ordinaire ne passe jamais par ici.
+
+set -u
+
+ECRAN=/dev/tty1
+DOSSIER=/run/grenos
+mkdir -p "$DOSSIER" 2>/dev/null || true
+
+dire() {
+    # Sur l'écran de la personne, et sur le port série pour la CI.
+    printf '%s\n' "$1" > "$ECRAN" 2>/dev/null || true
+    echo "grenos: maj-demarrage : $1" > /dev/ttyS0 2>/dev/null || true
+}
+
+# Le service ne doit plus jamais se relancer tout seul : on le désactive
+# AVANT d'installer quoi que ce soit. Si l'installation tourne mal et que la
+# machine redémarre au milieu, elle redémarre normalement — elle ne se
+# retrouve pas coincée dans une boucle de mise à jour.
+systemctl disable grenos-maj-demarrage.service >/dev/null 2>&1 || true
+
+printf '\n\n' > "$ECRAN" 2>/dev/null || true
+dire "Mise à jour de grenOS — n'éteins pas l'ordinateur."
+
+export DEBIAN_FRONTEND=noninteractive
+
+# Les paquets ont normalement déjà été téléchargés en arrière-plan par
+# `grenos-maj-verif` : `full-upgrade` les trouve dans le cache et n'a plus qu'à
+# les poser. C'est ce qui rend l'attente courte au lieu d'interminable.
+apt-get update -qq >/dev/null 2>&1 || true
+
+DEBUT=$(date +%s)
+if apt-get -y \
+        -o Dpkg::Options::=--force-confdef \
+        -o Dpkg::Options::=--force-confold \
+        full-upgrade > "$DOSSIER/maj-journal" 2>&1; then
+    RESULTAT=ok
+else
+    # Le repli, comme dans la fenêtre : une option refusée ne doit pas
+    # empêcher la machine de se mettre à jour.
+    if apt-get -y full-upgrade >> "$DOSSIER/maj-journal" 2>&1; then
+        RESULTAT=ok
+    else
+        RESULTAT=echec
+    fi
+fi
+DUREE=$(( $(date +%s) - DEBUT ))
+
+if [ "$RESULTAT" = ok ]; then
+    POSES=$(grep -c '^Setting up ' "$DOSSIER/maj-journal" 2>/dev/null || echo 0)
+    dire "termine en ${DUREE}s, $POSES paquets poses"
+    # Rebrancher services, menus, icônes et réglages partagés : c'est le même
+    # travail qu'après une mise à jour depuis la fenêtre.
+    [ -x /usr/lib/grenos/appliquer-systeme ] && /usr/lib/grenos/appliquer-systeme >/dev/null 2>&1
+    printf 'ok %s\n' "$POSES" > "$DOSSIER/maj-resultat"
+else
+    # **On démarre quand même.** Une machine qui ne revient pas est la pire
+    # panne possible ; une mise à jour ratée n'en est qu'une petite. Le bureau
+    # lira ce fichier et le dira, avec le journal à l'appui.
+    dire "la mise a jour a echoue — le bureau s'ouvre quand meme"
+    printf 'echec\n' > "$DOSSIER/maj-resultat"
+fi
+chmod 0644 "$DOSSIER/maj-resultat" "$DOSSIER/maj-journal" 2>/dev/null || true
+
+# Le compte affiché par la barre n'a plus de sens : il sera refait.
+rm -f "$DOSSIER/maj" 2>/dev/null || true
+exit 0

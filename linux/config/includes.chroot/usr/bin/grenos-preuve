@@ -147,6 +147,24 @@ fi
 pilotes=$(ls /usr/lib/x86_64-linux-gnu/dri/*_drv_video.so 2>/dev/null | wc -l)
 dire "video : $pilotes pilotes VA-API installes"
 
+# ---- La mise a jour au demarrage est-elle en place, et desarmee ? -----------
+#
+# Demandé : « qu'on doive par exemple redémarrer le PC pour mettre à jour comme
+# Windows ». La pièce qui le permet ne doit exister qu'à l'état dormant : si
+# elle était active, chaque démarrage installerait des paquets sans qu'on l'ait
+# demandé. Le hook le vérifie à la construction ; on le redit ici sur l'image
+# démarrée, parce que ce sont deux moments différents et que seul le second est
+# celui que vit la personne.
+if [ -f /etc/systemd/system/grenos-maj-demarrage.service ]; then
+    etat=$(systemctl is-enabled grenos-maj-demarrage.service 2>/dev/null || echo inconnu)
+    dire "maj: installation au demarrage presente, etat $etat"
+else
+    dire "maj: installation au demarrage ABSENTE"
+fi
+if [ -s /run/grenos/maj-telechargee ]; then
+    dire "maj: paquets deja telecharges, l installation sera courte"
+fi
+
 # ---- Le magasin peut-il vraiment installer ? --------------------------------
 #
 # La machine d'integration ouvrait GrenPlace et comptait ses applications. Elle

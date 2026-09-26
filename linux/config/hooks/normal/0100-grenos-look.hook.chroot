@@ -516,6 +516,39 @@ if trouve != attendu:
 print("grenos: le service automatique lance exactement la meme commande")
 MAJ
 
+echo "--- grenOS : la mise a jour au demarrage est-elle bien desarmee ---"
+# Ce service installe les mises a jour AVANT que le bureau ne s'ouvre, comme
+# Windows. Il ne doit tourner que lorsque la personne a choisi « Mettre a jour
+# et redemarrer » : livre actif, il installerait des paquets a CHAQUE
+# demarrage, sans que personne ne l'ait demande, en retardant l'ouverture du
+# bureau de plusieurs minutes.
+#
+# C'est le genre de defaut qu'on ne voit qu'en production, et qui donne
+# exactement l'impression que Grenofar reproche a Windows. On le refuse ici.
+service=/etc/systemd/system/grenos-maj-demarrage.service
+if [ ! -f "$service" ]; then
+    echo "grenos: le service de mise a jour au demarrage est absent" >&2
+    exit 1
+fi
+if [ ! -x /usr/lib/grenos/grenos-maj-demarrage ]; then
+    echo "grenos: grenos-maj-demarrage n est pas executable" >&2
+    exit 1
+fi
+# `systemctl is-enabled` rend « disabled » tant qu'aucun lien n'existe dans
+# multi-user.target.wants. Un lien present ici serait l'erreur.
+if [ -e /etc/systemd/system/multi-user.target.wants/grenos-maj-demarrage.service ]; then
+    echo "grenos: le service de mise a jour au demarrage est ACTIF dans l image" >&2
+    echo "grenos: il installerait des paquets a chaque demarrage" >&2
+    exit 1
+fi
+# Et il doit passer avant l'ecran de connexion, sinon le bureau s'ouvrirait
+# pendant que dpkg travaille — tout l'interet disparaitrait.
+if ! grep -q '^Before=.*lightdm' "$service"; then
+    echo "grenos: le service ne s ordonne pas avant lightdm" >&2
+    exit 1
+fi
+echo "grenos: mise a jour au demarrage : presente, desarmee, avant le bureau"
+
 echo "--- grenOS : le bureau de depart est-il garni ---"
 
 # La CI a dit « bureau pret, 0 icones » et c'est comme cela que j'ai vu que

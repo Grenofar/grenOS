@@ -22,6 +22,44 @@ GESTES = [
     ("Éteindre", "Arrêter complètement la machine.", ["systemctl", "poweroff"], "danger"),
 ]
 
+ATTENTE = "/run/grenos/maj"
+
+
+def combien_attendent():
+    """Combien de paquets attendent d'être installés, ou zéro."""
+    try:
+        with open(ATTENTE, encoding="utf-8") as fichier:
+            return int(fichier.read().strip())
+    except (OSError, ValueError):
+        return 0
+
+
+def gestes():
+    """Les gestes offerts, avec la mise à jour en tête s'il y en a une.
+
+    Demandé mot pour mot : « qu'on doive par exemple redémarrer le PC pour
+    mettre à jour comme Windows ». Le bouton n'apparaît que lorsqu'il y a
+    vraiment quelque chose à installer — une option permanente qui ne fait
+    jamais rien, on cesse de la lire.
+
+    Ce qu'il fait tient en deux gestes : armer le service qui installe avant
+    l'ouverture du bureau, puis redémarrer. Le service se désarme lui-même au
+    premier démarrage, donc il n'y a pas d'état à nettoyer, et une machine
+    éteinte brutalement entre les deux redémarre simplement sans rien
+    installer.
+    """
+    combien = combien_attendent()
+    if combien <= 0:
+        return GESTES
+    mot = "mise à jour" if combien == 1 else "mises à jour"
+    return [(
+        "Mettre à jour et redémarrer",
+        f"Installer {combien} {mot} avant d'ouvrir le bureau, puis redémarrer.",
+        ["sh", "-c",
+         "systemctl enable grenos-maj-demarrage.service && systemctl reboot"],
+        "accent",
+    )] + GESTES
+
 
 def faire(commande):
     Gtk.main_quit()
@@ -44,7 +82,7 @@ class Arret(Gtk.Window):
 
         colonne.pack_start(grenosui.titre("Fin de session", grenosui.adresse()), False, False, 0)
 
-        for nom, note, commande, genre in GESTES:
+        for nom, note, commande, genre in gestes():
             bouton = Gtk.Button()
             for classe in genre.split():
                 bouton.get_style_context().add_class(classe)

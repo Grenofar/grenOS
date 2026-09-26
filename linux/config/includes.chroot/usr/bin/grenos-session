@@ -128,17 +128,33 @@ grenos-veilleur grenos-shell &
     # `chrt` lit la politique d'ordonnancement du noyau. FIFO ou RR : PipeWire
     # est prioritaire, il tiendra sous charge. OTHER : il fait la queue comme
     # le decodeur video, et ca hoquettera des que la machine peine.
+    # On regarde TOUS LES FILS, pas seulement le principal.
+    #
+    # Premiere version de cette mesure : `chrt -p` sur le processus. Elle a
+    # repondu « SCHED_OTHER, PAS prioritaire » — et elle avait tort. PipeWire
+    # ne met pas son fil principal en temps reel : il cree un fil a part,
+    # `data-loop`, qui est le seul a porter le son, et c'est CELUI-LA qui
+    # demande SCHED_FIFO. Mesurer le processus revenait a juger un orchestre
+    # sur le silence du chef.
+    #
+    # Corrige avant d'avoir cru le resultat — la lecon du 25 septembre, ou la
+    # CI affirmait que le panneau de son ne se fermait pas alors que la capture
+    # montrait qu'il etait parti : *un test qui echoue peut se tromper.*
     PW=$(pgrep -x pipewire 2>/dev/null | head -1)
-    if [ -n "$PW" ] && command -v chrt >/dev/null 2>&1; then
-        POLITIQUE=$(chrt -p "$PW" 2>/dev/null | sed -n 's/.*policy: //p' | head -1)
-        case "$POLITIQUE" in
-            SCHED_FIFO|SCHED_RR)
-                grenos-dire "son : pipewire en temps reel ($POLITIQUE), il tiendra sous charge" ;;
-            "")
-                grenos-dire "son : politique de pipewire illisible" ;;
-            *)
-                grenos-dire "son : pipewire en $POLITIQUE, PAS prioritaire — le son hoquettera sous charge" ;;
-        esac
+    if [ -n "$PW" ] && [ -d "/proc/$PW/task" ] && command -v chrt >/dev/null 2>&1; then
+        TEMPS_REEL=0
+        for fil in /proc/"$PW"/task/*; do
+            [ -d "$fil" ] || continue
+            case "$(chrt -p "$(basename "$fil")" 2>/dev/null | sed -n 's/.*policy: //p' | head -1)" in
+                SCHED_FIFO|SCHED_RR) TEMPS_REEL=$((TEMPS_REEL + 1)) ;;
+            esac
+        done
+        FILS=$(ls -1 /proc/"$PW"/task 2>/dev/null | wc -l)
+        if [ "$TEMPS_REEL" -gt 0 ]; then
+            grenos-dire "son : pipewire a $TEMPS_REEL fil(s) en temps reel sur $FILS, il tiendra sous charge"
+        else
+            grenos-dire "son : aucun fil de pipewire en temps reel sur $FILS — le son hoquettera sous charge"
+        fi
     else
         grenos-dire "son : pipewire introuvable, priorite non mesuree"
     fi

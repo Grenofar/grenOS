@@ -49,4 +49,26 @@ apt-get -s full-upgrade 2>/dev/null | sed -n 's/^Inst \([^ ]*\).*/\1/p' \
     > "$DOSSIER/maj-liste" 2>/dev/null || true
 chmod 0644 "$DOSSIER/maj-liste" 2>/dev/null || true
 
+# Et on TÉLÉCHARGE, sans rien installer.
+#
+# C'est ce qui rend la mise à jour au redémarrage supportable : au moment où la
+# personne choisit « Mettre à jour et redémarrer », les paquets sont déjà sur le
+# disque, et il ne reste qu'à les poser. Sans cela elle attendrait devant un
+# écran noir le temps d'un téléchargement, ce qui est exactement ce qu'on
+# reproche aux mises à jour de Windows.
+#
+# `-d` ne touche à rien : il remplit le cache d'apt et s'arrête là. Un
+# téléchargement interrompu est repris au suivant, et un paquet déjà présent
+# n'est pas retéléchargé. Le pire qui puisse arriver est d'occuper quelques
+# centaines de mégaoctets dans /var/cache/apt.
+if [ "$NOMBRE" -gt 0 ] 2>/dev/null; then
+    if apt-get -d -y full-upgrade >/dev/null 2>&1; then
+        echo "grenos: maj : $NOMBRE paquets telecharges, prets a poser" > /dev/ttyS0 2>/dev/null || true
+        printf 'oui\n' > "$DOSSIER/maj-telechargee"
+    else
+        printf 'non\n' > "$DOSSIER/maj-telechargee"
+    fi
+    chmod 0644 "$DOSSIER/maj-telechargee" 2>/dev/null || true
+fi
+
 echo "grenos: ${NOMBRE} mises a jour disponibles" > /dev/ttyS0 2>/dev/null || true

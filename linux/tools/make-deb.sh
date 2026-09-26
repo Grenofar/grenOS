@@ -46,6 +46,14 @@ done
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-compte" "$BUILD/usr/lib/grenos/"
 
 install -m 0644 "$DEDANS/usr/share/xsessions/grenos.desktop" "$BUILD/usr/share/xsessions/"
+
+# Le tampon de PipeWire, sans lequel le son hoquette sous charge. Fichier a
+# nous dans un dossier de complements : aucun autre paquet ne le possede, donc
+# dpkg ne refusera pas notre paquet — c'est la lecon du 24 septembre avec
+# lightdm-gtk-greeter.
+mkdir -p "$BUILD/etc/pipewire/pipewire.conf.d"
+install -m 0644 "$DEDANS/etc/pipewire/pipewire.conf.d/10-grenos-tampon.conf" \
+    "$BUILD/etc/pipewire/pipewire.conf.d/"
 install -m 0644 "$DEDANS/usr/share/themes/grenOS/openbox-3/themerc" \
     "$BUILD/usr/share/themes/grenOS/openbox-3/"
 
@@ -85,7 +93,8 @@ done
 # mises à jour et leur installation automatique.
 for service in grenos-premier.service grenos-preuve.service \
                grenos-maj-verif.service grenos-maj-verif.timer \
-               grenos-maj-auto.service grenos-maj-auto.timer; do
+               grenos-maj-auto.service grenos-maj-auto.timer \
+               grenos-maj-demarrage.service; do
     install -m 0644 "$DEDANS/etc/systemd/system/$service" "$BUILD/etc/systemd/system/"
 done
 
@@ -121,6 +130,10 @@ install -m 0644 "$DEDANS/usr/share/grenos/partition.conf" "$BUILD/usr/share/gren
 # construction de l'image qu'après chaque mise à jour.
 install -m 0755 "$DEDANS/usr/lib/grenos/appliquer-systeme" "$BUILD/usr/lib/grenos/"
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-verif" "$BUILD/usr/lib/grenos/"
+# Celui qui installe AVANT l'ouverture du bureau, comme Windows. Sans cette
+# ligne il n'arriverait que par une ISO — or tout l'objet de ce chantier est de
+# ne plus jamais avoir a en telecharger une.
+install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-demarrage" "$BUILD/usr/lib/grenos/"
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-reglage" "$BUILD/usr/lib/grenos/"
 
 # Ce qui s'exécute après l'installation du paquet. Sans lui, un service

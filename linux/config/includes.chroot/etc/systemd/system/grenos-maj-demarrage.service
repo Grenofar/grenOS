@@ -1,0 +1,35 @@
+# Appliquer les mises à jour au démarrage, avant que le bureau ne s'ouvre.
+#
+# Ce service est **désactivé par défaut**. Il ne s'active que lorsque la
+# personne choisit « Mettre à jour et redémarrer » dans l'écran d'arrêt, et il
+# se désactive lui-même dès qu'il démarre : un démarrage ordinaire ne passe
+# jamais par ici, et une installation interrompue ne peut pas boucler.
+#
+# `Before=lightdm.service` est tout l'intérêt : rien d'autre ne tourne pendant
+# que dpkg travaille. C'est ce qui permet de remplacer le bureau lui-même sans
+# le relancer à chaud au milieu de la session de quelqu'un.
+
+[Unit]
+Description=grenOS : installer les mises a jour avant d ouvrir le bureau
+DefaultDependencies=no
+After=network-online.target local-fs.target
+Wants=network-online.target
+Before=lightdm.service display-manager.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+Environment=DEBIAN_FRONTEND=noninteractive
+# Le script rend toujours 0 : un echec de mise a jour ne doit pas empecher la
+# machine de demarrer. Il ecrit son verdict dans /run/grenos/maj-resultat.
+ExecStart=/usr/lib/grenos/grenos-maj-demarrage
+# Vingt minutes : au-dela, systemd passe a la suite et le bureau s'ouvre. Mieux
+# vaut une mise a jour inachevee qu'un ecran noir sans fin.
+TimeoutStartSec=1200
+StandardOutput=journal
+StandardError=journal
+TTYPath=/dev/tty1
+
+[Install]
+WantedBy=multi-user.target
