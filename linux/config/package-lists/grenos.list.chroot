@@ -114,6 +114,28 @@ network-manager-gnome
 ## melangeur dans l'etat ou on l'a laisse au demarrage. Sans lui, un portable
 ## qui demarre avec sa sortie coupee reste coupe, et personne n'a `amixer` pour
 ## s'en apercevoir.
+## La priorite temps reel de PipeWire, sans laquelle le son HOQUETTE.
+##
+## Grenofar, le 26 au soir : « on entend des bom bom bom quand y'a la video ».
+## Ce n'est pas du silence — le son sort. Un son qui hache par a-coups sous
+## charge est un manque de temps processeur : PipeWire n'est pas servi assez
+## tot, son tampon se vide, et chaque vidage s'entend.
+##
+## La cause, lue dans les Packages.gz de trixie :
+##
+##     pipewire-bin   Recommends: dbus-user-session, rtkit, wireplumber
+##
+## `rtkit` n'est que RECOMMANDE, donc absent. Sans `rtkit-daemon`, PipeWire ne
+## peut pas demander l'ordonnancement temps reel : sous charge il passe apres
+## le decodeur video et se fait preempter. En machine virtuelle il n'y a aucun
+## decodage materiel, donc chaque image de video mange le processeur — c'est
+## exactement « quand y'a la video ».
+##
+## Sixieme fois que ce piege mord, et c'est LA MEME LIGNE que
+## `dbus-user-session`, deja ajoute le 24 septembre pour ce meme sous-systeme :
+## j'ai pris l'un des trois et laisse l'autre. `verif-recommandes.py` le
+## listait pourtant le matin meme.
+rtkit
 alsa-ucm-conf
 alsa-topology-conf
 alsa-utils

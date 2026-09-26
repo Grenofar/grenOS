@@ -132,6 +132,25 @@ class Travail:
         # vraiment. Une CI verte prouvait que le dépôt marche, pas que le
         # bouton marche.
         code = self._courir(COMMANDE_MAJ, suivre)
+
+        # Le repli : si notre commande échoue, on réessaie la plus nue.
+        #
+        # C'est la réponse au défaut de conception que le 26 septembre a mis à
+        # nu : **un défaut dans la mise à jour ne peut être réparé que par une
+        # mise à jour**. `--with-new-pkgs` a bloqué le bouton, et le correctif
+        # voyageait dans le paquet que seul ce bouton pouvait installer. Il a
+        # fallu une commande au terminal — exactement ce que Grenofar ne veut
+        # plus jamais avoir à faire.
+        #
+        # `apt-get -y full-upgrade` sans une seule option est la forme la plus
+        # pauvre qui fasse le travail. Si un jour une option que nous ajoutons
+        # est refusée, mal orthographiée ou retirée d'apt, la machine se met à
+        # jour quand même et le dit. Une erreur de notre part doit DÉGRADER, pas
+        # BLOQUER.
+        if code != 0:
+            self.sur_ligne("--- la commande habituelle a échoué, essai de la forme simple ---")
+            code = self._courir(["apt-get", "-y", "full-upgrade"], suivre)
+
         self.sur_avance(1.0)
         if code != 0:
             return self.sur_fin("L'installation s'est arrêtée. Le détail est ci-dessous.", False)

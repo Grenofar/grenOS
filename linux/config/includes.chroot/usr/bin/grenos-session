@@ -117,6 +117,32 @@ grenos-veilleur grenos-shell &
     COURANTE=$(pactl info 2>/dev/null | sed -n 's/^Default Sink: //p')
     grenos-dire "son, $SORTIES sorties, courante ${COURANTE:-aucune}"
 
+    # PipeWire tourne-t-il en TEMPS REEL ? C'est la mesure qui manquait.
+    #
+    # Grenofar : « on entend des bom bom bom quand y'a la video ». Le son
+    # sortait ; il hachait. Un son qui hache sous charge veut dire que PipeWire
+    # n'est pas servi a temps et que son tampon se vide. Or `rtkit`, qui lui
+    # donne le droit de passer devant, n'est que RECOMMANDE par pipewire-bin :
+    # il etait absent, et rien ne le disait.
+    #
+    # `chrt` lit la politique d'ordonnancement du noyau. FIFO ou RR : PipeWire
+    # est prioritaire, il tiendra sous charge. OTHER : il fait la queue comme
+    # le decodeur video, et ca hoquettera des que la machine peine.
+    PW=$(pgrep -x pipewire 2>/dev/null | head -1)
+    if [ -n "$PW" ] && command -v chrt >/dev/null 2>&1; then
+        POLITIQUE=$(chrt -p "$PW" 2>/dev/null | sed -n 's/.*policy: //p' | head -1)
+        case "$POLITIQUE" in
+            SCHED_FIFO|SCHED_RR)
+                grenos-dire "son : pipewire en temps reel ($POLITIQUE), il tiendra sous charge" ;;
+            "")
+                grenos-dire "son : politique de pipewire illisible" ;;
+            *)
+                grenos-dire "son : pipewire en $POLITIQUE, PAS prioritaire — le son hoquettera sous charge" ;;
+        esac
+    else
+        grenos-dire "son : pipewire introuvable, priorite non mesuree"
+    fi
+
     # Et maintenant on JOUE. Compter les sorties prouve que PipeWire repond ;
     # cela ne prouve pas qu'un son sort, et c'est toute la difference entre ce
     # qu'on croyait savoir et ce que Grenofar a entendu — rien.

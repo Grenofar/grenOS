@@ -52,6 +52,7 @@ AVIS = {
     "libgtk-3-bin": "PRIS — gtk-update-icon-cache et gtk-launch",
     "desktop-file-utils": "PRIS — update-desktop-database, la base du menu",
     "alsa-ucm-conf": "PRIS — sans lui, muet sur toute carte SOF ou ACP",
+    "rtkit": "PRIS — sans lui PipeWire n'est jamais prioritaire : le son hoquette sous charge",
     "alsa-topology-conf": "PRIS — va avec alsa-ucm-conf, memes cartes",
     "dosfstools": "PRIS — sans lui, pas de partition EFI, donc pas d'install UEFI",
     "btrfs-progs": "PRIS — partition.conf offre btrfs ; le proposer sans l'outil est un piege",
