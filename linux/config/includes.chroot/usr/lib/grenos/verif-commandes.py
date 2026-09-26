@@ -112,6 +112,22 @@ def commandes_de(chemin):
         # contrôle y a lu « import » comme une commande — puis a refusé l'image
         # entière. Le garde avait raison de crier ; c'est la lecture qui était
         # fausse. On saute donc ce qui est manifestement du Python.
+        # Une commande coupée par des « \ » est UNE commande, pas trois.
+        #
+        # Troisième fois que ce contrôle lit mal — et la troisième fois, la
+        # cause est la même : il regarde une ligne isolée là où le shell voit
+        # une phrase. Ici :
+        #
+        #     if apt-get -y \
+        #             -o Dpkg::Options::=--force-confdef \
+        #             full-upgrade > ... ; then
+        #
+        # il a pris `full-upgrade` pour un programme et refusé l'image entière.
+        # Le garde avait raison d'être strict ; c'est sa LECTURE qui était
+        # fausse, exactement comme quand il lisait `import sys` comme un appel.
+        # On recolle donc les continuations avant de lire, une bonne fois.
+        contenu = re.sub(r"\\\n\s*", " ", contenu)
+
         dans_python = False
         for ligne in contenu.split("\n"):
             nue = ligne.strip()
