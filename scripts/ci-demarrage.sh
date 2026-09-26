@@ -551,8 +551,13 @@ import sys
 
 chemin = sys.argv[1]
 if not os.path.exists(chemin):
-    print("son : QEMU n a ecrit aucun fichier — la carte n a jamais joue")
-    raise SystemExit(0)
+    # Absence de fichier = absence de preuve, et non preuve d'absence de
+    # probleme. Tant que ce controle etait facultatif, sortir en 0 ici etait
+    # tolerable ; maintenant qu'il bloque, ce serait un garde sans dents —
+    # une option `-audiodev` mal ecrite le rendrait muet, et il dirait oui.
+    print("::error::QEMU n'a ecrit aucun fichier de son : la carte n'a jamais"
+          " joue, ou l'option -audiodev est fautive.")
+    raise SystemExit(1)
 
 brut = open(chemin, "rb").read()
 # QEMU ecrit un entete WAV de 44 octets, et n en corrige la longueur qu en se
@@ -576,12 +581,21 @@ for valeur in struct.unpack("<%dh" % paires, donnees[:paires * 2]):
 secondes = paires / 2.0 / 44100.0
 print("son : %.1f s enregistrees, crete %d sur 32767, %d echantillons audibles"
       % (secondes, crete, pics))
-if crete == 0:
-    print("son : silence complet — la chaine ne sort rien")
-elif pics < 100:
-    print("son : presque silencieux, a regarder")
-else:
-    print("son : grenOS a ete ENTENDU")
+if crete == 0 or pics < 100:
+    # EXIGE depuis le 26 septembre au soir : vu vert cinq fois de suite
+    # (36249052722, 36252138095, 36256203829, 36258213058, 36260754848), avec
+    # des cretes de 9568 a 15422 et plus de quarante mille echantillons a
+    # chaque fois. La regle n'a pas change — une etape ne devient obligatoire
+    # qu'apres avoir ete vue verte — mais une fois qu'elle l'a ete, la laisser
+    # facultative reviendrait a publier une image muette sans le savoir.
+    #
+    # C'est le reproche numero un de Grenofar, et le seul qu'on n'ait jamais
+    # pu prouver autrement qu'en comptant des sorties PipeWire, c'est-a-dire
+    # en comptant des tuyaux.
+    print("::error::Aucun son n'est sorti : crete %d, %d echantillons audibles."
+          % (crete, pics))
+    raise SystemExit(1)
+print("son : grenOS a ete ENTENDU")
 ECOUTER
 
 echo "--- cette image peut-elle se mettre a jour ---"
