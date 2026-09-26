@@ -76,6 +76,9 @@ firefox-esr
 ## Microsoft refuse Firefox. Sans Chromium, ce bouton commencait par installer
 ## un navigateur — desormais il ouvre le jeu.
 chromium
+## Le bac a sable de Chromium, qu'il recommande sans en dependre. Sans lui, il
+## se rabat sur un mode degrade ou refuse de demarrer selon la machine.
+chromium-sandbox
 pcmanfm
 mousepad
 xfce4-terminal
@@ -172,6 +175,27 @@ desktop-file-utils
 ## L'installation sur le disque, en un clic depuis le live.
 calamares
 calamares-settings-debian
+## De quoi FORMATER ce que l'installateur propose.
+##
+## Trouve par `verif-recommandes.py`, et le premier est grave :
+##
+##   - `dosfstools` manquait. Calamares ne pouvait donc pas formater la
+##     partition EFI en FAT32 — et sans elle, aucun PC UEFI ne demarre, c'est-
+##     a-dire presque tous depuis 2012. L'installation aurait echoue au pire
+##     moment, apres avoir efface le disque.
+##   - `btrfs-progs` et `xfsprogs` : notre `partition.conf` OFFRE ces deux
+##     systemes de fichiers dans la liste. Sans leurs outils, choisir l'un des
+##     deux echoue. Proposer un choix qu'on ne sait pas tenir est pire que ne
+##     pas le proposer.
+##
+## `e2fsprogs` et `cryptsetup`, eux, arrivent bien par les dependances : on a
+## verifie plutot que de supposer.
+dosfstools
+btrfs-progs
+xfsprogs
+## Calamares est en Qt et grenOS en GTK : sans ce theme de plateforme,
+## l'installateur ne ressemble a rien de ce qui l'entoure.
+qt5-gtk-platformtheme
 
 ## Le démarrage : un écran de chargement, pas un mur de texte.
 plymouth
@@ -259,6 +283,10 @@ os-prober
 adwaita-icon-theme
 adwaita-icon-theme-legacy
 papirus-icon-theme
+## Le lecteur d'images SVG. Papirus est un theme **en SVG** : sans lui,
+## GdkPixbuf ne sait pas ouvrir ses fichiers, et ces icones ne s'affichent pas
+## du tout. On reglait le theme et on ne pouvait pas le dessiner.
+librsvg2-common
 hicolor-icon-theme
 
 ## Les polices : Inter pour l'interface — la plus proche de celle de Windows —,

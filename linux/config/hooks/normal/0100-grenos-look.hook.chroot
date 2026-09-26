@@ -309,6 +309,100 @@ if orphelins:
 print("grenos: chaque autorisation designe une action qui existe")
 POLKIT
 
+echo "--- grenOS : savons-nous formater ce que l installateur propose ---"
+# `partition.conf` OFFRE une liste de systemes de fichiers, et une partition
+# EFI, et le chiffrement. Offrir n'est pas savoir faire : chacun de ces choix
+# a besoin d'un outil, et ces outils ne sont que RECOMMANDES.
+#
+# Trouve par `verif-recommandes.py`, et le premier fait mal : `dosfstools`
+# etait absent, donc pas de `mkfs.vfat`, donc **pas de partition EFI**. Sur un
+# PC UEFI — presque tous depuis 2012 — l'installation aurait echoue APRES avoir
+# efface le disque. `btrfs-progs` et `xfsprogs` manquaient aussi, alors que la
+# page d'installation propose les deux dans sa liste deroulante.
+#
+# C'est le meme defaut que la regle polkit juste au-dessus : une promesse a
+# l'ecran sans rien derriere. Ce controle tourne dans l'image, ou l'outil
+# existe ou n'existe pas.
+python3 - <<'FORMATER'
+import shutil
+import sys
+
+CONF = "/usr/share/grenos/partition.conf"
+OUTIL = {
+    "ext4": "mkfs.ext4", "ext3": "mkfs.ext3", "ext2": "mkfs.ext2",
+    "btrfs": "mkfs.btrfs", "xfs": "mkfs.xfs", "f2fs": "mkfs.f2fs",
+    "jfs": "mkfs.jfs", "reiserfs": "mkfs.reiserfs", "fat32": "mkfs.vfat",
+}
+
+try:
+    lignes = open(CONF, encoding="utf-8").read().split("\n")
+except OSError:
+    print("grenos: partition.conf est absent de l image", file=sys.stderr)
+    sys.exit(1)
+
+# On lit la liste a la main : pas de PyYAML dans l image, et le format est
+# celui-ci, une entree par ligne sous « availableFileSystemTypes: ».
+demandes, dans_liste, efi, luks = [], False, False, False
+for ligne in lignes:
+    nue = ligne.strip()
+    if nue.startswith("#"):
+        continue
+    if nue.startswith("availableFileSystemTypes:"):
+        dans_liste = True
+        continue
+    if dans_liste:
+        if nue.startswith("- "):
+            demandes.append(nue[2:].strip().strip('"'))
+            continue
+        dans_liste = False
+    if nue.startswith("defaultFileSystemType:"):
+        demandes.append(nue.split(":", 1)[1].strip().strip('"'))
+    if nue.startswith("efiSystemPartition:"):
+        efi = True
+    if nue.startswith("enableLuksAutomatedPartitioning:"):
+        luks = nue.split(":", 1)[1].strip().lower() == "true"
+
+# Ce que la partition EFI exige, et ce que le chiffrement exige.
+besoins = {}
+for systeme in sorted(set(demandes)):
+    if systeme not in OUTIL:
+        print("grenos: systeme de fichiers inconnu dans partition.conf : "
+              + systeme, file=sys.stderr)
+        sys.exit(1)
+    besoins[OUTIL[systeme]] = "propose dans la liste : " + systeme
+if efi:
+    besoins["mkfs.vfat"] = "la partition EFI, sans quoi aucun PC UEFI ne demarre"
+if luks:
+    besoins["cryptsetup"] = "le chiffrement, que partition.conf active"
+
+if not besoins:
+    print("grenos: partition.conf ne propose rien : la lecture a echoue",
+          file=sys.stderr)
+    sys.exit(1)
+
+absents = []
+for outil in sorted(besoins):
+    ou = shutil.which(outil) or shutil.which("/usr/sbin/" + outil)
+    if ou is None:
+        for essai in ("/sbin/", "/usr/sbin/"):
+            import os
+            if os.path.exists(essai + outil):
+                ou = essai + outil
+                break
+    print("grenos:   %-14s %s  (%s)"
+          % (outil, "present" if ou else "ABSENT ", besoins[outil]))
+    if not ou:
+        absents.append(outil)
+
+if absents:
+    print("grenos: l installateur propose ce qu il ne sait pas faire : "
+          + ", ".join(absents), file=sys.stderr)
+    print("grenos: une installation qui echoue APRES avoir efface le disque est"
+          " le pire moment pour echouer", file=sys.stderr)
+    sys.exit(1)
+print("grenos: tout ce que l installateur propose, il sait le formater")
+FORMATER
+
 echo "--- grenOS : le bureau de depart est-il garni ---"
 
 # La CI a dit « bureau pret, 0 icones » et c'est comme cela que j'ai vu que
