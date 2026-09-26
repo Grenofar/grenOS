@@ -54,6 +54,12 @@ install -m 0644 "$DEDANS/usr/share/xsessions/grenos.desktop" "$BUILD/usr/share/x
 mkdir -p "$BUILD/etc/pipewire/pipewire.conf.d"
 install -m 0644 "$DEDANS/etc/pipewire/pipewire.conf.d/10-grenos-tampon.conf" \
     "$BUILD/etc/pipewire/pipewire.conf.d/"
+
+# Le droit, pour le son, de passer devant. Mesure sur l'image : rtkit seul ne
+# l'accordait pas — « aucun fil de pipewire en temps reel sur 3 ».
+mkdir -p "$BUILD/etc/security/limits.d"
+install -m 0644 "$DEDANS/etc/security/limits.d/95-grenos-audio.conf" \
+    "$BUILD/etc/security/limits.d/"
 install -m 0644 "$DEDANS/usr/share/themes/grenOS/openbox-3/themerc" \
     "$BUILD/usr/share/themes/grenOS/openbox-3/"
 

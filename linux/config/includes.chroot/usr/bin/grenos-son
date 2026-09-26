@@ -291,8 +291,9 @@ class PanneauSon(Gtk.Window):
         # Un panneau qui s'ouvre loin du bouton qu'on vient de cliquer se lit
         # comme une fenêtre apparue toute seule. Ces deux fichiers doivent donc
         # bouger ensemble : si l'icône déménage, cette ligne aussi.
-        self.move(max(10, ecran.get_width() - largeur - 10),
-                  ecran.get_height() - HAUTEUR_BARRE - hauteur - 8)
+        self.place = (max(10, ecran.get_width() - largeur - 10),
+                      ecran.get_height() - HAUTEUR_BARRE - hauteur - 8)
+        self.move(*self.place)
         self.present()
 
         self.decoupe = None
@@ -364,8 +365,19 @@ def main():
     # deviner : c'est ce qui marche déjà pour le bouton de la barre, et une
     # détection au jugé se trompe de fenêtre dès qu'une autre est ouverte
     # derrière — essayé, et c'est exactement ce qui est arrivé.
+    # On annonce l'endroit qu'on a DEMANDÉ, pas celui que GTK rapporte.
+    #
+    # `get_position()` a répondu « 0,0 » sur l'image : sous X11 elle rend
+    # souvent des coordonnées périmées, parce que le gestionnaire de fenêtres
+    # n'a pas encore appliqué le déplacement quand on l'interroge. Ma mesure
+    # des quatre coins allait donc examiner le coin de l'ÉCRAN et le déclarer
+    # propre — un garde qui passe au vert en regardant ailleurs est pire que
+    # pas de garde du tout : il rassure.
+    #
+    # `self.place` est le couple que `ouvrir()` a calculé et passé à `move()`.
+    # C'est la seule valeur dont on soit sûr.
     grenosui.dire("son : panneau en %d,%d de %dx%d"
-                  % (*panneau.get_position(), *panneau.get_size()))
+                  % (*getattr(panneau, "place", (0, 0)), *panneau.get_size()))
     Gtk.main()
 
 

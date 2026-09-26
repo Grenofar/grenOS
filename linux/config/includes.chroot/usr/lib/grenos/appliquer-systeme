@@ -158,6 +158,23 @@ poser lightdm-gtk-greeter.conf  /etc/lightdm/lightdm-gtk-greeter.conf
 poser gtk-settings.ini          /etc/gtk-3.0/settings.ini
 poser fonts-local.conf          /etc/fonts/local.conf
 
+# ---- Le droit de faire du son sans hoquet -----------------------------------
+#
+# Les limites de `/etc/security/limits.d/95-grenos-audio.conf` sont données au
+# groupe `audio`. Encore faut-il que la personne y soit : sur l'image live
+# `live-config` s'en charge, mais un compte créé par l'installateur, ou renommé
+# par le premier écran, peut très bien ne pas l'être — et alors PipeWire
+# retombe en priorité ordinaire, le tampon se vide, et ça fait « bom bom bom ».
+#
+# On le fait ici parce que c'est le seul endroit qui s'exécute après chaque
+# installation ET après chaque mise à jour.
+for compte in $(awk -F: '$3 >= 1000 && $3 < 60000 {print $1}' /etc/passwd 2>/dev/null); do
+    if ! id -nG "$compte" 2>/dev/null | tr ' ' '\n' | grep -qx audio; then
+        usermod -aG audio "$compte" >/dev/null 2>&1 || true
+        echo "grenos: $compte ajoute au groupe audio"
+    fi
+done
+
 # ---- Les icônes et les menus ------------------------------------------------
 gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
 gtk-update-icon-cache -f /usr/share/icons/Papirus-Dark >/dev/null 2>&1 || true
