@@ -58,6 +58,7 @@ AVIS = {
     "xfsprogs": "PRIS — idem pour xfs",
     "librsvg2-common": "PRIS — Papirus est en SVG ; sans lui ses icones ne s'affichent pas",
     "chromium-sandbox": "PRIS — le bac a sable de Chromium",
+    "libavcodec-extra61": "PRIS (par le metapaquet) — sans lui Firefox n'a ni H.264 ni VA-API",
     "qt5-gtk-platformtheme": "PRIS — Calamares est en Qt, le reste en GTK",
     "gnome-icon-theme": "LAISSE — 15 Mio d'icones d'un bureau que nous n'avons pas",
     "iso-codes": "LAISSE — 23 Mio ; Calamares nomme ses langues sans",

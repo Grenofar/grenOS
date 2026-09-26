@@ -228,9 +228,35 @@ mesa-vulkan-drivers
 ## Intel anciennes, intel-media pour les Gen9 et au-dela, mesa-va pour AMD.
 ## `mesa-vdpau-drivers` couvre les NVIDIA avec le pilote libre. `vainfo` sert
 ## a verifier, et la page Materiel s'en servira.
+## LE decodeur. Sans lui, les deux corrections ci-dessous ne servent a rien.
+##
+## grenOS n'embarque aucun lecteur video : les videos que regarde quelqu'un ici
+## sont des videos **web**. Or Firefox ne decode pas lui-meme sur Linux — il
+## appelle libavcodec. Et `firefox-esr` ne fait que le RECOMMANDER :
+##
+##     Recommends: libavcodec62 | libavcodec-extra62 | libavcodec61 | ...
+##
+## On construit sans les recommandes, donc il n'y en avait AUCUN. Deux
+## consequences, et la seconde est celle qui mord :
+##
+##   1. pas de H.264, le codec de la moitie du web ;
+##   2. **pas de decodage materiel du tout** — le chemin VA-API de Firefox
+##      passe PAR ffmpeg. Ajouter `va-driver-all` sans libavcodec, c'est poser
+##      un bon moteur sans le relier au reservoir. C'est ce que j'avais fait ce
+##      matin, et c'est pourquoi ce n'etait pas suffisant.
+##
+## On prend le metapaquet sans numero : il suit tout seul le jour ou Debian
+## passe de libavcodec61 a 62, alors qu'un nom numerote casserait la
+## construction ce jour-la. 16,6 Mio, section main.
+libavcodec-extra
 va-driver-all
 mesa-vdpau-drivers
 vainfo
+## Le pendant de `vainfo` pour VDPAU. On livrait `mesa-vdpau-drivers` sans
+## aucun moyen de savoir s'ils repondent — et la spec du Codeur dit justement
+## de taper `vdpauinfo`. 45 Kio : une commande nommee dans notre documentation
+## doit exister sur l'image.
+vdpauinfo
 mesa-utils
 vulkan-tools
 # Pour jouer : la priorite au jeu pendant qu'il tourne, et le compteur

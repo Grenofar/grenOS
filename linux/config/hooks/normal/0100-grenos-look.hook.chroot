@@ -309,6 +309,33 @@ if orphelins:
 print("grenos: chaque autorisation designe une action qui existe")
 POLKIT
 
+echo "--- grenOS : le navigateur sait-il decoder une video ---"
+# grenOS n'embarque aucun lecteur video : toute video regardee ici est une
+# video WEB. Or Firefox ne decode pas lui-meme sur Linux, il appelle
+# libavcodec — qu'il ne fait que RECOMMANDER. Sans les recommandes, il n'y en
+# avait aucun : pas de H.264, et surtout **pas de decodage materiel**, le
+# chemin VA-API de Firefox passant par ffmpeg.
+#
+# C'est pour cela que `va-driver-all`, ajoute ce matin, ne suffisait pas : un
+# bon moteur sans conduite vers le reservoir. Grenofar a dit « les videos
+# buggent avec 200 Mbit » ; le reseau n'y etait pour rien, et la premiere
+# correction non plus.
+decodeur=$(ls /usr/lib/x86_64-linux-gnu/libavcodec.so.* 2>/dev/null | head -n 1)
+if [ -z "$decodeur" ]; then
+    echo "grenos: AUCUN libavcodec : le navigateur n aura ni H.264 ni VA-API" >&2
+    echo "grenos: firefox-esr ne fait que le recommander, et on construit sans" >&2
+    exit 1
+fi
+echo "grenos: decodeur present : $(basename "$decodeur")"
+
+# Les pilotes materiels servent les deux API : autant verifier qu'ils sont la.
+pilotes=$(ls /usr/lib/x86_64-linux-gnu/dri/*_drv_video.so 2>/dev/null | wc -l)
+if [ "$pilotes" -lt 1 ]; then
+    echo "grenos: aucun pilote VA-API : le decodage se fera au processeur" >&2
+    exit 1
+fi
+echo "grenos: $pilotes pilotes VA-API, et vainfo/vdpauinfo pour les interroger"
+
 echo "--- grenOS : savons-nous formater ce que l installateur propose ---"
 # `partition.conf` OFFRE une liste de systemes de fichiers, et une partition
 # EFI, et le chiffrement. Offrir n'est pas savoir faire : chacun de ces choix

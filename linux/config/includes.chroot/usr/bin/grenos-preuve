@@ -118,6 +118,21 @@ else
     dire "son : alsactl absent, une sortie coupee le restera"
 fi
 
+# ---- La video se decodera-t-elle, et par quoi ? -----------------------------
+#
+# « les videos buggent » avec 200 Mbit dans les deux sens : le reseau n'y etait
+# pour rien. Il manquait les pilotes VA-API — ajoutes le matin — ET libavcodec,
+# sans lequel Firefox ne sait ni lire du H.264 ni atteindre ces pilotes. On le
+# dit donc ici, une fois pour toutes, plutot que de l'apprendre par un rapport.
+decodeur=$(ls /usr/lib/x86_64-linux-gnu/libavcodec.so.* 2>/dev/null | head -n 1)
+if [ -n "$decodeur" ]; then
+    dire "video : decodeur $(basename "$decodeur"), le navigateur lira du H.264"
+else
+    dire "video : AUCUN libavcodec, le navigateur ne lira pas de H.264"
+fi
+pilotes=$(ls /usr/lib/x86_64-linux-gnu/dri/*_drv_video.so 2>/dev/null | wc -l)
+dire "video : $pilotes pilotes VA-API installes"
+
 # ---- Le magasin peut-il vraiment installer ? --------------------------------
 #
 # La machine d'integration ouvrait GrenPlace et comptait ses applications. Elle
