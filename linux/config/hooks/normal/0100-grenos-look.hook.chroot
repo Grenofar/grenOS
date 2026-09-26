@@ -430,6 +430,43 @@ if absents:
 print("grenos: tout ce que l installateur propose, il sait le formater")
 FORMATER
 
+echo "--- grenOS : saurons-nous poser le chargeur de demarrage ---"
+# Le controle ci-dessus verifie qu'on sait FORMATER ce que l'installateur
+# propose. Formater n'est que la moitie du travail : une installation qui
+# partitionne bien, copie bien, puis ne sait pas poser GRUB laisse une machine
+# qui ne demarre pas — et elle a deja efface le disque. C'est le pire endroit
+# ou echouer, et c'est la toute derniere etape.
+#
+# Les paquets sont dans la liste (grub2-common, grub-pc-bin, grub-efi-amd64-bin,
+# efibootmgr). Mais un paquet present ne veut pas dire une commande presente :
+# c'est exactement l'erreur commise avec les modules de Calamares, ou j'avais
+# compte des fichiers sans regarder leur chemin. Ici, `which` repond pour de
+# vrai, dans l'image.
+manque=""
+for outil in grub-install grub-mkconfig update-grub efibootmgr; do
+    if command -v "$outil" >/dev/null 2>&1; then
+        echo "grenos:   $outil present"
+    else
+        echo "grenos:   $outil ABSENT"
+        manque="$manque $outil"
+    fi
+done
+# Les modules de GRUB eux-memes : sans eux, `grub-install` n'a rien a installer.
+for genre in i386-pc x86_64-efi; do
+    if [ -d "/usr/lib/grub/$genre" ]; then
+        echo "grenos:   modules $genre presents ($(ls -1 "/usr/lib/grub/$genre" | wc -l) fichiers)"
+    else
+        echo "grenos:   modules $genre ABSENTS"
+        manque="$manque grub/$genre"
+    fi
+done
+if [ -n "$manque" ]; then
+    echo "grenos: l installateur ne pourrait pas rendre le disque amorcable :$manque" >&2
+    echo "grenos: la machine serait effacee, puis ne demarrerait pas" >&2
+    exit 1
+fi
+echo "grenos: l installateur saura rendre le disque amorcable, en BIOS et en UEFI"
+
 echo "--- grenOS : le bureau de depart est-il garni ---"
 
 # La CI a dit « bureau pret, 0 icones » et c'est comme cela que j'ai vu que
