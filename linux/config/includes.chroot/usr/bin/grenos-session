@@ -149,6 +149,19 @@ grenos-veilleur grenos-shell &
                 SCHED_FIFO|SCHED_RR) TEMPS_REEL=$((TEMPS_REEL + 1)) ;;
             esac
         done
+        # La LIMITE, et pas seulement le résultat.
+        #
+        # Quatre tentatives ont échoué sur ce point, chacune corrigeant un
+        # étage plausible sans jamais vérifier lequel bloquait. « Aucun fil en
+        # temps réel » dit qu'on a échoué ; il ne dit pas pourquoi. Le noyau,
+        # lui, écrit le plafond réel du processus dans /proc, et cette valeur
+        # départage tout : à zéro, PipeWire n'a pas le DROIT de demander, et
+        # c'est une histoire de limites ; au-dessus de zéro, il a le droit et
+        # ne s'en sert pas, et c'est une histoire de module.
+        PLAFOND=$(sed -n 's/^Max realtime priority *\([0-9a-z]*\) .*/\1/p' \
+                  "/proc/$PW/limits" 2>/dev/null | head -1)
+        grenos-dire "son : plafond temps reel de pipewire = ${PLAFOND:-illisible}"
+
         FILS=$(ls -1 /proc/"$PW"/task 2>/dev/null | wc -l)
         if [ "$TEMPS_REEL" -gt 0 ]; then
             grenos-dire "son : pipewire a $TEMPS_REEL fil(s) en temps reel sur $FILS, il tiendra sous charge"

@@ -66,6 +66,14 @@ install -m 0644 "$DEDANS/etc/security/limits.d/95-grenos-audio.conf" \
 mkdir -p "$BUILD/etc/systemd/user.conf.d"
 install -m 0644 "$DEDANS/etc/systemd/user.conf.d/10-grenos-audio.conf" \
     "$BUILD/etc/systemd/user.conf.d/"
+
+# Et le plafond au-dessus : `systemd --user` ne peut pas accorder plus que ce
+# que le gestionnaire systeme lui a donne. Les deux fichiers vont ensemble, et
+# separes ils ne servent a rien.
+mkdir -p "$BUILD/etc/systemd/system.conf.d"
+install -m 0644 "$DEDANS/etc/systemd/system.conf.d/10-grenos-audio.conf" \
+    "$BUILD/etc/systemd/system.conf.d/"
+
 install -m 0644 "$DEDANS/usr/share/themes/grenOS/openbox-3/themerc" \
     "$BUILD/usr/share/themes/grenOS/openbox-3/"
 
