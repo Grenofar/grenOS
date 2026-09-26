@@ -306,13 +306,33 @@ export async function runMasterCycle(
         // from a main that holds none of it (lineage.ts).
         const base = await baseFor(mission.id, assignee.id, action.continue_from);
 
+        // A task that names exact files must SHOW them.
+        //
+        // executor.ts has always read `file:` refs — its own comment says
+        // "Files the Master named explicitly". Nothing ever wrote one: this
+        // insert only ever produced `base:`. The feature was built and never
+        // wired, and it cost two Coder tasks in a row on 2026-09-26. Both came
+        // back with the same spec_gap — "le fichier n'est pas fourni dans le
+        // contexte" — and both were right. The Coder was blamed twice for a
+        // missing line here.
+        //
+        // The rule needs no new field: if the Master says "you may write
+        // exactly this file", the agent obviously needs to see that file. A
+        // path with no glob character is a file, not a domain. Broad domains
+        // (linux/**) keep the tree view they already had.
+        const paths: string[] = action.allowed_paths ?? assignee.allowedPaths;
+        const named = paths
+          .filter((p) => !p.includes("*") && /\.[a-z0-9]+$|\/[a-z0-9-]+$/i.test(p))
+          .slice(0, 12)
+          .map((p) => `file:${p}`);
+
         const { error } = await db.from("tasks").insert({
           mission_id: mission.id,
           assigned_to: assignee.id,
           goal: action.goal,
           acceptance_criteria: action.acceptance_criteria,
-          allowed_paths: action.allowed_paths ?? assignee.allowedPaths,
-          context_refs: base ? [`base:${base}`] : [],
+          allowed_paths: paths,
+          context_refs: [...(base ? [`base:${base}`] : []), ...named],
           status: "ready",
           max_attempts: assignee.maxAttempts,
           token_budget: assignee.maxTokensPerTask,
