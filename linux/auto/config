@@ -27,5 +27,6 @@ lb config noauto \
     --chroot-squashfs-compression-type zstd \
     --chroot-squashfs-compression-level 19 \
     --apt-recommends false \
+    --apt-options "--yes --allow-downgrades" \
     --bootappend-live "boot=live components locales=fr_FR.UTF-8 keyboard-layouts=fr keyboard-model=pc105 timezone=Europe/Paris username=grenos user-fullname=grenOS hostname=grenos persistence persistence-encryption=none quiet splash loglevel=3 udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 rd.udev.log_level=3 noprompt noeject" \
     "${@}"
