@@ -571,14 +571,37 @@ class Reglages(Gtk.Window):
                                        f"({infos['memoire_libre']:.1f} Go libres)")),
             self.ligne("Carte graphique", Gtk.Label(label=infos["carte"][:52])),
             self.ligne("Pilote", Gtk.Label(label=infos["pilote"][:52])),
-            self.ligne("Disque",
+            self.ligne("Système sur",
                        Gtk.Label(label=f"{infos['disque']:.0f} Go "
                                        f"({infos['disque_libre']:.0f} Go libres)")),
         ]
 
+        # Tous les disques, un par ligne.
+        #
+        # La page n'en montrait qu'un : celui qui porte la racine. Quelqu'un
+        # avec deux disques en voyait donc un seul ici, alors que
+        # l'installateur, lui, lui en proposait deux — de quoi douter de l'un
+        # ou de l'autre au pire moment, juste avant d'effacer quelque chose.
+        vus = infos.get("disques") or []
+        for index, disque_vu in enumerate(vus):
+            nom = disque_vu["modele"] or disque_vu["nom"]
+            lignes.append(self.ligne(
+                "Disque" if index == 0 and len(vus) == 1 else f"Disque {index + 1}",
+                Gtk.Label(label=f"{nom[:34]} — "
+                                f"{materiel.genre_du_disque(disque_vu)} "
+                                f"({disque_vu['nom']})")))
+        if not vus:
+            lignes.append(self.ligne(
+                "Disques",
+                Gtk.Label(label="aucun disque vu : rien à installer dessus")))
+
         explication = ("grenOS utilise d'office tout ce que la machine lui donne : "
                        "tous les cœurs, toute la mémoire, toute la mémoire vidéo. "
                        "Il n'y a rien à débloquer.")
+        if len(vus) > 1:
+            explication += ("\n\nCette machine a plusieurs disques. L'installateur "
+                            "les propose tous et demande lequel prendre : il "
+                            "n'efface jamais avant que tu aies choisi.")
         if virtuelle:
             explication += (f"\n\nCette machine est virtuelle ({virtuelle}) : c'est l'hôte "
                             "qui décide de ce qu'elle voit. Pour lui en donner plus, "

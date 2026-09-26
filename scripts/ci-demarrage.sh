@@ -449,6 +449,19 @@ if [ "${VUES:-0}" -lt 3 ]; then
 fi
 echo "aucune fenetre ne deborde en 720p (${VUES} fenetres mesurees)"
 
+echo "--- combien de disques la machine voit-elle ---"
+# QEMU lui en donne deux : la persistance de 8 Go et le disque vierge de 20 Go.
+# `lsblk` en comptait trois — il ajoute le lecteur de disquette que QEMU
+# invente —, donc il ne prouvait pas ce que la personne lit. Les Reglages
+# repondent par la fonction qu'ils emploient eux-memes.
+grep -a 'grenos: disques vus par les Reglages' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
+VUS=$(grep -a 'grenos: disques vus par les Reglages : ' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/.*Reglages : //' | cut -d' ' -f1)
+if [ "${VUS:-0}" -ge 2 ] 2>/dev/null; then
+  echo "disques: la machine en voit ${VUS}, comme QEMU lui en donne"
+else
+  echo "::warning::Les Reglages ne voient que ${VUS:-0} disque(s) alors que la machine en a deux."
+fi
+
 echo "--- le magasin peut-il vraiment installer ---"
 # La CI ouvrait GrenPlace et comptait ses applications. Elle n'a jamais appuye
 # sur « Installer » — et c'est exactement par la que le defaut du 25 septembre

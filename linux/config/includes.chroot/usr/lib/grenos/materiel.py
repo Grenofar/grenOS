@@ -80,6 +80,76 @@ def disque(chemin="/"):
     return total, libre
 
 
+def disques():
+    """Tous les disques de la machine, pas seulement celui qui porte la racine.
+
+    `disque()` ci-dessus lit la place d'un système de fichiers monté : sur une
+    machine à deux disques, elle en décrit un et ignore l'autre. La page
+    Matériel affichait donc « Disque : 500 Go » à quelqu'un qui en a deux, et
+    l'installateur, lui, en proposait deux — de quoi douter de l'un ou de
+    l'autre.
+
+    On lit `/sys/block`, que le noyau tient à jour : pas de programme à lancer,
+    donc rien qui puisse traîner dans une fenêtre en train de se dessiner.
+
+    Rendu : [{'nom', 'taille', 'modele', 'amovible', 'rotatif'}], du plus grand
+    au plus petit. Les disques de boucle, de RAM et les lecteurs de disquette
+    sont écartés : ce ne sont pas des disques pour qui regarde son matériel.
+    """
+    racine = "/sys/block"
+    trouves = []
+    try:
+        noms = sorted(os.listdir(racine))
+    except OSError:
+        return []
+
+    for nom in noms:
+        if nom.startswith(("loop", "ram", "zram", "fd", "sr", "dm-", "md")):
+            continue
+        base = os.path.join(racine, nom)
+
+        # `size` est en secteurs de 512 octets, quelle que soit la taille de
+        # secteur physique du disque. C'est la convention du noyau, et s'en
+        # écarter donnerait des tailles fausses sur les disques 4K.
+        try:
+            with open(os.path.join(base, "size"), encoding="utf-8") as fichier:
+                secteurs = int(fichier.read().strip())
+        except (OSError, ValueError):
+            continue
+        if secteurs <= 0:
+            continue
+
+        def lire(quoi, defaut=""):
+            try:
+                with open(os.path.join(base, quoi), encoding="utf-8",
+                          errors="replace") as fichier:
+                    return fichier.read().strip()
+            except OSError:
+                return defaut
+
+        trouves.append({
+            "nom": nom,
+            "taille": secteurs * 512 / 1000 ** 3,      # en Go, comme le vendeur
+            "modele": lire("device/model") or lire("device/name") or "",
+            "amovible": lire("removable") == "1",
+            "rotatif": lire("queue/rotational") == "1",
+        })
+
+    trouves.sort(key=lambda d: d["taille"], reverse=True)
+    return trouves
+
+
+def genre_du_disque(disque_vu):
+    """Ce qu'on en dit à quelqu'un : « SSD 500 Go », « clé USB 32 Go »."""
+    if disque_vu["amovible"]:
+        sorte = "amovible"
+    elif disque_vu["rotatif"]:
+        sorte = "disque dur"
+    else:
+        sorte = "SSD"
+    return f"{sorte} de {disque_vu['taille']:.0f} Go"
+
+
 def machine_virtuelle():
     """Le nom de l'hyperviseur si l'on tourne dans une machine virtuelle."""
     try:
@@ -105,5 +175,9 @@ def resume():
         "pilote": pilote,
         "disque": place,
         "disque_libre": reste,
+        # Tous les disques, pas seulement celui de la racine. Sans cela, une
+        # machine a deux disques n'en montrait qu'un, et l'installateur en
+        # proposait deux : de quoi douter de l'un ou de l'autre.
+        "disques": disques(),
         "virtuelle": machine_virtuelle(),
     }

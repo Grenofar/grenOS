@@ -132,6 +132,28 @@ else
     dire "disques : aucun, l'installateur n'aurait rien a proposer"
 fi
 
+# Et ce que la page Materiel montre vraiment.
+#
+# `lsblk` ci-dessus compte tout, y compris le lecteur de disquette que QEMU
+# invente : il dit « 3 disques » la ou la personne en voit deux. Ce n'est donc
+# pas une preuve de ce qu'elle lit. On appelle la MEME fonction que les
+# Reglages — une preuve qui passe par un autre chemin que le produit ne prouve
+# pas le produit. C'est la lecon de `ca-certificates`, que l'essai en conteneur
+# installait lui-meme.
+vus=$(python3 -c "
+import sys
+sys.path.insert(0, '/usr/lib/grenos')
+import materiel
+d = materiel.disques()
+print('%d|%s' % (len(d), ', '.join(
+    '%s %s' % (x['nom'], materiel.genre_du_disque(x)) for x in d)))
+" 2>/dev/null)
+if [ -n "$vus" ]; then
+    dire "disques vus par les Reglages : ${vus%%|*} — ${vus#*|}"
+else
+    dire "disques vus par les Reglages : la lecture a echoue"
+fi
+
 # ---- Ce que la personne ecrit est-il garde ? --------------------------------
 #
 # C'est la promesse de la machine VirtualBox, ecrite sur la page de
