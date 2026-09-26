@@ -6,6 +6,7 @@ prendre », c'est « qu'est-ce que la machine voit vraiment ? » — surtout dan
 une machine virtuelle, où c'est l'hôte qui décide, et où un écran de réglages
 honnête vaut mieux qu'une promesse.
 """
+import glob
 import os
 import re
 import subprocess
@@ -158,6 +159,55 @@ def machine_virtuelle():
     except (OSError, subprocess.SubprocessError):
         return ""
     return "" if sortie in ("none", "") else sortie
+
+
+def son_et_video():
+    """Ce que le systeme lit vraiment pour le son et la video.
+
+    Quatre lectures, et aucune ne lance de programme : `pactl`, `vainfo` ou
+    `lspci` interrogent des services qui peuvent mettre deux minutes a
+    repondre — l'un d'eux a deja fige une fenetre tout ce temps. On lit des
+    fichiers, qui repondent toujours tout de suite, et on dit ce qu'on a lu,
+    jamais ce qu'on espere.
+    """
+    # Les profils qui disent a ALSA comment brancher les haut-parleurs : sans
+    # eux, une carte pourtant reconnue reste silencieuse.
+    profils = len(glob.glob("/usr/share/alsa/ucm2/**/*.conf", recursive=True))
+
+    # La carte son et son pilote, lus dans ce que le noyau annonce.
+    carte = ""
+    try:
+        with open("/proc/asound/cards", encoding="utf-8", errors="replace") as fichier:
+            for ligne in fichier:
+                if re.match(r"^\s*\d+\s*\[", ligne):
+                    carte = ligne.split("[", 1)[1].split("]")[0].strip()
+                    break
+    except OSError:
+        pass
+
+    module = ""
+    try:
+        with open("/proc/asound/modules", encoding="utf-8", errors="replace") as fichier:
+            for ligne in fichier:
+                champs = ligne.split()
+                if len(champs) >= 2:
+                    module = champs[1]
+                    break
+    except OSError:
+        pass
+
+    # Le decodeur que le navigateur appelle pour chaque video, et les pilotes
+    # qui peuvent decoder sur la carte graphique au lieu du processeur.
+    decodeur = bool(glob.glob("/usr/lib/x86_64-linux-gnu/libavcodec.so.*"))
+    pilotes_video = len(glob.glob("/usr/lib/x86_64-linux-gnu/dri/*_drv_video.so"))
+
+    return {
+        "profils_alsa": profils,
+        "carte": carte,
+        "module": module,
+        "decodeur": decodeur,
+        "pilotes_video": pilotes_video,
+    }
 
 
 def resume():
