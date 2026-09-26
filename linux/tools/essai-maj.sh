@@ -125,40 +125,43 @@ FIN
 
     # --- Et un PAQUET neuf, pas seulement un fichier neuf ---
     #
-    # Ce qui precede prouve qu'une mise a jour apporte nos propres fichiers.
-    # Grenofar a pose une autre question, et c'est la vraie : « je peux mettre
-    # a jour depuis grenOS pour la version avec son etc ? » — autrement dit,
-    # une machine deja installee recoit-elle les paquets DEBIAN que la nouvelle
-    # image ajoute ? Le 26 septembre j'ai repondu oui en LISANT `make-deb.sh`.
-    # Lire n'est pas prouver : c'est la faute que j'ai deja payee avec les
-    # modules de Calamares.
+    # Ce qui precede prouve qu'une mise a jour apporte nos propres FICHIERS.
+    # Grenofar a pose une autre question, et c'est la vraie : « SI TU FAIS UNE
+    # VERSION JE POURRAIS METTRE A JOUR L OS DEPUIS GRENOS SANS AVOIR A TOUT
+    # REINSTALLER ». Autrement dit : une machine deja posee recoit-elle les
+    # paquets DEBIAN que la nouvelle image ajoute ? Le son et la video de sa
+    # machine en dependent, pas de nos fichiers a nous. J'ai repondu oui en
+    # LISANT `make-deb.sh`. Lire n'est pas prouver.
     #
-    # On simule donc sa machine : on lui retire un paquet que la nouvelle liste
-    # contient, et on regarde s'il revient. `vdpauinfo` est choisi parce qu'il
-    # est une feuille — rien ne depend de lui sauf notre metapaquet — et qu'il
-    # pese 45 Kio. `--force-depends` laisse `grenos-systeme` installe mais
-    # insatisfait, exactement l'etat d'une machine en retard d'une version.
-    AMPUTE=vdpauinfo
-    if dpkg-query -W -f='${Status}' "$AMPUTE" 2>/dev/null | grep -q 'ok installed'; then
-        dpkg --remove --force-depends "$AMPUTE" >/dev/null 2>&1 || true
-        echo "maj : $AMPUTE retire de la machine, comme s'il lui manquait"
-    fi
-
-    # Le metapaquet monte de version lui aussi : sans cela apt le voit deja a
-    # jour et ne resout pas ses dependances. Une vraie nouvelle image change
-    # bien la version des deux.
+    # Premier essai, et il avait tort : je retirais un paquet dont le
+    # metapaquet installe dependait deja. apt refuse alors TOUTE installation —
+    # « Unmet dependencies. Try apt --fix-broken install » — et l'etape echouait
+    # sans rien dire du produit. Cet etat casse n'existe d'ailleurs jamais sur
+    # une vraie machine : l'ancien metapaquet ne RECLAMAIT simplement pas le
+    # paquet, rien n'etait brise.
+    #
+    # Le bon modele est donc l'inverse : la version suivante DECLARE une
+    # dependance que la machine n'a pas, et on regarde si elle arrive. C'est
+    # exactement ce qui s'est passe aujourd'hui avec libavcodec-extra.
+    # `hello` sert de temoin : 280 Kio, dans main, aucune dependance hors libc,
+    # et personne ne peut le confondre avec un paquet de grenOS.
+    TEMOIN=hello
     SYSTEME_DEB=$(ls dist/grenos-systeme_*_all.deb 2>/dev/null | head -1)
     if [ -n "$SYSTEME_DEB" ]; then
         rm -rf /tmp/suite-systeme
         dpkg-deb -R "$SYSTEME_DEB" /tmp/suite-systeme
         sed -i "s/^Version: .*/Version: ${ANCIENNE}+suite/" \
             /tmp/suite-systeme/DEBIAN/control
+        sed -i "s/^Depends: \(.*\)$/Depends: \1, ${TEMOIN}/" \
+            /tmp/suite-systeme/DEBIAN/control
         rm -f /tmp/suite-systeme/DEBIAN/md5sums
         dpkg-deb -b /tmp/suite-systeme /tmp/grenos-systeme-suite.deb >/dev/null
+
         # Le bureau exige le metapaquet a la version exacte : elle a change.
         sed -i "s/grenos-systeme (= [^)]*)/grenos-systeme (= ${ANCIENNE}+suite)/" \
             /tmp/suite/DEBIAN/control
         dpkg-deb -b /tmp/suite /tmp/grenos-desktop-suite.deb >/dev/null
+        echo "maj : la version suivante reclame $TEMOIN, que la machine n a pas"
     fi
 
     # Les deux paquets ensemble, et pas seulement l'un d'eux.
@@ -191,12 +194,12 @@ FIN
     echo "la mise a jour a apporte un service neuf, une entree de menu neuve,"
     echo "et a repose le reglage partage : appliquer-systeme s'est bien execute"
 
-    # Le paquet qu'on avait retire est-il revenu de lui-meme ?
-    if dpkg-query -W -f='${Status}' "$AMPUTE" 2>/dev/null | grep -q 'ok installed'; then
-        echo "maj : $AMPUTE est revenu — un paquet neuf arrive bien par la mise a jour"
+    # Le paquet que seule la nouvelle version reclamait est-il arrive ?
+    if dpkg-query -W -f='${Status}' "$TEMOIN" 2>/dev/null | grep -q 'ok installed'; then
+        echo "maj : $TEMOIN est arrive — un paquet neuf suit bien la mise a jour"
     else
-        echo "la mise a jour n a pas rapporte le paquet $AMPUTE" >&2
-        echo "une machine deja installee resterait donc en retard sur l image" >&2
+        echo "la mise a jour n a pas installe $TEMOIN, que la nouvelle version" >&2
+        echo "declarait : une machine deja posee resterait en retard sur l image" >&2
         exit 1
     fi
 
