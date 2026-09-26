@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Le son, en un clic : le volume, la sortie, et chaque application.
 
-Un panneau qui s'ouvre au-dessus de la barre, en bas à gauche, et se referme
+Un panneau qui s'ouvre au-dessus de la barre, en bas à droite, et se referme
 dès qu'on clique ailleurs. Trois choses, dans cet ordre d'usage :
 
   - le volume de la machine, et le silence d'un clic ;
@@ -284,10 +284,15 @@ class PanneauSon(Gtk.Window):
     def ouvrir(self):
         ecran = Gdk.Screen.get_default()
         self.show_all()
-        _, hauteur = self.get_size()
-        # En bas à gauche, juste au-dessus de la barre : là où se trouve
-        # l'icône qui l'ouvre.
-        self.move(10, ecran.get_height() - HAUTEUR_BARRE - hauteur - 8)
+        largeur, hauteur = self.get_size()
+        # En bas à **droite**, juste au-dessus de la barre : là où se trouve
+        # l'icône qui l'ouvre depuis qu'elle a rejoint le réseau et l'horloge.
+        #
+        # Un panneau qui s'ouvre loin du bouton qu'on vient de cliquer se lit
+        # comme une fenêtre apparue toute seule. Ces deux fichiers doivent donc
+        # bouger ensemble : si l'icône déménage, cette ligne aussi.
+        self.move(max(10, ecran.get_width() - largeur - 10),
+                  ecran.get_height() - HAUTEUR_BARRE - hauteur - 8)
         self.present()
 
         self.decoupe = None

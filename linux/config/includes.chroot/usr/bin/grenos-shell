@@ -708,16 +708,14 @@ class Panneau(Gtk.Window):
         boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.add(boite)
 
-        # Le son, en bas a gauche : le volume, la sortie et le melangeur
-        # s'ouvrent au-dessus de cette icone. Elle est dessinee par nous, pas
-        # empruntee a un emoji — un emoji depend de la police installee et ne
-        # se teinte pas.
+        # Le son : cree ici, mais POSE A DROITE, avec le reseau et l'horloge
+        # (voir plus bas). Il est dessine par nous, pas emprunte a un emoji —
+        # un emoji depend de la police installee et ne se teinte pas.
         self.bouton_son = Gtk.Button()
         self.image_son = Gtk.Image()
         self.bouton_son.add(self.image_son)
         self.bouton_son.set_tooltip_text("Son : volume, sortie, applications")
         self.bouton_son.connect("clicked", lambda _: basculer("grenos-son"))
-        boite.pack_start(self.bouton_son, False, False, 0)
 
         boite.pack_start(Gtk.Box(), True, True, 0)
 
@@ -757,6 +755,13 @@ class Panneau(Gtk.Window):
         self.bouton_reseau.add(self.image_reseau)
         self.bouton_reseau.connect("clicked",
                                    lambda _: grenosui.lancer("grenos-connexions"))
+        # L'ordre compte, et `pack_end` se lit a l'envers : le premier appel se
+        # place le plus a droite. On obtient donc, de gauche a droite,
+        # **reseau, son, horloge** — l'ordre de la barre de Windows, que
+        # Grenofar a nomme comme reference. Le haut-parleur etait jusqu'ici a
+        # l'autre bout de l'ecran : personne ne va chercher le volume en bas a
+        # gauche.
+        boite.pack_end(self.bouton_son, False, False, 0)
         boite.pack_end(self.bouton_reseau, False, False, 0)
 
         # Une mise a jour qui attend se voit, sans rien interrompre. Le bouton

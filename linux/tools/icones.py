@@ -138,12 +138,17 @@ def son(chemin, taille, niveau=2):
     image, u, v = toile(taille)
 
     # Le corps du haut-parleur : un carre, puis le pavillon en triangle.
-    corps = rectangle(u, v, 0.18, 0.40, 0.34, 0.60, rayon=0.03)
+    #
+    # Le tout est decale vers la gauche par rapport a la version d'avant. La
+    # capture agrandie de `linux-20260926-1422` montrait pourquoi : la premiere
+    # onde naissait a 0.52 et le pavillon finissait a 0.53. Elles se touchaient,
+    # et l'onde se lisait comme un eclat colle au pavillon — pas comme une onde.
+    corps = rectangle(u, v, 0.12, 0.40, 0.28, 0.60, rayon=0.03)
     poser(image, corps, CLAIR, 1.0)
 
-    # Le pavillon : tout ce qui est a droite de 0.30 et dans le triangle.
-    largeur = np.clip((u - 0.30) / 0.22, 0.0, 1.0)
-    dans = (np.abs(v - 0.50) < 0.06 + largeur * 0.26) & (u > 0.30) & (u < 0.53)
+    # Le pavillon : tout ce qui est a droite de 0.24 et dans le triangle.
+    largeur = np.clip((u - 0.24) / 0.22, 0.0, 1.0)
+    dans = (np.abs(v - 0.50) < 0.06 + largeur * 0.26) & (u > 0.24) & (u < 0.47)
     poser(image, dans.astype(float), CLAIR, 1.0)
 
     if niveau <= 0:
@@ -155,14 +160,23 @@ def son(chemin, taille, niveau=2):
             trait *= ((u > 0.60) & (u < 0.86)).astype(float)
             poser(image, trait, CLAIR, 0.95)
     else:
-        rayon = np.hypot((u - 0.40) * 1.0, (v - 0.50) * 1.0)
-        for index, (distance, epaisseur) in enumerate(((0.23, 0.022), (0.37, 0.022))):
+        # Les ondes, decoupees par un ANGLE et non par un rectangle.
+        #
+        # La version d'avant gardait la portion « u > 0.55 et |v-0.5| petit ».
+        # Une droite qui coupe un cercle le coupe en biais : l'arc arrivait au
+        # bord en rasant, l'antialiasing n'avait qu'une fraction de pixel a se
+        # mettre sous la dent, et l'onde finissait en POINTILLES. Vu sur la
+        # planche rendue a 16, 20 et 24 pixels — invisible en lisant la formule.
+        #
+        # Un masque angulaire coupe l'arc net, perpendiculairement a lui.
+        rayon = np.hypot(u - 0.34, v - 0.50)
+        angle = np.abs(np.arctan2(v - 0.50, u - 0.34))
+        ouvert = np.clip((0.95 - angle) / 0.18, 0.0, 1.0)
+        for index, (distance, epaisseur) in enumerate(((0.29, 0.042), (0.48, 0.042))):
             if index >= niveau:
                 break
-            onde = np.clip((epaisseur - np.abs(rayon - distance)) / 0.013, 0.0, 1.0)
-            # Seulement la partie droite : une onde complete ferait un anneau.
-            onde *= ((u > 0.52) & (np.abs(v - 0.50) < distance * 0.85)).astype(float)
-            poser(image, onde, CLAIR, 0.95 - index * 0.12)
+            onde = np.clip((epaisseur - np.abs(rayon - distance)) / 0.022, 0.0, 1.0)
+            poser(image, onde * ouvert, CLAIR, 0.95 - index * 0.10)
 
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
@@ -315,37 +329,42 @@ def wifi(chemin, taille, barres=3):
 
 
 def cable(chemin, taille):
-    """L'Ethernet : la prise RJ45 vue de face, large, avec sa languette.
+    """L'Ethernet : un ecran, comme Windows — et non plus une prise RJ45.
 
-    Quand le cable est branche, montrer des arcs de Wi-Fi est un mensonge poli.
-    Windows montre une prise ; on montre une prise.
+    **Quatrieme dessin, et le premier qui change de metaphore.** Les trois
+    precedents cherchaient a dessiner la prise elle-meme : un corps plus haut
+    que large s'est lu comme une spatule ; huit contacts fins se sont fondus en
+    code-barres ; quatre contacts epais ont donne un clavier. Chaque fois j'ai
+    redessine la meme idee au lieu d'en changer.
 
-    Deux essais ont ete jetes avant celui-ci, et pour la meme raison a chaque
-    fois : un corps plus haut que large surmontant une tige se lit comme une
-    **spatule**, pas comme une prise. Ce qui fait la prise, c'est d'etre large
-    et basse, avec la languette qui deborde dessous. Pas de fil : le fil est
-    precisement ce qui faisait le manche.
+    La capture de `linux-20260926-1422`, agrandie six fois, a tranche : la
+    silhouette large-et-basse a rayures NE PEUT PAS dire « reseau » a vingt
+    pixels, quelle que soit la finesse du trait. Ce n'est pas le dessin qui
+    etait rate, c'est le sujet.
+
+    Windows, que Grenofar a nomme comme reference, ne montre d'ailleurs pas une
+    prise : il montre **un ecran**. Une silhouette d'ecran se reconnait a douze
+    pixels, et surtout elle ne ressemble a rien d'autre dans la barre — ni aux
+    arcs du Wi-Fi, ni au pavillon du haut-parleur. C'est cela qui compte : une
+    icone de barre n'a pas a etre belle, elle doit etre **distincte**.
     """
     image, u, v = toile(taille)
 
-    # Le corps : plus large que haut, et **ramasse vers le milieu**. Tout le
-    # dessin tient entre 0.22 et 0.78 en hauteur : quel que soit l'endroit ou
-    # la barre centre l'icone, il lui reste de la marge. La version d'avant
-    # descendait jusqu'a 0.74 et sa languette touchait le bas de l'ecran.
-    corps = rectangle(u, v, 0.12, 0.26, 0.88, 0.56, rayon=0.05)
-    poser(image, corps, ACCENT, 1.0)
+    # Tout tient entre 0.22 et 0.80 en hauteur, comme les autres icones de la
+    # barre : quel que soit l'endroit ou elle centre, il reste de la marge.
+    ecran = rectangle(u, v, 0.10, 0.22, 0.90, 0.60, rayon=0.06)
+    poser(image, ecran, CLAIR, 1.0)
 
-    # Quatre contacts EPAIS, pas huit fins. A vingt pixels, huit traits fins ne
-    # se comptent pas : ils se fondent en rayures, et l'icone ressemble a un
-    # code-barres. Vu sur la capture de la barre, agrandie six fois.
-    for i in range(4):
-        x = 0.235 + i * 0.155
-        contact = rectangle(u, v, x, 0.315, x + 0.085, 0.435, rayon=0.02)
-        poser(image, contact, CLAIR, 0.95)
+    # La dalle, en bleu : c'est elle qui fait lire « ecran » plutot que
+    # « rectangle ». Un seul aplat interieur, pas deux — deux redeviendraient
+    # des rayures, et on connait la fin de cette histoire.
+    dalle = rectangle(u, v, 0.19, 0.29, 0.81, 0.53, rayon=0.03)
+    poser(image, dalle, ACCENT, 1.0)
 
-    # La languette, large et courte : le trait qui acheve la silhouette.
-    languette = rectangle(u, v, 0.37, 0.54, 0.63, 0.70, rayon=0.035)
-    poser(image, languette, SECOND, 1.0)
+    # Le pied : une tige courte et une base large. Sans la base, l'ecran flotte
+    # et redevient un rectangle.
+    poser(image, rectangle(u, v, 0.43, 0.59, 0.57, 0.69), CLAIR, 1.0)
+    poser(image, rectangle(u, v, 0.27, 0.69, 0.73, 0.79, rayon=0.03), CLAIR, 1.0)
 
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
