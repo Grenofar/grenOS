@@ -351,6 +351,21 @@ def main():
                   % (len(module_son.sorties()), module_son.volume(),
                      "muet" if module_son.muet() else "actif",
                      *panneau.get_size()))
+
+    # Et OÙ il se trouve, pour qu'on puisse mesurer ses coins sur la capture.
+    #
+    # « les bords sont noirs dans l'overlay » est le reproche d'origine de
+    # Grenofar, et il n'était vérifié nulle part : les quatre coins avaient été
+    # mesurés à la main le 25 septembre, une fois, jamais transformés en
+    # contrôle. Le panneau a déménagé à droite depuis — cette mesure ne valait
+    # donc même plus pour l'endroit où il s'ouvre.
+    #
+    # Le panneau dit sa position plutôt que de laisser la machine d'essai la
+    # deviner : c'est ce qui marche déjà pour le bouton de la barre, et une
+    # détection au jugé se trompe de fenêtre dès qu'une autre est ouverte
+    # derrière — essayé, et c'est exactement ce qui est arrivé.
+    grenosui.dire("son : panneau en %d,%d de %dx%d"
+                  % (*panneau.get_position(), *panneau.get_size()))
     Gtk.main()
 
 

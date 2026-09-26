@@ -307,6 +307,102 @@ if [ -n "$POINT_SON" ]; then
   # par le focus seul » : l'attrape du pointeur n'a PAS pris, et donc
   # ne prenait sans doute jamais. C'est le filet du focus qui travaille,
   # et il n'avait jamais ete exerce.
+  # --- Les coins sont-ils vraiment arrondis, ou noirs ? ---
+  #
+  # « les bords sont noirs dans l'overlay » : c'est le reproche d'origine, et
+  # il n'etait verifie NULLE PART. Les quatre coins avaient ete mesures a la
+  # main le 25 septembre, une fois, jamais transformes en controle — et le
+  # panneau a demenage a droite depuis, donc cette mesure ne valait meme plus
+  # pour l'endroit ou il s'ouvre.
+  #
+  # X11 sans composition n'a pas de transparence : un `border-radius` ne fait
+  # que montrer le noir de la fenetre. Les vrais coins sont RETIRES par un
+  # masque de forme. Si ce masque cesse de s'appliquer, la seule chose qui le
+  # dira est un carre noir a chaque angle — invisible sur le port serie.
+  #
+  # Le panneau dit lui-meme ou il est : deviner sa position sur l'image se
+  # trompe de fenetre des qu'une autre est ouverte derriere. Essaye, et c'est
+  # exactement ce qui est arrive.
+  PLACE=$(grep -a 'grenos: son : panneau en' "$RUNNER_TEMP/serial.log" | tail -1 \
+          | tr -d '[:cntrl:]' | sed 's/.*panneau en //')
+  if [ -n "$PLACE" ] && [ -f "$RUNNER_TEMP/ecran-son.ppm" ]; then
+    echo "son: le panneau est en $PLACE"
+    python3 - "$RUNNER_TEMP/ecran-son.ppm" "$PLACE" <<'COINS'
+import sys
+
+chemin, place = sys.argv[1], sys.argv[2]
+coin, taille = place.split(" de ")
+px0, py0 = (int(v) for v in coin.split(","))
+pl, ph = (int(v) for v in taille.split("x"))
+
+with open(chemin, "rb") as fichier:
+    brut = fichier.read()
+
+# Entete PPM : P6, largeur, hauteur, maxval, puis les octets.
+champs, i = [], 2
+while len(champs) < 3:
+    while brut[i:i + 1].isspace():
+        i += 1
+    if brut[i:i + 1] == b"#":
+        while brut[i:i + 1] != b"\n":
+            i += 1
+        continue
+    j = i
+    while not brut[j:j + 1].isspace():
+        j += 1
+    champs.append(int(brut[i:j]))
+    i = j
+i += 1
+L, H, _ = champs
+pixels = brut[i:]
+
+
+def somme(x, y):
+    d = (y * L + x) * 3
+    return pixels[d] + pixels[d + 1] + pixels[d + 2]
+
+
+# Le seuil, et pourquoi il est si bas.
+#
+# Le fond d'une fenetre GTK non masquee est du NOIR PUR : sous X11 sans visuel
+# RGBA, ce que le `border-radius` laisse voir est (0,0,0). On ne cherche donc
+# pas « sombre ».
+#
+# Premier essai a 25, et il a signale le coin bas-droit comme fautif. En
+# regardant l'image plutot qu'en croyant le test : le FOND D'ECRAN, juste a
+# cote du panneau, vaut 22 a 31 a cet endroit. Le coin montrait donc le papier
+# peint — c'est-a-dire que le masque marchait — et c'est le seuil qui etait
+# faux. On voyait meme la courbe du coin juste au-dessus, a 95, 186, 187.
+#
+# Un fond d'ecran tres sombre et une fenetre noire ne se distinguent que par
+# le zero absolu. Minimum releve sur le papier peint : 19.
+NOIR = 12
+COTE = 5
+angles = (("haut-gauche", px0, py0),
+          ("haut-droit", px0 + pl - COTE, py0),
+          ("bas-gauche", px0, py0 + ph - COTE),
+          ("bas-droit", px0 + pl - COTE, py0 + ph - COTE))
+
+fautifs = []
+for nom, ax, ay in angles:
+    if ax < 0 or ay < 0 or ax + COTE > L or ay + COTE > H:
+        print("son: coin %s hors de l ecran, non mesure" % nom)
+        continue
+    noirs = sum(1 for dy in range(COTE) for dx in range(COTE)
+                if somme(ax + dx, ay + dy) < NOIR)
+    print("son: coin %-12s %2d pixels noirs sur %d" % (nom, noirs, COTE * COTE))
+    if noirs >= 3:
+        fautifs.append(nom)
+
+if fautifs:
+    print("son: le masque de forme ne s'applique plus : " + ", ".join(fautifs))
+else:
+    print("son: les quatre coins sont arrondis, aucun carre noir")
+COINS
+  else
+    echo "son: le panneau n a pas dit ou il est, coins non mesures"
+  fi
+
   AVANT_SON=$(grep -ac 'son ferme' "$RUNNER_TEMP/serial.log" 2>/dev/null | head -1)
   AVANT_SON=${AVANT_SON:-0}
   python3 scripts/ci-screen.py clic "$RUNNER_TEMP/qmp.sock" \
