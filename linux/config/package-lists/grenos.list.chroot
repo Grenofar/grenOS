@@ -67,6 +67,15 @@ feh
 
 ## Les applications d'un système complet.
 firefox-esr
+## Un second navigateur, demande par Grenofar : « ajoute un chrome aussi de
+## base ». Le vrai Chrome n'est pas dans Debian ; Chromium est le meme moteur,
+## empaquete par Debian et mis a jour par notre canal comme le reste.
+##
+## Il sert aussi a quelque chose que nous promettons deja : la page Jeux pose
+## Fortnite en nuage dans une fenetre sans barre d'adresse, et le service de
+## Microsoft refuse Firefox. Sans Chromium, ce bouton commencait par installer
+## un navigateur — desormais il ouvre le jeu.
+chromium
 pcmanfm
 mousepad
 xfce4-terminal
@@ -84,6 +93,27 @@ libspa-0.2-bluetooth
 ## et le volume : PipeWire lui répond comme le faisait PulseAudio.
 network-manager
 network-manager-gnome
+## Les profils ALSA, sans lesquels une carte moderne reste MUETTE.
+##
+## Quatrieme fois aujourd'hui que le meme piege mord : `alsa-ucm-conf` n'est
+## que RECOMMANDE par `libasound2-data`, et on construit avec
+## `--apt-recommends false`. Il etait donc absent.
+##
+## Ce que cela coute : depuis 2019 environ, les cartes Intel SOF et AMD ACP —
+## c'est-a-dire presque tous les portables vendus — ont besoin de ces profils
+## pour qu'ALSA sache par ou sortir le son. Sans eux, PipeWire voit la carte,
+## l'annonce, affiche un volume... et rien ne sort. La pile logicielle a l'air
+## parfaite, et c'est exactement ce que la machine d'essai montrait : QEMU
+## emule une carte ancienne qui n'a pas besoin d'UCM.
+##
+## `alsa-topology-conf` va avec, pour les memes cartes SOF.
+## `alsa-utils` apporte `alsactl` — donc `alsa-restore.service`, qui remet le
+## melangeur dans l'etat ou on l'a laisse au demarrage. Sans lui, un portable
+## qui demarre avec sa sortie coupee reste coupe, et personne n'a `amixer` pour
+## s'en apercevoir.
+alsa-ucm-conf
+alsa-topology-conf
+alsa-utils
 pipewire-audio
 wireplumber
 pavucontrol
@@ -163,6 +193,20 @@ pciutils
 ## Vulkan est ce que demandent Steam et les jeux. NVIDIA reste à part : son
 ## pilote est propriétaire et s'installe depuis le magasin.
 mesa-vulkan-drivers
+## Le decodage VIDEO par la carte graphique. C'est autre chose que la 3D.
+##
+## On livrait `mesa-vulkan-drivers` — la 3D — et RIEN pour la video. Chaque
+## film etait donc decode par le processeur, image par image. Grenofar :
+## « avec 200 mbits entrant et sortant les videos bug » — le reseau n'y est
+## pour rien, c'est le processeur qui ne suit pas une 4K qu'il decode seul.
+##
+## `va-driver-all` (24 Kio) tire ce qu'il faut selon la carte : i965 pour les
+## Intel anciennes, intel-media pour les Gen9 et au-dela, mesa-va pour AMD.
+## `mesa-vdpau-drivers` couvre les NVIDIA avec le pilote libre. `vainfo` sert
+## a verifier, et la page Materiel s'en servira.
+va-driver-all
+mesa-vdpau-drivers
+vainfo
 mesa-utils
 vulkan-tools
 # Pour jouer : la priorite au jeu pendant qu'il tourne, et le compteur

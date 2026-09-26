@@ -449,6 +449,19 @@ if [ "${VUES:-0}" -lt 3 ]; then
 fi
 echo "aucune fenetre ne deborde en 720p (${VUES} fenetres mesurees)"
 
+echo "--- le son pourrait-il seulement sortir ---"
+# « son ouvert, 1 sorties » prouve que PipeWire repond, pas qu'on entend
+# quelque chose. Sur une carte SOF ou ACP — presque tous les portables depuis
+# 2019 — ALSA a besoin des profils UCM pour savoir par ou sortir. Ils
+# manquaient, et QEMU ne pouvait pas le montrer : il emule une carte ancienne
+# qui n'en a pas besoin.
+grep -a 'grenos: son : ' "$RUNNER_TEMP/serial.log" | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' | sort -u || true
+if grep -aq 'grenos: son : AUCUN profil ALSA' "$RUNNER_TEMP/serial.log"; then
+  echo "::warning::Aucun profil ALSA : muet sur toute carte recente."
+elif grep -aq 'grenos: son : [0-9]* profils ALSA' "$RUNNER_TEMP/serial.log"; then
+  echo "son: les profils ALSA sont la"
+fi
+
 echo "--- combien de disques la machine voit-elle ---"
 # QEMU lui en donne deux : la persistance de 8 Go et le disque vierge de 20 Go.
 # `lsblk` en comptait trois — il ajoute le lecteur de disquette que QEMU

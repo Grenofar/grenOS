@@ -43,6 +43,11 @@ DE_BASE = {
     "sleep", "kill", "touch", "install", "ln", "od", "exec", "command", "which",
     "getent", "exit", "elif", "then", "else", "fi", "do", "done", "local",
     "export", "set", "read", "return", "case", "esac", "for", "while", "if",
+    # Des mots de Python. Le saut de bloc ci-dessous devrait suffire ; ceci est
+    # le second filet, parce qu'une image refusée pour un faux positif coûte
+    # trente minutes et fait douter du contrôle lui-même.
+    "import", "print", "from", "def", "class", "elif", "try", "except",
+    "finally", "with", "lambda", "yield", "assert", "pass", "raise",
 }
 
 # Ce qui a le droit de manquer, parce que le code le vérifie avant d'appeler et
@@ -102,8 +107,26 @@ def commandes_de(chemin):
                 if isinstance(premier, ast.Constant) and isinstance(premier.value, str):
                     noter(premier.value.split()[0] if premier.value.split() else "")
     else:
+        # Un script shell peut contenir du Python. `grenos-preuve` appelle
+        # `python3 -c "..."` sur plusieurs lignes, et la premiere version de ce
+        # contrôle y a lu « import » comme une commande — puis a refusé l'image
+        # entière. Le garde avait raison de crier ; c'est la lecture qui était
+        # fausse. On saute donc ce qui est manifestement du Python.
+        dans_python = False
         for ligne in contenu.split("\n"):
             nue = ligne.strip()
+
+            if dans_python:
+                # Le bloc se ferme sur le guillemet qui a ouvert `-c "`.
+                if nue.startswith('"') or nue.endswith('"') or nue.endswith('")'):
+                    dans_python = False
+                continue
+            if re.search(r"python3?\s+-\s*<<|python3?\s+-c\s+[\"']", ligne):
+                # Ouvert sur cette ligne : fermé aussi si le guillemet revient.
+                reste = ligne.split("-c", 1)[-1]
+                dans_python = reste.count('"') < 2 and reste.count("'") < 2
+                continue
+
             if not nue or nue.startswith("#"):
                 continue
             depart = re.match(r"(?:command -v |exec )?([a-z][a-z0-9._+-]{2,})\s", nue)

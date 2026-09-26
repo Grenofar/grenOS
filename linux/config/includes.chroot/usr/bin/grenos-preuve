@@ -94,6 +94,30 @@ else
     dire "maj: grenos-desktop n'est pas installe, apt n'aura rien a mettre a jour"
 fi
 
+# ---- Le son peut-il seulement sortir ? --------------------------------------
+#
+# « son ouvert, 1 sorties, volume 40%, actif » ne prouve pas qu'on entend
+# quelque chose : cela prouve que PipeWire repond. Sur une carte moderne — SOF
+# chez Intel, ACP chez AMD, donc presque tous les portables depuis 2019 — ALSA
+# a besoin des profils UCM pour savoir par ou sortir le son. Sans eux, la carte
+# est vue, annoncee, reglable... et muette.
+#
+# Ils manquaient : `alsa-ucm-conf` n'est que RECOMMANDE par `libasound2-data`,
+# et on construit sans les recommandes. La machine d'essai ne pouvait pas le
+# voir — QEMU emule une carte ancienne qui n'en a pas besoin. C'est le meme
+# angle mort que `ca-certificates`.
+if [ -d /usr/share/alsa/ucm2 ]; then
+    profils=$(find /usr/share/alsa/ucm2 -name '*.conf' 2>/dev/null | wc -l)
+    dire "son : $profils profils ALSA, une carte moderne saura par ou sortir"
+else
+    dire "son : AUCUN profil ALSA (alsa-ucm-conf absent) — muet sur une carte recente"
+fi
+if command -v alsactl >/dev/null 2>&1; then
+    dire "son : alsactl present, le melangeur sera restaure au demarrage"
+else
+    dire "son : alsactl absent, une sortie coupee le restera"
+fi
+
 # ---- Le magasin peut-il vraiment installer ? --------------------------------
 #
 # La machine d'integration ouvrait GrenPlace et comptait ses applications. Elle
