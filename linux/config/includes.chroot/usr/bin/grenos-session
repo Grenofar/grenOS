@@ -162,6 +162,17 @@ grenos-veilleur grenos-shell &
                   "/proc/$PW/limits" 2>/dev/null | head -1)
         grenos-dire "son : plafond temps reel de pipewire = ${PLAFOND:-illisible}"
 
+        # Ce que le module a REELLEMENT fait, dit par PipeWire lui-meme.
+        #
+        # Le plafond a 95 et aucun fil en temps reel : PipeWire a le droit et
+        # ne s'en sert pas. La cause est donc dans `module-rt`, qui est charge
+        # avec `nofail` — son echec ne se voit nulle part, sauf dans son propre
+        # journal. On va l'y chercher, au lieu de deviner une cinquieme fois.
+        RAISON=$(journalctl --user -u pipewire --no-pager -n 200 2>/dev/null \
+                 | grep -i -m1 -E 'rt|realtime|rtkit|priority' \
+                 | sed 's/.*pipewire\[[0-9]*\]: //' | cut -c1-110)
+        [ -n "$RAISON" ] && grenos-dire "son : pipewire dit « $RAISON »"
+
         FILS=$(ls -1 /proc/"$PW"/task 2>/dev/null | wc -l)
         if [ "$TEMPS_REEL" -gt 0 ]; then
             grenos-dire "son : pipewire a $TEMPS_REEL fil(s) en temps reel sur $FILS, il tiendra sous charge"
