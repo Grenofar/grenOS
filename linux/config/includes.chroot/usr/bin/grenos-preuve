@@ -106,11 +106,25 @@ fi
 # et on construit sans les recommandes. La machine d'essai ne pouvait pas le
 # voir — QEMU emule une carte ancienne qui n'en a pas besoin. C'est le meme
 # angle mort que `ca-certificates`.
-if [ -d /usr/share/alsa/ucm2 ]; then
-    profils=$(find /usr/share/alsa/ucm2 -name '*.conf' 2>/dev/null | wc -l)
+# On compte par `materiel.son_et_video()`, et non par un `find` a nous.
+#
+# Ce fichier disait « 682 profils ALSA » pendant que la page Son des Reglages
+# en affichait 687 : deux comptages du meme chose, l'un par `find`, l'autre par
+# `glob(**)`. Aucun des deux n'etait faux, et c'est bien le probleme — deux
+# chiffres pour une seule realite finissent par faire douter des DEUX. La
+# personne qui lit l'ecran et celle qui lit le journal doivent voir le meme.
+profils=$(python3 -c "
+import sys
+sys.path.insert(0, '/usr/lib/grenos')
+import materiel
+print(materiel.son_et_video()['profils_alsa'])
+" 2>/dev/null || echo "")
+if [ -n "$profils" ] && [ "$profils" -gt 0 ] 2>/dev/null; then
     dire "son : $profils profils ALSA, une carte moderne saura par ou sortir"
-else
+elif [ -n "$profils" ]; then
     dire "son : AUCUN profil ALSA (alsa-ucm-conf absent) — muet sur une carte recente"
+else
+    dire "son : impossible de compter les profils ALSA (materiel.py muet)"
 fi
 if command -v alsactl >/dev/null 2>&1; then
     dire "son : alsactl present, le melangeur sera restaure au demarrage"
