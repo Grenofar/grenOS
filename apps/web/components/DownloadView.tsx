@@ -62,6 +62,9 @@ const FR = {
   qemu: "Pour essayer sans rien écrire sur un disque :",
   source: "Code source",
   beta: "Les images de la veille, et celle d'il y a dix minutes",
+  toujoursAJour:
+    "Il n'y a qu'une version : la dernière. Une fois grenOS installé, il se met à jour tout seul — tu ne retéléchargeras plus jamais cette page.",
+  cetteImage: "le détail de cette image",
 };
 
 const EN: typeof FR = {
@@ -95,6 +98,9 @@ const EN: typeof FR = {
   ],
   qemuTitle: "QEMU",
   qemu: "To try it without writing to any disk:",
+  toujoursAJour:
+    "There is only one version: the latest. Once grenOS is installed it updates itself — you will never need this page again.",
+  cetteImage: "what is in this image",
   source: "Source code",
   beta: "Yesterday's images, and the one from ten minutes ago",
 };
@@ -119,9 +125,20 @@ export function DownloadView({ linux = null, repo }: { linux?: LinuxRelease | nu
       <section>
         {linux ? (
           <>
+            {/* Le nom, pas le numero.
+              *
+              * Grenofar : « au lieu que des chiffres genre 1455, fais juste
+              * grenOS sans version ». C'est une consequence directe de la mise
+              * a jour : une machine qui se met a jour toute seule n'a pas de
+              * version a choisir, elle a la derniere. Le numero ne servait
+              * qu'a nous. Il reste accessible en bas, pour qui veut savoir
+              * exactement ce qu'il telecharge. */}
             <p className="faint" style={{ marginTop: 0 }}>
-              <span className="dot ok" /> <span className="mono">{linux.tag}</span> · {c.published}{" "}
+              <span className="dot ok" /> <strong>grenOS</strong> · {c.published}{" "}
               {linux.publishedAt.slice(0, 10)}
+            </p>
+            <p className="muted" style={{ marginTop: 0 }}>
+              {c.toujoursAJour}
             </p>
             {/* Deux formes de la même image : l'ISO seule, ou la machine toute prête. */}
             <div className="grid cols-2">
@@ -149,7 +166,7 @@ export function DownloadView({ linux = null, repo }: { linux?: LinuxRelease | nu
               </div>
             </div>
             <p className="faint" style={{ marginTop: 8 }}>
-              {c.checked} <a href={linux.pageUrl}>{linux.tag}</a>
+              {c.checked} <a href={linux.pageUrl}>{c.cetteImage}</a>
             </p>
           </>
         ) : (
