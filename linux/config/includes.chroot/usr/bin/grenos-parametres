@@ -337,6 +337,20 @@ class Reglages(Gtk.Window):
                        "les vidéos seront décodées par le processeur.")
 
         self.dire_diag_son.set_text("\n".join([profils, carte, decodeur, pilotes]))
+
+        # Et on le dit sur le port série.
+        #
+        # Sans cette ligne, ce diagnostic n'était prouvé nulle part : la CI
+        # ouvre bien les Réglages, mais la fenêtre s'ouvre sur « Apparence » —
+        # vu sur la capture — et personne ne clique jamais sur « Son ». Une
+        # page qu'on n'ouvre pas peut cesser de s'afficher sans qu'une seule
+        # étape ne rougisse, exactement comme une application qu'on n'ouvre
+        # pas. La page est construite au démarrage, donc cette lecture a lieu
+        # même quand on ne la regarde pas : autant qu'elle parle.
+        grenosui.dire(
+            "reglages son : %d profils ALSA, carte %s, decodeur %s, %d pilotes video"
+            % (lu["profils_alsa"], lu["carte"] or "aucune",
+               "present" if lu["decodeur"] else "absent", lu["pilotes_video"]))
         return False
 
     def changer_sortie(self, combo):
