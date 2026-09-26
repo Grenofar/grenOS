@@ -123,6 +123,44 @@ FIN
 
     dpkg-deb -b /tmp/suite /tmp/grenos-desktop-suite.deb >/dev/null
 
+    # --- Et un PAQUET neuf, pas seulement un fichier neuf ---
+    #
+    # Ce qui precede prouve qu'une mise a jour apporte nos propres fichiers.
+    # Grenofar a pose une autre question, et c'est la vraie : « je peux mettre
+    # a jour depuis grenOS pour la version avec son etc ? » — autrement dit,
+    # une machine deja installee recoit-elle les paquets DEBIAN que la nouvelle
+    # image ajoute ? Le 26 septembre j'ai repondu oui en LISANT `make-deb.sh`.
+    # Lire n'est pas prouver : c'est la faute que j'ai deja payee avec les
+    # modules de Calamares.
+    #
+    # On simule donc sa machine : on lui retire un paquet que la nouvelle liste
+    # contient, et on regarde s'il revient. `vdpauinfo` est choisi parce qu'il
+    # est une feuille — rien ne depend de lui sauf notre metapaquet — et qu'il
+    # pese 45 Kio. `--force-depends` laisse `grenos-systeme` installe mais
+    # insatisfait, exactement l'etat d'une machine en retard d'une version.
+    AMPUTE=vdpauinfo
+    if dpkg-query -W -f='${Status}' "$AMPUTE" 2>/dev/null | grep -q 'ok installed'; then
+        dpkg --remove --force-depends "$AMPUTE" >/dev/null 2>&1 || true
+        echo "maj : $AMPUTE retire de la machine, comme s'il lui manquait"
+    fi
+
+    # Le metapaquet monte de version lui aussi : sans cela apt le voit deja a
+    # jour et ne resout pas ses dependances. Une vraie nouvelle image change
+    # bien la version des deux.
+    SYSTEME_DEB=$(ls dist/grenos-systeme_*_all.deb 2>/dev/null | head -1)
+    if [ -n "$SYSTEME_DEB" ]; then
+        rm -rf /tmp/suite-systeme
+        dpkg-deb -R "$SYSTEME_DEB" /tmp/suite-systeme
+        sed -i "s/^Version: .*/Version: ${ANCIENNE}+suite/" \
+            /tmp/suite-systeme/DEBIAN/control
+        rm -f /tmp/suite-systeme/DEBIAN/md5sums
+        dpkg-deb -b /tmp/suite-systeme /tmp/grenos-systeme-suite.deb >/dev/null
+        # Le bureau exige le metapaquet a la version exacte : elle a change.
+        sed -i "s/grenos-systeme (= [^)]*)/grenos-systeme (= ${ANCIENNE}+suite)/" \
+            /tmp/suite/DEBIAN/control
+        dpkg-deb -b /tmp/suite /tmp/grenos-desktop-suite.deb >/dev/null
+    fi
+
     # Les deux paquets ensemble, et pas seulement l'un d'eux.
     #
     # `grenos-desktop` exige `grenos-systeme` a la version exacte construite en
@@ -131,11 +169,12 @@ FIN
     # celle de main, et apt refusait : « Depends: grenos-systeme (= …0208) but
     # …0134 is to be installed ». **Toutes les taches d'agent paraissaient donc
     # echouer**, et personne ne voyait que c'etait l'essai qui avait tort.
-    SYSTEME=$(ls dist/grenos-systeme_*_all.deb 2>/dev/null | head -1)
+    SYSTEME=/tmp/grenos-systeme-suite.deb
+    [ -f "$SYSTEME" ] || SYSTEME=""
     apt-get install -y --no-install-recommends \
         -o Dpkg::Options::=--force-confdef \
         -o Dpkg::Options::=--force-confold \
-        /tmp/grenos-desktop-suite.deb ${SYSTEME:+"./$SYSTEME"}
+        /tmp/grenos-desktop-suite.deb ${SYSTEME:+"$SYSTEME"}
 
     NOUVELLE=$(dpkg-query -W -f='${Version}' grenos-desktop)
     echo "version : $ANCIENNE -> $NOUVELLE"
@@ -151,6 +190,31 @@ FIN
     done
     echo "la mise a jour a apporte un service neuf, une entree de menu neuve,"
     echo "et a repose le reglage partage : appliquer-systeme s'est bien execute"
+
+    # Le paquet qu'on avait retire est-il revenu de lui-meme ?
+    if dpkg-query -W -f='${Status}' "$AMPUTE" 2>/dev/null | grep -q 'ok installed'; then
+        echo "maj : $AMPUTE est revenu — un paquet neuf arrive bien par la mise a jour"
+    else
+        echo "la mise a jour n a pas rapporte le paquet $AMPUTE" >&2
+        echo "une machine deja installee resterait donc en retard sur l image" >&2
+        exit 1
+    fi
+
+    # Et la machine a-t-elle TOUT ce que la nouvelle image declare ? C'est la
+    # promesse entiere : « 0 donnees perdu, et rien a reinstaller ».
+    LISTE=linux/config/package-lists/grenos.list.chroot
+    manquants=""
+    combien=0
+    for paquet in $(grep -v '^#' "$LISTE" | grep -v '^[[:space:]]*$'); do
+        combien=$((combien + 1))
+        dpkg-query -W -f='${Status}' "$paquet" 2>/dev/null | grep -q 'ok installed' \
+            || manquants="$manquants $paquet"
+    done
+    if [ -n "$manquants" ]; then
+        echo "apres la mise a jour, ces paquets manquent toujours :$manquants" >&2
+        exit 1
+    fi
+    echo "maj : les $combien paquets de la nouvelle image sont sur la machine"
 else
     echo "(pas de paquet local : l'essai de remplacement est saute)"
 fi
