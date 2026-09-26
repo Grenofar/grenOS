@@ -12,6 +12,7 @@ le système de comptes.
 import os
 import subprocess
 import sys
+import threading
 
 sys.path.insert(0, "/usr/lib/grenos")
 
@@ -279,6 +280,12 @@ class Reglages(Gtk.Window):
             contenu = [self.note("Aucune sortie audio détectée. Dans une machine "
                                  "virtuelle, vérifie que le son est activé côté hôte.")]
 
+        # Ce que la machine lit vraiment pour le son et la video. La lecture
+        # se fait derriere, dans un fil a part : la page se dessine d'abord
+        # avec « Lecture… », et la reponse la remplace quand elle arrive.
+        self.dire_diag_son = self.note("Lecture…")
+        threading.Thread(target=self.lire_son_et_video, daemon=True).start()
+
         return self.enveloppe(
             grenosui.titre("Son", "Par où le son sort, et à quel volume."),
             grenosui.carte(*contenu),
@@ -288,7 +295,49 @@ class Reglages(Gtk.Window):
                                            lambda: grenosui.lancer("pavucontrol"))),
                 self.note("Le mélangeur règle le volume application par application."),
             ),
+            grenosui.carte(
+                self.dire_diag_son,
+                self.note("Ce que grenOS lit sur la machine, sans lancer aucun "
+                          "programme : c'est ce qui est là, pas ce qui devrait l'être."),
+            ),
         )
+
+    def lire_son_et_video(self):
+        """Lit le diagnostic son et video derriere, puis l'affiche au premier plan."""
+        lu = materiel.son_et_video()
+        GLib.idle_add(self.montrer_son_et_video, lu)
+
+    def montrer_son_et_video(self, lu):
+        """La reponse, en phrases que tout le monde comprend."""
+        if lu["profils_alsa"]:
+            profils = f"{lu['profils_alsa']} profils ALSA trouvés."
+        else:
+            profils = ("Aucun profil ALSA trouvé : sur un portable récent, "
+                       "le son peut rester muet sans eux.")
+
+        if lu["carte"]:
+            carte = f"Carte son : {lu['carte']}"
+            if lu["module"]:
+                carte += f", pilotée par {lu['module']}"
+            carte += "."
+        else:
+            carte = "Aucune carte son détectée."
+
+        if lu["decodeur"]:
+            decodeur = "Le décodeur vidéo est installé."
+        else:
+            decodeur = "Aucun décodeur vidéo installé."
+
+        if lu["pilotes_video"]:
+            pilotes = (f"{lu['pilotes_video']} pilote"
+                       f"{'s' if lu['pilotes_video'] > 1 else ''} de décodage "
+                       "vidéo sur la carte graphique.")
+        else:
+            pilotes = ("Aucun pilote de décodage vidéo sur la carte graphique : "
+                       "les vidéos seront décodées par le processeur.")
+
+        self.dire_diag_son.set_text("\n".join([profils, carte, decodeur, pilotes]))
+        return False
 
     def changer_sortie(self, combo):
         index = combo.get_active()
