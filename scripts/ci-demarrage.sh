@@ -667,16 +667,53 @@ if len(donnees) < 4:
 pics = 0
 crete = 0
 paires = len(donnees) // 2
-for valeur in struct.unpack("<%dh" % paires, donnees[:paires * 2]):
+echantillons = struct.unpack("<%dh" % paires, donnees[:paires * 2])
+for valeur in echantillons:
     valeur = abs(valeur)
     if valeur > crete:
         crete = valeur
     if valeur > 512:
         pics += 1
 
+
 secondes = paires / 2.0 / 44100.0
 print("son : %.1f s enregistrees, crete %d sur 32767, %d echantillons audibles"
       % (secondes, crete, pics))
+
+# LES TROUS, et c'est la seule chose qui ressemble a ce que Grenofar entend.
+#
+# « On entend des bom bom bom quand y'a la video » : le son sort, il hache. Un
+# hachement est un TROU — le tampon de PipeWire se vide, la carte joue du vide
+# pendant quelques millisecondes, et on l'entend comme un a-coup.
+#
+# Compter la crete et les echantillons audibles prouve qu'un son est sorti. Ce
+# controle-la etait vert a chaque passage, et il ne pouvait pas voir un hoquet :
+# un son hache reste un son fort. Il fallait regarder AILLEURS dans le meme
+# fichier — entre les echantillons, pas leur somme.
+#
+# On ne regarde qu'a l'interieur de la partie sonore : le silence avant et
+# apres la lecture est normal, et le compter donnerait un chiffre affolant qui
+# ne voudrait rien dire.
+SEUIL = 256
+FORTS = [i for i, v in enumerate(echantillons) if abs(v) > SEUIL]
+trous = 0
+plus_long = 0
+if len(FORTS) > 100:
+    # Un trou de plus de 3 ms au milieu du son : a 44,1 kHz stereo, cela fait
+    # environ 260 echantillons. En dessous, c'est le silence naturel entre deux
+    # oscillations et non un tampon vide.
+    MINIMUM = 260
+    precedent = FORTS[0]
+    for position in FORTS[1:]:
+        ecart = position - precedent
+        if ecart > MINIMUM:
+            trous += 1
+            if ecart > plus_long:
+                plus_long = ecart
+        precedent = position
+    duree = plus_long / 2.0 / 44100.0 * 1000.0
+    print("son : %d trou(s) dans la partie sonore, le plus long %.0f ms"
+          % (trous, duree))
 if crete == 0 or pics < 100:
     # EXIGE depuis le 26 septembre au soir : vu vert cinq fois de suite
     # (36249052722, 36252138095, 36256203829, 36258213058, 36260754848), avec
