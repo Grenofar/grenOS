@@ -651,8 +651,26 @@ echo "--- combien de temps chaque fenetre met-elle a s ouvrir ---"
 # Rapporte, trie du plus lent au plus rapide : c'est la liste par laquelle
 # commencer.
 if grep -aq 'grenos: ouverture :' "$RUNNER_TEMP/serial.log"; then
-  grep -a 'grenos: ouverture :' "$RUNNER_TEMP/serial.log" | tr -d '[:cntrl:]' \
-    | sed 's/^.*grenos: //' | sort -t' ' -k5 -rn | head -12
+  # `tr -d '\r'`, surtout pas `tr -d '[:cntrl:]'`.
+  #
+  # Le premier jet utilisait `[:cntrl:]`, qui supprime AUSSI les retours a la
+  # ligne : les six mesures se collaient en une seule ligne geante, `sort` n'en
+  # voyait qu'une, et le resume n'en affichait qu'une. J'ai cru pendant un tour
+  # que cinq applications ne se chronometraient pas, et j'ai failli aller
+  # chercher pourquoi.
+  #
+  # Ailleurs dans ce fichier, `[:cntrl:]` est juste — il s'applique apres un
+  # `tail -1`, donc a une seule ligne. Ici il y en a six.
+  #
+  # Et le tri se fait sur le NOMBRE, ou qu'il soit dans la ligne. `sort -k5`
+  # prenait le cinquieme mot : juste pour « Jeux en 1159 ms », faux pour
+  # « Bienvenue dans grenOS en 2789 ms ». La liste se serait annoncee « du plus
+  # lent au plus rapide » sans l'etre — le genre de resume qu'on croit sur
+  # parole parce qu'il a l'air trie.
+  grep -a 'grenos: ouverture :' "$RUNNER_TEMP/serial.log" | tr -d '\r' \
+    | sed 's/^.*grenos: //' \
+    | awk '{ n = 0; for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) n = $i; print n "\t" $0 }' \
+    | sort -rn | cut -f2- | head -12
 else
   echo "ouverture : aucune fenetre ne s'est chronometree"
 fi

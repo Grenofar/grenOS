@@ -603,6 +603,32 @@ for module in /usr/lib/grenos/*.py; do
         compiler "$module"
     fi
 done
+
+# Et maintenant on DEPOSE leur bytecode, ce qu'on n'avait jamais fait.
+#
+# Grenofar : « dans certaines applications ca met du temps a ouvrir ». Le
+# chronometre pose ce soir a donne les premiers chiffres : 810 a 1199 ms pour
+# cinq fenetres, 2789 ms pour l'accueil. Une partie de ce temps est payee
+# AVANT que la fenetre n'existe, a l'import de nos modules.
+#
+# Le controle ci-dessus lit les fichiers sans rien ecrire — c'est voulu pour
+# /usr/bin, ou un __pycache__ ne servirait a personne : Python ne met jamais en
+# cache le script principal. Mais /usr/lib/grenos est IMPORTE par les douze
+# programmes, et la le cache compte.
+#
+# Sans lui, Python recompile grenosui.py et ses neuf voisins a chaque
+# lancement, parce que le squashfs est en lecture seule : il ne peut pas
+# deposer le resultat, donc il recommence. Le faire ici, une fois, pendant la
+# construction.
+#
+# `-q` pour ne pas noyer le journal, et on ne s'arrete pas dessus : un cache
+# manquant rend le demarrage plus lent, il ne casse rien.
+if python3 -m compileall -q /usr/lib/grenos >/dev/null 2>&1; then
+    caches=$(find /usr/lib/grenos -name '*.pyc' | wc -l)
+    echo "grenos: $caches modules pre-compiles, ils ne le seront plus a chaque lancement"
+else
+    echo "grenos: la pre-compilation a echoue — le demarrage sera plus lent" >&2
+fi
 # Nos programmes : eux portent une ligne #!, et certains sont du shell.
 for programme in /usr/bin/grenos-* /usr/bin/grenplace /usr/lib/grenos/grenos-*; do
     [ -f "$programme" ] || continue
