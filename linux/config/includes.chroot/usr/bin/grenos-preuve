@@ -15,6 +15,21 @@ set -u
 
 BOITE=/tmp/grenos-billets
 MARQUE=/tmp/grenos-session
+
+# Le temoin de persistance est lu ICI, a la premiere ligne utile, et pas la ou
+# il est rapporte.
+#
+# Il etait lu deux cents lignes plus bas, apres un `flatpak remote-info` qui
+# peut prendre quatre-vingt-dix secondes. La session avait tout le temps
+# d'ecrire le sien entre-temps, et les DEUX demarrages repondaient « le temoin
+# est de ce demarrage » : la mesure etait devenue honnete, elle ne prouvait
+# toujours rien.
+#
+# C'est la cinquieme fois cette semaine : *une mesure prise au mauvais moment
+# n'est pas fausse, elle mesure autre chose.* Ce service demarre avec le
+# systeme, bien avant lightdm ; lire a la premiere ligne, c'est lire ce que le
+# disque contenait AVANT que quiconque y touche.
+TEMOIN_AU_DEMARRAGE=$(cat /home/*/.config/grenos/temoin-persistance 2>/dev/null | head -1)
 mkdir -p "$BOITE" 2>/dev/null || true
 chmod 1777 "$BOITE" 2>/dev/null || true
 
@@ -268,7 +283,7 @@ fi
 # elle ne prouvait rien. Le noyau tire un `boot_id` neuf a chaque demarrage,
 # donc un temoin qui en porte un autre vient forcement d'avant — et aucune
 # course ne peut plus s'y glisser.
-temoin=$(cat /home/*/.config/grenos/temoin-persistance 2>/dev/null | head -1)
+temoin="$TEMOIN_AU_DEMARRAGE"
 demarrage=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)
 if [ -z "$temoin" ]; then
     dire "persistance : aucun temoin — premier demarrage, ou rien n'a ete garde"
