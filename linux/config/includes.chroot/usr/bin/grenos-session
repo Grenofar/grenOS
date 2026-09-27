@@ -166,27 +166,29 @@ grenos-veilleur grenos-shell &
     # A retenir : *une mesure prise au mauvais moment n'est pas une mesure
     # fausse, c'est une mesure d'autre chose.* Elle repond parfaitement a
     # une question qu'on n'a pas posee.
-    # On regarde TOUS LES FILS, pas seulement le principal.
+    # La priorite des fils, lue par `ps`, et par rien d'autre.
     #
-    # Premiere version de cette mesure : `chrt -p` sur le processus. Elle a
-    # repondu « SCHED_OTHER, PAS prioritaire » — et elle avait tort. PipeWire
-    # ne met pas son fil principal en temps reel : il cree un fil a part,
-    # `data-loop`, qui est le seul a porter le son, et c'est CELUI-LA qui
-    # demande SCHED_FIFO. Mesurer le processus revenait a juger un orchestre
-    # sur le silence du chef.
+    # SEPT tentatives ont porte sur « aucun fil de pipewire en temps
+    # reel ». La huitieme mesure a montre que ce chiffre etait faux depuis
+    # le debut :
     #
-    # Corrige avant d'avoir cru le resultat — la lecon du 25 septembre, ou la
-    # CI affirmait que le panneau de son ne se fermait pas alors que la capture
-    # montrait qu'il etait parti : *un test qui echoue peut se tromper.*
+    #     son : fils de pipewire = pipewire/TS/- data-loop.0/FF/88
+    #
+    # `data-loop.0` est en classe FF — SCHED_FIFO — a la priorite 88.
+    # **PipeWire tournait en temps reel.** C'est ma boucle `chrt` qui
+    # comptait faux, et elle a tenu sept tours en disant le contraire de
+    # la verite, sans jamais se contredire.
+    #
+    # Elle est supprimee. Une seule source desormais : `ps -L`, qui rend
+    # le nom, la classe et la priorite de chaque fil tels que le noyau les
+    # voit. Le verdict se deduit de cette meme ligne, donc il ne peut plus
+    # dire autre chose qu'elle.
+    #
+    # La lecon de la nuit, et elle vaut pour tout : *deux mesures d'une
+    # meme chose finissent toujours par diverger ; celle qui reste doit
+    # etre celle qu'on peut lire a l'oeil nu.*
     PW=$(pgrep -x pipewire 2>/dev/null | head -1)
     if [ -n "$PW" ] && [ -d "/proc/$PW/task" ] && command -v chrt >/dev/null 2>&1; then
-        TEMPS_REEL=0
-        for fil in /proc/"$PW"/task/*; do
-            [ -d "$fil" ] || continue
-            case "$(chrt -p "$(basename "$fil")" 2>/dev/null | sed -n 's/.*policy: //p' | head -1)" in
-                SCHED_FIFO|SCHED_RR) TEMPS_REEL=$((TEMPS_REEL + 1)) ;;
-            esac
-        done
 
         # QUI sont ces fils, au juste ?
         #
@@ -199,8 +201,10 @@ grenos-veilleur grenos-shell &
         # FIFO) et la priorite, telles que le noyau les voit, sans prose a
         # interpreter. Six mesures se sont trompees cette nuit en lisant la
         # sortie d'un outil plutot que la valeur elle-meme.
-        QUI=$(ps -L -o comm=,cls=,rtprio= -p "$PW" 2>/dev/null \
+        FILS_PS=$(ps -L -o comm=,cls=,rtprio= -p "$PW" 2>/dev/null)
+        QUI=$(printf '%s\n' "$FILS_PS" \
               | awk '{printf "%s/%s/%s ", $1, $2, $3}' | cut -c1-120)
+        TEMPS_REEL=$(printf '%s\n' "$FILS_PS" | awk '$2=="FF" || $2=="RR"' | wc -l)
         grenos-dire "son : fils de pipewire = ${QUI:-illisibles}"
         # La LIMITE, et pas seulement le résultat.
         #
@@ -237,13 +241,13 @@ grenos-veilleur grenos-shell &
             MODULES=$(pw-cli ls Module 2>/dev/null | grep -c 'module-rt')
             case "${MODULES:-0}" in
                 0) grenos-dire "son : module-rt N EST PAS charge — personne ne demande la priorite" ;;
-                *) grenos-dire "son : module-rt charge ($MODULES fois), il demande et se fait refuser" ;;
+                *) grenos-dire "son : module-rt charge, c est lui qui obtient la priorite" ;;
             esac
         else
             grenos-dire "son : pw-cli absent, impossible de savoir si module-rt est la"
         fi
 
-        FILS=$(ls -1 /proc/"$PW"/task 2>/dev/null | wc -l)
+        FILS=$(printf '%s\n' "$FILS_PS" | awk 'NF' | wc -l)
         if [ "$TEMPS_REEL" -gt 0 ]; then
             grenos-dire "son : pipewire a $TEMPS_REEL fil(s) en temps reel sur $FILS, il tiendra sous charge"
         else
