@@ -63,7 +63,13 @@ fi
 #
 # L'etiquette n'est surtout pas « persistence » : live-boot la cherche, et
 # deux candidats feraient une panne que personne ne saurait lire.
-sudo linux/tools/make-disk.sh "$RUNNER_TEMP/persistence.vdi" 8
+#
+# Le marqueur `/etc/grenos/essai-charge` fait de ce disque celui de la machine
+# d'integration, et rien d'autre : la session y joue le son une SECONDE fois,
+# les coeurs satures. C'est la seule facon de voir le hoquet que Grenofar
+# entend « quand y'a la video », et un son propre au repos ne le voit pas.
+# Aucune machine reelle n'a ce fichier.
+sudo linux/tools/make-disk.sh "$RUNNER_TEMP/persistence.vdi" 8 etc/grenos/essai-charge
 sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/persistence.vdi"
 qemu-img create -f raw "$RUNNER_TEMP/disque.raw" 20G >/dev/null
 sudo sgdisk --new=1:2048:0 --typecode=1:8300 --change-name=1:DONNEES \
@@ -739,26 +745,80 @@ print("son : %.1f s enregistrees, crete %d sur 32767, %d echantillons audibles"
 # On ne regarde qu'a l'interieur de la partie sonore : le silence avant et
 # apres la lecture est normal, et le compter donnerait un chiffre affolant qui
 # ne voudrait rien dire.
+#
+# DEUX lectures, pas une, et c'est tout l'objet du changement du 27 septembre.
+#
+# La session joue le meme son une premiere fois au repos, puis une seconde
+# fois avec tous les coeurs satures — le second essai n'a lieu que sur cette
+# machine, reconnue par un marqueur pose dans son disque de persistance. Il
+# faut donc DECOUPER le fichier : sans cela, les trois secondes de silence
+# entre les deux lectures compteraient pour un trou geant, et le controle
+# dirait le contraire de la verite.
+#
+# Ce que la comparaison donne, et qu'aucun chiffre isole ne donnait : « propre
+# au repos, hache sous charge » est un diagnostic ; « 0 trou » tout seul ne
+# repond pas a la question qu'il a posee.
 SEUIL = 256
 FORTS = [i for i, v in enumerate(echantillons) if abs(v) > SEUIL]
-trous = 0
-plus_long = 0
-if len(FORTS) > 100:
-    # Un trou de plus de 3 ms au milieu du son : a 44,1 kHz stereo, cela fait
-    # environ 260 echantillons. En dessous, c'est le silence naturel entre deux
-    # oscillations et non un tampon vide.
-    MINIMUM = 260
+# Un trou de plus de 3 ms au milieu du son : a 44,1 kHz stereo, cela fait
+# environ 260 echantillons. En dessous, c'est le silence naturel entre deux
+# oscillations et non un tampon vide.
+MINIMUM = 260
+# Un demi-silence de 0,4 s separe deux LECTURES, pas deux oscillations.
+SEPARATION = int(0.4 * 44100 * 2)
+
+
+def ms(entrees):
+    return entrees / 2.0 / 44100.0 * 1000.0
+
+
+regions = []
+if FORTS:
+    debut = FORTS[0]
     precedent = FORTS[0]
     for position in FORTS[1:]:
+        if position - precedent > SEPARATION:
+            regions.append((debut, precedent))
+            debut = position
+        precedent = position
+    regions.append((debut, precedent))
+
+# Une region de moins de 100 ms est un clic, pas une lecture.
+regions = [r for r in regions if ms(r[1] - r[0]) > 100]
+
+NOMS = ["au repos", "sous charge"]
+resume = []
+for rang, (depart, fin) in enumerate(regions):
+    dedans = [i for i in FORTS if depart <= i <= fin]
+    trous = 0
+    plus_long = 0
+    precedent = dedans[0]
+    for position in dedans[1:]:
         ecart = position - precedent
         if ecart > MINIMUM:
             trous += 1
             if ecart > plus_long:
                 plus_long = ecart
         precedent = position
-    duree = plus_long / 2.0 / 44100.0 * 1000.0
-    print("son : %d trou(s) dans la partie sonore, le plus long %.0f ms"
-          % (trous, duree))
+    nom = NOMS[rang] if rang < len(NOMS) else "lecture %d" % (rang + 1)
+    resume.append((nom, trous, plus_long))
+    print("son : %s — %.0f ms, %d trou(s), le plus long %.0f ms"
+          % (nom, ms(fin - depart), trous, ms(plus_long)))
+
+if len(resume) < 2:
+    # Rapporte, pas bloquant : le second essai vient d'etre ecrit, et une
+    # etape ne devient obligatoire qu'apres avoir ete vue verte.
+    print("son : une seule lecture entendue — la mesure sous charge n a pas eu"
+          " lieu, le marqueur ou le second paplay a manque")
+else:
+    repos, charge = resume[0], resume[1]
+    if charge[1] > repos[1]:
+        print("::warning::Le son hache SOUS CHARGE : %d trou(s) contre %d au"
+              " repos, le plus long %.0f ms. C est le defaut que Grenofar"
+              " entend." % (charge[1], repos[1], ms(charge[2])))
+    else:
+        print("son : sous charge comme au repos, %d trou(s) — le tampon tient"
+              % charge[1])
 if crete == 0 or pics < 100:
     # EXIGE depuis le 26 septembre au soir : vu vert cinq fois de suite
     # (36249052722, 36252138095, 36256203829, 36258213058, 36260754848), avec

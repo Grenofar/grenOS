@@ -128,6 +128,55 @@ grenos-veilleur grenos-shell &
 # cette ligne, « aucune sortie détectée » dans les Réglages ne permet pas de
 # distinguer une panne d'un ordinateur sans carte son.
 (
+    # --- D'ABORD : le mélangeur ALSA n'est-il pas simplement COUPÉ ? --------
+    #
+    # Grenofar, le 27 au matin, après avoir installé la mise à jour : « le son
+    # fonctionne toujours pas ». Les cinq corrections de la nuit — rtkit, les
+    # limites aux deux étages, module-rt, le tampon à 2048, memlock — visaient
+    # un son qui *hache*. Aucune ne peut faire sortir un son d'une carte dont
+    # le canal Master est coupé.
+    #
+    # Et rien, nulle part, ne le démontait. `grenos-preuve` disait même
+    # « alsactl présent, le mélangeur sera restauré au démarrage » : c'est une
+    # promesse sans rien derrière, exactement comme la règle polkit qui nommait
+    # une action inexistante et comme `partition.conf` qui offrait btrfs sans
+    # `mkfs.btrfs`. `alsactl restore` restaure un état **enregistré**, et une
+    # image live n'en a aucun. Une carte HDA — celle que VirtualBox donne —
+    # démarre couramment avec Master à zéro et coupé : silence total, sous une
+    # pile logicielle impeccable.
+    #
+    # La CI ne pouvait pas le voir : le mélangeur d'`intel-hda` sous QEMU sort
+    # ouvert, donc elle entendait un son et disait vrai. C'est le maillon exact
+    # qui reste invisible ici et qu'il fallait aller chercher.
+    #
+    # On ne le fait qu'UNE fois. Après, le volume appartient à la personne :
+    # un système qui remonte le son à chaque ouverture de session est
+    # insupportable, et le sien est gardé par la persistance.
+    if [ ! -e "$CONFIG/melangeur-ouvert" ] && command -v amixer >/dev/null 2>&1; then
+        OUVERTS=""
+        for CARTE in $(sed -n 's/^ *\([0-9]\+\) \[.*/\1/p' /proc/asound/cards 2>/dev/null); do
+            for CANAL in Master PCM Speaker Headphone Front "Analog Output"; do
+                if amixer -c "$CARTE" sget "$CANAL" >/dev/null 2>&1; then
+                    # `unmute` seul ne suffit pas : un canal peut être ouvert
+                    # ET à zéro. Les deux, donc, et en une fois.
+                    if amixer -q -c "$CARTE" sset "$CANAL" 80% unmute >/dev/null 2>&1; then
+                        OUVERTS="$OUVERTS $CANAL"
+                    fi
+                fi
+            done
+        done
+        touch "$CONFIG/melangeur-ouvert"
+        if [ -n "$OUVERTS" ]; then
+            grenos-dire "son : melangeur ouvert au premier demarrage —$OUVERTS"
+            # Et on l'enregistre, pour que le prochain démarrage le retrouve :
+            # c'est ce que la ligne de `grenos-preuve` promettait sans que rien
+            # n'ait jamais écrit l'état qu'elle prétendait restaurer.
+            alsactl store >/dev/null 2>&1 || true
+        else
+            grenos-dire "son : aucun canal de melangeur trouve a ouvrir"
+        fi
+    fi
+
     # PipeWire demarre par socket, a la demande : on le reveille plutot que
     # d'esperer que quelqu'un d'autre le fasse.
     systemctl --user start pipewire.socket pipewire-pulse.socket 2>/dev/null
@@ -178,6 +227,44 @@ grenos-veilleur grenos-shell &
             grenos-dire "son : un son a ete joue par PipeWire"
         else
             grenos-dire "son : paplay a refuse de jouer"
+        fi
+
+        # --- Et le MÊME son, une seconde fois, pendant que la machine peine ---
+        #
+        # C'est la seule mesure qui ressemble à ce que Grenofar entend.
+        #
+        # « On entend des bom bom bom **quand y'a la vidéo** » : c'est la
+        # charge qui déclenche son hoquet. Or notre preuve jouait sur une
+        # machine oisive, où PipeWire a tout le temps du monde — elle disait
+        # « 0 trou » et aurait continué à le dire même si le défaut était
+        # entier. Un son propre au repos ne prouve rien d'un son sous charge.
+        #
+        # Deux lectures séparées par un vrai silence, et la machine
+        # d'intégration compare les deux : au repos, puis les cœurs saturés.
+        # C'est la différence entre les deux qui est le diagnostic, pas le
+        # chiffre isolé.
+        #
+        # **Uniquement sur la machine d'intégration.** Le marqueur est posé
+        # par la CI dans le disque de persistance qu'elle fabrique elle-même
+        # (`make-disk.sh`), et n'existe sur aucune machine réelle. Brûler les
+        # cœurs une seconde au démarrage serait insupportable sur un portable
+        # de 2012 — c'est-à-dire exactement la machine qu'on essaie de servir.
+        if [ -e /etc/grenos/essai-charge ]; then
+            sleep 2
+            COEURS=$(nproc 2>/dev/null || echo 2)
+            CHARGE=""
+            i=0
+            while [ "$i" -lt "$COEURS" ]; do
+                sh -c 'while : ; do : ; done' &
+                CHARGE="$CHARGE $!"
+                i=$((i + 1))
+            done
+            sleep 1
+            paplay "$ESSAI" 2>/dev/null || true
+            # shellcheck disable=SC2086
+            kill $CHARGE 2>/dev/null || true
+            wait 2>/dev/null || true
+            grenos-dire "son : second essai joue avec $COEURS coeur(s) satures"
         fi
     else
         grenos-dire "son : pas de quoi essayer (fichier ou paplay absent)"

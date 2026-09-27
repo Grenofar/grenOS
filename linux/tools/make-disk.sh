@@ -8,12 +8,20 @@
 # retrouvé au démarrage suivant. L'installation sur disque reste possible, et
 # reprendra la même place.
 #
-#   sudo linux/tools/make-disk.sh <sortie.vdi> [taille en Go]
+#   sudo linux/tools/make-disk.sh <sortie.vdi> [taille en Go] [marqueur]
+#
+# Le troisième argument, s'il est donné, est un chemin **dans le volume** :
+# un fichier vide y est créé, dossiers parents compris. La persistance étant
+# montée en union sur toute la racine, ce fichier apparaît tel quel dans le
+# système qui démarre. C'est ainsi que la machine d'intégration se fait
+# reconnaître pour ses essais — voir `/etc/grenos/essai-charge`, qui déclenche
+# la mesure du son sous charge et n'existe sur aucune machine réelle.
 
 set -eu
 
 OUT="$1"
 SIZE="${2:-25}"
+MARQUE="${3:-}"
 RAW=$(mktemp -u).raw
 trap 'rm -f "$RAW"' EXIT
 
@@ -34,6 +42,11 @@ mount "${LOOP}p1" "$MOUNT"
 # La ligne que live-boot lit : « / union » veut dire que tout le système de
 # fichiers est superposé, donc tout ce qui change est gardé ici.
 echo "/ union" > "$MOUNT/persistence.conf"
+if [ -n "$MARQUE" ]; then
+    mkdir -p "$MOUNT/$(dirname "$MARQUE")"
+    : > "$MOUNT/$MARQUE"
+    echo "--- marqueur $MARQUE pose dans le volume ---"
+fi
 sync
 umount "$MOUNT"
 rmdir "$MOUNT"

@@ -336,7 +336,45 @@ class Reglages(Gtk.Window):
             pilotes = ("Aucun pilote de décodage vidéo sur la carte graphique : "
                        "les vidéos seront décodées par le processeur.")
 
-        self.dire_diag_son.set_text("\n".join([profils, carte, decodeur, pilotes]))
+        # Le mélangeur, et c'est la ligne la plus utile de la page.
+        #
+        # Grenofar : « le son fonctionne toujours pas », après une mise à jour
+        # qui portait cinq corrections sur la priorité et le tampon. Aucune ne
+        # peut faire sortir un son d'un canal coupé. Cette ligne répond enfin
+        # à « pourquoi » au lieu de me laisser deviner une septième fois.
+        coupes = [c for c in lu.get("melangeur", []) if c["coupe"]]
+        bas = [c for c in lu.get("melangeur", [])
+               if not c["coupe"] and c["niveau"] is not None and c["niveau"] < 10]
+        if coupes:
+            melangeur = ("LE SON EST COUPÉ dans le mélangeur de la carte : "
+                         + ", ".join(c["nom"] for c in coupes)
+                         + ". C'est la cause la plus probable d'un silence "
+                           "complet. Ouvre le mélangeur ci-dessus et remonte-les.")
+        elif bas:
+            melangeur = ("Le mélangeur de la carte est très bas : "
+                         + ", ".join("%s à %d %%" % (c["nom"], c["niveau"]) for c in bas)
+                         + ".")
+        elif lu.get("melangeur"):
+            melangeur = ("Le mélangeur de la carte est ouvert ("
+                         + ", ".join("%s %d %%" % (c["nom"], c["niveau"])
+                                     for c in lu["melangeur"]
+                                     if c["niveau"] is not None)
+                         + ").")
+        else:
+            melangeur = "Aucun canal de mélangeur lisible sur cette carte."
+
+        temps_reel = lu.get("temps_reel")
+        if temps_reel is True:
+            priorite = ("PipeWire tourne en temps réel : le son tiendra quand "
+                        "la machine peine.")
+        elif temps_reel is False:
+            priorite = ("PipeWire ne tourne PAS en temps réel : le son hachera "
+                        "dès que la machine peine.")
+        else:
+            priorite = "PipeWire ne tourne pas."
+
+        self.dire_diag_son.set_text("\n".join(
+            [melangeur, priorite, carte, profils, decodeur, pilotes]))
 
         # Et on le dit sur le port série.
         #
@@ -351,6 +389,14 @@ class Reglages(Gtk.Window):
             "reglages son : %d profils ALSA, carte %s, decodeur %s, %d pilotes video"
             % (lu["profils_alsa"], lu["carte"] or "aucune",
                "present" if lu["decodeur"] else "absent", lu["pilotes_video"]))
+        # Le mélangeur sur sa propre ligne : c'est celle qu'on ira chercher le
+        # jour où quelqu'un dira « pas de son », et elle doit se lire seule.
+        grenosui.dire(
+            "reglages son : melangeur %s"
+            % (", ".join("%s %s %s" % (c["nom"],
+                                       "?" if c["niveau"] is None else "%d%%" % c["niveau"],
+                                       "COUPE" if c["coupe"] else "ouvert")
+                         for c in lu.get("melangeur", [])) or "illisible"))
         return False
 
     def changer_sortie(self, combo):

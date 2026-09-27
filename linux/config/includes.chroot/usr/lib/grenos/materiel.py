@@ -207,7 +207,83 @@ def son_et_video():
         "module": module,
         "decodeur": decodeur,
         "pilotes_video": pilotes_video,
+        "melangeur": melangeur(),
+        "temps_reel": pipewire_temps_reel(),
     }
+
+
+def melangeur():
+    """Les canaux du mélangeur ALSA : leur niveau, et s'ils sont coupés.
+
+    C'est la lecture qui manquait, et elle vaut toutes les autres. Le
+    27 septembre, après cinq corrections sur la priorité temps réel et le
+    tampon de PipeWire, Grenofar a répondu « le son fonctionne toujours pas ».
+    Aucune de ces corrections ne peut faire sortir un son d'une carte dont le
+    canal Master est coupé — et rien, dans grenOS, ne le disait ni ne le
+    démontait.
+
+    **Pourquoi un programme ici, alors que le reste de ce fichier n'en lance
+    aucun** : `amixer` lit /dev/snd directement et répond tout de suite, là où
+    `pactl`, `vainfo` et `vulkaninfo` interrogent des services qui peuvent
+    mettre deux minutes — l'un d'eux a déjà figé une fenêtre vingt-cinq
+    secondes. Il est de plus appelé depuis un fil, jamais pendant qu'une
+    fenêtre se dessine, et borné à deux secondes. La règle n'est pas oubliée :
+    elle vise les appels lents, et celui-ci ne l'est pas.
+    """
+    canaux = []
+    for carte in re.findall(r"^\s*(\d+)\s*\[", _lire("/proc/asound/cards"), re.M):
+        for canal in ("Master", "PCM", "Speaker", "Headphone"):
+            try:
+                sortie = subprocess.run(
+                    ["amixer", "-c", carte, "sget", canal],
+                    capture_output=True, text=True, timeout=2)
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if sortie.returncode != 0:
+                continue
+            # « [75%] [on] » ou « [0%] [off] » — on prend le premier canal
+            # physique, les deux oreilles portent le même réglage.
+            niveau = re.search(r"\[(\d+)%\]", sortie.stdout)
+            coupe = "[off]" in sortie.stdout
+            canaux.append({
+                "carte": carte,
+                "nom": canal,
+                "niveau": int(niveau.group(1)) if niveau else None,
+                "coupe": coupe,
+            })
+    return canaux
+
+
+def pipewire_temps_reel():
+    """PipeWire a-t-il un fil en temps réel ? Lu dans /proc, sans rien lancer.
+
+    Le champ 41 de `/proc/<pid>/task/<tid>/stat` est la politique
+    d'ordonnancement : 1 = FIFO, 2 = RR, 0 = ordinaire. C'est le fil
+    `data-loop` qui porte le son et qui bascule — jamais le processus. Compter
+    le processus au lieu de ses fils est l'erreur qui a coûté sept tentatives
+    dans la nuit du 26 au 27.
+    """
+    for chemin in glob.glob("/proc/[0-9]*"):
+        if _lire(chemin + "/comm").strip() != "pipewire":
+            continue
+        for fil in glob.glob(chemin + "/task/[0-9]*"):
+            stat = _lire(fil + "/stat")
+            # Le nom du fil est entre parenthèses et peut contenir des
+            # espaces : on coupe après la dernière.
+            champs = stat[stat.rfind(")") + 1:].split()
+            # stat[0] est le 3e champ, donc le 41e est à l'indice 38.
+            if len(champs) > 38 and champs[38] in ("1", "2"):
+                return True
+        return False
+    return None
+
+
+def _lire(chemin):
+    try:
+        with open(chemin, encoding="utf-8", errors="replace") as fichier:
+            return fichier.read()
+    except OSError:
+        return ""
 
 
 def resume():
