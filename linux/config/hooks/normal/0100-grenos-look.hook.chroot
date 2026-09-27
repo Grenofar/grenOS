@@ -250,7 +250,7 @@ echo "--- grenOS : nos icones existent-elles en petite taille ---"
 petites=""
 for nom in grenos grenplace grenos-fichiers grenos-taches grenos-jeux \
            grenos-son grenos-son-muet grenos-reseau-cable grenos-reseau-aucun \
-           grenos-parametres; do
+           grenos-parametres grenos-maj grenos-installer grenos-theme; do
     if [ ! -f "/usr/share/icons/hicolor/24x24/apps/$nom.png" ]; then
         petites="$petites $nom"
     fi

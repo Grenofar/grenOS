@@ -3,6 +3,6 @@ Type=Application
 Name=Jour et nuit
 Comment=Changer la lumière du bureau
 Exec=grenos-theme
-Icon=weather-clear-night
+Icon=grenos-theme
 Terminal=false
 Categories=Settings;

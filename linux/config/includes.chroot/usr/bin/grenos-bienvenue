@@ -32,7 +32,7 @@ GESTES = [
     ("Réglages", "Le thème jour et nuit, l'écran, le son, l'heure, le mot de passe, "
      "les mises à jour.", "grenos-parametres", ["grenos-parametres", "preferences-system"]),
     ("Mettre à jour", "Les nouveautés de grenOS et les correctifs de sécurité, "
-     "sans retélécharger l'image.", "grenos-maj", ["system-software-update"]),
+     "sans retélécharger l'image.", "grenos-maj", ["grenos-maj", "system-software-update"]),
     ("Naviguer", "Firefox est là, avec ses onglets et ses favoris.",
      "firefox-esr", ["firefox-esr", "web-browser"]),
     ("Tes fichiers", "Ouvrir, renommer, copier, supprimer — et tout ce que tu poses "
@@ -43,7 +43,7 @@ GESTES = [
 
 INSTALLER = ("Installer grenOS", "Poser le système sur le disque de ce PC, à côté ou à "
              "la place de ce qui s'y trouve. Rien n'est touché avant que tu ne valides.",
-             "pkexec calamares", ["drive-harddisk"])
+             "pkexec calamares", ["grenos-installer", "drive-harddisk"])
 
 ASTUCES = [
     "Clic droit sur le bureau : créer un dossier, un fichier, changer le fond.",

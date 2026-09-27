@@ -3,6 +3,6 @@ Type=Application
 Name=Mettre à jour grenOS
 Comment=Les nouveautés de grenOS et les correctifs de sécurité
 Exec=grenos-maj
-Icon=system-software-update
+Icon=grenos-maj
 Terminal=false
 Categories=System;

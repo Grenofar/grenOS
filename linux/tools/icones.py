@@ -482,6 +482,97 @@ def dessin_reglages(taille):
     return np.clip(image, 0, 255).astype(np.uint8)
 
 
+def dessin_maj(taille):
+    """Mettre à jour : une flèche qui descend sur un socle.
+
+    Elle portait `system-software-update`, de Papirus. Une flèche vers le bas
+    est ce qui se lit le plus vite à seize pixels — mieux qu'une flèche
+    circulaire, dont la boucle se referme en bouillie dès qu'on descend sous
+    vingt pixels. Le socle dit « sur cette machine » et empêche de la
+    confondre avec un simple téléchargement.
+    """
+    image, u, v = toile(taille)
+
+    # La hampe, puis la pointe : deux formes, pas un chevron dessiné à la main.
+    hampe = rectangle(u, v, 0.415, 0.13, 0.585, 0.52, rayon=0.05)
+    poser(image, hampe, ACCENT, 1.0)
+
+    # La pointe est un triangle : |u - 0.5| plus petit que ce qui reste à
+    # descendre. Les bords restent doux parce qu'on divise par un flou.
+    #
+    # Pas de rabot en bas : la largeur se referme déjà d'elle-même quand `v`
+    # approche de 0,70. Le premier jet en ajoutait un, et les deux adoucissements
+    # se multipliaient — la pointe s'éteignait avant de se former, ce qui donnait
+    # un pentagone. Visible seulement sur la planche : à 256 px, c'était une
+    # flèche impeccable.
+    largeur = np.clip((0.72 - v) * 0.95, 0.0, 1.0)
+    pointe = np.clip((largeur - np.abs(u - 0.5)) / 0.02, 0.0, 1.0)
+    pointe = pointe * np.clip((v - 0.42) / 0.02, 0.0, 1.0)
+    poser(image, pointe, ACCENT, 1.0)
+
+    socle = rectangle(u, v, 0.18, 0.80, 0.82, 0.91, rayon=0.045)
+    poser(image, socle, CLAIR, 0.9)
+
+    return np.clip(image, 0, 255).astype(np.uint8)
+
+
+def dessin_installateur(taille):
+    """Installer grenOS : un disque, et la flèche qui y entre.
+
+    Elle portait `drive-harddisk`, de Papirus — un boîtier gris, lisible mais
+    étranger. Ici le même boîtier, à notre bleu, et une flèche claire qui y
+    descend : c'est la différence entre « un disque » et « poser le système
+    dessus ».
+    """
+    image, u, v = toile(taille)
+
+    boitier = rectangle(u, v, 0.14, 0.24, 0.86, 0.78, rayon=0.10)
+    poser(image, boitier, ACCENT, 1.0)
+
+    # La flèche, en clair, à l'intérieur du boîtier.
+    hampe = rectangle(u, v, 0.455, 0.33, 0.545, 0.55, rayon=0.03)
+    poser(image, hampe, CLAIR, 1.0)
+    # Même remarque que pour la mise à jour : la largeur suffit à fermer la
+    # pointe, un rabot de plus l'aurait tronquée.
+    largeur = np.clip((0.70 - v) * 1.05, 0.0, 1.0)
+    pointe = np.clip((largeur - np.abs(u - 0.5)) / 0.02, 0.0, 1.0)
+    pointe = pointe * np.clip((v - 0.50) / 0.02, 0.0, 1.0)
+    poser(image, pointe, CLAIR, 1.0)
+
+    return np.clip(image, 0, 255).astype(np.uint8)
+
+
+def dessin_theme(taille):
+    """Jour et nuit : un croissant, decoupe dans un disque.
+
+    Elle portait `weather-clear-night`, qui est une icone de METEO — a un clic
+    du reglage du theme, ce qui est exactement le genre de detail qui fait dire
+    « ca ne se ressemble pas ». Un croissant se lit a douze pixels ; un soleil
+    a rayons, non.
+    """
+    image, u, v = toile(taille)
+
+    plein = np.clip((0.36 - np.hypot(u - 0.5, v - 0.5)) / 0.022, 0.0, 1.0)
+    # Le disque qui mord : decale en haut a droite, c'est lui qui fait le
+    # croissant. Sans decalage vertical, on obtient un quartier de citron.
+    morsure = np.clip((0.31 - np.hypot(u - 0.70, v - 0.34)) / 0.022, 0.0, 1.0)
+    poser(image, plein * (1.0 - morsure), ACCENT_CLAIR, 1.0)
+
+    return np.clip(image, 0, 255).astype(np.uint8)
+
+
+def maj(chemin, taille):
+    png(chemin, dessin_maj(taille))
+
+
+def installateur(chemin, taille):
+    png(chemin, dessin_installateur(taille))
+
+
+def theme(chemin, taille):
+    png(chemin, dessin_theme(taille))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
@@ -504,6 +595,9 @@ def main():
     sans_reseau(os.path.join(dossier, 'grenos-reseau-aucun.png'), taille)
     taches(os.path.join(dossier, 'grenos-taches.png'), taille)
     reglages(os.path.join(dossier, 'grenos-parametres.png'), taille)
+    maj(os.path.join(dossier, 'grenos-maj.png'), taille)
+    installateur(os.path.join(dossier, 'grenos-installer.png'), taille)
+    theme(os.path.join(dossier, 'grenos-theme.png'), taille)
 
 
 if __name__ == '__main__':
