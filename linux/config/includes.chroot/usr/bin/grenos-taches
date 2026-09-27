@@ -178,6 +178,7 @@ def processus():
 class Taches(Gtk.Window):
     def __init__(self):
         super().__init__(title="Gestionnaire de tâches")
+        grenosui.chronometrer(self)
         grenosui.poser_taille(self, 900, 640)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)

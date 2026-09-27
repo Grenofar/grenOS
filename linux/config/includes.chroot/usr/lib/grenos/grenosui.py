@@ -694,8 +694,22 @@ def fenetre(nom, largeur=820, hauteur=600):
     cadre.set_position(Gtk.WindowPosition.CENTER)
     cadre.set_icon_name("grenos")
     cadre.connect("destroy", Gtk.main_quit)
-    cadre.connect("map-event", _premier_affichage, nom)
+    chronometrer(cadre, nom)
     return cadre
+
+
+def chronometrer(cadre, nom=None):
+    """Faire dire à cette fenêtre combien de temps elle a mis à s'afficher.
+
+    Appelée d'office par `fenetre()`, et **à la main par les sept applications
+    qui construisent leur propre `Gtk.Window`**. C'est le premier passage qui
+    l'a dit : une seule ligne `ouverture :` est revenue du port série, celle de
+    l'accueil, parce que lui seul passe par l'aide partagée. Un instrument qui
+    ne mesure qu'un cas sur huit ne mesure rien — et il aurait été facile de
+    croire, sur cette unique ligne, que tout allait bien.
+    """
+    cadre.connect("map-event", _premier_affichage,
+                  nom or cadre.get_title() or "fenêtre")
 
 
 def _premier_affichage(cadre, _evenement, nom):

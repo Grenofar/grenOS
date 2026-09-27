@@ -348,6 +348,7 @@ class Installation(Gtk.Window):
 class GrenPlace(Gtk.Window):
     def __init__(self):
         super().__init__(title="GrenPlace")
+        grenosui.chronometrer(self)
         grenosui.poser_taille(self, 980, 720)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)

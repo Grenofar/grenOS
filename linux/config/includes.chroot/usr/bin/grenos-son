@@ -76,6 +76,7 @@ def region_arrondie(largeur, hauteur, rayon):
 class PanneauSon(Gtk.Window):
     def __init__(self):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        grenosui.chronometrer(self, "Son")
         self.set_name("panneau-son")
         self.set_decorated(False)
         self.set_skip_taskbar_hint(True)

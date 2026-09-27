@@ -44,6 +44,7 @@ def barres(force):
 class Connexions(Gtk.Window):
     def __init__(self):
         super().__init__(title="Connexions")
+        grenosui.chronometrer(self)
         grenosui.poser_taille(self, 560, 640)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
