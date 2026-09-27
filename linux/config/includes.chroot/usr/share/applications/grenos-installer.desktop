@@ -6,3 +6,17 @@ Exec=pkexec calamares
 Icon=drive-harddisk
 Terminal=false
 Categories=System;
+# La fenêtre s'annonce sous la classe « calamares », pas sous « pkexec ».
+#
+# Vu en agrandissant la capture du 27 septembre, la première où la CI ouvre
+# vraiment l'installateur : sa tuile dans la barre était un « grenOS »
+# minuscule et illisible. La barre relie une fenêtre à son entrée par la classe
+# X11 ; sans cette ligne, elle lisait « pkexec » ici, ne trouvait rien, et
+# retombait sur l'icône de la fenêtre elle-même — notre logo de marque, qui est
+# un MOT. Un mot à vingt pixels est une tache.
+#
+# Même famille que les icônes à 48 px dans une barre de 52 : une image juste,
+# rendue à une taille pour laquelle elle n'a pas été faite. La différence est
+# qu'ici le remède n'est pas de dessiner plus petit — c'est d'arrêter de se
+# servir d'un logotype comme d'une icône.
+StartupWMClass=calamares
