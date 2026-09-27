@@ -128,6 +128,44 @@ grenos-veilleur grenos-shell &
     # `chrt` lit la politique d'ordonnancement du noyau. FIFO ou RR : PipeWire
     # est prioritaire, il tiendra sous charge. OTHER : il fait la queue comme
     # le decodeur video, et ca hoquettera des que la machine peine.
+
+    # Et maintenant on JOUE. Compter les sorties prouve que PipeWire repond ;
+    # cela ne prouve pas qu'un son sort, et c'est toute la difference entre ce
+    # qu'on croyait savoir et ce que Grenofar a entendu — rien.
+    #
+    # Le fichier vient d'alsa-utils (verifie dans le .deb), et paplay de
+    # pulseaudio-utils : les deux sont sur l'image. On passe par paplay, donc
+    # par PipeWire, pour exercer la chaine entiere plutot qu'ALSA seul.
+    ESSAI=/usr/share/sounds/alsa/Front_Center.wav
+    if [ -r "$ESSAI" ] && command -v paplay >/dev/null 2>&1; then
+        if paplay "$ESSAI" 2>/dev/null; then
+            grenos-dire "son : un son a ete joue par PipeWire"
+        else
+            grenos-dire "son : paplay a refuse de jouer"
+        fi
+    else
+        grenos-dire "son : pas de quoi essayer (fichier ou paplay absent)"
+    fi
+
+    # --- Et MAINTENANT la priorite, une fois qu'un son a joue ---
+    #
+    # L'ordre etait faux, et c'est tout ce qui manquait.
+    #
+    # Ce bloc se trouvait AVANT `paplay`. Or PipeWire ne bascule son fil
+    # `data-loop` en temps reel que lorsqu'un flux existe : au repos, il
+    # n'a aucune raison de demander quoi que ce soit. Je mesurais donc un
+    # orchestre avant l'entree des musiciens, et j'en concluais qu'il ne
+    # jouait pas.
+    #
+    # Six tentatives sont parties de cette lecture : rtkit, les limites
+    # PAM, celles de systemd, le plafond systeme, la configuration du
+    # module. Chacune etait un vrai manque — le plafond est passe de zero
+    # a 95, et rien de tout cela n'est a defaire — mais aucune n'etait LA
+    # cause du chiffre que je lisais.
+    #
+    # A retenir : *une mesure prise au mauvais moment n'est pas une mesure
+    # fausse, c'est une mesure d'autre chose.* Elle repond parfaitement a
+    # une question qu'on n'a pas posee.
     # On regarde TOUS LES FILS, pas seulement le principal.
     #
     # Premiere version de cette mesure : `chrt -p` sur le processus. Elle a
@@ -198,24 +236,6 @@ grenos-veilleur grenos-shell &
         fi
     else
         grenos-dire "son : pipewire introuvable, priorite non mesuree"
-    fi
-
-    # Et maintenant on JOUE. Compter les sorties prouve que PipeWire repond ;
-    # cela ne prouve pas qu'un son sort, et c'est toute la difference entre ce
-    # qu'on croyait savoir et ce que Grenofar a entendu — rien.
-    #
-    # Le fichier vient d'alsa-utils (verifie dans le .deb), et paplay de
-    # pulseaudio-utils : les deux sont sur l'image. On passe par paplay, donc
-    # par PipeWire, pour exercer la chaine entiere plutot qu'ALSA seul.
-    ESSAI=/usr/share/sounds/alsa/Front_Center.wav
-    if [ -r "$ESSAI" ] && command -v paplay >/dev/null 2>&1; then
-        if paplay "$ESSAI" 2>/dev/null; then
-            grenos-dire "son : un son a ete joue par PipeWire"
-        else
-            grenos-dire "son : paplay a refuse de jouer"
-        fi
-    else
-        grenos-dire "son : pas de quoi essayer (fichier ou paplay absent)"
     fi
 ) &
 
