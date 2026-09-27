@@ -412,6 +412,18 @@ def habiller(couleurs=None):
     # icône du nom du programme — une liste écrite à la main vieillirait au
     # premier programme ajouté, et personne ne s'en apercevrait.
     Gtk.Window.set_default_icon_name(marque_du_programme(nommer()))
+    # Quatrième repère, et il devrait être le dernier.
+    #
+    # `habiller()` coûte 620 à 641 ms dans les six applications — une constante,
+    # donc un travail fixe et non proportionnel à ce que chacune affiche. Deux
+    # choses seulement se passent ici : demander au thème d'icônes s'il connaît
+    # un nom, et faire analyser notre feuille de style par GTK. Papirus compte
+    # des dizaines de milliers d'entrées, et le premier accès au thème les
+    # charge ; la feuille, elle, fait quelques centaines de lignes. Le soupçon
+    # penche d'un côté, mais un soupçon n'est pas une mesure.
+    global APRES_ICONE
+    if APRES_ICONE is None:
+        APRES_ICONE = _age_du_processus()
     fournisseur = Gtk.CssProvider()
     charger(fournisseur, feuille(couleurs))
     Gtk.StyleContext.add_provider_for_screen(
@@ -766,9 +778,10 @@ def _premier_affichage(cadre, _evenement, nom):
         # Trois nombres, parce qu'il y a trois responsables possibles et qu'un
         # seul chiffre ne dit pas lequel : ce qui précède notre code, notre
         # habillage, puis la fenêtre elle-même.
-        dire("ouverture : %s en %d ms (%d avant nous, %d habillage, %d fenetre)"
-             % (nom, millisecondes, AVANT_NOTRE_CODE,
-                APRES_HABILLAGE - AVANT_NOTRE_CODE,
+        icone = (APRES_ICONE - AVANT_NOTRE_CODE) if APRES_ICONE else -1
+        style = (APRES_HABILLAGE - APRES_ICONE) if APRES_ICONE else -1
+        dire("ouverture : %s en %d ms (%d avant nous, %d icone, %d style, %d fenetre)"
+             % (nom, millisecondes, AVANT_NOTRE_CODE, icone, style,
                 millisecondes - APRES_HABILLAGE))
     return False
 
@@ -802,5 +815,6 @@ def _age_du_processus():
 #
 # Mesuré ici, à la dernière ligne, et pas au début : au début, GTK n'est pas
 # encore chargé, et c'est précisément lui qu'on soupçonne.
+APRES_ICONE = None
 APRES_HABILLAGE = None
 AVANT_NOTRE_CODE = _age_du_processus()
