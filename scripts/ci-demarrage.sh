@@ -637,6 +637,26 @@ if [ "$MUET" = 1 ]; then
   exit 1
 fi
 
+echo "--- combien de temps chaque fenetre met-elle a s ouvrir ---"
+# Grenofar : « dans certaines applications ca met du temps a ouvrir, trouve une
+# solution ». Avant une solution, un chiffre.
+#
+# On n'en avait aucun. On savait par accident qu'ouvrir Jeux avait laisse un
+# ecran vide vingt-cinq secondes, et cette machine attend douze a trente
+# secondes apres chaque ouverture « pour etre sure » — ces delais disent que le
+# probleme est reel, pas lequel est lent. La session mesure desormais de la
+# naissance du processus au moment ou X affiche la fenetre, c'est-a-dire tout
+# le temps ou l'ecran ne montre rien.
+#
+# Rapporte, trie du plus lent au plus rapide : c'est la liste par laquelle
+# commencer.
+if grep -aq 'grenos: ouverture :' "$RUNNER_TEMP/serial.log"; then
+  grep -a 'grenos: ouverture :' "$RUNNER_TEMP/serial.log" | tr -d '[:cntrl:]' \
+    | sed 's/^.*grenos: //' | sort -t' ' -k5 -rn | head -12
+else
+  echo "ouverture : aucune fenetre ne s'est chronometree"
+fi
+
 echo "--- les fenetres tiennent-elles dans l ecran ---"
 # Grenofar a demarre grenOS en 1280x720 : « il est casse, on voit pas
 # tout ». Il avait raison — les Reglages demandaient 660 pixels de

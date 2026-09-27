@@ -694,4 +694,51 @@ def fenetre(nom, largeur=820, hauteur=600):
     cadre.set_position(Gtk.WindowPosition.CENTER)
     cadre.set_icon_name("grenos")
     cadre.connect("destroy", Gtk.main_quit)
+    cadre.connect("map-event", _premier_affichage, nom)
     return cadre
+
+
+def _premier_affichage(cadre, _evenement, nom):
+    """Dit, une seule fois, combien de temps la fenêtre a mis à s'afficher.
+
+    Grenofar : « dans certaines applications ça met du temps à ouvrir, trouve
+    une solution ». Avant de chercher une solution, il faut un chiffre — et
+    personne n'en a jamais eu. On sait seulement, par accident, qu'ouvrir Jeux
+    a laissé un écran vide vingt-cinq secondes à cause d'un `vulkaninfo`, et
+    que la machine d'intégration attend douze à trente secondes après chaque
+    ouverture « pour être sûre ». Ces délais disent que le problème est réel ;
+    ils ne disent pas lequel est lent.
+
+    `map-event` est le moment où X affiche vraiment la fenêtre, pas celui où on
+    la lui demande : c'est l'instant que la personne voit. Et l'origine est
+    `/proc/self/stat`, donc le lancement du PROCESSUS — l'interpréteur Python,
+    les imports de GTK et tout ce qui précède comptent, puisque tout cela est
+    du temps où l'écran ne montre rien.
+    """
+    if getattr(cadre, "_grenos_affichee", False):
+        return False
+    cadre._grenos_affichee = True
+    millisecondes = _age_du_processus()
+    if millisecondes is not None:
+        dire("ouverture : %s en %d ms" % (nom, millisecondes))
+    return False
+
+
+def _age_du_processus():
+    """Depuis combien de millisecondes ce processus existe-t-il ?
+
+    Le champ 22 de `/proc/self/stat` est l'instant du démarrage, en tics depuis
+    celui de la machine ; `/proc/uptime` donne l'âge de la machine. La
+    différence est l'âge du processus. On lit deux fichiers, on ne lance rien.
+    """
+    try:
+        with open("/proc/self/stat", encoding="utf-8") as fichier:
+            stat = fichier.read()
+        champs = stat[stat.rfind(")") + 1:].split()
+        # champs[0] est le 3e champ du fichier, donc le 22e est a l'indice 19.
+        depart = int(champs[19]) / float(os.sysconf("SC_CLK_TCK"))
+        with open("/proc/uptime", encoding="utf-8") as fichier:
+            debout = float(fichier.read().split()[0])
+        return int(max(0.0, debout - depart) * 1000)
+    except (OSError, ValueError, IndexError, ZeroDivisionError):
+        return None

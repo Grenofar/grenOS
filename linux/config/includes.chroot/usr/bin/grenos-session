@@ -83,6 +83,29 @@ printf '%s %s\n' "$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)" \
 sync 2>/dev/null || true
 export XDG_DESKTOP_DIR="$HOME/Bureau"
 
+# Les dossiers usuels dans « Emplacements », comme le volet de gauche de
+# Windows.
+#
+# Grenofar : « que l'explorateur soit encore plus proche de celui de Windows
+# (ce PC, documents, vidéos etc) ». « Poste de travail », le bureau et la
+# corbeille viennent de `libfm.conf` ; Documents, Images, Musique, Vidéos et
+# Téléchargements, non — libfm ne connaît pas ces dossiers, il n'affiche que
+# les **marque-pages** de GTK.
+#
+# Ils ne peuvent pas être livrés dans `/etc/skel` : un marque-page porte un
+# chemin ABSOLU, donc il faut connaître le nom du compte, qui n'existe qu'ici.
+# Écrit une seule fois : après, cette liste appartient à la personne, et un
+# système qui la réécrit à chaque ouverture lui reprend ce qu'elle a rangé.
+MARQUES="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/bookmarks"
+if [ ! -e "$MARQUES" ]; then
+    mkdir -p "$(dirname "$MARQUES")"
+    for DOSSIER in Documents Images Musique Vidéos Téléchargements; do
+        [ -d "$HOME/$DOSSIER" ] || continue
+        printf 'file://%s %s\n' "$HOME/$DOSSIER" "$DOSSIER" >> "$MARQUES"
+    done
+    grenos-dire "emplacements : $(wc -l < "$MARQUES" 2>/dev/null) marque-pages poses"
+fi
+
 # L'écran reste allumé, et le pointeur est une flèche dès la première seconde.
 xset s off -dpms s noblank 2>/dev/null || true
 xsetroot -cursor_name left_ptr 2>/dev/null || true

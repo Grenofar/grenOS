@@ -452,6 +452,17 @@
       "source": "flatpak",
       "identifiant": "org.gnome.Weather",
       "site": "https://apps.gnome.org/Weather"
+    },
+    {
+      "slug": "opera",
+      "nom": "Opera",
+      "rayon": "Internet",
+      "editeur": "Opera",
+      "description": "Un navigateur avec VPN intégré, bloqueur de publicités et barre latérale.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.opera.Opera.png",
+      "source": "flatpak",
+      "identifiant": "com.opera.Opera",
+      "site": "https://www.opera.com"
     }
   ]
 }
