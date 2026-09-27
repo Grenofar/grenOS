@@ -733,8 +733,24 @@ def _premier_affichage(cadre, _evenement, nom):
         return False
     cadre._grenos_affichee = True
     millisecondes = _age_du_processus()
-    if millisecondes is not None:
+    if millisecondes is None:
+        return False
+    # Le chiffre est découpé en deux, parce qu'un total ne dit pas où agir.
+    #
+    # La pré-compilation de nos modules n'a rien changé — 810 ms avant, 810 ms
+    # après, tout dans le bruit. Ce n'est donc pas notre Python qui coûte, et
+    # continuer à deviner reviendrait à corriger au hasard.
+    #
+    # `AVANT_NOTRE_CODE` est pris à la toute fin de l'import de ce module,
+    # c'est-à-dire une fois `gi`, `Gdk`, `GLib` et `Gtk` chargés : tout ce qui
+    # précède est du temps qu'on ne contrôle pas sans changer de langage. La
+    # différence, elle, est à nous — construction de la fenêtre, feuille de
+    # style, icônes, lectures.
+    if AVANT_NOTRE_CODE is None:
         dire("ouverture : %s en %d ms" % (nom, millisecondes))
+    else:
+        dire("ouverture : %s en %d ms (dont %d avant notre code)"
+             % (nom, millisecondes, AVANT_NOTRE_CODE))
     return False
 
 
@@ -756,3 +772,15 @@ def _age_du_processus():
         return int(max(0.0, debout - depart) * 1000)
     except (OSError, ValueError, IndexError, ZeroDivisionError):
         return None
+
+
+# L'âge du processus au moment où ce module finit de se charger.
+#
+# Autrement dit : tout le temps passé avant que la moindre ligne de grenOS ne
+# s'exécute — démarrage de l'interpréteur, `import gi`, chargement de GTK et de
+# ses bibliothèques. C'est un plancher que nous ne pouvons pas descendre sans
+# quitter Python, et il faut savoir combien il vaut avant de chercher ailleurs.
+#
+# Mesuré ici, à la dernière ligne, et pas au début : au début, GTK n'est pas
+# encore chargé, et c'est précisément lui qu'on soupçonne.
+AVANT_NOTRE_CODE = _age_du_processus()

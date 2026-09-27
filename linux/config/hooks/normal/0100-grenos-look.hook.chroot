@@ -629,6 +629,26 @@ if python3 -m compileall -q /usr/lib/grenos >/dev/null 2>&1; then
 else
     echo "grenos: la pre-compilation a echoue — le demarrage sera plus lent" >&2
 fi
+
+# Le cache des themes d'icones, deuxieme piste du temps d'ouverture.
+#
+# La pre-compilation ci-dessus n'a RIEN change aux chiffres — 810 ms avant,
+# 810 ms apres. Ce n'etait donc pas la. Papirus compte des dizaines de milliers
+# de fichiers : sans `icon-theme.cache`, GTK les parcourt a chaque demarrage
+# d'application. `appliquer-systeme` lance bien `gtk-update-icon-cache`, mais
+# personne n'a jamais verifie que le fichier existait ensuite — et une commande
+# qui echoue en silence derriere `|| true` est la forme exacte des defauts de
+# cette semaine.
+#
+# Rapporte, pas bloquant : on cherche encore ou part le temps.
+for theme in hicolor Papirus-Dark Papirus; do
+    cache="/usr/share/icons/$theme/icon-theme.cache"
+    if [ -f "$cache" ]; then
+        echo "grenos: cache d icones $theme : $(( $(wc -c < "$cache") / 1024 )) Kio"
+    elif [ -d "/usr/share/icons/$theme" ]; then
+        echo "grenos: cache d icones $theme ABSENT — GTK parcourra les fichiers un a un"
+    fi
+done
 # Nos programmes : eux portent une ligne #!, et certains sont du shell.
 for programme in /usr/bin/grenos-* /usr/bin/grenplace /usr/lib/grenos/grenos-*; do
     [ -f "$programme" ] || continue
