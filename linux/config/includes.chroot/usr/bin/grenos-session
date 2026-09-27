@@ -168,17 +168,26 @@ grenos-veilleur grenos-shell &
         # ne s'en sert pas. La cause est donc dans `module-rt`, qui est charge
         # avec `nofail` — son echec ne se voit nulle part, sauf dans son propre
         # journal. On va l'y chercher, au lieu de deviner une cinquieme fois.
-        # Le motif compte : « rt » tout court attrapait « Sta-rt-ed », la ligne
-        # de systemd qui n'apprend rien. On vise les messages du module — il
-        # prefixe les siens par `mod.rt` — et ce que rtkit repond.
-        RAISON=$(journalctl --user -u pipewire --no-pager -n 300 2>/dev/null \
-                 | grep -v 'systemd\[' \
-                 | grep -i -m2 -E 'mod\.rt|rtkit|realtime|RLIMIT|sched' \
-                 | sed 's/.*pipewire\[[0-9]*\]: //' | cut -c1-110 | tr '\n' ';')
-        if [ -n "$RAISON" ]; then
-            grenos-dire "son : pipewire dit « $RAISON »"
+        # LE MODULE EST-IL SEULEMENT CHARGE ? On demande au demon, pas au
+        # journal.
+        #
+        # La mesure precedente passait par `journalctl --user`, et elle a
+        # repondu « pipewire ne dit rien ». Reponse ambigue, donc inutile :
+        # soit le module n'est pas la, soit le journal de session est
+        # volatil et ne rend rien — ce qui est courant sur une image live.
+        # Une mesure qui a deux explications n'en est pas une.
+        #
+        # `pw-cli` interroge le demon qui tourne. S'il repond, sa reponse est
+        # la verite du moment ; s'il ne repond pas, c'est que PipeWire est
+        # mort, ce qui serait une autre information et tout aussi utile.
+        if command -v pw-cli >/dev/null 2>&1; then
+            MODULES=$(pw-cli ls Module 2>/dev/null | grep -c 'module-rt')
+            case "${MODULES:-0}" in
+                0) grenos-dire "son : module-rt N EST PAS charge — personne ne demande la priorite" ;;
+                *) grenos-dire "son : module-rt charge ($MODULES fois), il demande et se fait refuser" ;;
+            esac
         else
-            grenos-dire "son : pipewire ne dit rien de la priorite (module-rt muet ou absent)"
+            grenos-dire "son : pw-cli absent, impossible de savoir si module-rt est la"
         fi
 
         FILS=$(ls -1 /proc/"$PW"/task 2>/dev/null | wc -l)
