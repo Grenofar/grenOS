@@ -580,7 +580,22 @@ fi
 # change : une etape ne devient obligatoire qu'apres avoir ete vue
 # verte — mais une fois qu'elle l'a ete, la laisser facultative
 # reviendrait a publier une image ou le magasin ne s'ouvre plus.
-for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau du depot present" "maj: grenos-desktop" "disques : " "persistance : active" "son ouvert" "reglages ouvert" "jeux ouvert"; do
+# Trois lignes rejoignent la liste aujourd'hui, chacune vue verte au moins
+# trois fois de suite — la regle n'a pas change, et elle a toujours ete tenue :
+#
+#   « son : second essai joue »  — la mesure du son SOUS CHARGE a bien eu lieu.
+#     Sans elle, la preuve retombe sans bruit a « son propre sur une machine
+#     oisive », qui ne peut pas voir le hoquet de Grenofar. Ce n'est pas le
+#     NOMBRE de trous qu'on rend obligatoire — une machine d'integration
+#     chargee peut en creuser un de bonne foi — mais le fait de mesurer.
+#
+#   « son : melangeur »  — la session a bien regarde le melangeur ALSA. Un
+#     canal Master coupe donne un silence total sous une pile impeccable, et
+#     rien ne le disait avant le 27 septembre.
+#
+#   « emplacements : »  — la barre laterale de l'explorateur voit ce que gvfs
+#     lui propose. C'est la reponse a « est-ce qu'on peut voir les disques ».
+for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau du depot present" "maj: grenos-desktop" "disques : " "persistance : active" "son ouvert" "reglages ouvert" "jeux ouvert" "son : second essai joue" "son : melangeur" "emplacements : "; do
   if grep -aq "grenos: $preuve" "$RUNNER_TEMP/serial.log"; then
     echo "prouve: $preuve"
   else
@@ -590,6 +605,24 @@ for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau d
 done
 if grep -aq 'grenos: disques : aucun' "$RUNNER_TEMP/serial.log"; then
   echo "::error::Le systeme ne voit aucun disque : l'installateur n'aurait rien a proposer."
+  MUET=1
+fi
+
+# L'installateur a-t-il OUVERT SA FENETRE ?
+#
+# `pkcheck : autorise sans mot de passe` dit seulement que polkit laisserait
+# passer. pkexec peut autoriser et Calamares refuser de demarrer — une
+# configuration illisible, un module manquant, un theme Qt absent. La barre,
+# elle, ne peut pas se tromper : une fenetre de classe « calamares » a existe.
+#
+# Exige depuis aujourd'hui : vue verte aux trois constructions depuis que la CI
+# ouvre l'installateur (fd1ca088, 07355248, 85130c58). C'est le premier des
+# trois verrous de « l'installation sur disque menee a son terme », et le seul
+# qui ne demande pas la main de Grenofar.
+if grep -aq 'tuiles.*calamares' "$RUNNER_TEMP/serial.log"; then
+  echo "prouve: l'installateur a ouvert sa fenetre"
+else
+  echo "::error::L'installateur ne s'est pas ouvert : polkit autorise peut-etre, mais Calamares n'a pas demarre."
   MUET=1
 fi
 # Le clavier ne se contente pas d'exister : il doit etre celui qu'on a

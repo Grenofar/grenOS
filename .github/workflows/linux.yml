@@ -334,11 +334,22 @@ jobs:
           # arrivee jusqu'au premier ecran de grenOS. Presque aucun PC vendu
           # depuis dix ans ne demarre autrement : publier une image qui ne
           # demarre pas en UEFI serait publier une image que personne n'allume.
-          # Ce que le second demarrage a retrouve du premier. RAPPORTE, jamais
-          # bloquant : la regle n'a pas change, une etape ne devient
-          # obligatoire qu'apres avoir ete vue verte.
+          # Ce que le second demarrage a retrouve du premier.
+          #
+          # EXIGE depuis aujourd'hui : vu vert trois constructions de suite
+          # (36321970850, 36324202295, 36326684530), dont une ou l'ordre
+          # d'enumeration SATA s'etait inverse — la preuve ne depend pas du nom
+          # du disque, elle compare le `boot_id` du noyau.
+          #
+          # C'est la premiere phrase de la page de telechargement : « tout ce
+          # que tu fais est garde sur le disque de la machine ». Publier une
+          # image qui ne la tient pas, c'est mentir a la premiere ligne.
           grep -a 'persistance :' "$RUNNER_TEMP/serial-uefi.log" 2>/dev/null | sed 's/^.*grenos: //' || \
             echo "persistance : le second demarrage n'a rien dit"
+          if ! grep -aq "persistance : un fichier d'un demarrage PRECEDENT est revenu" "$RUNNER_TEMP/serial-uefi.log"; then
+            echo "::error::Ce qui a ete ecrit au premier demarrage n'est pas revenu au second : la persistance ne tient pas sa promesse."
+            exit 1
+          fi
           if grep -q "screen: PASS" "$RUNNER_TEMP/uefi-juge.log"; then
             echo "uefi: le chargeur a pris la main et le noyau dessine"
           else
