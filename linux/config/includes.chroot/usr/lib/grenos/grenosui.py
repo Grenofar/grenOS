@@ -417,6 +417,17 @@ def habiller(couleurs=None):
     Gtk.StyleContext.add_provider_for_screen(
         Gdk.Screen.get_default(), fournisseur, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
     )
+    # Troisième repère du chronomètre, posé après que la mesure précédente a
+    # renversé l'hypothèse.
+    #
+    # On croyait le temps perdu dans Python et GTK : la mesure a répondu
+    # 110 ms, et sept cents à mille millisecondes DANS NOTRE CODE. Reste à
+    # savoir si c'est l'habillage — lire le thème, fabriquer la feuille de
+    # style, la faire analyser par GTK — ou la fenêtre que chaque application
+    # construit ensuite. Les deux se corrigent, mais pas de la même façon.
+    global APRES_HABILLAGE
+    if APRES_HABILLAGE is None:
+        APRES_HABILLAGE = _age_du_processus()
     return fournisseur
 
 
@@ -748,9 +759,17 @@ def _premier_affichage(cadre, _evenement, nom):
     # style, icônes, lectures.
     if AVANT_NOTRE_CODE is None:
         dire("ouverture : %s en %d ms" % (nom, millisecondes))
-    else:
+    elif APRES_HABILLAGE is None:
         dire("ouverture : %s en %d ms (dont %d avant notre code)"
              % (nom, millisecondes, AVANT_NOTRE_CODE))
+    else:
+        # Trois nombres, parce qu'il y a trois responsables possibles et qu'un
+        # seul chiffre ne dit pas lequel : ce qui précède notre code, notre
+        # habillage, puis la fenêtre elle-même.
+        dire("ouverture : %s en %d ms (%d avant nous, %d habillage, %d fenetre)"
+             % (nom, millisecondes, AVANT_NOTRE_CODE,
+                APRES_HABILLAGE - AVANT_NOTRE_CODE,
+                millisecondes - APRES_HABILLAGE))
     return False
 
 
@@ -783,4 +802,5 @@ def _age_du_processus():
 #
 # Mesuré ici, à la dernière ligne, et pas au début : au début, GTK n'est pas
 # encore chargé, et c'est précisément lui qu'on soupçonne.
+APRES_HABILLAGE = None
 AVANT_NOTRE_CODE = _age_du_processus()
