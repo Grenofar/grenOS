@@ -303,7 +303,17 @@ jobs:
           cp "$VARS" "$RUNNER_TEMP/uefi-vars.fd"
           ACCEL=""
           if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then ACCEL="-enable-kvm -cpu host"; fi
-          qemu-system-x86_64 $ACCEL -m 2048 -smp 2 -drive if=pflash,format=raw,readonly=on,file="$CODE" -drive if=pflash,format=raw,file="$RUNNER_TEMP/uefi-vars.fd" -cdrom "$ISO_UEFI" -boot d -display none -vga std -serial file:"$RUNNER_TEMP/serial-uefi.log" -monitor unix:"$RUNNER_TEMP/uefi.sock",server,nowait -no-reboot &
+          # Le MEME disque de persistance que le premier demarrage, et c'est
+          # nouveau : ce second demarrage devient du meme coup la seule preuve
+          # possible de « tout ce que tu fais est garde sur le disque de la
+          # machine ». On prouvait que live-boot trouvait sa partition, jamais
+          # qu'un fichier ecrit revenait. Une machine qui ne demarre qu'une
+          # fois ne peut pas repondre ; celle-ci demarre deux fois.
+          GARDE=""
+          if [ -f "$RUNNER_TEMP/persistence.vdi" ]; then
+            GARDE="-drive file=$RUNNER_TEMP/persistence.vdi,format=vdi,if=none,id=garde2 -device ahci,id=sata2 -device ide-hd,drive=garde2,bus=sata2.0"
+          fi
+          qemu-system-x86_64 $ACCEL -m 2048 -smp 2 -drive if=pflash,format=raw,readonly=on,file="$CODE" -drive if=pflash,format=raw,file="$RUNNER_TEMP/uefi-vars.fd" -cdrom "$ISO_UEFI" -boot d $GARDE -display none -vga std -serial file:"$RUNNER_TEMP/serial-uefi.log" -monitor unix:"$RUNNER_TEMP/uefi.sock",server,nowait -no-reboot &
           QEMU=$!
           sleep 3
           if ! kill -0 "$QEMU" 2>/dev/null; then
@@ -324,6 +334,11 @@ jobs:
           # arrivee jusqu'au premier ecran de grenOS. Presque aucun PC vendu
           # depuis dix ans ne demarre autrement : publier une image qui ne
           # demarre pas en UEFI serait publier une image que personne n'allume.
+          # Ce que le second demarrage a retrouve du premier. RAPPORTE, jamais
+          # bloquant : la regle n'a pas change, une etape ne devient
+          # obligatoire qu'apres avoir ete vue verte.
+          grep -a 'persistance :' "$RUNNER_TEMP/serial-uefi.log" 2>/dev/null | sed 's/^.*grenos: //' || \
+            echo "persistance : le second demarrage n'a rien dit"
           if grep -q "screen: PASS" "$RUNNER_TEMP/uefi-juge.log"; then
             echo "uefi: le chargeur a pris la main et le noyau dessine"
           else

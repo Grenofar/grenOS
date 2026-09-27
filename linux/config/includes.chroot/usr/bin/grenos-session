@@ -52,6 +52,22 @@ fi
 # Et on DIT ce que le compte contient : un nom abîmé se voit sur une capture,
 # mais seulement si quelqu'un la regarde. Sur le port série, il se cherche.
 grenos-dire "dossiers du compte : $(ls -1 "$HOME" 2>/dev/null | tr '\n' ' ')"
+
+# Le témoin de la persistance : une ligne, écrite dans le dossier de la
+# personne, relue au démarrage suivant par `grenos-preuve`.
+#
+# « Tout ce que tu fais est gardé sur le disque de la machine » est écrit sur
+# la page de téléchargement. On prouvait que live-boot avait trouvé sa
+# partition — pas qu'un fichier écrit un jour soit encore là le lendemain. Une
+# machine d'essai qui ne démarre qu'une fois ne peut pas répondre ; celle-ci
+# démarre une seconde fois pour l'essai UEFI, et c'est là qu'on lira.
+#
+# `sync` n'est pas une précaution de style : la machine d'essai est tuée, pas
+# éteinte proprement, et un cache non vidé donnerait « rien n'a été gardé »
+# alors que la persistance marche.
+printf 'ecrit le %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
+    > "$CONFIG/temoin-persistance" 2>/dev/null || true
+sync 2>/dev/null || true
 export XDG_DESKTOP_DIR="$HOME/Bureau"
 
 # L'écran reste allumé, et le pointeur est une flèche dès la première seconde.

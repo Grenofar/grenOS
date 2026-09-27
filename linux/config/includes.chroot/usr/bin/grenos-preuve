@@ -242,6 +242,30 @@ else
     dire "persistance : aucune, ce qui sera ecrit disparaitra a l'extinction"
 fi
 
+# ---- Et ce qu'elle a ecrit HIER est-il revenu ? -----------------------------
+#
+# « Active » n'est pas « ca marche ». On prouvait que live-boot avait trouve sa
+# partition ; on n'a JAMAIS prouve qu'un fichier ecrit a un demarrage soit
+# encore la au suivant — et c'est pourtant la phrase exacte de la page de
+# telechargement, « tout ce que tu fais est garde sur le disque de la machine ».
+# Une machine d'essai qui ne demarre qu'une fois ne peut pas repondre.
+#
+# Le doute est venu d'un fait precis : un fichier POSE dans la partition de
+# persistance avant le demarrage n'est pas arrive jusqu'au systeme (le marqueur
+# de charge du 27 septembre). Deposer et garder sont deux mecanismes
+# differents, et l'echec du premier ne condamne pas le second — mais il
+# interdit de continuer a le supposer.
+#
+# Le temoin est ecrit par la session, dans le dossier de la personne, parce que
+# c'est exactement ce que la promesse designe. On le lit ici, au demarrage
+# suivant, avant que la session ne le reecrive.
+temoin=$(cat /home/*/.config/grenos/temoin-persistance 2>/dev/null | head -1)
+if [ -n "$temoin" ]; then
+    dire "persistance : un fichier du demarrage precedent est revenu ($temoin)"
+else
+    dire "persistance : aucun temoin — premier demarrage, ou rien n'a ete garde"
+fi
+
 vu_session=0
 i=0
 # Un quart d'heure, et pas davantage. La machine d'integration a rendu son
