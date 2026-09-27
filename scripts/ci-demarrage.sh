@@ -89,6 +89,7 @@ qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -display none -vga std \
   -global VGA.xres=1280 -global VGA.yres=720 \
   -usb -device usb-tablet \
+  -smbios type=1,version=grenos-essai-charge \
   -audiodev wav,id=son,path="$RUNNER_TEMP/son.wav" \
   -device intel-hda -device hda-duplex,audiodev=son \
   -serial file:"$RUNNER_TEMP/serial.log" \

@@ -249,7 +249,26 @@ grenos-veilleur grenos-shell &
         # (`make-disk.sh`), et n'existe sur aucune machine réelle. Brûler les
         # cœurs une seconde au démarrage serait insupportable sur un portable
         # de 2012 — c'est-à-dire exactement la machine qu'on essaie de servir.
-        if [ -e /etc/grenos/essai-charge ]; then
+        # Deux chemins pour se faire reconnaître, et le second existe parce que
+        # le premier a échoué.
+        #
+        # Le fichier posé dans le disque de persistance **n'est pas arrivé** au
+        # système démarré : la construction disait bien « marqueur
+        # etc/grenos/essai-charge pose dans le volume », et la session ne l'a
+        # pas trouvé. Je ne sais pas encore pourquoi — d'où la ligne de
+        # diagnostic ci-dessous, qui le dira au lieu de me laisser deviner.
+        #
+        # Le second chemin ne dépend de rien : QEMU écrit
+        # `version=grenos-essai-charge` dans la table SMBIOS, et le noyau
+        # l'expose en lecture libre. Ni VirtualBox ni un vrai PC n'y mettront
+        # jamais cette chaîne.
+        MARQUE=""
+        [ -e /etc/grenos/essai-charge ] && MARQUE="fichier"
+        if grep -qs grenos-essai-charge /sys/class/dmi/id/product_version; then
+            MARQUE="${MARQUE:+$MARQUE et }smbios"
+        fi
+        grenos-dire "son : marqueur de charge = ${MARQUE:-aucun}"
+        if [ -n "$MARQUE" ]; then
             sleep 2
             COEURS=$(nproc 2>/dev/null || echo 2)
             CHARGE=""
