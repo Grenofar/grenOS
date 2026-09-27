@@ -175,6 +175,24 @@ for compte in $(awk -F: '$3 >= 1000 && $3 < 60000 {print $1}' /etc/passwd 2>/dev
     fi
 done
 
+# ---- Le dossier au nom abîmé, laissé par l'absence de locale ----------------
+#
+# Vu sur la capture de l'explorateur : un dossier « TÃ©lÃ©chargements » à côté
+# du vrai « Téléchargements ». C'est de l'UTF-8 lu comme du Latin-1 :
+# `xdg-user-dirs-update` a tourné alors que la locale fr_FR.UTF-8 n'existait
+# pas — le paquet `locales` était absent de l'image.
+#
+# La cause est corrigée, mais une machine déjà installée garde le dossier. On
+# le retire **seulement s'il est vide** : si quelqu'un y a mis un fichier, il
+# lui appartient, et un système qui efface des dossiers non vides sans rien
+# demander n'est pas un système à soi.
+for compte in $(awk -F: '$3 >= 1000 && $3 < 60000 {print $4":"$6}' /etc/passwd 2>/dev/null | cut -d: -f2); do
+    abime="$compte/TÃ©lÃ©chargements"
+    if [ -d "$abime" ] && [ -z "$(ls -A "$abime" 2>/dev/null)" ]; then
+        rmdir "$abime" 2>/dev/null && echo "grenos: dossier au nom abime retire de $compte"
+    fi
+done
+
 # ---- Les icônes et les menus ------------------------------------------------
 gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
 gtk-update-icon-cache -f /usr/share/icons/Papirus-Dark >/dev/null 2>&1 || true

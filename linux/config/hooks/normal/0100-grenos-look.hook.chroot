@@ -93,6 +93,25 @@ echo "fr_FR.UTF-8 UTF-8" > /etc/locale.gen
 echo "LANG=fr_FR.UTF-8" > /etc/default/locale
 locale-gen >/dev/null 2>&1 || true
 
+# Et on VERIFIE, parce que le `|| true` ci-dessus a menti pendant dix jours.
+#
+# `locales` est de priorite standard : debootstrap ne l'installe pas, et aucune
+# de nos dependances ne le reclamait. `locale-gen` n'existait donc pas, son
+# echec etait avale, et `LANG=fr_FR.UTF-8` designait une locale jamais
+# generee — la glibc retombait sur C. Resultat : tout Debian en anglais dans un
+# systeme qui se dit francais, et un dossier « TA©lA©chargements » dans le
+# compte de la personne.
+#
+# Invisible parce que NOS programmes portent leurs textes francais en dur :
+# la barre, le bureau et les Reglages avaient l'air parfaitement francais.
+# Il a fallu ouvrir l'explorateur, qui lui depend de la locale.
+if ! locale -a 2>/dev/null | grep -qi '^fr_FR\.utf'; then
+    echo "grenos: la locale fr_FR.UTF-8 n'est PAS generee" >&2
+    echo "grenos: tout ce qui n'est pas ecrit par nous s'afficherait en anglais" >&2
+    exit 1
+fi
+echo "grenos: langue : fr_FR.UTF-8 generee, les applications parleront francais"
+
 # L'environnement global : sans cela, l'écran de connexion s'affiche en anglais.
 # Il démarre avant qu'une session n'ait lu /etc/default/locale.
 cat > /etc/environment <<'EOF'

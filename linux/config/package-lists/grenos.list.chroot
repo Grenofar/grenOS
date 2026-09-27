@@ -352,5 +352,22 @@ live-tools
 uuid-runtime
 keyboard-configuration
 console-setup
+## LA LANGUE. Sans ce paquet, grenOS est en anglais.
+##
+## Trouve le 27 septembre en ouvrant l'explorateur pour la premiere fois : ses
+## menus disaient « Places », « Home Folder », « Trash Can », « Free space »,
+## et un dossier du compte s'appelait « TA©lA©chargements » — de l'UTF-8 lu
+## comme du Latin-1.
+##
+## Une seule cause aux deux : `locales` est de priorite **standard**, que
+## debootstrap n'installe pas, et il n'est tire par aucune dependance. Le hook
+## ecrit pourtant `/etc/locale.gen` puis lance `locale-gen`... qui n'existe
+## pas. Le `|| true` avalait l'echec depuis le premier jour.
+##
+## Consequence : `LANG=fr_FR.UTF-8` designait une locale JAMAIS GENEREE, donc
+## la glibc retombait sur C. Toutes les applications Debian — l'explorateur,
+## les boites de dialogue, les messages — etaient en anglais, et personne ne
+## l'avait vu parce que NOS programmes portent leurs textes francais en dur.
+locales
 xdg-user-dirs
 sudo
