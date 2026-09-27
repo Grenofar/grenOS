@@ -314,6 +314,48 @@ grenos-veilleur grenos-shell &
     fi
 ) &
 
+# Ce que le panneau « Emplacements » de l'explorateur a sous les yeux.
+#
+# Grenofar : « est-ce qu'on peut les voir sur l'explorateur ? » La capture
+# disait non — et deux causes très différentes donnent exactement la même
+# image vide, ce qui est la définition d'une mesure inutile :
+#
+#   1. gvfs ne propose pas les disques internes du tout ;
+#   2. gvfs les propose, et c'est libfm qui les cache
+#      (`show_internal_volumes`, à 0 par défaut).
+#
+# On interroge donc le MÊME objet que l'explorateur, `Gio.VolumeMonitor`, dans
+# la MÊME session — pas `lsblk`, qui répond toujours oui et ne prouve rien du
+# chemin emprunté. Le compte des disques et celui des volumes sont dits
+# séparément : un disque sans système de fichiers n'a aucun volume, et son
+# absence des « Emplacements » est alors normale, pas un défaut.
+(
+    sleep 12
+    VOL=$(python3 -c "
+from gi.repository import Gio, GLib
+vm = Gio.VolumeMonitor.get()
+ctx = GLib.MainContext.default()
+for _ in range(200):
+    if not ctx.pending():
+        break
+    ctx.iteration(False)
+volumes = vm.get_volumes()
+disques = vm.get_connected_drives()
+def dire(v):
+    d = v.get_drive()
+    genre = 'amovible' if (d is not None and d.is_removable()) else 'interne'
+    return '%s (%s)' % (v.get_name(), genre)
+print('%d disque(s), %d volume(s) : %s' % (
+    len(disques), len(volumes),
+    ', '.join(dire(v) for v in volumes) or 'aucun'))
+" 2>/dev/null)
+    if [ -n "$VOL" ]; then
+        grenos-dire "emplacements : $VOL"
+    else
+        grenos-dire "emplacements : GVolumeMonitor n a rien repondu"
+    fi
+) &
+
 # L'installateur pourrait-il seulement demarrer ?
 #
 # « Installer grenOS » lance `pkexec calamares`, et pkexec demande a polkit

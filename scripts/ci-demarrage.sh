@@ -47,14 +47,36 @@ fi
 # persistance, n'en trouvait pas, et continuait. Le chemin que
 # Grenofar emprunte vraiment n'etait pas celui qu'on testait.
 #
-# Le second est vierge : c'est celui que l'installateur proposerait.
+# Le second est celui que l'installateur proposerait, et il porte desormais
+# une partition ext4 etiquetee DONNEES.
+#
+# Il etait **vierge** jusqu'a ce matin : ni table de partition, ni systeme de
+# fichiers. C'est ce qui rendait la question de Grenofar — « est-ce qu'on peut
+# les voir sur l'explorateur ? » — impossible a trancher ici : un disque sans
+# systeme de fichiers n'a aucun volume a montrer, et Windows ne l'afficherait
+# pas davantage. L'essai repondait donc « non » quelle que soit la
+# configuration, et aurait continue a le faire apres n'importe quelle
+# correction.
+#
+# Meme faute que le detecteur de trous qui mesurait la diction d'une voix :
+# ce n'etait pas la mesure qu'il fallait corriger, c'etait le signal.
+#
+# L'etiquette n'est surtout pas « persistence » : live-boot la cherche, et
+# deux candidats feraient une panne que personne ne saurait lire.
 sudo linux/tools/make-disk.sh "$RUNNER_TEMP/persistence.vdi" 8
 sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/persistence.vdi"
-qemu-img create -f qcow2 "$RUNNER_TEMP/disque.qcow2" 20G
+qemu-img create -f raw "$RUNNER_TEMP/disque.raw" 20G >/dev/null
+sudo sgdisk --new=1:2048:0 --typecode=1:8300 --change-name=1:DONNEES \
+  "$RUNNER_TEMP/disque.raw" >/dev/null
+BOUCLE=$(sudo losetup --find --show --partscan "$RUNNER_TEMP/disque.raw")
+sudo mkfs.ext4 -q -L DONNEES "${BOUCLE}p1"
+sudo losetup -d "$BOUCLE"
+sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/disque.raw"
+echo "second disque : 20 Go, une partition ext4 etiquetee DONNEES"
 qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -cdrom "$ISO" -boot d \
   -drive file="$RUNNER_TEMP/persistence.vdi",format=vdi,if=none,id=garde \
-  -drive file="$RUNNER_TEMP/disque.qcow2",format=qcow2,if=none,id=dur \
+  -drive file="$RUNNER_TEMP/disque.raw",format=raw,if=none,id=dur \
   -device ahci,id=sata \
   -device ide-hd,drive=garde,bus=sata.0 \
   -device ide-hd,drive=dur,bus=sata.1 \
