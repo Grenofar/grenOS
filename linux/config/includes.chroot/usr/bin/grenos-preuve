@@ -257,6 +257,37 @@ else
     dire "persistance : aucune, ce qui sera ecrit disparaitra a l'extinction"
 fi
 
+# ---- OU vont les fichiers de la partition, exactement ? ---------------------
+#
+# Question restee sans reponse le 27 septembre au matin, et elle n'est pas
+# academique : un fichier POSE dans la partition avant le demarrage
+# (`etc/grenos/essai-charge`) n'est jamais arrive jusqu'au systeme. La
+# construction disait « marqueur pose dans le volume », la session ne le
+# trouvait pas, et j'ai contourne par SMBIOS sans comprendre.
+#
+# Ce que cela empeche, au-dela de l'essai : preparer une machine avant de la
+# livrer, et — le jour ou on voudra le prouver — armer « Mettre a jour et
+# redemarrer » depuis l'exterieur pour voir un vrai redemarrage.
+#
+# Deux hypotheses donnent la meme absence, et c'est pour cela qu'il faut
+# regarder au lieu de deviner : ou bien live-boot n'utilise pas la racine de la
+# partition comme couche superieure, ou bien il l'utilise et quelque chose
+# efface. La reponse tient en deux listes cote a cote.
+for point in /run/live/persistence/*; do
+    [ -d "$point" ] || continue
+    dedans=$(ls -A "$point" 2>/dev/null | head -6 | xargs echo)
+    dire "persistance : $point contient [${dedans:-rien}]"
+done
+# Et ce que la racine montre de ces memes noms. `persistence.conf` est le
+# temoin ideal : live-boot l'exige a la racine de la partition, donc il EXISTE
+# a coup sur. S'il se voit aussi a la racine du systeme, la couche superieure
+# est bien la partition entiere, et l'absence du marqueur vient d'ailleurs.
+if [ -e /persistence.conf ]; then
+    dire "persistance : /persistence.conf se voit depuis la racine — la couche est la partition"
+else
+    dire "persistance : /persistence.conf ne se voit PAS — la couche n'est pas la racine de la partition"
+fi
+
 # ---- Et ce qu'elle a ecrit HIER est-il revenu ? -----------------------------
 #
 # « Active » n'est pas « ca marche ». On prouvait que live-boot avait trouve sa
