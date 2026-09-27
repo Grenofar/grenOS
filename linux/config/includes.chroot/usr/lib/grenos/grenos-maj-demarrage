@@ -80,4 +80,47 @@ chmod 0644 "$DOSSIER/maj-resultat" "$DOSSIER/maj-journal" 2>/dev/null || true
 
 # Le compte affiché par la barre n'a plus de sens : il sera refait.
 rm -f "$DOSSIER/maj" 2>/dev/null || true
+
+# ---- Et les travaux mis en attente pour ce démarrage ------------------------
+#
+# Demandé le 27 au soir : « qu'on puisse changer des systèmes importants et que
+# ça s'applique au prochain redémarrage ». Cette fenêtre ne sert donc plus
+# seulement à `apt` : c'est la file de tout ce qui ne peut pas se faire pendant
+# que le bureau tourne.
+#
+# Quatre règles, et chacune répond à une façon précise de casser une machine :
+#
+#   1. chaque travail est BORNÉ dans le temps. Sans `timeout`, un seul script
+#      qui attend une réponse laisse la personne devant un écran figé, sans
+#      rien pour lui dire quoi faire ;
+#   2. un travail qui échoue est ÉCARTÉ, pas rejoué. Le rejouer à chaque
+#      démarrage transforme une erreur en boucle, et une boucle en machine
+#      perdue ;
+#   3. les travaux sont DÉPLACÉS dans `faits/`, jamais effacés : on doit
+#      pouvoir lire après coup ce qui s'est passé ;
+#   4. quoi qu'il arrive, ce script rend 0 et le bureau s'ouvre. Une mise à
+#      jour qui laisse un PC éteint est pire que pas de mise à jour.
+FILE=/var/lib/grenos/au-prochain-demarrage
+if [ -d "$FILE" ]; then
+    mkdir -p "$FILE/faits" 2>/dev/null || true
+    for TRAVAIL in "$FILE"/[0-9]*; do
+        [ -f "$TRAVAIL" ] || continue
+        TITRE=$(sed -n '2s/^# //p' "$TRAVAIL" 2>/dev/null)
+        dire "${TITRE:-travail} — en cours"
+        DEPART=$(date +%s)
+        if timeout 600 "$TRAVAIL" >> "$DOSSIER/maj-journal" 2>&1; then
+            VERDICT=ok
+        else
+            VERDICT=echec
+        fi
+        dire "${TITRE:-travail} — $VERDICT en $(( $(date +%s) - DEPART ))s"
+        mv -f "$TRAVAIL" "$FILE/faits/$(basename "$TRAVAIL").$VERDICT" 2>/dev/null \
+            || rm -f "$TRAVAIL" 2>/dev/null || true
+    done
+    # Un travail peut avoir posé un service ou une entrée de menu : c'est
+    # `appliquer-systeme` qui les branche, exactement comme après un paquet.
+    [ -x /usr/lib/grenos/appliquer-systeme ] \
+        && /usr/lib/grenos/appliquer-systeme >/dev/null 2>&1
+fi
+
 exit 0

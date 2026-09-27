@@ -4,6 +4,7 @@
 Trois gestes qu'on ne veut jamais déclencher par erreur : la fenêtre demande,
 Échap annule, et le bouton d'extinction est le seul en rouge.
 """
+import os
 import subprocess
 import sys
 
@@ -23,6 +24,7 @@ GESTES = [
 ]
 
 ATTENTE = "/run/grenos/maj"
+TRAVAUX = "/var/lib/grenos/au-prochain-demarrage"
 
 
 def combien_attendent():
@@ -49,16 +51,44 @@ def gestes():
     installer.
     """
     combien = combien_attendent()
-    if combien <= 0:
+    travaux = combien_de_travaux()
+    if combien <= 0 and travaux <= 0:
         return GESTES
-    mot = "mise à jour" if combien == 1 else "mises à jour"
+
+    # Deux choses peuvent attendre le redémarrage, et le bouton doit dire
+    # laquelle : des paquets à installer, ou des changements de système mis en
+    # attente. « Mettre à jour » pour trois réglages système serait un
+    # mensonge, et un bouton qui ment est un bouton qu'on n'ose plus presser.
+    morceaux = []
+    if combien > 0:
+        morceaux.append("%d %s" % (
+            combien, "mise à jour" if combien == 1 else "mises à jour"))
+    if travaux > 0:
+        morceaux.append("%d %s" % (
+            travaux, "changement" if travaux == 1 else "changements"))
+    titre = "Mettre à jour et redémarrer" if combien > 0 else "Appliquer et redémarrer"
     return [(
-        "Mettre à jour et redémarrer",
-        f"Installer {combien} {mot} avant d'ouvrir le bureau, puis redémarrer.",
+        titre,
+        "Poser %s avant d'ouvrir le bureau, puis redémarrer."
+        % " et ".join(morceaux),
         ["sh", "-c",
          "systemctl enable grenos-maj-demarrage.service && systemctl reboot"],
         "accent",
     )] + GESTES
+
+
+def combien_de_travaux():
+    """Combien de changements de système attendent le prochain démarrage.
+
+    Ils vivent dans `/var/lib`, pas dans `/run` : `/run` est vidé à
+    l'extinction, ce qui est exactement ce qu'une file censée traverser un
+    redémarrage ne doit pas faire. Le sous-dossier `faits/` garde ce qui a déjà
+    été appliqué et ne compte pas.
+    """
+    try:
+        return len([n for n in os.listdir(TRAVAUX) if n[:1].isdigit()])
+    except OSError:
+        return 0
 
 
 def faire(commande):

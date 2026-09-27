@@ -424,6 +424,19 @@ jobs:
             echo 'deb [trusted=yes] http://10.0.2.2:8000 ./' \
               | sudo tee "$POINT/rw/etc/apt/sources.list.d/essai-local.list" >/dev/null
           fi
+          # Un travail en attente, comme si quelqu'un avait demande un
+          # changement de systeme depuis le bureau.
+          #
+          # « Qu'on puisse changer des systemes importants et que ca s'applique
+          # au prochain redemarrage. » La file est exercee hors machine sur
+          # quatre cas — reussi, echoue, sans fin, rien rejoue —, mais rien ne
+          # prouvait encore qu'un travail depose AVANT un demarrage soit
+          # execute par ce demarrage-la. C'est le seul endroit qui peut le dire.
+          ATTENTE="$POINT/rw/var/lib/grenos/au-prochain-demarrage"
+          sudo mkdir -p "$ATTENTE/faits"
+          printf '#!/bin/sh\n# Essai de la machine d integration\nset -u\ntouch /var/lib/grenos/travail-fait\n' \
+            | sudo tee "$ATTENTE/001-essai" >/dev/null
+          sudo chmod 0755 "$ATTENTE/001-essai"
           sudo sync
           sudo umount "$POINT"
           sudo losetup -d "$BOUCLE"
@@ -459,6 +472,13 @@ jobs:
             else
               echo "::warning::La version d'essai n'a pas ete installee au demarrage : a lire dans serial-maj-demarrage.log."
             fi
+          fi
+          # Et le travail mis en attente : a-t-il ete execute par CE demarrage ?
+          if grep -aq 'Essai de la machine d integration' "$RUNNER_TEMP/serial-maj-demarrage.log"; then
+            grep -a 'maj-demarrage : Essai' "$RUNNER_TEMP/serial-maj-demarrage.log" | sed 's/^.*grenos: //'
+            echo "travaux : un changement depose avant le demarrage a ete applique"
+          else
+            echo "::warning::Le travail en attente n'a pas ete execute au demarrage."
           fi
           kill ${SERVEUR:-0} 2>/dev/null || true
         env:

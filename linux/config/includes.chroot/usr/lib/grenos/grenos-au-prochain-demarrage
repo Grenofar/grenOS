@@ -1,0 +1,83 @@
+#!/bin/sh
+# Déposer un travail qui s'appliquera au prochain démarrage, avant le bureau.
+#
+# Demandé le 27 septembre au soir : « que maj permette de mettre les
+# modifications dans le prochain redémarrage, qu'on puisse changer des systèmes
+# importants et que ça s'applique au prochain redémarrage ».
+#
+# Pourquoi cette fenêtre-là et pas une autre : `grenos-maj-demarrage.service`
+# est ordonné **avant lightdm**, donc à un moment où rien de graphique ne
+# tourne. C'est le seul instant où l'on peut remplacer le bureau lui-même, X,
+# systemd ou le noyau sans couper une session en cours. Remplacer
+# `grenos-desktop` pendant que la barre tourne oblige à la relancer au milieu
+# du travail de quelqu'un ; Windows applique hors session pour cette raison
+# exacte.
+#
+#   grenos-au-prochain-demarrage <nom lisible> <commande...>
+#
+# Exemple, depuis le bureau :
+#   sudo -n /usr/lib/grenos/grenos-au-prochain-demarrage \
+#       "Installer les pilotes NVIDIA" apt-get -y install nvidia-driver
+#
+# Ce que ce script NE fait pas, volontairement : exécuter la commande. Il
+# l'écrit et s'arrête. Tout ce qui pourrait casser la machine attend le
+# redémarrage, où la seule chose qui tourne est ce service.
+
+set -u
+
+FILE=/var/lib/grenos/au-prochain-demarrage
+
+if [ "$#" -lt 2 ]; then
+    echo "usage : $0 <nom lisible> <commande...>" >&2
+    exit 2
+fi
+
+NOM="$1"
+shift
+
+# `/var/lib`, et surtout pas `/run`.
+#
+# `/run` est un tmpfs : il est vidé à l'extinction. C'est là que vivent le
+# compte de mises à jour et le verdict, parce qu'ils ne valent que pour la
+# session en cours. Une file qui doit traverser un redémarrage n'a rien à y
+# faire — et c'est l'erreur qu'on ferait en recopiant le code de la pastille.
+mkdir -p "$FILE" "$FILE/faits" 2>/dev/null || {
+    echo "impossible d'écrire dans $FILE : il faut être root" >&2
+    exit 1
+}
+
+# Un numéro croissant, pour que l'ordre de dépôt soit l'ordre d'exécution.
+#
+# **`grep -c` affiche « 0 » ET sort en erreur** quand il ne trouve rien. Le
+# premier jet écrivait `$(... | grep -c ... || echo 0)`, donc « 0 » suivi d'un
+# second « 0 », et le calcul refusait la ligne entière : les trois premiers
+# travaux d'essai se sont retrouvés nommés `-20260927192549`. C'est le même
+# piège que le compte de souris et que le tube de l'étape UEFI — la troisième
+# fois cette semaine —, et c'est l'essai qui l'a dit, pas la relecture.
+#
+# L'idiome ci-dessous est celui de `grenos-maj-verif`, qui a déjà payé pour
+# l'apprendre : on laisse grec écrire ce qu'il veut, et on refuse ensuite tout
+# ce qui n'est pas un nombre.
+COMBIEN=$(ls -1 "$FILE" 2>/dev/null | grep -c '^[0-9]') || true
+case "$COMBIEN" in
+    ''|*[!0-9]*) COMBIEN=0 ;;
+esac
+NUMERO=$(printf '%03d' "$(( COMBIEN + 1 ))")
+TRAVAIL="$FILE/${NUMERO}-$(date -u +%Y%m%d%H%M%S)"
+
+# Le nom lisible vit dans le script, en commentaire ET en écho : l'écran
+# d'avant-bureau le montre, et quelqu'un qui lit le fichier comprend ce qu'il
+# fait sans nous demander.
+{
+    printf '#!/bin/sh\n'
+    printf '# %s\n' "$NOM"
+    printf 'set -u\n'
+    printf 'echo %s\n' "$(printf '%s' "$NOM" | sed "s/'/'\\\\''/g; s/^/'/; s/$/'/")"
+    printf '%s\n' "$(for mot in "$@"; do
+        printf "%s " "$(printf '%s' "$mot" | sed "s/'/'\\\\''/g; s/^/'/; s/$/'/")"
+    done)"
+} > "$TRAVAIL"
+
+chmod 0755 "$TRAVAIL"
+echo "$TRAVAIL"
+echo "grenos: travail en attente : $NOM" > /dev/ttyS0 2>/dev/null || true
