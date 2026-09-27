@@ -496,6 +496,46 @@ else
   echo "reglages: ils ne se sont pas annonces (test non bloquant, a affiner)"
 fi
 
+echo "--- l installateur s ouvre-t-il vraiment ---"
+# Des trois choses qui bloquent « l'installation sur disque, menee a son
+# terme », celle-ci est a notre portee : le LANCEMENT.
+#
+# On ne prouvait jusqu'ici que la reponse de polkit (`pkcheck : autorise sans
+# mot de passe`). C'est necessaire et loin d'etre suffisant : pkexec peut
+# autoriser et Calamares refuser de demarrer — une configuration illisible, un
+# module manquant, un theme Qt absent. Exactement la meme distance qu'entre
+# « la configuration est la » et « l'installateur propose tout le disque »,
+# qui nous a deja coute une image.
+#
+# On l'ouvre comme le ferait Grenofar : le menu, son nom, Entree. Il est hors
+# de la liste par defaut — un seul chemin pour installer — mais la RECHERCHE
+# montre les entrees cachees, et c'est ce que fait quelqu'un qui le cherche.
+#
+# `sendkey q` donne un « a » sur un clavier AZERTY : les touches portent la
+# position QWERTY. « install » s'ecrit donc i n s t q l l. On le savait dans
+# l'autre sens depuis GrenPlace ; c'est la premiere fois qu'on s'en sert pour
+# TAPER un accent de disposition.
+#
+# On n'y clique RIEN. Ouvrir suffit : un clic de trop dans un installateur est
+# la seule chose de ce parcours qui puisse effacer un disque.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+sleep 2
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+sleep 4
+for touche in i n s t q l l ret; do
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+  sleep 1
+done
+# Calamares charge Qt et ses trente modules : il lui faut du temps.
+sleep 30
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-installateur.ppm" || true
+echo "installateur: capture prise — la fenetre est a regarder"
+# Et on le referme, pour ne pas le laisser devant les captures suivantes.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey alt-f4" || true
+sleep 3
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
+sleep 2
+
 grep -a 'grenos:' "$RUNNER_TEMP/serial.log" | tail -n 24 || true
 
 if ! cp "$RUNNER_TEMP/ecran-5min.ppm" "$RUNNER_TEMP/final.ppm" 2>/dev/null; then
