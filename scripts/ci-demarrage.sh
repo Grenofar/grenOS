@@ -428,6 +428,29 @@ else
   echo "son: la barre n a pas dit ou est son bouton"
 fi
 
+echo "--- l explorateur montre-t-il les disques ---"
+# Grenofar : « est-ce qu'on peut les voir sur l'explorateur ? »
+#
+# Les Reglages disent « disques vus par les Reglages : 2 » a chaque
+# construction, et c'est prouve. L'explorateur, lui, n'avait JAMAIS ete ouvert
+# ici — on ouvre la barre, le bureau, le menu, les taches, GrenPlace, les
+# Reglages, les Jeux et le panneau de son, mais pas lui.
+#
+# Tout est pourtant configure pour : `side_pane_mode=places`,
+# `places_computer=1`, et surtout `places_unmounted=1`, qui fait apparaitre un
+# disque AVANT meme qu'il soit monte. Plus udisks2, gvfs et polkitd pour que
+# cliquer dessus suffise, sans mot de passe.
+#
+# « Configure pour » n'est pas « le fait ». C'est exactement la forme de tous
+# les defauts de la semaine, et la seule facon de trancher est de regarder.
+#
+# Super+E, comme sous Windows : le raccourci existe deja dans openbox, on ne
+# l'invente pas pour l'essai.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey meta_l-e" || true
+sleep 12
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-explorateur.ppm" || true
+echo "explorateur: capture prise — le panneau « Emplacements » est a regarder"
+
 echo "--- les reglages s ouvrent-ils ---"
 # C'est la porte des mises a jour, du son et du mot de passe, et
 # personne ne l'avait jamais ouverte ici. Huit pages construites,
