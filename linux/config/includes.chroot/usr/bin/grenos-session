@@ -65,7 +65,20 @@ grenos-dire "dossiers du compte : $(ls -1 "$HOME" 2>/dev/null | tr '\n' ' ')"
 # `sync` n'est pas une précaution de style : la machine d'essai est tuée, pas
 # éteinte proprement, et un cache non vidé donnerait « rien n'a été gardé »
 # alors que la persistance marche.
-printf 'ecrit le %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
+# Le témoin porte l'identifiant du DÉMARRAGE, pas seulement une heure.
+#
+# Première version : une date. Elle a donné une preuve qui se trompait dans le
+# bon sens — le premier démarrage annonçait lui aussi « un fichier du démarrage
+# précédent est revenu ». Il ne le pouvait pas : `grenos-preuve` attend jusqu'à
+# quatre-vingt-dix secondes sur Flathub avant d'arriver à ce contrôle, et la
+# session a écrit le témoin entre-temps. Chaque démarrage relisait le sien.
+#
+# C'est la quatrième mesure de la semaine à répondre parfaitement à une
+# question qu'on ne lui avait pas posée. `boot_id` la rend indiscutable : le
+# noyau en tire un neuf à chaque démarrage, donc un témoin qui en porte un
+# autre vient forcément d'avant.
+printf '%s %s\n' "$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)" \
+    "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
     > "$CONFIG/temoin-persistance" 2>/dev/null || true
 sync 2>/dev/null || true
 export XDG_DESKTOP_DIR="$HOME/Bureau"

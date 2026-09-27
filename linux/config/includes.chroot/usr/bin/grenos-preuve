@@ -259,11 +259,23 @@ fi
 # Le temoin est ecrit par la session, dans le dossier de la personne, parce que
 # c'est exactement ce que la promesse designe. On le lit ici, au demarrage
 # suivant, avant que la session ne le reecrive.
+# On compare l'identifiant de demarrage, pas l'heure. Ce controle a d'abord
+# lu une date, et il a annonce « revenu » des le PREMIER demarrage : il attend
+# jusqu'a quatre-vingt-dix secondes sur Flathub avant d'arriver ici, et la
+# session a ecrit le temoin entre-temps. Il relisait le sien.
+#
+# Une mesure fausse ne se contredit pas : celle-la etait verte, coherente, et
+# elle ne prouvait rien. Le noyau tire un `boot_id` neuf a chaque demarrage,
+# donc un temoin qui en porte un autre vient forcement d'avant — et aucune
+# course ne peut plus s'y glisser.
 temoin=$(cat /home/*/.config/grenos/temoin-persistance 2>/dev/null | head -1)
-if [ -n "$temoin" ]; then
-    dire "persistance : un fichier du demarrage precedent est revenu ($temoin)"
-else
+demarrage=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)
+if [ -z "$temoin" ]; then
     dire "persistance : aucun temoin — premier demarrage, ou rien n'a ete garde"
+elif [ "${temoin%% *}" = "$demarrage" ]; then
+    dire "persistance : le temoin est de CE demarrage, il ne prouve rien"
+else
+    dire "persistance : un fichier d'un demarrage PRECEDENT est revenu (${temoin#* })"
 fi
 
 vu_session=0

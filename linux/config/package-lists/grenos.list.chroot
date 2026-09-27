@@ -215,9 +215,22 @@ calamares-settings-debian
 dosfstools
 btrfs-progs
 xfsprogs
-## Calamares est en Qt et grenOS en GTK : sans ce theme de plateforme,
-## l'installateur ne ressemble a rien de ce qui l'entoure.
+## Calamares est en Qt et grenOS en GTK : sans ce theme de plateforme, les
+## applications Qt ne ressemblent a rien de ce qui les entoure.
+##
+## **Qt6, pas Qt5, et c'est une erreur qu'il faut raconter.** J'avais ajoute
+## `qt5-gtk-platformtheme` en pensant a l'installateur. Or `calamares` 3.3.14
+## ne depend que de `libqt6*` — verifie dans ses Depends, pas suppose : le
+## paquet ne pouvait rien pour lui. Meme faute que `va-driver-all` pose sans
+## `libavcodec`, un bon moteur sans conduite vers le reservoir.
+##
+## Les deux restent : Qt5 sert aux applications que quelqu'un installera
+## depuis GrenPlace, Qt6 a celles de l'image. Et pour Calamares lui-meme,
+## aucun des deux ne suffit — `pkexec` nettoie l'environnement, donc
+## `QT_QPA_PLATFORMTHEME` ne l'atteint pas. C'est `stylesheet.qss` dans notre
+## habillage qui fait le travail.
 qt5-gtk-platformtheme
+qt6-gtk-platformtheme
 
 ## Le démarrage : un écran de chargement, pas un mur de texte.
 plymouth

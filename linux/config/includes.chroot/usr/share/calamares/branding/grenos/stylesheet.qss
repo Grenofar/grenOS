@@ -1,0 +1,128 @@
+/* L'installateur aux couleurs de grenOS.
+ *
+ * Trouvé en regardant la capture du 27 septembre, la première où la CI ouvre
+ * vraiment l'installateur : sa barre latérale était bien sombre — c'est la
+ * section `style:` de `branding.desc` qui la colore — et tout le reste de la
+ * fenêtre était BLANC. Une fenêtre à moitié sombre et à moitié blanche, dans
+ * le premier écran que voit quelqu'un qui installe grenOS.
+ *
+ * Deux choses l'expliquent, et la seconde m'a fait ajouter un paquet inutile :
+ *
+ *   1. `style:` de Calamares ne connaît que quatre clés, toutes pour la barre
+ *      latérale (vérifié dans `Branding.h` du paquet). Le corps de la fenêtre
+ *      est peint par Qt, pas par l'habillage ;
+ *   2. j'avais ajouté `qt5-gtk-platformtheme` pour que les applications Qt
+ *      suivent notre thème sombre. Or **Calamares 3.3.14 est en Qt6** — ses
+ *      dépendances ne citent que `libqt6*`. Le paquet ne pouvait rien pour
+ *      lui. Même faute que `va-driver-all` posé sans `libavcodec` : un bon
+ *      moteur sans conduite vers le réservoir.
+ *
+ * Et même avec le bon paquet, `pkexec` nettoie l'environnement : ni
+ * `QT_QPA_PLATFORMTHEME` ni `XDG_CURRENT_DESKTOP` n'arrivent jusqu'à
+ * Calamares. Passer par `pkexec env ...` casserait tout — polkit autorise
+ * l'action `com.github.calamares.calamares.pkexec.run`, liée au binaire
+ * calamares, et lancer `env` à la place redemanderait un mot de passe que
+ * cette machine n'a pas. C'est exactement la panne du 25 septembre.
+ *
+ * Ce fichier ne dépend de rien de tout cela : `libcalamaresui.so.3.3.14`
+ * contient la chaîne `stylesheet.qss` — vérifié dans le .deb, pas supposé —
+ * et lit ce fichier dans le dossier d'habillage.
+ *
+ * Les couleurs sont celles de `grenosui.py`, qui tient la seule palette du
+ * système. Les recopier ici est un doublon assumé : Calamares ne sait pas
+ * lire notre Python, et un installateur qui déparaille est pire qu'une
+ * constante répétée une fois.
+ */
+
+QWidget {
+    background-color: #0b101c;
+    color: #eef2fa;
+}
+
+/* Le corps des pages, un ton au-dessus du fond, comme nos cartes. */
+#mainApp, QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget {
+    background-color: #141b2d;
+    color: #eef2fa;
+}
+
+QLabel {
+    background: transparent;
+    color: #eef2fa;
+}
+
+/* Les boutons : le même bleu que l'accent de la barre et du bureau. */
+QPushButton {
+    background-color: #1a2338;
+    color: #eef2fa;
+    border: 1px solid #2c3d60;
+    border-radius: 6px;
+    padding: 6px 16px;
+}
+
+QPushButton:hover  { background-color: #22304d; }
+QPushButton:default,
+QPushButton:focus  { background-color: #3b82f6; border-color: #3b82f6; color: #ffffff; }
+QPushButton:pressed { background-color: #1d4ed8; }
+
+QPushButton:disabled {
+    background-color: #0b101c;
+    color: #5a6880;
+    border-color: #22304d;
+}
+
+/* Les champs où l'on tape, et les listes déroulantes. */
+QLineEdit, QComboBox, QSpinBox, QAbstractItemView, QTreeView, QListView, QTableView {
+    background-color: #080c16;
+    color: #eef2fa;
+    border: 1px solid #22304d;
+    border-radius: 6px;
+    selection-background-color: #3b82f6;
+    selection-color: #ffffff;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #141b2d;
+    border: 1px solid #2c3d60;
+}
+
+QCheckBox, QRadioButton, QGroupBox {
+    background: transparent;
+    color: #eef2fa;
+}
+
+/* La barre de progression de l'installation, celle qu'on regarde le plus. */
+QProgressBar {
+    background-color: #080c16;
+    border: 1px solid #22304d;
+    border-radius: 6px;
+    text-align: center;
+    color: #eef2fa;
+}
+
+QProgressBar::chunk {
+    background-color: #3b82f6;
+    border-radius: 5px;
+}
+
+/* Les ascenseurs, discrets comme ailleurs dans grenOS. */
+QScrollBar:vertical, QScrollBar:horizontal {
+    background: #0b101c;
+    border: none;
+    width: 10px;
+    height: 10px;
+}
+
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: #2c3d60;
+    border-radius: 5px;
+    min-height: 24px;
+    min-width: 24px;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
+
+QToolTip {
+    background-color: #141b2d;
+    color: #eef2fa;
+    border: 1px solid #2c3d60;
+}
