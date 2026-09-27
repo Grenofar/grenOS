@@ -257,6 +257,73 @@ else
     echo "(pas de paquet local : l'essai de remplacement est saute)"
 fi
 
+echo "--- le script qui met a jour au demarrage tient-il ses promesses ---"
+# C'est la piece de « Mettre a jour et redemarrer », et personne ne l'avait
+# jamais vue s'executer. Elle a ete ecrite, livree, et le hook verifie qu'elle
+# est presente et desarmee — mais « present » n'est pas « marche ». C'est
+# exactement la difference qui a coute le bouton de mise a jour le 26.
+#
+# On ne peut pas redemarrer une machine ici. On peut en revanche executer le
+# script et verifier son CONTRAT, qui tient en trois promesses :
+#
+#   1. il rend toujours 0, meme quand l'installation echoue — une machine qui
+#      ne revient pas serait la pire des pannes ;
+#   2. il ecrit son verdict dans /run/grenos/maj-resultat, que la barre lit
+#      pour dire a la personne ce qui s'est passe ;
+#   3. il se desarme lui-meme, pour qu'une installation interrompue ne puisse
+#      pas boucler au demarrage suivant.
+SCRIPT=/usr/lib/grenos/grenos-maj-demarrage
+if [ ! -x "$SCRIPT" ]; then
+    echo "maj : $SCRIPT absent ou non executable" >&2
+    exit 1
+fi
+
+rm -f /run/grenos/maj-resultat
+if "$SCRIPT"; then
+    echo "maj : le script de demarrage rend 0, comme il le doit"
+else
+    echo "maj : le script de demarrage a rendu une erreur — une machine ne redemarrerait pas" >&2
+    exit 1
+fi
+
+if [ ! -s /run/grenos/maj-resultat ]; then
+    echo "maj : il n a pas ecrit son verdict, la barre n aurait rien a dire" >&2
+    exit 1
+fi
+echo "maj : verdict ecrit — $(cat /run/grenos/maj-resultat)"
+
+# Et le meme script sur une machine ou apt ne peut PAS travailler : il doit
+# encore rendre 0 et dire « echec ». On casse volontairement les sources.
+#
+# Le menage compte autant que l'essai : Debian trixie n'a pas forcement de
+# `sources.list` — ses depots vivent dans des fichiers `.sources`. Si on en
+# cree un et qu'on se contente de « restaurer » une sauvegarde inexistante, on
+# LAISSE un depot invalide derriere soi, et tout ce qui suit dans cet essai
+# echoue pour une raison qui n'a rien a voir. On note donc s'il y en avait un.
+AVAIT_SOURCES=non
+[ -f /etc/apt/sources.list ] && AVAIT_SOURCES=oui
+[ "$AVAIT_SOURCES" = oui ] && cp /etc/apt/sources.list /tmp/sources.garde
+
+remettre_les_sources() {
+    if [ "$AVAIT_SOURCES" = oui ]; then
+        cp /tmp/sources.garde /etc/apt/sources.list
+    else
+        rm -f /etc/apt/sources.list
+    fi
+}
+
+echo "deb http://exemple.invalide/rien stable main" > /etc/apt/sources.list
+rm -f /run/grenos/maj-resultat
+if "$SCRIPT"; then
+    echo "maj : avec un depot injoignable, il rend quand meme 0"
+else
+    echo "maj : il a rendu une erreur alors que la machine doit demarrer" >&2
+    remettre_les_sources
+    exit 1
+fi
+remettre_les_sources
+echo "maj : le pire des cas laisse la machine demarrable"
+
 echo "--- l'installateur a-t-il tout ce qu'il lui faut ---"
 # Calamares lit settings.conf, y trouve une suite de modules, et va chercher
 # chacun d'eux sur le disque. Si l'un manque, il s'arrete au lancement avec un
