@@ -164,7 +164,7 @@ install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-demarrage" "$BUILD/usr/lib/gr
 # paquet, donc une machine deja installee le recoit par mise a jour — ce qui
 # est la moindre des choses pour un outil dont tout l'objet est d'appliquer des
 # changements sans reinstaller.
-install -m 0755 /usr/lib/grenos/grenos-au-prochain-demarrage /usr/lib/grenos/
+install -m 0755 "$DEDANS/usr/lib/grenos/grenos-au-prochain-demarrage" "$BUILD/usr/lib/grenos/"
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-reglage" "$BUILD/usr/lib/grenos/"
 
 # Ce qui s'exécute après l'installation du paquet. Sans lui, un service
