@@ -401,7 +401,7 @@ class Menu(Gtk.Window):
         pied.pack_end(self.petit("Éteindre", "grenos-arret",
                                  ["system-shutdown", "system-log-out"]), False, False, 0)
         pied.pack_end(self.petit("Réglages", "grenos-parametres",
-                                 ["preferences-system", "applications-system"]),
+                                 ["grenos-parametres", "preferences-system", "applications-system"]),
                       False, False, 0)
         boite.pack_start(pied, False, False, 0)
 

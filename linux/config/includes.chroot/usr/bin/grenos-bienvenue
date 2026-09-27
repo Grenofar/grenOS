@@ -30,7 +30,7 @@ GESTES = [
     ("Connexions", "Le Wi-Fi et le Bluetooth, dans une fenêtre.",
      "grenos-connexions", ["grenos-connexions", "network-wireless"]),
     ("Réglages", "Le thème jour et nuit, l'écran, le son, l'heure, le mot de passe, "
-     "les mises à jour.", "grenos-parametres", ["preferences-system"]),
+     "les mises à jour.", "grenos-parametres", ["grenos-parametres", "preferences-system"]),
     ("Mettre à jour", "Les nouveautés de grenOS et les correctifs de sécurité, "
      "sans retélécharger l'image.", "grenos-maj", ["system-software-update"]),
     ("Naviguer", "Firefox est là, avec ses onglets et ses favoris.",

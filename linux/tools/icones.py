@@ -422,6 +422,66 @@ def taches(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def reglages(chemin, taille):
+    """Les Réglages : un engrenage, aux couleurs du système.
+
+    Il portait `preferences-system`, l'icône de Papirus : bien faite, lisible,
+    et **vert sarcelle** au milieu d'une barre bleue. Elle se voyait sur chacune
+    de nos captures, et c'est précisément ce que Grenofar désignait par « ça se
+    voit que l'UI n'est pas la tienne ».
+
+    Un engrenage plutôt que des curseurs : à vingt pixels, trois traits
+    horizontaux ressembleraient aux trois barres du gestionnaire de tâches, qui
+    est juste à côté dans la barre. La silhouette dentée, elle, ne ressemble à
+    rien d'autre.
+
+    Les dents sont une modulation du rayon, pas huit rectangles tournés : le
+    contour reste lisse, donc l'antialiasing travaille au lieu d'escalier.
+    """
+    png(chemin, dessin_reglages(taille))
+
+
+def dessin_reglages(taille):
+    """L'engrenage, rendu en tableau — le fichier n'est écrit qu'au-dessus.
+
+    Séparé pour qu'une planche de contrôle puisse le regarder à 16, 20, 24 et
+    32 px sur fond de barre **sans redessiner la même chose ailleurs**. Deux
+    dessins d'une même icône finiraient par diverger, et c'est alors la planche
+    qu'on croirait : le piège des deux mesures, à l'échelle d'un pixel.
+    """
+    image, u, v = toile(taille)
+    dx, dy = u - 0.5, v - 0.5
+    rayon = np.hypot(dx, dy)
+    angle = np.arctan2(dy, dx)
+
+    # SIX dents, pas huit, et un moyeu plus petit.
+    #
+    # La première version en avait huit, avec un moyeu à 0,135. Regardée sur
+    # fond de barre : lisible à 32 et 24 px, une fleur à 20, une tache à 16.
+    # Deux causes, mesurables : l'anneau entre le moyeu et le bord ne faisait
+    # que 0,155 de la largeur — un pixel et demi à 16 px —, et huit dents à ce
+    # rayon laissent moins de cinq pixels par dent, donc de la bouillie.
+    #
+    # Six dents et un anneau de 0,21 : trois pixels et demi de matière à 16 px,
+    # ce qui est le minimum pour qu'une forme se lise.
+    # Le quart de tour : une dent droit en haut et une droit en bas, au lieu de
+    # deux a l'horizontale. La silhouette devient symetrique par rapport a la
+    # verticale, et c'est ce qui la fait lire « engrenage » du premier coup.
+    dents = 0.5 * (1.0 + np.tanh(np.cos(6.0 * (angle + np.pi / 6.0)) * 5.0))
+    limite = 0.315 + 0.095 * dents
+
+    flou = 0.022
+    corps = np.clip((limite - rayon) / flou, 0.0, 1.0)
+    poser(image, corps, ACCENT, 1.0)
+
+    # Le moyeu, en clair : c'est lui qui fait lire « engrenage » et non
+    # « soleil ». Sans trou, la forme est une étoile.
+    trou = np.clip((0.105 - rayon) / flou, 0.0, 1.0)
+    poser(image, trou, CLAIR, 1.0)
+
+    return np.clip(image, 0, 255).astype(np.uint8)
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
@@ -443,6 +503,7 @@ def main():
     cable(os.path.join(dossier, 'grenos-reseau-cable.png'), taille)
     sans_reseau(os.path.join(dossier, 'grenos-reseau-aucun.png'), taille)
     taches(os.path.join(dossier, 'grenos-taches.png'), taille)
+    reglages(os.path.join(dossier, 'grenos-parametres.png'), taille)
 
 
 if __name__ == '__main__':

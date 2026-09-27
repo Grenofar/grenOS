@@ -3,6 +3,6 @@ Type=Application
 Name=Réglages
 Comment=L'apparence, l'écran, le son, l'heure, le compte, les mises à jour
 Exec=grenos-parametres
-Icon=preferences-system
+Icon=grenos-parametres
 Terminal=false
 Categories=System;Settings;
