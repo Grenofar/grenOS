@@ -216,6 +216,21 @@ class Taches(Gtk.Window):
                 rendu.set_property("xalign", 1.0)
             vraie = Gtk.TreeViewColumn(titre, rendu, text=colonne_texte)
             vraie.set_sort_column_id(colonne_tri)
+            # La flèche doit dire l'ordre RÉEL, pas son ordre par défaut.
+            #
+            # Le modèle trie la colonne « Processeur » du plus gourmand au
+            # moins gourmand, ce qui est le bon choix : on ouvre cette fenêtre
+            # pour voir ce qui mange la machine. Mais tant que personne n'a
+            # cliqué sur l'en-tête, GTK laisse l'indicateur de la colonne à sa
+            # valeur par défaut — une flèche vers le haut, qui annonce
+            # l'inverse de ce que la liste montre.
+            #
+            # Vu en ouvrant la capture : Xorg à 1,5 % en tête, tout le reste à
+            # 0,0 %, et une flèche montante au-dessus. Personne ne s'en plaint
+            # jamais, et pourtant l'écran ment.
+            if colonne_tri == 2:
+                vraie.set_sort_indicator(True)
+                vraie.set_sort_order(Gtk.SortType.DESCENDING)
             vraie.set_resizable(True)
             vraie.set_min_width(largeur)
             self.vue.append_column(vraie)
