@@ -359,6 +359,72 @@ jobs:
         env:
           ISO_UEFI: ${{ steps.build.outputs.iso }}
 
+      # « Qu'on doive redemarrer le PC pour mettre a jour, comme Windows. »
+      #
+      # C'est la derniere piece du plan que personne n'a jamais vue tourner, et
+      # la seule dont l'echec laisserait une machine SANS DEMARRAGE. Le contrat
+      # du script est exerce depuis le 26 dans un conteneur — il rend toujours
+      # 0, ecrit son verdict, se desarme, survit a un depot injoignable — mais
+      # aucune machine n'avait jamais redemarre dessus.
+      #
+      # Ce qui le rend possible aujourd'hui : on sait enfin ou vont les
+      # fichiers de la persistance. La couche superieure est `<partition>/rw`,
+      # pas la racine — d'ou le lien symbolique pose la, qui arme le service
+      # exactement comme le ferait le bouton « Mettre a jour et redemarrer ».
+      #
+      # RAPPORTE, jamais bloquant, et il ne conditionne pas la Release : une
+      # etape ne devient obligatoire qu'apres avoir ete vue verte. On travaille
+      # de plus sur une COPIE du disque, pour ne pas abimer celui dont les deux
+      # premiers demarrages viennent de prouver la persistance.
+      - name: La mise a jour au demarrage s applique-t-elle
+        id: majdem
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -u
+          if [ ! -f "$RUNNER_TEMP/persistence.vdi" ]; then
+            echo "pas de disque de persistance : rien a essayer"
+            exit 0
+          fi
+          qemu-img convert -f vdi -O raw "$RUNNER_TEMP/persistence.vdi" "$RUNNER_TEMP/maj-disque.raw"
+          BOUCLE=$(sudo losetup --find --show --partscan "$RUNNER_TEMP/maj-disque.raw")
+          POINT=$(mktemp -d)
+          sudo mount "${BOUCLE}p1" "$POINT"
+          # Armer le service, c'est exactement ce que fait le bouton : poser le
+          # lien que systemd cherche dans multi-user.target.wants.
+          VOULU="$POINT/rw/etc/systemd/system/multi-user.target.wants"
+          sudo mkdir -p "$VOULU"
+          sudo ln -sf /etc/systemd/system/grenos-maj-demarrage.service \
+            "$VOULU/grenos-maj-demarrage.service"
+          sudo sync
+          sudo umount "$POINT"
+          sudo losetup -d "$BOUCLE"
+          rmdir "$POINT" 2>/dev/null || true
+          echo "service arme dans la couche superieure de la persistance"
+          ACCEL=""
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then ACCEL="-enable-kvm -cpu host"; fi
+          qemu-system-x86_64 $ACCEL -m 3072 -smp 2 -cdrom "$ISO_MAJDEM" -boot d -drive file="$RUNNER_TEMP/maj-disque.raw",format=raw,if=none,id=garde3 -device ahci,id=sata3 -device ide-hd,drive=garde3,bus=sata3.0 -display none -vga std -global VGA.xres=1280 -global VGA.yres=720 -serial file:"$RUNNER_TEMP/serial-maj-demarrage.log" -monitor unix:"$RUNNER_TEMP/majdem.sock",server,nowait -no-reboot &
+          QEMU=$!
+          sleep 5
+          if ! kill -0 "$QEMU" 2>/dev/null; then
+            echo "::warning::QEMU n'a pas demarre pour l'essai de mise a jour au demarrage."
+            exit 0
+          fi
+          sleep 240
+          python3 scripts/ci-screen.py grab "$RUNNER_TEMP/majdem.sock" "$RUNNER_TEMP/ecran-maj-demarrage.ppm" || true
+          kill $QEMU 2>/dev/null || true
+          echo "--- ce que le troisieme demarrage a dit ---"
+          grep -a 'grenos:' "$RUNNER_TEMP/serial-maj-demarrage.log" | tail -n 20 || true
+          # La seule question qui compte : la machine est-elle revenue ? Une
+          # mise a jour qui laisse un PC eteint est pire que pas de mise a jour.
+          if grep -aq 'session de bureau ouverte' "$RUNNER_TEMP/serial-maj-demarrage.log"; then
+            echo "maj au demarrage : le bureau est REVENU apres l'application"
+          else
+            echo "::warning::Le bureau n'est pas revenu dans les 240 s : a regarder sur la capture."
+          fi
+        env:
+          ISO_MAJDEM: ${{ steps.build.outputs.iso }}
+
       - name: Garder les captures
         if: always()
         continue-on-error: true
