@@ -156,24 +156,42 @@ grenos-veilleur grenos-shell &
         OUVERTS=""
         for CARTE in $(sed -n 's/^ *\([0-9]\+\) \[.*/\1/p' /proc/asound/cards 2>/dev/null); do
             for CANAL in Master PCM Speaker Headphone Front "Analog Output"; do
-                if amixer -c "$CARTE" sget "$CANAL" >/dev/null 2>&1; then
-                    # `unmute` seul ne suffit pas : un canal peut être ouvert
-                    # ET à zéro. Les deux, donc, et en une fois.
-                    if amixer -q -c "$CARTE" sset "$CANAL" 80% unmute >/dev/null 2>&1; then
-                        OUVERTS="$OUVERTS $CANAL"
-                    fi
+                ETAT=$(amixer -c "$CARTE" sget "$CANAL" 2>/dev/null) || continue
+                [ -n "$ETAT" ] || continue
+                # On ne touche QUE ce qui est coupé ou à zéro.
+                #
+                # La première version posait tous les canaux à 80 %, coupés ou
+                # non. La machine d'intégration l'a dit tout de suite, mais
+                # dans un chiffre et non dans une étape rouge : la crête du son
+                # enregistré est tombée de 10 584 à 2 215 sur 32 767. Un
+                # amplificateur HDA est gradué en décibels — 100 % à 80 %, ce
+                # sont une douzaine de dB, donc un son cinq fois plus faible.
+                #
+                # Autrement dit, en réparant le silence de Grenofar j'aurais
+                # baissé le son de tous ceux chez qui il marchait. Un système
+                # qui touche à un réglage correct « pour aider » est un système
+                # qui ment sur ce qu'il fait.
+                COUPE=$(printf '%s' "$ETAT" | grep -c '\[off\]' || true)
+                NIVEAU=$(printf '%s' "$ETAT" | sed -n 's/.*\[\([0-9]\+\)%\].*/\1/p' | head -1)
+                if [ "$COUPE" -gt 0 ]; then
+                    amixer -q -c "$CARTE" sset "$CANAL" unmute >/dev/null 2>&1 || true
+                    OUVERTS="$OUVERTS $CANAL(rallume)"
+                fi
+                if [ -n "$NIVEAU" ] && [ "$NIVEAU" -lt 5 ]; then
+                    amixer -q -c "$CARTE" sset "$CANAL" 80% >/dev/null 2>&1 || true
+                    OUVERTS="$OUVERTS $CANAL(remonte)"
                 fi
             done
         done
         touch "$CONFIG/melangeur-ouvert"
         if [ -n "$OUVERTS" ]; then
-            grenos-dire "son : melangeur ouvert au premier demarrage —$OUVERTS"
+            grenos-dire "son : melangeur corrige au premier demarrage —$OUVERTS"
             # Et on l'enregistre, pour que le prochain démarrage le retrouve :
             # c'est ce que la ligne de `grenos-preuve` promettait sans que rien
             # n'ait jamais écrit l'état qu'elle prétendait restaurer.
             alsactl store >/dev/null 2>&1 || true
         else
-            grenos-dire "son : aucun canal de melangeur trouve a ouvrir"
+            grenos-dire "son : melangeur deja ouvert, rien touche"
         fi
     fi
 
