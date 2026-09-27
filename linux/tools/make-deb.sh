@@ -84,6 +84,10 @@ python3 "$HERE/tools/wallpaper.py" "$BUILD/usr/share/grenos" 2560 1440
 
 # Le catalogue de secours de GrenPlace : celui du réseau l'emporte toujours.
 install -m 0644 "$HERE/data/catalogue.json" "$BUILD/usr/share/grenos/catalogue.json"
+# Le son d'essai : c'est lui qui bipe a l'ouverture de session et sur lequel la
+# machine d'integration compte les trous. Sans cette ligne il n'arriverait que
+# par une ISO.
+install -m 0644 "$DEDANS/usr/share/grenos/essai-son.wav" "$BUILD/usr/share/grenos/" 2>/dev/null || true
 
 # Nos icônes, calculées comme les fonds d'écran.
 # Nos icones, dans TOUTES les tailles que le theme sait chercher.

@@ -50,6 +50,14 @@ echo "grenos: icones dessinees en 16 22 24 32 48 64 128 256"
 
 echo "--- fonds d'écran et logo ---"
 python3 tools/wallpaper.py config/includes.chroot/usr/share/grenos 2560 1440
+# Un son d'essai CONTINU, de 0,8 s. Il sert deux fois : c'est le petit bip qui
+# confirme que le son marche a l'ouverture de session, et c'est le signal sur
+# lequel la machine d'integration compte les trous. Un fichier sans silence
+# interne est la seule facon de distinguer un vrai hoquet d'une respiration :
+# `Front_Center.wav`, la voix d'alsa-utils qu'on jouait avant, contient 6
+# silences naturels dont un de 345 ms, et le detecteur les comptait comme des
+# pannes.
+python3 tools/son-essai.py config/includes.chroot/usr/share/grenos 0.8
 # Le logo : le nom, dans la police du système, sur fond transparent. Il sert à
 # l'écran de démarrage et à l'accueil.
 convert -size 900x260 xc:none \

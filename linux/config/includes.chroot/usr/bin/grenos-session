@@ -136,7 +136,23 @@ grenos-veilleur grenos-shell &
     # Le fichier vient d'alsa-utils (verifie dans le .deb), et paplay de
     # pulseaudio-utils : les deux sont sur l'image. On passe par paplay, donc
     # par PipeWire, pour exercer la chaine entiere plutot qu'ALSA seul.
-    ESSAI=/usr/share/sounds/alsa/Front_Center.wav
+    # Notre son a nous, et pourquoi il a remplace celui d'alsa-utils.
+    #
+    # On jouait `Front_Center.wav` : une voix qui dit « Front Centre ». Deux
+    # defauts, et le second a coute une mesure entiere.
+    #
+    #   1. c'est une phrase en anglais qui sort des enceintes a chaque
+    #      ouverture de session, ce que personne n'a demande ;
+    #   2. une voix SE TAIT entre les syllabes. La machine d'integration compte
+    #      les trous dans le son enregistre pour reperer un hoquet, et elle a
+    #      rapporte « 6 trous, le plus long 366 ms » — exactement les 6 silences
+    #      du fichier source, verifies en l'ouvrant. Elle mesurait la diction.
+    #
+    # `essai-son.wav` est une sinusoide continue de 0,8 s, fabriquee a la
+    # construction. Court, discret, et sans un seul silence : tout trou qu'on y
+    # trouvera aura ete creuse par la machine.
+    ESSAI=/usr/share/grenos/essai-son.wav
+    [ -r "$ESSAI" ] || ESSAI=/usr/share/sounds/alsa/Front_Center.wav
     if [ -r "$ESSAI" ] && command -v paplay >/dev/null 2>&1; then
         if paplay "$ESSAI" 2>/dev/null; then
             grenos-dire "son : un son a ete joue par PipeWire"
