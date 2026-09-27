@@ -187,6 +187,21 @@ grenos-veilleur grenos-shell &
                 SCHED_FIFO|SCHED_RR) TEMPS_REEL=$((TEMPS_REEL + 1)) ;;
             esac
         done
+
+        # QUI sont ces fils, au juste ?
+        #
+        # « Deux fils, aucun en temps reel » ne veut rien dire tant qu'on ne
+        # sait pas lesquels. Si le fil `data-loop` n'existe pas, la question
+        # n'est plus « pourquoi n'est-il pas prioritaire » mais « pourquoi
+        # n'est-il pas la » — et ce ne sont pas les memes causes.
+        #
+        # `ps` rend la classe d'ordonnancement (TS pour ordinaire, FF pour
+        # FIFO) et la priorite, telles que le noyau les voit, sans prose a
+        # interpreter. Six mesures se sont trompees cette nuit en lisant la
+        # sortie d'un outil plutot que la valeur elle-meme.
+        QUI=$(ps -L -o comm=,cls=,rtprio= -p "$PW" 2>/dev/null \
+              | awk '{printf "%s/%s/%s ", $1, $2, $3}' | cut -c1-120)
+        grenos-dire "son : fils de pipewire = ${QUI:-illisibles}"
         # La LIMITE, et pas seulement le résultat.
         #
         # Quatre tentatives ont échoué sur ce point, chacune corrigeant un
