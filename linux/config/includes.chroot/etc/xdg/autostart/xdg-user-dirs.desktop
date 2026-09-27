@@ -1,0 +1,28 @@
+[Desktop Entry]
+Type=Application
+Name=xdg-user-dirs (neutralisé par grenOS)
+Exec=/bin/true
+NoDisplay=true
+Hidden=true
+
+# Ce fichier en masque un autre, et voici pourquoi.
+#
+# Debian livre `/etc/xdg/autostart/xdg-user-dirs.desktop`, qui crée les
+# dossiers du compte — Bureau, Documents, Téléchargements — au démarrage de la
+# session. Il s'exécute AVANT que `grenos-session` n'ait exporté la langue.
+#
+# Tant que la locale fr_FR.UTF-8 n'existait pas, cela donnait un dossier nommé
+# « TÃ©lÃ©chargements » : le fichier de référence est en UTF-8, et l'outil le
+# convertit depuis le jeu de caractères de la locale courante — qui était le
+# C, donc de l'ASCII. Chaque octet accentué en devenait deux.
+#
+# La locale est maintenant générée, mais le dossier abîmé revenait quand même
+# sur une image neuve : la preuve que cet appel-là tourne encore trop tôt.
+# Plutôt que de chercher lequel des deux appels faute — on s'est déjà trompé
+# sept fois cette nuit en devinant —, on n'en laisse qu'un seul : celui de
+# `grenos-session`, qui s'exécute après avoir lu `/etc/default/locale` et qui
+# force explicitement la langue.
+#
+# `Hidden=true` est la façon prévue par la spécification freedesktop pour
+# qu'un fichier de `/etc/xdg` en annule un autre : rien n'est supprimé du
+# paquet Debian, et une mise à jour de celui-ci ne rétablira pas le problème.

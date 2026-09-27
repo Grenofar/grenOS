@@ -31,7 +31,27 @@ mkdir -p "$CONFIG" "$HOME/Bureau"
 # Les dossiers en français, écrits avant que quoi que ce soit ne les demande.
 # Sans cela, les applications cherchent ~/Desktop — vide — pendant que les
 # raccourcis attendent dans ~/Bureau.
-command -v xdg-user-dirs-update >/dev/null 2>&1 && xdg-user-dirs-update 2>/dev/null
+# La langue est FORCÉE sur cet appel, et pas seulement héritée.
+#
+# Le dossier « TÃ©lÃ©chargements » vu sur la capture vient de là : l'outil lit
+# un fichier de référence en UTF-8 et le convertit depuis le jeu de caractères
+# de la locale courante. Dans la locale C, chaque octet accentué en devient
+# deux. L'appel de Debian, au démarrage de session, est neutralisé par
+# `/etc/xdg/autostart/xdg-user-dirs.desktop` ; celui-ci est le seul qui reste,
+# et il ne dépend plus de ce que l'environnement a bien voulu transmettre.
+command -v xdg-user-dirs-update >/dev/null 2>&1 \
+    && LANG=fr_FR.UTF-8 LC_ALL=fr_FR.UTF-8 xdg-user-dirs-update 2>/dev/null
+
+# Et on retire le dossier abîmé s'il en reste un, mais seulement s'il est vide.
+# Ce qu'on y aurait mis appartient à la personne.
+if [ -d "$HOME/TÃ©lÃ©chargements" ] && [ -z "$(ls -A "$HOME/TÃ©lÃ©chargements" 2>/dev/null)" ]; then
+    rmdir "$HOME/TÃ©lÃ©chargements" 2>/dev/null \
+        && grenos-dire "dossier au nom abime retire"
+fi
+
+# Et on DIT ce que le compte contient : un nom abîmé se voit sur une capture,
+# mais seulement si quelqu'un la regarde. Sur le port série, il se cherche.
+grenos-dire "dossiers du compte : $(ls -1 "$HOME" 2>/dev/null | tr '\n' ' ')"
 export XDG_DESKTOP_DIR="$HOME/Bureau"
 
 # L'écran reste allumé, et le pointeur est une flèche dès la première seconde.
