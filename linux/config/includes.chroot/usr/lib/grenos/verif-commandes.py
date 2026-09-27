@@ -43,6 +43,13 @@ DE_BASE = {
     "sleep", "kill", "touch", "install", "ln", "od", "exec", "command", "which",
     "getent", "exit", "elif", "then", "else", "fi", "do", "done", "local",
     "export", "set", "read", "return", "case", "esac", "for", "while", "if",
+    # `wait`, `trap`, `shift`, `eval`, `unset`, `:` et `.` sont des PRIMITIVES
+    # du shell : elles n'existent dans aucun paquet, et les chercher dans
+    # l'image fait refuser une construction parfaitement saine. `wait` l'a fait
+    # le 27 septembre, sur trois lignes qui attendaient la fin de boucles de
+    # charge. Le garde avait raison d'être strict — c'est sa liste qui était
+    # incomplète.
+    "wait", "trap", "shift", "eval", "unset", "umask", "times", "ulimit",
     # Des mots de Python. Le saut de bloc ci-dessous devrait suffire ; ceci est
     # le second filet, parce qu'une image refusée pour un faux positif coûte
     # trente minutes et fait douter du contrôle lui-même.
