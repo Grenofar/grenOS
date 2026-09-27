@@ -387,6 +387,29 @@ jobs:
             exit 0
           fi
           qemu-img convert -f vdi -O raw "$RUNNER_TEMP/persistence.vdi" "$RUNNER_TEMP/maj-disque.raw"
+          # De quoi AVOIR quelque chose a installer.
+          #
+          # Le premier essai a rendu « termine en 0s » : l'image venait d'etre
+          # construite depuis le meme depot, il n'y avait rien de neuf. La
+          # plomberie etait prouvee — ordonnancement, message, desarmement,
+          # retour du bureau — mais pas qu'elle installe quoi que ce soit dans
+          # cette fenetre-la. Une mise a jour qui n'a rien a faire reussit
+          # toujours.
+          #
+          # On fabrique donc une version plus recente de `grenos-desktop`, on
+          # la sert depuis le runner, et la machine la voit par le reseau
+          # utilisateur de QEMU, ou l'hote repond a 10.0.2.2. `[trusted=yes]`
+          # parce que ce depot-la ne sort pas de la machine d'integration ;
+          # celui de production, lui, reste signe.
+          NEUVE=""
+          if [ -n "${VERSION_APT:-}" ] && command -v dpkg-scanpackages >/dev/null 2>&1; then
+            NEUVE="${VERSION_APT}+essai1"
+            linux/tools/make-deb.sh "$NEUVE" "$RUNNER_TEMP/depot-essai" >/dev/null
+            ( cd "$RUNNER_TEMP/depot-essai" && dpkg-scanpackages . /dev/null > Packages 2>/dev/null && gzip -9cf Packages > Packages.gz )
+            python3 -m http.server 8000 --directory "$RUNNER_TEMP/depot-essai" --bind 127.0.0.1 >/dev/null 2>&1 &
+            SERVEUR=$!
+            echo "depot d essai servi : grenos-desktop $NEUVE"
+          fi
           BOUCLE=$(sudo losetup --find --show --partscan "$RUNNER_TEMP/maj-disque.raw")
           POINT=$(mktemp -d)
           sudo mount "${BOUCLE}p1" "$POINT"
@@ -396,6 +419,11 @@ jobs:
           sudo mkdir -p "$VOULU"
           sudo ln -sf /etc/systemd/system/grenos-maj-demarrage.service \
             "$VOULU/grenos-maj-demarrage.service"
+          if [ -n "$NEUVE" ]; then
+            sudo mkdir -p "$POINT/rw/etc/apt/sources.list.d"
+            echo 'deb [trusted=yes] http://10.0.2.2:8000 ./' \
+              | sudo tee "$POINT/rw/etc/apt/sources.list.d/essai-local.list" >/dev/null
+          fi
           sudo sync
           sudo umount "$POINT"
           sudo losetup -d "$BOUCLE"
@@ -422,8 +450,20 @@ jobs:
           else
             echo "::warning::Le bureau n'est pas revenu dans les 240 s : a regarder sur la capture."
           fi
+          # Et la question que le premier essai ne posait pas : a-t-elle
+          # vraiment INSTALLE quelque chose ? « termine en 0s » veut dire qu'il
+          # n'y avait rien a faire, ce qui reussit toujours.
+          if [ -n "$NEUVE" ]; then
+            if grep -aq "grenos-desktop $NEUVE est installe" "$RUNNER_TEMP/serial-maj-demarrage.log"; then
+              echo "maj au demarrage : la version $NEUVE a ete POSEE avant le bureau"
+            else
+              echo "::warning::La version d'essai n'a pas ete installee au demarrage : a lire dans serial-maj-demarrage.log."
+            fi
+          fi
+          kill ${SERVEUR:-0} 2>/dev/null || true
         env:
           ISO_MAJDEM: ${{ steps.build.outputs.iso }}
+          VERSION_APT: ${{ steps.apt.outputs.version }}
 
       - name: Garder les captures
         if: always()
