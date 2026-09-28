@@ -79,17 +79,72 @@ class Reglages(Gtk.Window):
         defilement.add(self.pages)
         cadre.pack_start(defilement, True, True, 0)
 
-        self.pages.add_titled(self.page_apparence(), "apparence", "Apparence")
-        self.pages.add_titled(self.page_ecran(), "ecran", "Écran")
-        self.pages.add_titled(self.page_son(), "son", "Son")
-        self.pages.add_titled(self.page_reseau(), "reseau", "Réseau")
-        self.pages.add_titled(self.page_compte(), "compte", "Compte")
-        self.pages.add_titled(self.page_heure(), "heure", "Heure et date")
-        self.pages.add_titled(self.page_maj(), "maj", "Mises à jour")
-        self.pages.add_titled(self.page_materiel(), "materiel", "Matériel")
+        # Les huit pages sont annoncées tout de suite, et remplies ensuite.
+        #
+        # Le chronomètre a mesuré 479 ms de construction de fenêtre ici, contre
+        # 40 à 139 ms pour les autres applications : les huit pages étaient
+        # bâties au démarrage alors qu'une seule est visible. Plusieurs
+        # appellent des programmes extérieurs — `pactl` pour le son, `xrandr`
+        # pour l'écran — et on payait les huit pour en montrer une.
+        #
+        # Le volet de gauche a besoin que les enfants existent pour afficher
+        # leurs titres : on pose donc des boîtes vides, et on les garnit.
+        self.constructeurs = {
+            "apparence": self.page_apparence,
+            "ecran": self.page_ecran,
+            "son": self.page_son,
+            "reseau": self.page_reseau,
+            "compte": self.page_compte,
+            "heure": self.page_heure,
+            "maj": self.page_maj,
+            "materiel": self.page_materiel,
+        }
+        self.garnies = set()
+        for nom, titre in (("apparence", "Apparence"), ("ecran", "Écran"),
+                           ("son", "Son"), ("reseau", "Réseau"),
+                           ("compte", "Compte"), ("heure", "Heure et date"),
+                           ("maj", "Mises à jour"), ("materiel", "Matériel")):
+            self.pages.add_titled(
+                Gtk.Box(orientation=Gtk.Orientation.VERTICAL), nom, titre)
+        self.pages.connect("notify::visible-child-name", self.garnir)
 
         if page:
             self.pages.set_visible_child_name(page)
+        # Celle qu'on voit, maintenant. Les sept autres attendent le temps mort.
+        self.garnir()
+        GLib.idle_add(self.garnir_le_reste)
+
+    def garnir(self, *_):
+        """Construit la page visible, si ce n'est pas déjà fait."""
+        nom = self.pages.get_visible_child_name()
+        if not nom or nom in self.garnies:
+            return
+        self.garnies.add(nom)
+        boite = self.pages.get_child_by_name(nom)
+        boite.pack_start(self.constructeurs[nom](), True, True, 0)
+        boite.show_all()
+
+    def garnir_le_reste(self):
+        """Les sept autres pages, une par tour de boucle, quand rien ne presse.
+
+        Elles ne sont pas abandonnées : les construire au premier temps mort
+        les rend prêtes avant le premier clic, et **garde les lignes qu'elles
+        écrivent sur le port série**. Celle du Son en particulier — « reglages
+        son : melangeur … » — est une preuve exigée par la construction ; la
+        rendre paresseuse sans cela l'aurait fait disparaître, et une image
+        muette serait passée pour bonne.
+
+        Une page par tour, et non les sept d'un coup : la fenêtre reste
+        maniable pendant qu'elles se remplissent.
+        """
+        for nom in self.constructeurs:
+            if nom not in self.garnies:
+                self.garnies.add(nom)
+                boite = self.pages.get_child_by_name(nom)
+                boite.pack_start(self.constructeurs[nom](), True, True, 0)
+                boite.show_all()
+                return True
+        return False
 
     def enveloppe(self, *blocs):
         boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
