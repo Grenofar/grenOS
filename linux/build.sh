@@ -48,6 +48,14 @@ for taille in 16 22 24 32 48 64 128 256; do
 done
 echo "grenos: icones dessinees en 16 22 24 32 48 64 128 256"
 
+# Les boutons des barres de titre. Le themerc reglait la couleur de chacun dans
+# ses six etats et ne livrait AUCUN dessin : openbox retombait alors sur ses
+# bitmaps internes de 6x6, ou la croix de Fermer n'est plus une croix mais un
+# carre plein a quatre encoches. Mesure sur la capture du 28 septembre, sur le
+# glyphe le plus repete de tout le systeme.
+python3 tools/boutons-fenetre.py \
+    config/includes.chroot/usr/share/themes/grenOS/openbox-3
+
 echo "--- fonds d'écran et logo ---"
 python3 tools/wallpaper.py config/includes.chroot/usr/share/grenos 2560 1440
 # Un son d'essai CONTINU, de 0,8 s. Il sert deux fois : c'est le petit bip qui

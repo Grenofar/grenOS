@@ -17,7 +17,6 @@ import sys
 
 sys.path.insert(0, "/usr/lib/grenos")
 
-import cairo  # noqa: E402
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")
@@ -42,35 +41,6 @@ STYLE = """
 """
 
 
-RAYON = 14
-
-
-def region_arrondie(largeur, hauteur, rayon):
-    """Un rectangle aux coins arrondis, decoupe ligne par ligne.
-
-    X11 tourne ici **sans composition** : c'est ce qui rend la souris fluide
-    sans carte 3D, et c'est un choix qu'on ne revient pas dessus. Mais sans
-    composition il n'y a pas de transparence : un `border-radius` ne fait que
-    *ne pas peindre* les coins, et ce qui apparait dessous est le noir de la
-    fenetre. Grenofar l'a vu du premier coup d'oeil : « les bords sont noirs
-    dans l'overlay ».
-
-    La seule facon d'avoir de vrais coins arrondis sans composition est de
-    retirer les coins **de la fenetre elle-meme**. C'est ce que fait un masque
-    de forme : les pixels hors de la region n'appartiennent plus a la fenetre,
-    et c'est le bureau qu'on voit a travers, pas du noir.
-    """
-    region = cairo.Region()
-    for y in range(hauteur):
-        if y < rayon:
-            ecart = rayon - 1 - y
-        elif y >= hauteur - rayon:
-            ecart = y - (hauteur - rayon)
-        else:
-            ecart = 0
-        creux = rayon - int((rayon * rayon - ecart * ecart) ** 0.5) if ecart else 0
-        region.union(cairo.RectangleInt(creux, y, max(1, largeur - 2 * creux), 1))
-    return region
 
 
 class PanneauSon(Gtk.Window):
@@ -280,7 +250,7 @@ class PanneauSon(Gtk.Window):
         if (largeur, hauteur) == getattr(self, "decoupe", None):
             return
         self.decoupe = (largeur, hauteur)
-        cadre.shape_combine_region(region_arrondie(largeur, hauteur, RAYON), 0, 0)
+        cadre.shape_combine_region(grenosui.region_arrondie(largeur, hauteur), 0, 0)
 
     def ouvrir(self):
         ecran = Gdk.Screen.get_default()

@@ -367,6 +367,13 @@ class Menu(Gtk.Window):
         self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
         self.set_keep_above(True)
         self.attrape = None
+        # Les coins retirés de la fenêtre elle-même. Sans cela, X11 sans
+        # composition montre le NOIR de la fenêtre là où la feuille de style
+        # arrondit — mesuré le 28 septembre sur la capture : 32 pixels noirs
+        # purs dans le coin haut gauche, 25 dans le coin droit. Le panneau de
+        # son en avait zéro depuis le 25 ; le correctif n'avait jamais été
+        # porté ici, sur la surface la plus utilisée du système.
+        grenosui.arrondir(self)
 
         boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.add(boite)

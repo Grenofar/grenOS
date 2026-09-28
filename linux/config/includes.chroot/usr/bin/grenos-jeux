@@ -294,6 +294,38 @@ class Jeux(Gtk.Window):
             # qu'il faut aller le choisir dans les propriétés du jeu. Sans ce
             # réglage, EAC refuse le multijoueur, et on en conclut que le
             # système ne sait pas jouer. Le bouton fait donc le réglage.
+            # La voie d'aujourd'hui, en premier : le jeu n'est plus vendu sur
+            # Steam depuis 2020 (vérifié auprès de Steam : aucune option
+            # d'achat), et il est gratuit sur Epic. Sans cette ligne, quelqu'un
+            # qui ne l'avait pas déjà cliquait « Préparer et jouer » et
+            # arrivait sur une fiche sans bouton d'achat.
+            epic = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            if jeux.heroic_pose():
+                epic.pack_start(grenosui.bouton(
+                    "Ouvrir Epic (gratuit)",
+                    lambda: grenosui.lancer(f"flatpak run {jeux.HEROIC}"),
+                    "principal"), False, False, 0)
+                pose = Gtk.Label(label="Heroic est installé : connecte-toi à Epic "
+                                       "et récupère le jeu, il est gratuit.",
+                                 xalign=0)
+                pose.set_line_wrap(True)
+                pose.get_style_context().add_class("sous")
+                epic.pack_start(pose, True, True, 0)
+            else:
+                epic.pack_start(grenosui.bouton(
+                    "Installer Epic et jouer", self.poser_heroic, "principal"),
+                    False, False, 0)
+                epic.pack_start(grenosui.bouton(
+                    "Voir la fiche Epic",
+                    lambda: grenosui.lancer(f"xdg-open {jeux.EPIC_ROCKET}"),
+                    "discret"), False, False, 0)
+            bloc.pack_start(epic, False, False, 0)
+
+            steam_titre = Gtk.Label(
+                label="Si tu l'avais déjà sur Steam avant 2020", xalign=0)
+            steam_titre.get_style_context().add_class("sous")
+            bloc.pack_start(steam_titre, False, False, 0)
+
             ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             if jeux.rocket_league_prete():
                 ligne.pack_start(grenosui.bouton(
@@ -324,6 +356,13 @@ class Jeux(Gtk.Window):
                     "Installer Fortnite en nuage", self.poser_fortnite, "principal"),
                     False, False, 0)
         return bloc
+
+    def poser_heroic(self):
+        """Installe Heroic, par qui on atteint sa bibliothèque Epic."""
+        self.dire.set_text("Heroic arrive : c'est lui qui ouvre Epic sous Linux. "
+                           "Connecte-toi ensuite avec ton compte Epic — Rocket "
+                           "League y est gratuit.")
+        self.installer("Heroic", "flatpak", jeux.HEROIC)
 
     def preparer_rocket(self):
         """Installe ce qui manque, pose Proton Experimental, ouvre le jeu.
@@ -388,6 +427,14 @@ def main():
     grenosui.dire("jeux ouvert, %d titres, 3D %s"
                   % (len(jeux.JEUX),
                      "oui" if getattr(fenetre, "vulkan_marche", False) else "non"))
+    # Et par où l'on peut OBTENIR Rocket League. Le jeu tourne sous Linux
+    # (Easy Anti-Cheat l'a activé en avril 2026), mais il n'est plus vendu sur
+    # Steam depuis 2020 : la fenêtre n'offrait donc qu'un chemin sans issue à
+    # quiconque ne l'avait pas déjà. Cette ligne dit les deux voies, pour que
+    # la disparition de l'une se voie sur le port série et pas six mois après.
+    grenosui.dire("rocket league : epic %s, steam %s"
+                  % ("pose" if jeux.heroic_pose() else "a installer",
+                     "regle" if jeux.rocket_league_prete() else "a regler"))
     Gtk.main()
 
 

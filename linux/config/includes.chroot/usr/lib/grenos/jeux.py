@@ -61,12 +61,13 @@ JEUX = [
         "nom": "Rocket League",
         "etat": "marche",
         "note": "Fonctionne sur Linux depuis avril 2026 : Psyonix a activé la version "
-                "Linux d'Easy Anti-Cheat, parties classées comprises. Une seule "
-                "condition, que personne ne devine : le jeu doit tourner sous Proton "
-                "Experimental, sans quoi l'anti-triche refuse le multijoueur. "
-                "« Préparer et jouer » pose ce réglage à ta place.",
+                "Linux d'Easy Anti-Cheat, parties classées comprises. Mais le jeu "
+                "n'est plus vendu sur Steam depuis 2020 — il y est resté seulement "
+                "pour ceux qui l'avaient déjà. Aujourd'hui il est gratuit sur Epic, "
+                "et c'est par là qu'on l'obtient.",
         "action": "steam",
         "adresse": "steam://store/252950",
+        "epic": "https://store.epicgames.com/p/rocket-league",
     },
     {
         "cle": "fortnite",
@@ -200,6 +201,47 @@ def poser_fortnite():
 
 ROCKET = "252950"
 PROTON = "proton_experimental"
+
+# ---- Et la voie par laquelle on l'obtient VRAIMENT --------------------------
+#
+# Tout ce qui précède rend le jeu jouable — à condition de le posséder. Or
+# vérifié le 28 septembre auprès de Steam lui-même (`appdetails` pour 252950) :
+# `price_overview` est nul, `packages` est nul, et la liste des options d'achat
+# est **vide**. Rocket League est retiré de la vente sur Steam depuis 2020 ; la
+# fiche n'existe plus que pour ceux qui l'avaient déjà.
+#
+# Le bouton « Préparer et jouer » faisait donc parfaitement son travail et
+# menait nulle part, pour tous les autres. C'est la sixième fois que ce projet
+# rencontre la même forme de défaut : *une promesse à l'écran sans rien
+# derrière* — partition.conf offrant btrfs sans mkfs.btrfs, la règle polkit
+# nommant une action inexistante, VA-API sans libavcodec.
+#
+# La voie d'aujourd'hui est Epic, où le jeu est **gratuit**. Sous Linux on y
+# accède par Heroic, qui est sur Flathub. Que le jeu passe l'anti-triche est
+# vérifié à la source : AreWeAntiCheatYet le donne « Supported », note « EAC
+# added. Steam Deck and Linux are supported », au 2026-04-28, et il connaît les
+# deux boutiques (steam 252950, epic slug `rocket-league`). ProtonDB le classe
+# platinum, 0,88 sur 868 rapports.
+HEROIC = "com.heroicgameslauncher.hgl"
+EPIC_ROCKET = "https://store.epicgames.com/p/rocket-league"
+
+
+def heroic_pose():
+    """Heroic est-il là ? C'est lui qui ouvre la bibliothèque Epic sous Linux.
+
+    Sans lancer `flatpak info` : cette question est posée **pendant** que la
+    fenêtre se construit, donc avant qu'elle s'affiche. `vulkaninfo` avait déjà
+    laissé cette page-ci vide pendant vingt-cinq secondes, et la règle qu'on en
+    a tirée vaut pour toute détection : on lit, on ne lance pas.
+
+    Un Flatpak installé est un dossier, à l'un des deux seuls endroits que
+    Flatpak emploie — le système, et le compte.
+    """
+    for racine in ("/var/lib/flatpak/app",
+                   os.path.expanduser("~/.local/share/flatpak/app")):
+        if os.path.isdir(os.path.join(racine, HEROIC)):
+            return True
+    return False
 
 STEAM_RACINES = [
     "~/.var/app/com.valvesoftware.Steam/.steam/steam",   # le Flatpak, le nôtre

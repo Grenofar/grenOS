@@ -488,6 +488,35 @@ if [ -n "$manque" ]; then
 fi
 echo "grenos: l installateur saura rendre le disque amorcable, en BIOS et en UEFI"
 
+echo "--- grenOS : les boutons des barres de titre ---"
+# Openbox ne dit RIEN quand il ne trouve pas le dessin d'un bouton : il prend
+# son bitmap interne de 6x6 et continue. Notre themerc reglait la couleur de
+# chaque bouton dans ses six etats depuis des semaines, sans une seule image —
+# et la croix de Fermer etait donc un carre plein a quatre encoches, sur toutes
+# les fenetres du systeme. Un repli silencieux est exactement ce qu'un garde
+# doit rendre bruyant.
+boutons=/usr/share/themes/grenOS/openbox-3
+manque=""
+for glyphe in close max max_toggled iconify; do
+    if [ ! -f "$boutons/$glyphe.xbm" ]; then
+        manque="$manque $glyphe"
+    fi
+done
+if [ -n "$manque" ]; then
+    echo "grenos: dessins de boutons absents :$manque" >&2
+    echo "grenos: openbox retomberait sur ses bitmaps de 6x6, ou Fermer n est pas une croix" >&2
+    exit 1
+fi
+# Et qu'ils soient bien plus grands que le repli : un fichier present mais
+# dessine en 6x6 ne vaudrait pas mieux que pas de fichier du tout.
+cote=$(sed -n 's/^#define close_width \([0-9]*\).*/\1/p' "$boutons/close.xbm")
+case "$cote" in ''|*[!0-9]*) cote=0 ;; esac
+if [ "$cote" -lt 8 ]; then
+    echo "grenos: la croix de Fermer fait $cote px : trop petite pour etre une croix" >&2
+    exit 1
+fi
+echo "grenos: boutons de fenetre dessines en ${cote}x${cote}, Fermer est une vraie croix"
+
 echo "--- grenOS : l ecran de la mise a jour au redemarrage ---"
 # L'ecran que Grenofar verra vraiment quand il appuiera sur « Mettre a jour et
 # redemarrer ». Il etait, jusqu'au 28 septembre, une roulette sur fond grenOS

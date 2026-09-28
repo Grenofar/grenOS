@@ -516,6 +516,70 @@ def dire(texte):
     return lancer("grenos-dire " + shlex.quote(str(texte)))
 
 
+RAYON_COINS = 14
+
+
+def region_arrondie(largeur, hauteur, rayon=RAYON_COINS):
+    """Un rectangle aux coins arrondis, découpé ligne par ligne.
+
+    X11 tourne ici **sans composition** : c'est ce qui rend la souris fluide
+    sans carte 3D, et on ne revient pas dessus. Mais sans composition il n'y a
+    pas de transparence : un `border-radius` ne fait que *ne pas peindre* les
+    coins, et ce qui apparaît dessous est le noir de la fenêtre. Grenofar l'a
+    vu du premier coup d'œil : « les bords sont noirs ».
+
+    La seule façon d'avoir de vrais coins arrondis sans composition est de
+    retirer les coins **de la fenêtre elle-même**. Les pixels hors de la
+    région ne lui appartiennent plus, et c'est le bureau qu'on voit à travers.
+
+    Cette fonction vivait dans `grenos-son`, donc une seule fenêtre en
+    profitait. Le 28 septembre, en mesurant les captures, le menu — la surface
+    la plus utilisée du système — portait encore **32 pixels noirs purs** dans
+    son coin haut gauche et 25 dans le coin droit, quand le panneau de son en
+    avait zéro sur ses quatre coins. Le correctif existait ; il n'avait
+    simplement jamais été porté. Il est ici maintenant, en un seul exemplaire.
+    """
+    # Importé ici et pas en tête : `grenosui` est chargé par les douze
+    # programmes, et la moitié n'a pas de coins à retirer. On mesure chaque
+    # milliseconde d'ouverture depuis le 27, ce n'est pas le moment d'en
+    # ajouter à tout le monde pour deux fenêtres.
+    import cairo
+    region = cairo.Region()
+    for y in range(hauteur):
+        if y < rayon:
+            ecart = rayon - 1 - y
+        elif y >= hauteur - rayon:
+            ecart = y - (hauteur - rayon)
+        else:
+            ecart = 0
+        creux = rayon - int((rayon * rayon - ecart * ecart) ** 0.5) if ecart else 0
+        region.union(cairo.RectangleInt(creux, y, max(1, largeur - 2 * creux), 1))
+    return region
+
+
+def arrondir(fenetre, rayon=RAYON_COINS):
+    """Retire les coins de cette fenêtre, et les reretire à chaque taille neuve.
+
+    À rebrancher sur `map-event` et sur `size-allocate` : demander le masque
+    avant que X ait affiché la fenêtre ne donne rien — c'est le même piège que
+    l'attrape du pointeur, qui échouait en silence pour la même raison.
+    """
+    def decouper(*_):
+        cadre = fenetre.get_window()
+        if cadre is None:
+            return False
+        largeur, hauteur = fenetre.get_size()
+        if (largeur, hauteur) == getattr(fenetre, "_coins_retires", None):
+            return False
+        fenetre._coins_retires = (largeur, hauteur)
+        cadre.shape_combine_region(region_arrondie(largeur, hauteur, rayon), 0, 0)
+        return False
+
+    fenetre.connect("map-event", decouper)
+    fenetre.connect("size-allocate", decouper)
+    return decouper
+
+
 def nombre(valeur, decimales=1):
     """Un nombre écrit en français : la virgule, jamais le point.
 
