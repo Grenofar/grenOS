@@ -380,7 +380,27 @@ def marque_du_programme(nom):
     le G de grenOS dans leur barre de titre. La même application avec deux
     visages, c'est-à-dire exactement ce que Grenofar reprochait.
     """
-    if _icone_existe(nom):
+    # On repasse par le thème, et c'est une marche arrière assumée.
+    #
+    # J'avais remplacé cet appel par une lecture de répertoire, parce que le
+    # chronomètre montrait 610 ms passées ici à chaque lancement. Le total n'a
+    # pas bougé d'un millimètre : GTK charge le thème plus tard, quand la
+    # fenêtre réclame ses icônes. Le temps s'était seulement déplacé de la
+    # colonne « icone » vers la colonne « fenetre » — exactement le risque que
+    # j'avais écrit avant de mesurer.
+    #
+    # **Et pour GrenPlace, c'était pire : 900 ms devenus 2740.** Il construit
+    # 42 tuiles avant de s'afficher, chacune réclamant une icône ; le thème se
+    # chargeait donc au milieu de cette boucle au lieu d'être déjà chaud. Cet
+    # appel, qu'on prenait pour un coût, était en fait un PRÉCHAUFFAGE : il
+    # paie une fois ce que la suite aurait payé plus cher, morceau par morceau.
+    #
+    # Ce qui reste vrai, et qui est le vrai sujet : le thème Papirus coûte
+    # ~610 ms au premier accès, dans chaque application. Le supprimer demande
+    # de changer de thème d'icônes, c'est-à-dire de changer l'allure du
+    # système — un arbitrage pour Grenofar, pas une optimisation.
+    theme = Gtk.IconTheme.get_default()
+    if theme.has_icon(nom):
         return nom
     entree = f"/usr/share/applications/{nom}.desktop"
     try:
@@ -388,54 +408,16 @@ def marque_du_programme(nom):
             for ligne in fichier:
                 if ligne.startswith("Icon="):
                     declare = ligne.split("=", 1)[1].strip()
-                    # On rend le nom déclaré tel quel, sans vérifier.
-                    #
-                    # Vérifier voudrait dire réveiller le thème, c'est-à-dire
-                    # reprendre les six cents millisecondes qu'on vient
-                    # d'économiser. Et si le nom ne désigne rien, GTK met son
-                    # icône générique — exactement ce que la vérification
-                    # aurait produit, mais payé plus tard et par GTK, une fois
-                    # la fenêtre déjà à l'écran.
-                    if declare:
+                    # Le thème est déjà chaud depuis la ligne ci-dessus :
+                    # cette vérification ne coûte plus rien, et elle garde le
+                    # repli sur notre marque quand le nom déclaré ne désigne
+                    # rien.
+                    if declare and theme.has_icon(declare):
                         return declare
                     break
     except OSError:
         pass
     return "grenos"
-
-
-def _icone_existe(nom):
-    """Cette icône est-elle installée ? Demandé au disque, pas à GTK.
-
-    **C'est la correction la plus rentable de la soirée, et elle tient en une
-    ligne.** Le chronomètre a montré que `habiller()` coûtait 620 à 641 ms dans
-    les six applications ; le découpage suivant a montré que la feuille de
-    style ne coûtait rien (0 à 10 ms) et que tout partait ici.
-
-    La cause : `Gtk.IconTheme.get_default().has_icon()` charge l'index du thème
-    courant. Papirus compte des dizaines de milliers d'entrées, et ce
-    chargement se paie **avant même que la fenêtre n'existe** — à chaque
-    lancement de chaque application.
-
-    Or la question posée est bien plus étroite que celle qu'on posait : « avons
-    -nous dessiné une icône de ce nom ? ». Nos icônes sont installées par la
-    construction dans `hicolor`, à des chemins connus. Un `os.path.exists` y
-    répond en une lecture de répertoire, sans réveiller le thème.
-
-    On ne remplace pas la question par une liste écrite à la main — elle
-    vieillirait au premier programme ajouté, et personne ne s'en apercevrait.
-    On interroge le disque, qui reste la source.
-
-    Ce que cela change aussi : GTK chargera le thème plus tard, quand il devra
-    vraiment dessiner une icône — mais alors la fenêtre est déjà à l'écran, et
-    l'attente ne se voit plus.
-    """
-    for taille in ("48x48", "24x24", "scalable"):
-        for extension in ("png", "svg"):
-            if os.path.exists(
-                    "/usr/share/icons/hicolor/%s/apps/%s.%s" % (taille, nom, extension)):
-                return True
-    return False
 
 
 def habiller(couleurs=None):
