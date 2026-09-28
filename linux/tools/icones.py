@@ -207,14 +207,56 @@ def nuage(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def segment(u, v, x0, y0, x1, y1, epaisseur, flou=0.012):
+    """Un trait epais entre deux points, bouts arrondis.
+
+    La distance d'un point au SEGMENT, pas a la droite : c'est ce qui donne
+    des bouts ronds sans les dessiner, et une poignee de manette n'est rien
+    d'autre qu'un trait epais qui descend en biais.
+    """
+    dx, dy = x1 - x0, y1 - y0
+    longueur = dx * dx + dy * dy
+    t = np.clip(((u - x0) * dx + (v - y0) * dy) / longueur, 0.0, 1.0) if longueur else 0.0
+    return np.clip((epaisseur - np.hypot(u - (x0 + t * dx), v - (y0 + t * dy)))
+                   / flou, 0.0, 1.0)
+
+
 def manette(chemin, taille):
-    """La manette de la page Jeux : un corps large et deux poignees."""
+    """La manette de la page Jeux : un corps large et deux vraies poignees.
+
+    POURQUOI ELLE A ETE REFAITE
+
+    Mesuree le 28 septembre sur la capture de l'accueil : l'encre de la
+    manette faisait **22x12** quand le sac de GrenPlace, juste au-dessus dans
+    la meme liste, faisait 20x22. Elle n'occupait que 37 % de sa toile la ou
+    toutes les autres en remplissent 88 %. A cote d'elles, elle se lisait comme
+    une bavure — et sur la barre de titre de Jeux elle tombait a 11x5.
+
+    La cause n'est pas le dessin, elle est la PROPORTION : une manette vue de
+    face est large et plate, donc elle n'occupe que les rangees du milieu. Une
+    vraie manette a des poignees qui DESCENDENT ; les dessiner remplit la boite
+    et rend la silhouette plus juste, pas seulement plus grande.
+
+    C'est la regle du 27 septembre appliquee a une icone qui n'y etait jamais
+    passee : une icone se juge a sa taille, sur son fond, a cote de ses voisines.
+    """
     image, u, v = toile(taille)
 
-    corps = rectangle(u, v, 0.16, 0.38, 0.84, 0.66, rayon=0.14)
-    for cx in (0.26, 0.74):
-        corps = np.maximum(corps, np.clip(
-            (0.13 - np.hypot((u - cx) * 1.0, (v - 0.60) * 0.85)) / 0.012, 0.0, 1.0))
+    # Le corps, en haut. Il descend jusqu'aux poignees.
+    corps = rectangle(u, v, 0.16, 0.24, 0.84, 0.58, rayon=0.15)
+    # Les deux poignees, en biais vers le bas et vers l'exterieur.
+    for depart, arrivee in ((0.30, 0.19), (0.70, 0.81)):
+        corps = np.maximum(corps, segment(u, v, depart, 0.44, arrivee, 0.82, 0.13))
+    # Le creux entre les deux, la ou les pouces passent : sans lui, c'est un
+    # pain. Il est retire du masque, pas peint par-dessus.
+    #
+    # Sa profondeur est ce qui decide de la lisibilite a SEIZE pixels, et le
+    # premier essai l'avait trop creuse : les jambes ne faisaient plus qu'une
+    # rangee et demie, et l'icone se lisait comme une ARCHE, pas comme une
+    # manette. Vu sur la planche, invisible dans la formule.
+    creux = np.clip((0.20 - np.hypot((u - 0.5) * 1.0, (v - 1.14) * 0.55)) / 0.012,
+                    0.0, 1.0)
+    corps = np.clip(corps - creux, 0.0, 1.0)
 
     melange = np.clip((u - 0.16) / 0.68, 0.0, 1.0)
     couleur = (np.array(ACCENT, dtype=float)[None, None, :] * (1 - melange[..., None])
@@ -223,12 +265,12 @@ def manette(chemin, taille):
     image[..., :3] = image[..., :3] * (1 - alpha) + couleur * alpha
     image[..., 3:] = image[..., 3:] * (1 - alpha) + 255.0 * alpha
 
-    # La croix a gauche, deux boutons a droite.
-    croix = np.maximum(rectangle(u, v, 0.26, 0.475, 0.40, 0.515, rayon=0.012),
-                       rectangle(u, v, 0.31, 0.425, 0.35, 0.565, rayon=0.012))
+    # La croix a gauche, deux boutons a droite, remontes avec le corps.
+    croix = np.maximum(rectangle(u, v, 0.22, 0.375, 0.38, 0.415, rayon=0.012),
+                       rectangle(u, v, 0.28, 0.315, 0.32, 0.475, rayon=0.012))
     poser(image, croix, CLAIR, 0.95)
-    for cx, cy in ((0.64, 0.46), (0.72, 0.53)):
-        point = np.clip((0.035 - np.hypot(u - cx, v - cy)) / 0.010, 0.0, 1.0)
+    for cx, cy in ((0.64, 0.35), (0.73, 0.43)):
+        point = np.clip((0.038 - np.hypot(u - cx, v - cy)) / 0.010, 0.0, 1.0)
         poser(image, point, CLAIR, 0.95)
 
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))

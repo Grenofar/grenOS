@@ -67,7 +67,37 @@ def graphique():
                 pilote = trouve.group(1).strip()
         except (OSError, subprocess.SubprocessError):
             pass
-    return carte or "carte graphique inconnue", pilote or "pilote générique"
+    return _carte_lisible(carte), pilote or "pilote générique"
+
+
+# Ce que `lspci` rend quand sa base ne connaît pas la puce : le mot « Device »
+# et deux nombres hexadécimaux. Sur la capture du 28 septembre, la page
+# Matériel affichait « Device [1234:1111] (rev 02) » en face d'une étiquette
+# française — un mot anglais et deux nombres qui ne disent rien à personne.
+#
+# Ces deux-là sont les cartes des machines virtuelles, et ce sont précisément
+# celles que pci.ids ne nomme pas. Les nommer nous-mêmes rend la ligne utile :
+# « carte virtuelle » explique aussi pourquoi il n'y a pas de 3D.
+CARTES_CONNUES = {
+    "1234:1111": "Carte graphique virtuelle (QEMU/Bochs)",
+    "1af4:1050": "Carte graphique virtuelle (VirtIO)",
+    "80ee:beef": "Carte graphique virtuelle (VirtualBox)",
+    "15ad:0405": "Carte graphique virtuelle (VMware)",
+}
+
+
+def _carte_lisible(carte):
+    """Le nom de la carte, en français, même quand lspci ne la connaît pas."""
+    if not carte:
+        return "carte graphique inconnue"
+    identifiant = re.search(r"\[([0-9a-f]{4}:[0-9a-f]{4})\]", carte)
+    if identifiant and identifiant.group(1) in CARTES_CONNUES:
+        return CARTES_CONNUES[identifiant.group(1)]
+    if carte.startswith("Device "):
+        # Inconnue de pci.ids, et pas des nôtres : on dit au moins ce qu'on
+        # sait, plutôt que de recopier un mot anglais et deux nombres.
+        return "Carte non reconnue " + (identifiant.group(0) if identifiant else "")
+    return carte
 
 
 def disque(chemin="/"):
