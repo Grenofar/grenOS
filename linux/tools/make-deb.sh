@@ -166,6 +166,11 @@ install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-demarrage" "$BUILD/usr/lib/gr
 # changements sans reinstaller.
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-au-prochain-demarrage" "$BUILD/usr/lib/grenos/"
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-reglage" "$BUILD/usr/lib/grenos/"
+# L'habillage de Plymouth. Il doit voyager avec le paquet parce que
+# `appliquer-systeme` le rejoue : `spinner.plymouth` appartient a Debian, et
+# une remise a jour de `plymouth-themes` remettrait l'anglais sur l'ecran de la
+# mise a jour au redemarrage — le seul ecran que Grenofar verra vraiment.
+install -m 0755 "$DEDANS/usr/lib/grenos/habiller-plymouth" "$BUILD/usr/lib/grenos/"
 
 # Ce qui s'exécute après l'installation du paquet. Sans lui, un service
 # nouvellement livré resterait éteint et une icône nouvelle invisible : le

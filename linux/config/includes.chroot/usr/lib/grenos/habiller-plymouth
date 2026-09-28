@@ -1,0 +1,75 @@
+#!/bin/sh
+# L'écran de chargement, et surtout celui de la mise à jour au redémarrage.
+#
+# POURQUOI CE FICHIER EXISTE
+#
+# Plymouth possède l'écran pendant tout ce qui précède le bureau. Notre service
+# de mise à jour écrivait sagement sur /dev/tty1 — un écran complet, centré,
+# aux couleurs de grenOS — **derrière** la splash. Personne ne l'aurait jamais
+# vu. Trouvé le 28 septembre en regardant la première capture jamais prise
+# PENDANT une mise à jour : un fond grenOS, une roulette, et rien d'autre.
+#
+# Le thème « spinner » de Debian porte déjà ce qu'il faut, et personne ne
+# l'avait lu : une section [updates] avec une barre de progression, un
+# pourcentage, un titre et un sous-titre. C'est Windows Update, livré dans le
+# paquet. Deux choses clochaient seulement : c'est en anglais, et la section
+# interdit les messages, donc on ne pouvait pas dire l'étape en cours.
+#
+# POURQUOI ON MODIFIE AU LIEU DE LIVRER
+#
+# `spinner.plymouth` appartient à `plymouth-themes`. Deux paquets ne peuvent
+# pas posséder le même chemin — appris le 24 septembre en voyant dpkg refuser
+# l'installation. On modifie donc le fichier de Debian, et `appliquer-systeme`
+# rejoue ce script après chaque mise à jour, comme pour les autres réglages
+# partagés. C'est aussi ce qui le répare si `plymouth-themes` est remis à jour.
+#
+# Appelé par la construction (le hook) ET par `appliquer-systeme` : le même
+# code aux deux endroits, jamais deux copies. Deux dessins d'une même chose
+# finissent par diverger, et c'est alors celui qu'on regarde qu'on croit.
+set -u
+
+THEME=/usr/share/plymouth/themes/spinner/spinner.plymouth
+[ -f "$THEME" ] || exit 0
+
+# Notre fond, et notre nom monté plus haut que le défaut.
+if [ -f /usr/share/grenos/grenos-nuit.png ]; then
+    cp /usr/share/grenos/grenos-nuit.png \
+       /usr/share/plymouth/themes/spinner/background-tile.png 2>/dev/null || true
+fi
+sed -i 's/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.22/' \
+    "$THEME" 2>/dev/null || true
+
+# La barre de progression à notre bleu, son creux à notre gris.
+sed -i 's/^ProgressBarForegroundColor=.*/ProgressBarForegroundColor=0x3b82f6/' \
+    "$THEME" 2>/dev/null || true
+sed -i 's/^ProgressBarBackgroundColor=.*/ProgressBarBackgroundColor=0x2a3450/' \
+    "$THEME" 2>/dev/null || true
+
+# Les quatre modes hors démarrage, en français. La plage `/^\[x\]/,/^\[/`
+# s'arrête à l'en-tête suivant : rien ne déborde sur la section d'à côté.
+#
+# `SuppressMessages` est retiré du seul mode qui nous serve : c'est lui qui
+# empêchait `plymouth display-message` d'afficher l'étape en cours. Les trois
+# autres modes le gardent — nous ne leur parlons pas.
+sed -i "/^\[updates\]/,/^\[/ {
+    s/^Title=.*/Title=Mise à jour de grenOS/
+    s/^SubTitle=.*/SubTitle=N'éteins pas l'ordinateur./
+    /^SuppressMessages=/d
+}" "$THEME" 2>/dev/null || true
+
+sed -i "/^\[system-upgrade\]/,/^\[/ {
+    s/^Title=.*/Title=Mise à niveau de grenOS/
+    s/^SubTitle=.*/SubTitle=N'éteins pas l'ordinateur./
+}" "$THEME" 2>/dev/null || true
+
+sed -i "/^\[firmware-upgrade\]/,/^\[/ {
+    s/^Title=.*/Title=Mise à jour du micrologiciel/
+    s/^SubTitle=.*/SubTitle=N'éteins pas l'ordinateur./
+}" "$THEME" 2>/dev/null || true
+
+sed -i "/^\[system-reset\]/,/^\[/ {
+    s/^Title=.*/Title=Réinitialisation de grenOS/
+    s/^SubTitle=.*/SubTitle=N'éteins pas l'ordinateur./
+}" "$THEME" 2>/dev/null || true
+
+exit 0

@@ -193,6 +193,14 @@ for compte in $(awk -F: '$3 >= 1000 && $3 < 60000 {print $4":"$6}' /etc/passwd 2
     fi
 done
 
+# ---- L'écran de chargement, et celui de la mise à jour ----------------------
+#
+# `spinner.plymouth` appartient à `plymouth-themes` : on le modifie, on ne le
+# livre pas. Une remise à jour de ce paquet remettrait donc l'anglais et
+# reprendrait la barre de progression de la mise à jour au redémarrage — celle
+# que Grenofar voit. On rejoue l'habillage à chaque passage ici.
+[ -x /usr/lib/grenos/habiller-plymouth ] && /usr/lib/grenos/habiller-plymouth
+
 # ---- Les icônes et les menus ------------------------------------------------
 gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
 gtk-update-icon-cache -f /usr/share/icons/Papirus-Dark >/dev/null 2>&1 || true

@@ -124,10 +124,11 @@ echo "--- grenOS : l'ecran de chargement ---"
 # Plymouth, thème « spinner » : notre fond, notre nom monté haut sur l'écran,
 # et aucun logo Debian.
 if [ -d /usr/share/plymouth/themes/spinner ]; then
-    cp /usr/share/grenos/grenos-nuit.png \
-       /usr/share/plymouth/themes/spinner/background-tile.png 2>/dev/null || true
-    sed -i 's/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.22/' \
-        /usr/share/plymouth/themes/spinner/spinner.plymouth 2>/dev/null || true
+    # Tout l'habillage est dans un seul script, que `appliquer-systeme` rejoue
+    # après chaque mise à jour : `spinner.plymouth` appartient à Debian, donc on
+    # le modifie au lieu de le livrer, et une remise à jour du paquet effacerait
+    # notre travail sans cela.
+    /usr/lib/grenos/habiller-plymouth
     plymouth-set-default-theme spinner >/dev/null 2>&1 || true
 fi
 
@@ -486,6 +487,56 @@ if [ -n "$manque" ]; then
     exit 1
 fi
 echo "grenos: l installateur saura rendre le disque amorcable, en BIOS et en UEFI"
+
+echo "--- grenOS : l ecran de la mise a jour au redemarrage ---"
+# L'ecran que Grenofar verra vraiment quand il appuiera sur « Mettre a jour et
+# redemarrer ». Il etait, jusqu'au 28 septembre, une roulette sur fond grenOS
+# et rien d'autre : notre page console etait peinte DERRIERE la splash de
+# Plymouth, qui possede l'ecran a ce moment-la.
+#
+# Trois choses doivent tenir ensemble, et aucune ne se voit en relisant :
+#   1. le mode `updates` du theme porte une barre de progression ;
+#   2. son titre est en francais — une remise a jour de `plymouth-themes`
+#      remettrait l'anglais, et c'est pour cela que `appliquer-systeme` rejoue
+#      `habiller-plymouth` ;
+#   3. il n'interdit plus les messages, sans quoi l'etape en cours ne
+#      s'afficherait pas et la barre avancerait sans dire de quoi.
+#
+# Meme famille que la regle polkit et que `partition.conf` offrant btrfs sans
+# `mkfs.btrfs` : une promesse a l'ecran sans rien derriere.
+theme=/usr/share/plymouth/themes/spinner/spinner.plymouth
+if [ -f "$theme" ]; then
+    bloc=$(sed -n '/^\[updates\]/,/^\[/p' "$theme")
+    manque=""
+    # En `if`, jamais en `cmd || var=…` : avec `set -e`, un `&&` dont la partie
+    # gauche echoue fait sortir le hook, et c'est un piege que ce projet a deja
+    # paye. Ici le cas NORMAL est justement un grep qui ne trouve rien.
+    if ! printf '%s' "$bloc" | grep -q '^UseProgressBar=true'; then
+        manque="$manque barre"
+    fi
+    if ! printf '%s' "$bloc" | grep -q '^Title=Mise à jour de grenOS'; then
+        manque="$manque titre-francais"
+    fi
+    if printf '%s' "$bloc" | grep -q '^SuppressMessages='; then
+        manque="$manque messages-interdits"
+    fi
+    if [ -n "$manque" ]; then
+        echo "grenos: l ecran de la mise a jour au redemarrage est incomplet :$manque" >&2
+        echo "grenos: c est le seul ecran que la personne verra pendant que dpkg travaille" >&2
+        exit 1
+    fi
+    echo "grenos: ecran de maj au redemarrage : barre, titre en francais, messages permis"
+    if [ ! -x /usr/lib/grenos/habiller-plymouth ]; then
+        echo "grenos: habiller-plymouth absent de l image" >&2
+        exit 1
+    fi
+    if ! grep -q 'habiller-plymouth' /usr/lib/grenos/appliquer-systeme; then
+        echo "grenos: appliquer-systeme ne rejoue pas l habillage de Plymouth" >&2
+        echo "grenos: une remise a jour de plymouth-themes remettrait l anglais" >&2
+        exit 1
+    fi
+    echo "grenos: et appliquer-systeme le repose apres chaque mise a jour"
+fi
 
 echo "--- grenOS : le bouton et le service de maj disent-ils la meme chose ---"
 # Deux endroits lancent apt pour mettre grenOS a jour : la fenetre « Mettre a

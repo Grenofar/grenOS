@@ -110,11 +110,47 @@ peindre_le_fond() {
     barre 0
 }
 
+# ---- Plymouth, qui possède vraiment l'écran ---------------------------------
+#
+# Tout ce qui précède peint la CONSOLE. Or à ce moment du démarrage, l'écran
+# appartient à Plymouth : notre belle page centrée était derrière la splash, et
+# personne ne l'aurait jamais vue. Trouvé le 28 septembre sur la première
+# capture jamais prise pendant une mise à jour — un fond grenOS, une roulette,
+# et rien d'autre.
+#
+# Le thème porte déjà un mode `updates` : barre de progression, pourcentage,
+# titre et sous-titre, traduits par `habiller-plymouth`. On lui parle.
+#
+# La console reste peinte quand même, et ce n'est pas du gâchis : sur une
+# machine sans splash — `nosplash`, un serveur, un PC où plymouth a échoué —
+# c'est elle qu'on voit. Chacune des deux couvre ce que l'autre ne couvre pas.
+PLYMOUTH=non
+if command -v plymouth >/dev/null 2>&1 && plymouth --ping >/dev/null 2>&1; then
+    PLYMOUTH=oui
+    plymouth change-mode --updates >/dev/null 2>&1 || true
+fi
+
+DERNIER_MESSAGE=""
+
+vers_plymouth() {
+    # $1 le texte, $2 l'avancement en pour cent.
+    [ "$PLYMOUTH" = oui ] || return 0
+    plymouth system-update --progress="$2" >/dev/null 2>&1 || true
+    # `hide-message` identifie le message par son TEXTE : sans garder le
+    # dernier, on empilerait les étapes les unes sous les autres.
+    if [ -n "$DERNIER_MESSAGE" ] && [ "$DERNIER_MESSAGE" != "$1" ]; then
+        plymouth hide-message --text="$DERNIER_MESSAGE" >/dev/null 2>&1 || true
+    fi
+    plymouth display-message --text="$1" >/dev/null 2>&1 || true
+    DERNIER_MESSAGE="$1"
+}
+
 montrer() {
     # Ce que la personne lit, sans rien dire au port série : la boucle de suivi
     # passe ici toutes les deux secondes, et elle noierait le journal.
     ecrire_centre "$LIGNE_ETAPE" '37' "$1"
     barre "$2"
+    vers_plymouth "$1" "$2"
 }
 
 etape() {
@@ -126,6 +162,13 @@ rendre_l_ecran() {
     # La palette d'une console est globale et survit à ce script : la remettre
     # est la moindre des politesses envers ce qui s'affichera ensuite.
     vers_l_ecran '\033[0m\033]R\033[2J\033[H\033[?25h'
+    # Et Plymouth revient au démarrage ordinaire, sinon lightdm s'ouvrirait
+    # derrière un « Mise à jour de grenOS » à 100 %.
+    if [ "$PLYMOUTH" = oui ]; then
+        [ -n "$DERNIER_MESSAGE" ] \
+            && plymouth hide-message --text="$DERNIER_MESSAGE" >/dev/null 2>&1
+        plymouth change-mode --boot-up >/dev/null 2>&1 || true
+    fi
 }
 
 # Le service ne doit plus jamais se relancer tout seul : on le désactive

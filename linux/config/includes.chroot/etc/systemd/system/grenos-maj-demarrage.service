@@ -15,6 +15,11 @@ DefaultDependencies=no
 After=network-online.target local-fs.target
 Wants=network-online.target
 Before=lightdm.service display-manager.service shutdown.target
+# Et AVANT que Plymouth ne s'en aille : c'est lui qui possède l'écran pendant
+# tout ce qui précède le bureau, et c'est donc lui qui montre la barre de
+# progression. Sans cette ligne, la splash pourrait disparaître au milieu du
+# travail et laisser la personne devant un écran noir sans explication.
+Before=plymouth-quit.service plymouth-quit-wait.service
 Conflicts=shutdown.target
 
 [Service]
