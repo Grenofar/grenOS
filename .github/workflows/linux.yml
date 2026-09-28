@@ -466,11 +466,29 @@ jobs:
           # Et la question que le premier essai ne posait pas : a-t-elle
           # vraiment INSTALLE quelque chose ? « termine en 0s » veut dire qu'il
           # n'y avait rien a faire, ce qui reussit toujours.
+          # Les deux exigences de cette etape, bloquantes depuis aujourd'hui.
+          #
+          # « Ne plus jamais reinstaller » est la promesse centrale du projet,
+          # et son echec est le plus grave de tous : une machine qui ne revient
+          # pas. Ces deux lignes sont donc les seules de cette etape qui
+          # arretent la publication.
+          #
+          # La regle est tenue, comme toujours : le paquet reel pose au
+          # redemarrage est vu vert CINQ constructions de suite (c9bed865,
+          # 89224aed, cc5d29ed, 50e870ad, 9a8051d5), la file de travaux QUATRE
+          # — elle n'existait pas a la premiere.
+          #
+          # Ce qui reste tolerant au-dessus : l'absence de disque, un QEMU qui
+          # ne demarre pas, un depot d'essai qu'on n'a pas pu fabriquer. Ce
+          # sont des pannes de la machine d'integration, pas de grenOS, et
+          # bloquer dessus ferait douter du controle lui-meme.
+          MANQUE=0
           if [ -n "$NEUVE" ]; then
             if grep -aq "grenos-desktop $NEUVE est installe" "$RUNNER_TEMP/serial-maj-demarrage.log"; then
               echo "maj au demarrage : la version $NEUVE a ete POSEE avant le bureau"
             else
-              echo "::warning::La version d'essai n'a pas ete installee au demarrage : a lire dans serial-maj-demarrage.log."
+              echo "::error::La mise a jour au redemarrage n'a rien installe : la promesse « plus jamais d'ISO » ne tient pas."
+              MANQUE=1
             fi
           fi
           # Et le travail mis en attente : a-t-il ete execute par CE demarrage ?
@@ -478,9 +496,11 @@ jobs:
             grep -a 'maj-demarrage : Essai' "$RUNNER_TEMP/serial-maj-demarrage.log" | sed 's/^.*grenos: //'
             echo "travaux : un changement depose avant le demarrage a ete applique"
           else
-            echo "::warning::Le travail en attente n'a pas ete execute au demarrage."
+            echo "::error::Un changement depose pour le prochain demarrage n'a pas ete applique."
+            MANQUE=1
           fi
           kill ${SERVEUR:-0} 2>/dev/null || true
+          exit "$MANQUE"
         env:
           ISO_MAJDEM: ${{ steps.build.outputs.iso }}
           VERSION_APT: ${{ steps.apt.outputs.version }}
@@ -627,7 +647,7 @@ jobs:
         # Rien n'est publie sans les deux preuves : un bureau qui s'ouvre, et
         # une mise a jour qui s'installe depuis notre depot. Une image qu'on ne
         # peut pas mettre a jour obligerait a tout regraver.
-        if: steps.boot.outcome == 'success' && steps.maj.outcome == 'success' && steps.uefi.outcome == 'success' && (github.ref == 'refs/heads/main' || inputs.publish)
+        if: steps.boot.outcome == 'success' && steps.maj.outcome == 'success' && steps.uefi.outcome == 'success' && steps.majdem.outcome == 'success' && (github.ref == 'refs/heads/main' || inputs.publish)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
