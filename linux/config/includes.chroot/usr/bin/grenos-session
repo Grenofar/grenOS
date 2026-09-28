@@ -99,7 +99,11 @@ export XDG_DESKTOP_DIR="$HOME/Bureau"
 MARQUES="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/bookmarks"
 if [ ! -e "$MARQUES" ]; then
     mkdir -p "$(dirname "$MARQUES")"
-    for DOSSIER in Documents Images Musique Vidéos Téléchargements; do
+    # L'ordre est celui de Windows, pas l'alphabétique : Téléchargements en
+    # tête, parce que c'est le dossier qu'on ouvre le plus souvent, puis
+    # Documents, Images, Musique, Vidéos. C'est la seule partie de ce volet
+    # dont nous décidons — le reste appartient à libfm.
+    for DOSSIER in Téléchargements Documents Images Musique Vidéos; do
         [ -d "$HOME/$DOSSIER" ] || continue
         printf 'file://%s %s\n' "$HOME/$DOSSIER" "$DOSSIER" >> "$MARQUES"
     done
