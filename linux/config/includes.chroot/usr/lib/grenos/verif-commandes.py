@@ -50,6 +50,11 @@ DE_BASE = {
     # charge. Le garde avait raison d'être strict — c'est sa liste qui était
     # incomplète.
     "wait", "trap", "shift", "eval", "unset", "umask", "times", "ulimit",
+    # Et les MOTS-CLÉS du shell, qui ne sont même pas des commandes. `function`
+    # a été trouvé en exerçant le contrôle sur un script parfaitement sain,
+    # écrit exprès : il refusait `function nom() {`. Un garde s'exerce dans les
+    # deux sens, sinon on ne voit que les défauts qu'on cherchait.
+    "function", "until", "time", "select",
     # Des mots de Python. Le saut de bloc ci-dessous devrait suffire ; ceci est
     # le second filet, parce qu'une image refusée pour un faux positif coûte
     # trente minutes et fait douter du contrôle lui-même.
@@ -73,8 +78,13 @@ FACULTATIVES = {
     "grenos-theme", "grenos-veilleur", "grenos-parametres", "grenos-connexions",
     "grenos-bureau", "grenos-taches", "grenos-son", "grenos-jeux", "grenplace",
     "grenos-bienvenue", "grenos-arret", "grenos-compte",
-    # Des mots qui ressemblent à des commandes dans nos scripts shell.
-    "dire", "poser", "debian-installer-launcher.desktop", "xfce4-terminal-settings",
+    # Des mots qui ressemblent à des commandes dans nos scripts.
+    #
+    # `dire` et `poser` étaient ici : ce sont des FONCTIONS de nos scripts, et
+    # le contrôle sait les reconnaître depuis le 28 septembre. Les garder
+    # reviendrait à ne plus rien dire le jour où un script appellerait
+    # vraiment un `dire` qu'il n'a pas défini.
+    "debian-installer-launcher.desktop", "xfce4-terminal-settings",
 }
 
 NOM = re.compile(r"^[a-z][a-z0-9._+-]*$")
@@ -89,8 +99,28 @@ def commandes_de(chemin):
     tete = contenu.split("\n", 1)[0]
     trouvees = set()
 
+    # Une fonction définie dans ce fichier n'est pas une commande extérieure.
+    #
+    # Quatrième mauvaise lecture de ce contrôle, et la première dont la cause
+    # n'était pas une ligne mal découpée : il ne savait tout simplement pas ce
+    # qu'est une fonction shell. Six fonctions écrites pour l'écran de la mise
+    # à jour — `barre`, `ecrire_centre`, `etape`, `montrer`, `suivre_dpkg`,
+    # `vers_l_ecran` — ont fait refuser une image entière.
+    #
+    # Le symptôme durait depuis longtemps : `dire` et `poser` avaient été
+    # ajoutés un par un à FACULTATIVES sous l'intitulé « des mots qui
+    # ressemblent à des commandes ». Une liste qu'il faut rallonger à chaque
+    # fonction écrite n'est pas une liste, c'est une dette. On lit les
+    # définitions, et c'est exact sans entretien.
+    #
+    # Par fichier, jamais globalement : un script qui APPELLE `dire` sans la
+    # définir est un vrai défaut, et il doit continuer à être dit.
+    definies = set(re.findall(
+        r"^\s*(?:function\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(\)\s*\{",
+        contenu, re.M))
+
     def noter(nom):
-        if nom and NOM.match(nom):
+        if nom and NOM.match(nom) and nom not in definies:
             trouvees.add(nom)
 
     if "python3" in tete or chemin.endswith(".py"):
