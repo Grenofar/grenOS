@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Nos textes affichés ont-ils leurs accents ?
+"""Nos textes affichés sont-ils écrits en français ?
+
+Deux règles, et la même cause : une phrase qui se lit encore passe toutes les
+relectures. Les accents d'abord, puis, depuis le 28 septembre, la virgule
+décimale — « 2.9 Go de mémoire » était à l'écran du mode Jeux depuis des
+semaines, et c'est en agrandissant une capture qu'on l'a vu.
 
 Une phrase sans accents se lit encore, et c'est exactement le problème : elle
 passe les relectures. Le 24 septembre, le catalogue du magasin en portait deux
@@ -61,6 +66,26 @@ LOCUTIONS = re.compile(
     r"\b(?:mises? a jour|est a jour|a jour|a partir|a cote|a nouveau|"
     r"a distance|a droite|a gauche|a propos|a venir|a suivre|jusqu a)\b", re.I)
 
+# Le point décimal anglais. En français, 2,9 Go — jamais 2.9 Go.
+#
+# Trouvé le 28 septembre en agrandissant les captures du mode Jeux et du
+# gestionnaire de tâches : « 2.9 Go de mémoire », « 1.5 % », « 0.5 Go sur
+# 2.9 Go », affichés depuis des semaines. C'est la faute sans accent
+# exactement : le texte se lit encore, donc personne ne le voit.
+#
+# On ne regarde que la façon dont un nombre est MIS EN FORME — « :.1f »,
+# « %.1f », « :, » —, jamais le texte autour : une version « 1.0.202609 » ou
+# une adresse « 127.0.0.1 » sont justes, et un contrôle qui crie à tort finit
+# par être ignoré. Une précision de zéro décimale ne montre aucun point.
+#
+# Dans une consigne de format, la virgule ne peut être que le séparateur de
+# milliers anglais (« 1,234 »), qui en français veut dire 1,234 — l'inverse.
+POINT_DECIMAL = re.compile(r"\.[1-9][0-9]*[fFeEgG%]|,")
+# Les deux autres façons d'écrire un nombre, dans un texte tout fait :
+# « "%.1f Go" % reste » et « "{:.1f} Go".format(reste) ».
+DANS_LE_TEXTE = re.compile(r"%\.[1-9][0-9]*[fFeEgG]"
+                           r"|\{[^{}]*:[^{}]*\.[1-9][0-9]*[fFeEgG%][^{}]*\}")
+
 # Ce par quoi un texte arrive sous les yeux de quelqu'un.
 AFFICHEURS = {
     "set_tooltip_text", "set_text", "set_label", "set_title",
@@ -85,8 +110,47 @@ def fautes_du_texte(texte):
     return fautes + LOCUTIONS.findall(texte)
 
 
+def _litteral(noeud):
+    """Le texte et les consignes de format d'un argument affiché.
+
+    Une chaîne toute faite, mais aussi une f-string : le garde n'en lisait
+    aucune, et c'est précisément là que vivaient « 2.9 Go » et « 1.5 % ».
+    On rend le texte visible (les morceaux littéraux recollés) et, à part,
+    chaque consigne de format — « .1f », « ,.0f » — qui décide de la façon
+    dont un nombre sera écrit.
+    """
+    # « "%.1f Go" % reste » : l'argument n'est pas une chaîne, c'est une
+    # opération. Le garde ne voyait donc rien — trouvé en l'exerçant contre un
+    # fichier fautif écrit exprès, pas en le relisant.
+    if isinstance(noeud, ast.BinOp) and isinstance(noeud.op, ast.Mod):
+        noeud = noeud.left
+    # « "{:.1f} Go".format(reste) » : le texte est porté par l'appelé.
+    elif isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Attribute) \
+            and noeud.func.attr == "format":
+        noeud = noeud.func.value
+
+    if isinstance(noeud, ast.Constant) and isinstance(noeud.value, str):
+        return noeud.value, []
+    if not isinstance(noeud, ast.JoinedStr):
+        return None, []
+
+    texte, consignes = "", []
+    for morceau in noeud.values:
+        if isinstance(morceau, ast.Constant) and isinstance(morceau.value, str):
+            texte += morceau.value
+        elif isinstance(morceau, ast.FormattedValue):
+            texte += "0"          # un nombre ou un mot y prendra la place
+            spec = morceau.format_spec
+            if isinstance(spec, ast.JoinedStr):
+                consignes.append("".join(
+                    part.value for part in spec.values
+                    if isinstance(part, ast.Constant)
+                    and isinstance(part.value, str)))
+    return texte, consignes
+
+
 def textes_affiches(arbre):
-    """Chaque chaîne littérale qui finit sous les yeux de quelqu'un."""
+    """Chaque texte qui finit sous les yeux de quelqu'un, et ses formats."""
     for noeud in ast.walk(arbre):
         if not isinstance(noeud, ast.Call):
             continue
@@ -97,15 +161,16 @@ def textes_affiches(arbre):
         elif isinstance(noeud.func, ast.Name):
             nom = noeud.func.id
 
-        if nom in AFFICHEURS or nom in FABRIQUES_1:
-            if noeud.args and isinstance(noeud.args[0], ast.Constant) \
-                    and isinstance(noeud.args[0].value, str):
-                yield noeud.lineno, noeud.args[0].value
+        candidats = []
+        if (nom in AFFICHEURS or nom in FABRIQUES_1) and noeud.args:
+            candidats.append(noeud.args[0])
+        candidats += [mot_cle.value for mot_cle in noeud.keywords
+                      if mot_cle.arg in CLES]
 
-        for mot_cle in noeud.keywords:
-            if mot_cle.arg in CLES and isinstance(mot_cle.value, ast.Constant) \
-                    and isinstance(mot_cle.value.value, str):
-                yield noeud.lineno, mot_cle.value.value
+        for candidat in candidats:
+            texte, consignes = _litteral(candidat)
+            if texte is not None:
+                yield noeud.lineno, texte, consignes
 
 
 def lire(chemin):
@@ -123,9 +188,17 @@ def lire(chemin):
         return []          # la syntaxe est jugée ailleurs, et avant celle-ci
 
     trouves = []
-    for ligne, texte in textes_affiches(arbre):
+    for ligne, texte, consignes in textes_affiches(arbre):
         for mot in fautes_du_texte(texte):
-            trouves.append((ligne, mot, texte.strip()[:70]))
+            trouves.append((ligne, f"« {mot} » sans accent", texte.strip()[:70]))
+        for consigne in consignes:
+            if POINT_DECIMAL.search(consigne):
+                trouves.append((ligne, f"le format « {consigne} » écrit un "
+                                       "nombre à l'anglaise",
+                                texte.strip()[:70]))
+        for consigne in DANS_LE_TEXTE.findall(texte):
+            trouves.append((ligne, f"le format « {consigne} » écrit un nombre "
+                                   "à l'anglaise", texte.strip()[:70]))
     return trouves
 
 
@@ -146,16 +219,17 @@ def main():
         if not os.path.isfile(chemin):
             continue
         lus += 1
-        for ligne, mot, texte in lire(chemin):
-            print(f"{chemin}:{ligne} : « {mot} » sans accent, dans « {texte} »")
+        for ligne, faute, texte in lire(chemin):
+            print(f"{chemin}:{ligne} : {faute}, dans « {texte} »")
             total += 1
 
     if total:
-        print(f"\n{total} texte(s) affiche(s) sans accent.")
-        print("Un texte que quelqu'un lit porte ses accents. Un commentaire "
-              "fait ce qu'il veut.")
+        print(f"\n{total} texte(s) affiche(s) mal ecrit(s).")
+        print("Un texte que quelqu'un lit porte ses accents, et ses nombres "
+              "prennent la virgule. Un commentaire fait ce qu'il veut.")
         return 1
-    print(f"accents : {lus} fichiers lus, tous les textes affiches sont accentues")
+    print(f"accents : {lus} fichiers lus, tous les textes affiches sont "
+          "accentues et leurs nombres a la francaise")
     return 0
 
 

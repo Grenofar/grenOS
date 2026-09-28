@@ -732,8 +732,9 @@ class Reglages(Gtk.Window):
             self.ligne("Processeur", Gtk.Label(label=f"{infos['coeurs']} cœurs")),
             self.ligne("Modèle", Gtk.Label(label=infos["processeur"][:52])),
             self.ligne("Mémoire vive",
-                       Gtk.Label(label=f"{infos['memoire']:.1f} Go "
-                                       f"({infos['memoire_libre']:.1f} Go libres)")),
+                       Gtk.Label(label=f"{grenosui.nombre(infos['memoire'])} Go "
+                                       f"({grenosui.nombre(infos['memoire_libre'])}"
+                                       " Go libres)")),
             self.ligne("Carte graphique", Gtk.Label(label=infos["carte"][:52])),
             self.ligne("Pilote", Gtk.Label(label=infos["pilote"][:52])),
             self.ligne("Système sur",

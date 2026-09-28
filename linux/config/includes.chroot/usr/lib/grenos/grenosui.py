@@ -516,6 +516,17 @@ def dire(texte):
     return lancer("grenos-dire " + shlex.quote(str(texte)))
 
 
+def nombre(valeur, decimales=1):
+    """Un nombre écrit en français : la virgule, jamais le point.
+
+    « 2.9 Go de mémoire », « 1.5 % », « 0.5 Go sur 2.9 Go » : trouvé le
+    28 septembre en agrandissant les captures du mode Jeux et du gestionnaire
+    de tâches, après des semaines à l'écran. C'est exactement la faute sans
+    accent — ça se lit encore, donc personne ne la voit.
+    """
+    return ("%.*f" % (decimales, valeur)).replace(".", ",")
+
+
 def icone(nom, taille=24):
     """L'image d'un nom d'icône du système, ou rien si le thème ne l'a pas."""
     if not nom:

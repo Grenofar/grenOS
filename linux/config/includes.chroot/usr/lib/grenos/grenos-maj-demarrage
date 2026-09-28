@@ -24,9 +24,108 @@ DOSSIER=/run/grenos
 mkdir -p "$DOSSIER" 2>/dev/null || true
 
 dire() {
-    # Sur l'écran de la personne, et sur le port série pour la CI.
-    printf '%s\n' "$1" > "$ECRAN" 2>/dev/null || true
+    # Le port série, pour la CI. Ce que voit la personne passe par `etape`.
     echo "grenos: maj-demarrage : $1" > /dev/ttyS0 2>/dev/null || true
+}
+
+# ---- L'écran, et pourquoi ce n'est pas un terminal --------------------------
+#
+# « que maj n'affiche pas un cmd » est une de ses toutes premières demandes.
+# Jusqu'au 28 septembre, cette fenêtre-ci — la seule qu'il verra vraiment,
+# puisqu'elle occupe l'écran entier pendant que dpkg travaille — était
+# exactement cela : des lignes blanches en haut à gauche d'une console. La CI
+# photographiait l'écran d'APRÈS, jamais celui-ci ; personne ne l'avait donc
+# jamais regardé.
+#
+# Ni X, ni GTK, ni Plymouth : ce service tourne avant tout le reste. Reste la
+# console, et elle suffit — on repeint sa palette aux couleurs de grenOS, on
+# centre, et la barre est faite d'espaces colorés. Pas un seul caractère de
+# tracé : une police de console sans ce glyphe rendrait une rangée de carrés,
+# et la police du démarrage n'est pas la nôtre.
+TAILLE=$(stty -F "$ECRAN" size 2>/dev/null || echo "")
+LIGNES=${TAILLE%% *}
+COLONNES=${TAILLE##* }
+case "$LIGNES" in ''|*[!0-9]*) LIGNES=25 ;; esac
+case "$COLONNES" in ''|*[!0-9]*) COLONNES=80 ;; esac
+[ "$LIGNES" -ge 14 ] || LIGNES=25
+[ "$COLONNES" -ge 40 ] || COLONNES=80
+
+BASE=$(( LIGNES / 2 - 4 ))
+LIGNE_MARQUE=$BASE
+LIGNE_TITRE=$(( BASE + 2 ))
+LIGNE_ETAPE=$(( BASE + 4 ))
+LIGNE_BARRE=$(( BASE + 6 ))
+LIGNE_PIED=$(( BASE + 8 ))
+LARGEUR_BARRE=$(( COLONNES / 2 ))
+COL_BARRE=$(( (COLONNES - LARGEUR_BARRE) / 2 + 1 ))
+
+vers_l_ecran() {
+    printf '%b' "$1" > "$ECRAN" 2>/dev/null || true
+}
+
+largeur_du_texte() {
+    # En UTF-8, « é » tient sur deux octets : compter les octets décalerait le
+    # centrage d'autant d'accents que la phrase en porte.
+    #
+    # `wc -m` compterait juste, mais seulement sous une locale UTF-8, et un
+    # service de démarrage n'en a aucune. Les octets de continuation d'UTF-8
+    # sont tous entre 0x80 et 0xBF : les retirer laisse exactement un octet par
+    # caractère, sans locale et sans rien supposer.
+    printf '%s' "$1" | tr -d '\200-\277' | wc -c | tr -dc '0-9'
+}
+
+ecrire_centre() {
+    # $1 la ligne, $2 les attributs ANSI, $3 le texte.
+    LARGE=$(largeur_du_texte "$3")
+    case "$LARGE" in ''|*[!0-9]*) LARGE=${#3} ;; esac
+    COL=$(( (COLONNES - LARGE) / 2 + 1 ))
+    [ "$COL" -ge 1 ] || COL=1
+    vers_l_ecran "\033[${1};1H\033[2K\033[${1};${COL}H\033[${2}m"
+    printf '%s' "$3" > "$ECRAN" 2>/dev/null || true
+    vers_l_ecran '\033[0m\033[40;37m'
+}
+
+barre() {
+    # $1 : de 0 à 100. Des espaces sur fond coloré, rien d'autre.
+    PLEIN=$(( LARGEUR_BARRE * $1 / 100 ))
+    [ "$PLEIN" -le "$LARGEUR_BARRE" ] || PLEIN=$LARGEUR_BARRE
+    [ "$PLEIN" -ge 0 ] || PLEIN=0
+    VIDE=$(( LARGEUR_BARRE - PLEIN ))
+    vers_l_ecran "\033[${LIGNE_BARRE};${COL_BARRE}H\033[44m"
+    [ "$PLEIN" -gt 0 ] && printf "%${PLEIN}s" "" > "$ECRAN" 2>/dev/null
+    # La couleur 1 a été repeinte en gris : personne ne voit « rouge », on voit
+    # le creux de la barre. C'est ce qui permet de n'utiliser que 40-47, les
+    # seuls codes qu'une console ancienne comprend à coup sûr.
+    vers_l_ecran '\033[41m'
+    [ "$VIDE" -gt 0 ] && printf "%${VIDE}s" "" > "$ECRAN" 2>/dev/null
+    vers_l_ecran '\033[0m\033[40;37m'
+}
+
+peindre_le_fond() {
+    vers_l_ecran '\033]P00b101c\033]P12a3450\033]P43b82f6\033]P7eef2fa'
+    vers_l_ecran '\033[?25l\033[40;37m\033[2J\033[H'
+    ecrire_centre "$LIGNE_MARQUE" '1;34' "grenOS"
+    ecrire_centre "$LIGNE_TITRE" '1;37' "Mise à jour en cours"
+    ecrire_centre "$LIGNE_PIED" '37' "N'éteins pas l'ordinateur."
+    barre 0
+}
+
+montrer() {
+    # Ce que la personne lit, sans rien dire au port série : la boucle de suivi
+    # passe ici toutes les deux secondes, et elle noierait le journal.
+    ecrire_centre "$LIGNE_ETAPE" '37' "$1"
+    barre "$2"
+}
+
+etape() {
+    montrer "$1" "$2"
+    dire "$1"
+}
+
+rendre_l_ecran() {
+    # La palette d'une console est globale et survit à ce script : la remettre
+    # est la moindre des politesses envers ce qui s'affichera ensuite.
+    vers_l_ecran '\033[0m\033]R\033[2J\033[H\033[?25h'
 }
 
 # Le service ne doit plus jamais se relancer tout seul : on le désactive
@@ -35,8 +134,8 @@ dire() {
 # retrouve pas coincée dans une boucle de mise à jour.
 systemctl disable grenos-maj-demarrage.service >/dev/null 2>&1 || true
 
-printf '\n\n' > "$ECRAN" 2>/dev/null || true
-dire "Mise à jour de grenOS — n'éteins pas l'ordinateur."
+peindre_le_fond
+etape "Préparation" 3
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -45,16 +144,48 @@ export DEBIAN_FRONTEND=noninteractive
 # les poser. C'est ce qui rend l'attente courte au lieu d'interminable.
 apt-get update -qq >/dev/null 2>&1 || true
 
+# Combien de paquets vont être posés ? apt le dit avant de commencer, et c'est
+# la seule façon d'avoir une barre qui AVANCE au lieu d'une barre qui saute.
+# `grep -c` écrit « 0 » et sort en 1 : on ne lui ajoute surtout pas
+# « || echo 0 », qui rendrait « 0\n0 » — le piège payé trois fois cette
+# semaine. Le `case` suffit, et il couvre aussi le cas où apt n'a rien dit.
+ATTENDUS=$(apt-get -s -y full-upgrade 2>/dev/null | grep -c '^Inst ')
+case "$ATTENDUS" in ''|*[!0-9]*) ATTENDUS=0 ;; esac
+
+suivre_dpkg() {
+    # Pendant que dpkg travaille, la barre suit ce qu'il dit de lui-même.
+    while kill -0 "$1" 2>/dev/null; do
+        POSES=$(grep -ac '^Setting up ' "$DOSSIER/maj-journal" 2>/dev/null)
+        case "$POSES" in ''|*[!0-9]*) POSES=0 ;; esac
+        if [ "$ATTENDUS" -gt 0 ]; then
+            AVANCE=$(( 10 + 75 * POSES / ATTENDUS ))
+            [ "$AVANCE" -le 85 ] || AVANCE=85
+            montrer "Installation : $POSES paquets sur $ATTENDUS" "$AVANCE"
+        else
+            montrer "Installation des paquets" 45
+        fi
+        sleep 2
+    done
+}
+
 DEBUT=$(date +%s)
-if apt-get -y \
+etape "Installation des paquets" 10
+apt-get -y \
         -o Dpkg::Options::=--force-confdef \
         -o Dpkg::Options::=--force-confold \
-        full-upgrade > "$DOSSIER/maj-journal" 2>&1; then
+        full-upgrade > "$DOSSIER/maj-journal" 2>&1 &
+APT=$!
+suivre_dpkg "$APT"
+if wait "$APT"; then
     RESULTAT=ok
 else
     # Le repli, comme dans la fenêtre : une option refusée ne doit pas
     # empêcher la machine de se mettre à jour.
-    if apt-get -y full-upgrade >> "$DOSSIER/maj-journal" 2>&1; then
+    etape "Nouvel essai" 12
+    apt-get -y full-upgrade >> "$DOSSIER/maj-journal" 2>&1 &
+    APT=$!
+    suivre_dpkg "$APT"
+    if wait "$APT"; then
         RESULTAT=ok
     else
         RESULTAT=echec
@@ -63,10 +194,14 @@ fi
 DUREE=$(( $(date +%s) - DEBUT ))
 
 if [ "$RESULTAT" = ok ]; then
-    POSES=$(grep -c '^Setting up ' "$DOSSIER/maj-journal" 2>/dev/null || echo 0)
+    # `grep -c` écrit « 0 » ET sort en 1 : « || echo 0 » rendait donc « 0\n0 »,
+    # et « 0 0 paquets poses » est parti sur le port série des jours durant.
+    POSES=$(grep -ac '^Setting up ' "$DOSSIER/maj-journal" 2>/dev/null)
+    case "$POSES" in ''|*[!0-9]*) POSES=0 ;; esac
     dire "termine en ${DUREE}s, $POSES paquets poses"
     # Rebrancher services, menus, icônes et réglages partagés : c'est le même
     # travail qu'après une mise à jour depuis la fenêtre.
+    etape "Réglages du système" 88
     [ -x /usr/lib/grenos/appliquer-systeme ] && /usr/lib/grenos/appliquer-systeme >/dev/null 2>&1
     printf 'ok %s\n' "$POSES" > "$DOSSIER/maj-resultat"
 else
@@ -74,6 +209,7 @@ else
     # panne possible ; une mise à jour ratée n'en est qu'une petite. Le bureau
     # lira ce fichier et le dira, avec le journal à l'appui.
     dire "la mise a jour a echoue — le bureau s'ouvre quand meme"
+    montrer "La mise à jour a échoué. Le bureau s'ouvre quand même." 88
     printf 'echec\n' > "$DOSSIER/maj-resultat"
 fi
 chmod 0644 "$DOSSIER/maj-resultat" "$DOSSIER/maj-journal" 2>/dev/null || true
@@ -107,6 +243,7 @@ if [ -d "$FILE" ]; then
         [ -f "$TRAVAIL" ] || continue
         TITRE=$(sed -n '2s/^# //p' "$TRAVAIL" 2>/dev/null)
         dire "${TITRE:-travail} — en cours"
+        montrer "${TITRE:-Modification du système}" 94
         DEPART=$(date +%s)
         if timeout 600 "$TRAVAIL" >> "$DOSSIER/maj-journal" 2>&1; then
             VERDICT=ok
@@ -122,5 +259,9 @@ if [ -d "$FILE" ]; then
     [ -x /usr/lib/grenos/appliquer-systeme ] \
         && /usr/lib/grenos/appliquer-systeme >/dev/null 2>&1
 fi
+
+montrer "Terminé. Ouverture de grenOS." 100
+sleep 1
+rendre_l_ecran
 
 exit 0

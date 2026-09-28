@@ -297,7 +297,7 @@ class Taches(Gtk.Window):
                 continue
             self.donnees.append([
                 pid, etat["nom"], part, etat["memoire"],
-                f"{part:.1f} %",
+                f"{grenosui.nombre(part)} %",
                 f"{etat['memoire'] / 1024:.0f} Mo" if etat["memoire"] else "—",
             ])
 
@@ -315,8 +315,8 @@ class Taches(Gtk.Window):
         valeur, barre, detail = self.jauges["memoire"]
         valeur.set_text(f"{part_memoire * 100:.0f} %")
         barre.set_fraction(min(part_memoire, 1.0))
-        detail.set_text(f"{utilisee / 1024 / 1024:.1f} Go sur "
-                        f"{self.memoire / 1024 / 1024:.1f} Go")
+        detail.set_text(f"{grenosui.nombre(utilisee / 1024 / 1024)} Go sur "
+                        f"{grenosui.nombre(self.memoire / 1024 / 1024)} Go")
 
         self.nombre.set_text(f"{len(maintenant)} processus")
         if choisi is not None:

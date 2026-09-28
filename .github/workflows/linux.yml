@@ -451,7 +451,32 @@ jobs:
             echo "::warning::QEMU n'a pas demarre pour l'essai de mise a jour au demarrage."
             exit 0
           fi
-          sleep 240
+          # On photographiait l'ecran d'APRES, jamais celui de PENDANT — et
+          # c'est pourtant le seul que la personne regardera, puisqu'il occupe
+          # tout l'ecran le temps que dpkg travaille. Des que le service dit sa
+          # premiere ligne, on prend la photo.
+          PRISE=non
+          ATTENTE=0
+          while [ "$ATTENTE" -lt 240 ]; do
+            if [ "$PRISE" = non ] && grep -aq 'maj-demarrage :' "$RUNNER_TEMP/serial-maj-demarrage.log" 2>/dev/null; then
+              # Trois photos a quatre secondes : la premiere prouve que l'ecran
+              # existe, les suivantes montrent la barre avancee. Une seule
+              # risquerait de tomber sur un ecran deja rendu, si le depot
+              # d'essai n'avait rien a poser.
+              for PHOTO in 1 2 3; do
+                python3 scripts/ci-screen.py grab "$RUNNER_TEMP/majdem.sock" "$RUNNER_TEMP/ecran-maj-pendant$PHOTO.ppm" || true
+                sleep 4
+              done
+              PRISE=oui
+              ATTENTE=$(( ATTENTE + 12 ))
+            fi
+            sleep 2
+            ATTENTE=$(( ATTENTE + 2 ))
+          done
+          # On attend les 240 s entieres, comme avant : les lignes que les
+          # preuves bloquantes cherchent arrivent APRES le bureau, et gagner
+          # trois minutes ne vaut pas le risque de les rater.
+          echo "maj au demarrage : ecran pendant la mise a jour pris = $PRISE"
           python3 scripts/ci-screen.py grab "$RUNNER_TEMP/majdem.sock" "$RUNNER_TEMP/ecran-maj-demarrage.ppm" || true
           kill $QEMU 2>/dev/null || true
           echo "--- ce que le troisieme demarrage a dit ---"

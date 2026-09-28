@@ -165,7 +165,8 @@ class Jeux(Gtk.Window):
         infos = materiel.resume()
         self.colonne.pack_start(
             grenosui.titre("Jeux", f"{infos['coeurs']} cœurs, "
-                                   f"{infos['memoire']:.1f} Go de mémoire."),
+                                   f"{grenosui.nombre(infos['memoire'])} Go "
+                                   "de mémoire."),
             False, False, 0)
 
         # ---- L'avertissement qui décide de tout ----------------------------
