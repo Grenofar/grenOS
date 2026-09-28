@@ -488,6 +488,41 @@ if [ -n "$manque" ]; then
 fi
 echo "grenos: l installateur saura rendre le disque amorcable, en BIOS et en UEFI"
 
+echo "--- grenOS : le volet de l explorateur demande-t-il une icone SOMBRE ---"
+# Papirus-Dark n'a que trois dossiers `devices` : le 16x16 est reel, les 22x22
+# et 24x24 sont des LIENS vers le theme clair. En demandant 20, GTK prenait le
+# plus proche — donc 22, donc le clair — et l'icone « Appareils » sortait a
+# #333333 sur un volet #2d2d2d : 1,07 : 1, invisible. GTK ne dit rien quand il
+# suit un lien de ce genre.
+#
+# Ce controle refuse toute taille de volet qui ne tombe pas sur un vrai dossier
+# du theme sombre. Meme famille que les boutons d'openbox et l'habillage de
+# Calamares : un repli silencieux qu'un garde doit rendre bruyant.
+volet=$(sed -n 's/^pane_icon_size=\([0-9]*\).*/\1/p' /etc/xdg/libfm/libfm.conf | tail -1)
+case "$volet" in ''|*[!0-9]*) volet=0 ;; esac
+sombre=/usr/share/icons/Papirus-Dark
+if [ "$volet" -gt 0 ] && [ -d "$sombre" ]; then
+    dossier="$sombre/${volet}x${volet}/devices"
+    if [ ! -d "$dossier" ]; then
+        echo "grenos: le volet demande ${volet}px, or le theme sombre n a pas ce dossier" >&2
+        echo "grenos: GTK prendrait la taille voisine, qui est un lien vers le theme clair" >&2
+        exit 1
+    fi
+    # On ne demande pas « est-ce un lien ? » mais « d ou vient vraiment cette
+    # icone ? ». C est la question qui compte, et elle reste juste le jour ou
+    # Papirus changera sa facon de ranger ses fichiers.
+    reel=$(readlink -f "$dossier" 2>/dev/null || echo "$dossier")
+    case "$reel" in
+        *Papirus-Dark*) : ;;
+        *)
+            echo "grenos: le volet demande ${volet}px, mais cette taille mene a $reel" >&2
+            echo "grenos: c est le theme CLAIR — l icone « Appareils » serait sombre sur fond sombre" >&2
+            exit 1
+            ;;
+    esac
+    echo "grenos: volet de l explorateur : ${volet}px, icones prises dans le theme sombre"
+fi
+
 echo "--- grenOS : l habillage de l installateur nomme-t-il des fichiers reels ---"
 # `branding.desc` nommait `logo.png` TROIS fois — productLogo, productIcon,
 # productWelcome — et le fichier n'a jamais existe. D'ou une bavure grise de
