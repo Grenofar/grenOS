@@ -167,6 +167,44 @@ STYLE = """
 
 
 # ---- Les applications du système -------------------------------------------
+def poser_infobulle(bouton, texte):
+    """Change l'infobulle d'un bouton, et SEULEMENT si elle a changé.
+
+    POURQUOI CETTE PRÉCAUTION, QUI N'EN A PAS L'AIR
+
+    L'infobulle « Son : 40 % » restait collée à l'écran, à cinq cents pixels du
+    pointeur, par-dessus l'explorateur puis par-dessus les Réglages. Mesuré sur
+    les captures de **quarante constructions d'affilée** : personne ne l'avait
+    vue, et c'est précisément le geste de Grenofar — cliquer le haut-parleur,
+    puis cliquer ailleurs.
+
+    La cause, lue dans la source de GTK 3 et non devinée :
+
+      - `gtk_tooltip_handle_event_internal` (gtktooltip.c) cache bien
+        l'infobulle sur `GDK_BUTTON_PRESS`. Le clic faisait donc son travail.
+      - Mais `gtk_widget_set_tooltip_text` appelle
+        `gtk_tooltip_trigger_tooltip_query`, qui **simule un mouvement de
+        souris**. Tant que le pointeur est encore sur le haut-parleur, cela
+        REMONTRE l'infobulle que le clic venait de cacher.
+      - Le panneau de son prend alors le pointeur (`Gdk.Seat.grab`), et le
+        pointeur s'en va. À partir de là, `trigger_tooltip_query` fait
+        `gdk_device_get_window_at_position` → NULL (le pointeur est sur la
+        fenêtre d'un AUTRE processus) et **sort immédiatement**. Elle ne peut
+        donc plus ni se montrer ni se cacher : elle reste.
+
+    Notre minuterie reposait l'infobulle à chaque seconde, qu'elle ait changé
+    ou non. C'est elle qui ressuscitait l'infobulle juste après le clic, et
+    elle seule. En ne la reposant que lorsque le texte change, le clic la cache
+    et plus rien ne la rappelle.
+
+    `set_has_tooltip(False)` n'aurait rien réglé : `gtk_widget_real_set_has_tooltip`
+    ne fait que changer un drapeau et des masques d'événements — il ne cache
+    jamais une infobulle affichée. Vérifié dans gtkwidget.c avant d'écrire ceci.
+    """
+    if bouton.get_tooltip_text() != texte:
+        bouton.set_tooltip_text(texte)
+
+
 def lire_desktop(chemin):
     """Ce qu'un fichier .desktop dit d'une application."""
     champs, section = {}, None
@@ -645,7 +683,8 @@ class Tuile(Gtk.Box):
             style.add_class("trait-reduite")
         else:
             style.add_class("trait-ouverte")
-        self.bouton.set_tooltip_text(
+        poser_infobulle(
+            self.bouton,
             f"{self.nom} — {len(fenetres)} fenêtre{'s' if len(fenetres) > 1 else ''}")
 
     def activer(self):
@@ -923,7 +962,8 @@ class Panneau(Gtk.Window):
             resultat = []
         if resultat and resultat[0] == "echec":
             self.bouton_maj.set_label("mise à jour échouée")
-            self.bouton_maj.set_tooltip_text(
+            poser_infobulle(
+                self.bouton_maj,
                 "La dernière mise à jour au démarrage ne s'est pas faite. "
                 "Cliquer pour réessayer et voir pourquoi.")
             self.bouton_maj.show()
@@ -936,7 +976,8 @@ class Panneau(Gtk.Window):
         if nombre:
             self.bouton_maj.set_label(
                 "%d mise%s à jour" % (nombre, "s" if nombre > 1 else ""))
-            self.bouton_maj.set_tooltip_text(
+            poser_infobulle(
+                self.bouton_maj,
                 "Cliquer pour installer les mises à jour de grenOS et de Debian, "
                 "ou choisir « Mettre à jour et redémarrer » dans l'écran d'arrêt.")
             self.bouton_maj.show()
@@ -960,7 +1001,8 @@ class Panneau(Gtk.Window):
         except Exception:
             nom, phrase = "grenos-reseau-aucun", "Connexions : Wi-Fi et Bluetooth"
         self.image_reseau.set_from_icon_name(nom, Gtk.IconSize.LARGE_TOOLBAR)
-        self.bouton_reseau.set_tooltip_text(phrase + " — cliquer pour les connexions")
+        poser_infobulle(self.bouton_reseau,
+                        phrase + " — cliquer pour les connexions")
         return True
 
     def relire_son(self):
@@ -973,8 +1015,8 @@ class Panneau(Gtk.Window):
         nom = ("grenos-son-muet" if muet
                else ("grenos-son-faible" if volume < 45 else "grenos-son"))
         self.image_son.set_from_icon_name(nom, Gtk.IconSize.LARGE_TOOLBAR)
-        self.bouton_son.set_tooltip_text(
-            "Son coupé" if muet else f"Son : {volume} %")
+        poser_infobulle(self.bouton_son,
+                        "Son coupé" if muet else f"Son : {volume} %")
         return True
 
     def tic(self):
