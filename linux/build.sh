@@ -48,6 +48,15 @@ for taille in 16 22 24 32 48 64 128 256; do
 done
 echo "grenos: icones dessinees en 16 22 24 32 48 64 128 256"
 
+# Le logo de l'installateur. Son `branding.desc` nomme `logo.png` TROIS fois —
+# productLogo, productIcon, productWelcome — et le fichier n'a jamais existe.
+# D'ou la bavure grise de 9x4 px dans la barre de titre, mesuree le 28 septembre
+# sur la seule fenetre qu'un nouveau venu ne peut pas eviter, et la seule sans
+# notre marque. Meme famille que la regle polkit nommant une action inexistante.
+cp config/includes.chroot/usr/share/icons/hicolor/256x256/apps/grenos.png \
+   config/includes.chroot/usr/share/calamares/branding/grenos/logo.png
+echo "grenos: logo de l installateur pose depuis notre marque"
+
 # Les boutons des barres de titre. Le themerc reglait la couleur de chacun dans
 # ses six etats et ne livrait AUCUN dessin : openbox retombait alors sur ses
 # bitmaps internes de 6x6, ou la croix de Fermer n'est plus une croix mais un

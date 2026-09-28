@@ -488,6 +488,34 @@ if [ -n "$manque" ]; then
 fi
 echo "grenos: l installateur saura rendre le disque amorcable, en BIOS et en UEFI"
 
+echo "--- grenOS : l habillage de l installateur nomme-t-il des fichiers reels ---"
+# `branding.desc` nommait `logo.png` TROIS fois — productLogo, productIcon,
+# productWelcome — et le fichier n'a jamais existe. D'ou une bavure grise de
+# 9x4 px dans la barre de titre de la seule fenetre qu'un nouveau venu ne peut
+# pas eviter, et la seule sans notre marque. Qt ne dit rien quand une icone
+# manque : il en met une par defaut et continue.
+#
+# Meme famille que la regle polkit nommant une action inexistante, que
+# `partition.conf` offrant btrfs sans `mkfs.btrfs`, que `allowed_paths` nommant
+# un fichier qu'on ne montre pas. Un fichier de configuration qui nomme une
+# ressource absente est un defaut, pas un detail.
+habillage=/usr/share/calamares/branding/grenos
+if [ -f "$habillage/branding.desc" ]; then
+    manque=""
+    for fichier in $(sed -n 's/.*: *"\([A-Za-z0-9._-]*\.\(png\|jpg\|svg\|qml\|qss\)\)".*/\1/p' \
+                     "$habillage/branding.desc" | sort -u); do
+        if [ ! -f "$habillage/$fichier" ]; then
+            manque="$manque $fichier"
+        fi
+    done
+    if [ -n "$manque" ]; then
+        echo "grenos: l habillage de l installateur nomme des fichiers absents :$manque" >&2
+        echo "grenos: Qt ne dira rien — il mettra une icone par defaut et continuera" >&2
+        exit 1
+    fi
+    echo "grenos: chaque image nommee par l habillage de l installateur existe"
+fi
+
 echo "--- grenOS : les boutons des barres de titre ---"
 # Openbox ne dit RIEN quand il ne trouve pas le dessin d'un bouton : il prend
 # son bitmap interne de 6x6 et continue. Notre themerc reglait la couleur de
