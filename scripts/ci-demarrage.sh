@@ -583,15 +583,20 @@ echo "--- que voit-on en eteignant la machine ---"
 # le chemin que Grenofar emprunte, et lui seul declenche la sequence d'arret de
 # systemd, donc les messages qu'on cherche.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "system_powerdown" || true
+# La machine s'eteint en MOINS DE TROIS SECONDES : au premier essai, la
+# premiere photo arrivait deja trop tard et le moniteur avait disparu. On prend
+# donc tout de suite, puis toutes les demi-secondes. Une image live n'a presque
+# rien a ecrire sur disque, et c'est tant mieux — mais cela laisse une fenetre
+# tres etroite pour la photographier.
 EXTINCTION=0
-for instant in 1 2 3 4 5 6; do
-  sleep 3
+for instant in 1 2 3 4 5 6 7 8 9 10; do
   if python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" \
        "$RUNNER_TEMP/ecran-extinction-$instant.ppm" 2>/dev/null; then
     EXTINCTION=$instant
   else
     break   # la machine est partie : il n'y a plus d'ecran a prendre
   fi
+  sleep 0.5
 done
 echo "extinction : $EXTINCTION capture(s) prises pendant l'arret"
 for instant in 1 2 3 4 5 6; do
@@ -606,8 +611,17 @@ for instant in 1 2 3 4 5 6; do
 done
 # Et ce que le port serie a dit pendant l'arret : c'est la ou les messages de
 # systemd apparaitraient s'ils apparaissaient.
+# `grep -c` ECRIT « 0 » et SORT EN 1 quand il ne trouve rien. Avec `set -e`,
+# cette ligne a tue le script au premier essai, juste apres avoir annonce
+# « 0 capture(s) » — et l'etape entiere a rendu 1 sans qu'une seule chose soit
+# cassee. Cinquieme fois cette semaine que ce piege mord, et le premier
+# deguisement nouveau : ce n'est plus `|| echo 0` qui double le resultat, c'est
+# `set -e` qui arrete tout.
+#
+# `|| true` est le bon remede ICI, et seulement ici : il change le statut sans
+# rien ecrire de plus, alors que `|| echo 0` rendrait « 0\n0 ».
 LIGNES_ARRET=$(grep -ac 'Stopping\|Stopped\|Unmounting\|Deactivating\|Reached target' \
-                 "$RUNNER_TEMP/serial.log" 2>/dev/null)
+                 "$RUNNER_TEMP/serial.log" 2>/dev/null || true)
 case "$LIGNES_ARRET" in ''|*[!0-9]*) LIGNES_ARRET=0 ;; esac
 echo "extinction : $LIGNES_ARRET ligne(s) de service sur le port serie"
 # Rapporte, pas bloquant : on ne rend une preuve obligatoire qu'apres l'avoir
