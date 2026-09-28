@@ -618,6 +618,19 @@ if [ -f "$theme" ]; then
         exit 1
     fi
     echo "grenos: ecran de maj au redemarrage : barre, titre en francais, messages permis"
+    # Et les deux images que le greffon `two-step` cherche a cote du theme.
+    # Debian n'en livre AUCUNE : ni le fond, ni la marque. Nous posions le fond
+    # et pas la marque, tout en reglant soigneusement sa position — donc
+    # l'ecran de chargement n'a jamais porte le nom de grenOS. Un fichier
+    # absent ne fait aucun bruit chez Plymouth : il prend son repli et continue.
+    for image in background-tile watermark; do
+        if [ ! -f "/usr/share/plymouth/themes/spinner/$image.png" ]; then
+            echo "grenos: l ecran de chargement n a pas son $image.png" >&2
+            echo "grenos: le theme le cherche, Plymouth ne dira rien, et il manquera" >&2
+            exit 1
+        fi
+    done
+    echo "grenos: ecran de chargement : notre fond et notre marque sont poses"
     if [ ! -x /usr/lib/grenos/habiller-plymouth ]; then
         echo "grenos: habiller-plymouth absent de l image" >&2
         exit 1

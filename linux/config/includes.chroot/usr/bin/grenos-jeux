@@ -305,8 +305,9 @@ class Jeux(Gtk.Window):
                     "Ouvrir Epic (gratuit)",
                     lambda: grenosui.lancer(f"flatpak run {jeux.HEROIC}"),
                     "principal"), False, False, 0)
-                pose = Gtk.Label(label="Heroic est installé : connecte-toi à Epic "
-                                       "et récupère le jeu, il est gratuit.",
+                pose = Gtk.Label(label="Heroic est installé. Dedans : connexion "
+                                       "Epic, puis Rocket League s'ajoute à ta "
+                                       "bibliothèque — il est gratuit.",
                                  xalign=0)
                 pose.set_line_wrap(True)
                 pose.get_style_context().add_class("sous")
@@ -320,6 +321,23 @@ class Jeux(Gtk.Window):
                     lambda: grenosui.lancer(f"xdg-open {jeux.EPIC_ROCKET}"),
                     "discret"), False, False, 0)
             bloc.pack_start(epic, False, False, 0)
+
+            # Les trois pas, écrits. Rien ici ne peut être fait à sa place —
+            # il faut son compte Epic — mais tout peut être DIT, et c'est la
+            # différence entre « c'est possible » et « je sais quoi faire ».
+            # Le troisième est celui que personne ne devine : sans le moteur,
+            # Heroic ouvre le jeu et il ne se passe rien.
+            for numero, pas in enumerate((
+                    "Ouvre Heroic et connecte-toi avec ton compte Epic.",
+                    "Récupère Rocket League : il est gratuit, un clic suffit.",
+                    "Au premier lancement, laisse Heroic télécharger son moteur "
+                    "(Proton-GE) — c'est lui qui fait tourner le jeu, et "
+                    "l'anti-triche l'accepte sous Linux depuis avril 2026.",
+            ), start=1):
+                ligne_pas = Gtk.Label(label=f"{numero}.  {pas}", xalign=0)
+                ligne_pas.set_line_wrap(True)
+                ligne_pas.get_style_context().add_class("sous")
+                bloc.pack_start(ligne_pas, False, False, 0)
 
             steam_titre = Gtk.Label(
                 label="Si tu l'avais déjà sur Steam avant 2020", xalign=0)

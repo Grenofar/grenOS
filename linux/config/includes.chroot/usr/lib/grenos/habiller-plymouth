@@ -31,11 +31,33 @@ set -u
 THEME=/usr/share/plymouth/themes/spinner/spinner.plymouth
 [ -f "$THEME" ] || exit 0
 
-# Notre fond, et notre nom monté plus haut que le défaut.
+IMAGES=/usr/share/plymouth/themes/spinner
+
+# Notre fond. Le thème de Debian n'en livre aucun : `background-tile.png` est
+# une image que le greffon `two-step` cherche et qui n'existe pas dans le
+# paquet. C'est nous qui la créons, et c'est pour cela que l'écran de chargement
+# montre notre fond d'écran.
 if [ -f /usr/share/grenos/grenos-nuit.png ]; then
-    cp /usr/share/grenos/grenos-nuit.png \
-       /usr/share/plymouth/themes/spinner/background-tile.png 2>/dev/null || true
+    cp /usr/share/grenos/grenos-nuit.png "$IMAGES/background-tile.png" \
+        2>/dev/null || true
 fi
+
+# Et notre marque. `watermark.png` est cherchée au même endroit, et elle
+# n'existait PAS non plus — ni dans le paquet, ni chez nous. Nous réglions donc
+# soigneusement `WatermarkVerticalAlignment` depuis des semaines pour placer une
+# image absente, et l'écran de chargement n'a jamais porté le nom de grenOS.
+#
+# Troisième fois le 28 septembre qu'un réglage désigne un fichier qui n'existe
+# pas — après `logo.png` de l'installateur et les dessins de boutons d'openbox.
+# La forme est toujours la même : le programme ne dit rien, il prend son repli
+# et continue.
+for marque in /usr/share/icons/hicolor/256x256/apps/grenos.png \
+              /usr/share/grenos/logo.png; do
+    if [ -f "$marque" ]; then
+        cp "$marque" "$IMAGES/watermark.png" 2>/dev/null || true
+        break
+    fi
+done
 sed -i 's/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.22/' \
     "$THEME" 2>/dev/null || true
 

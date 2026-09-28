@@ -496,6 +496,32 @@ else
   echo "reglages: ils ne se sont pas annonces (test non bloquant, a affiner)"
 fi
 
+echo "--- l accueil est-il vraiment lent, ou seulement premier ---"
+# LA QUESTION QU'ON S'EST POSEE SANS Y REPONDRE.
+#
+# « Bienvenue dans grenOS » met 2600 ms a s'ouvrir, trois fois plus que les
+# cinq autres fenetres. Mais il s'ouvre PENDANT que la session demarre — au
+# milieu de la barre, du bureau, de PipeWire et du veilleur. Le carnet le dit
+# depuis le 27 septembre : « ne pas conclure avant de l'avoir ouvert une
+# seconde fois, a froid ». Personne ne l'avait fait, et on a donc porte
+# pendant deux jours un chiffre dont on ne savait pas ce qu'il mesurait.
+#
+# On l'ouvre donc une seconde fois, ici, machine au repos. L'ecart entre les
+# deux dit exactement ce qui appartient a l'accueil et ce qui appartient au
+# demarrage — et c'est ce qui decide s'il y a quelque chose a corriger.
+#
+# « bien » ne designe que lui dans le menu, et ses quatre lettres sont a la
+# meme place en AZERTY qu'en QWERTY.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+sleep 4
+for touche in b i e n ret; do
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+  sleep 1
+done
+sleep 14
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey alt-f4" || true
+sleep 2
+
 echo "--- l installateur s ouvre-t-il vraiment ---"
 # Des trois choses qui bloquent « l'installation sur disque, menee a son
 # terme », celle-ci est a notre portee : le LANCEMENT.
@@ -542,6 +568,51 @@ if ! cp "$RUNNER_TEMP/ecran-5min.ppm" "$RUNNER_TEMP/final.ppm" 2>/dev/null; then
   python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/final.ppm" || true
 fi
 python3 scripts/ci-screen.py judge "$RUNNER_TEMP/final.ppm" "$RUNNER_TEMP/final.png" | tee "$RUNNER_TEMP/ecran.log"
+
+echo "--- que voit-on en eteignant la machine ---"
+# PERSONNE N'A JAMAIS REGARDE CET ECRAN.
+#
+# « a l'extinction : pas de logs, pas d'Entree » est une demande du
+# 23 septembre, et elle n'a jamais ete verifiee autrement qu'en relisant la
+# configuration — c'est-a-dire pas verifiee du tout. Le 28 septembre, la
+# premiere photo jamais prise de l'ecran de mise a jour a montre que la page
+# qu'on croyait afficher etait peinte DERRIERE la splash de Plymouth. Le meme
+# angle mort, au meme endroit, et la meme facon de le fermer : photographier.
+#
+# On eteint par le vrai bouton d'alimentation (ACPI), pas par un `kill` : c'est
+# le chemin que Grenofar emprunte, et lui seul declenche la sequence d'arret de
+# systemd, donc les messages qu'on cherche.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "system_powerdown" || true
+EXTINCTION=0
+for instant in 1 2 3 4 5 6; do
+  sleep 3
+  if python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" \
+       "$RUNNER_TEMP/ecran-extinction-$instant.ppm" 2>/dev/null; then
+    EXTINCTION=$instant
+  else
+    break   # la machine est partie : il n'y a plus d'ecran a prendre
+  fi
+done
+echo "extinction : $EXTINCTION capture(s) prises pendant l'arret"
+for instant in 1 2 3 4 5 6; do
+  [ -f "$RUNNER_TEMP/ecran-extinction-$instant.ppm" ] || continue
+  # Un ecran de texte est noir a plus de 90 % ; notre fond d'ecran, jamais.
+  # `judge` sort deja cette part, et c'est la seule mesure qui distingue
+  # « une console pleine de lignes » de « la splash de grenOS ».
+  PART_X=$(python3 scripts/ci-screen.py judge "$RUNNER_TEMP/ecran-extinction-$instant.ppm" \
+             "$RUNNER_TEMP/extinction-$instant.png" 2>/dev/null \
+           | sed -n 's/.*covers \([0-9]*\)%.*/\1/p' | head -1)
+  echo "extinction $instant : couleur dominante ${PART_X:-?} %"
+done
+# Et ce que le port serie a dit pendant l'arret : c'est la ou les messages de
+# systemd apparaitraient s'ils apparaissaient.
+LIGNES_ARRET=$(grep -ac 'Stopping\|Stopped\|Unmounting\|Deactivating\|Reached target' \
+                 "$RUNNER_TEMP/serial.log" 2>/dev/null)
+case "$LIGNES_ARRET" in ''|*[!0-9]*) LIGNES_ARRET=0 ;; esac
+echo "extinction : $LIGNES_ARRET ligne(s) de service sur le port serie"
+# Rapporte, pas bloquant : on ne rend une preuve obligatoire qu'apres l'avoir
+# vue verte, et celle-ci n'a jamais tourne.
+
 kill $QEMU 2>/dev/null || true
 tail -n 40 "$RUNNER_TEMP/serial.log" || true
 # La preuve qui ne trompe pas : le bureau ecrit une ligne sur le port
@@ -671,6 +742,32 @@ if grep -aq 'grenos: ouverture :' "$RUNNER_TEMP/serial.log"; then
     | sed 's/^.*grenos: //' \
     | awk '{ n = 0; for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) n = $i; print n "\t" $0 }' \
     | sort -rn | cut -f2- | head -12
+  # Et la comparaison qui repond a la question : l'accueil est-il lent, ou
+  # seulement premier ? On l'ouvre deux fois, la seconde machine au repos.
+  # Sans cette ligne, les deux mesures resteraient cote a cote dans le journal
+  # sans que personne ne les soustraie — c'est exactement ce qui est arrive
+  # aux mesures de la nuit du 26 au 27.
+  python3 - "$RUNNER_TEMP/serial.log" <<'DEUXFOIS'
+import re, sys
+temps = []
+for ligne in open(sys.argv[1], "rb").read().decode("utf-8", "replace").splitlines():
+    if "ouverture : Bienvenue" not in ligne:
+        continue
+    trouve = re.search(r"en (\d+) ms", ligne)
+    if trouve:
+        temps.append(int(trouve.group(1)))
+if len(temps) < 2:
+    print("accueil : ouvert %d fois — il en faut deux pour conclure" % len(temps))
+else:
+    premier, second = temps[0], temps[-1]
+    ecart = premier - second
+    print("accueil : %d ms au demarrage, %d ms a froid — %d ms venaient de la "
+          "contention du demarrage" % (premier, second, ecart))
+    if second > 1200:
+        print("accueil : meme au repos il depasse la seconde, le retard est a lui")
+    else:
+        print("accueil : au repos il rejoint les autres, son retard etait le demarrage")
+DEUXFOIS
 else
   echo "ouverture : aucune fenetre ne s'est chronometree"
 fi
