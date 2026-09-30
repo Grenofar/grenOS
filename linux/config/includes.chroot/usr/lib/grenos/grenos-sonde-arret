@@ -48,6 +48,43 @@ case "$etat" in
     *)  dire "extinction (pendant) : ShowStatus=$etat — quelque chose l a rallume" ;;
 esac
 
+# ---- Et Plymouth, à l'autre bout de l'arrêt ---------------------------------
+#
+# LA MÊME QUESTION, POSÉE DEUX FOIS, ET C'EST L'ÉCART QUI RÉPOND
+#
+# `grenos-taire-larret` pose déjà cette question **au début** de l'arrêt, et
+# elle a répondu :
+#
+#     extinction : plymouthd ne repond pas, il n y a aucune splash a montrer
+#
+# C'est-à-dire : pendant la fenêtre exacte où le journal d'arrêt s'imprime,
+# **aucun démon Plymouth n'existe**. Rien ne peut donc couvrir ce texte, et
+# c'est vrai quel que soit le soin apporté au thème.
+#
+# Mais cela ne dit pas si `plymouth-poweroff.service` finit par en démarrer un
+# plus tard. Cette sonde-ci s'exécute à l'autre extrémité
+# (`Before=systemd-poweroff.service`), donc **après** lui. L'écart entre les
+# deux réponses tranche entre deux causes très différentes :
+#
+#   - muet au début, muet à la fin → `plymouth-poweroff` n'a jamais réussi à
+#     démarrer son démon, et c'est lui qu'il faut réparer ;
+#   - muet au début, vivant à la fin → il démarre, mais **trop tard** : tout
+#     est déjà écrit quand il arrive. Il faudrait alors lever la splash plus
+#     tôt, pas la réparer.
+#
+# Poser la question à un seul bout aurait donné une réponse parfaite à une
+# question qu'on ne posait pas — quatrième fois cette semaine, et c'est
+# précisément pour cela qu'elle est posée deux fois.
+if command -v plymouth >/dev/null 2>&1; then
+    if plymouth --ping >/dev/null 2>&1; then
+        dire "extinction (pendant) : plymouthd repond a la fin de l arret"
+    else
+        dire "extinction (pendant) : plymouthd toujours muet a la fin de l arret"
+    fi
+else
+    dire "extinction (pendant) : plymouth n est pas installe"
+fi
+
 # Rendre 0 quoi qu'il arrive : une sonde ne doit jamais retarder un arrêt, ni
 # le faire échouer. Une machine qui ne s'éteint pas serait une panne bien pire
 # que la question qu'on essaie de trancher.
