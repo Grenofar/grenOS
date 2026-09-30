@@ -288,6 +288,52 @@ else
     dire "persistance : /persistence.conf ne se voit PAS — la couche n'est pas la racine de la partition"
 fi
 
+# ---- Qui ecrit le journal d'arret sur tty1 ? --------------------------------
+#
+# « Enleve les logs quand on eteint le PC » est demande depuis le 23 septembre.
+# Deux tiers sont faits : les messages du DEMARRAGE restes sur tty1 sont
+# effaces, et la sonde de disquette a disparu. Le tiers restant est le vrai
+# journal d'arret de systemd — les lignes « Stopped ... » — et il resiste a
+# `systemd.show_status=false` sur la ligne de commande comme a `ShowStatus=no`
+# dans la configuration : mesure le 30 septembre, 10481 pixels d'encre avant,
+# 10745 apres. Aucun effet.
+#
+# ET LA PISTE QUE J'AVAIS NOMMEE ETAIT FAUSSE. J'avais ecrit que la reponse
+# etait de faire apparaitre la splash Plymouth d'arret. Lu dans le paquet
+# (plymouth 24.004.60-5, unite plymouth-poweroff.service) :
+#
+#     Before=systemd-poweroff.service
+#
+# C'est-a-dire a l'instant FINAL, une fois que toute la transaction d'arret a
+# deja imprime ses lignes. Meme affichee, elle n'aurait jamais couvert ce
+# journal — et la photo le confirme : les deux premieres captures sont noires,
+# le texte n'arrive qu'a la troisieme. J'aurais repare cela et annonce que
+# c'etait fait.
+#
+# Donc on mesure, au lieu de deviner une neuvieme fois, et on mesure la seule
+# chose qui decide : ce que PID 1 croit. S'il dit que l'affichage est eteint et
+# que le texte sort quand meme, ce n'est pas lui qui ecrit, et tout reglage de
+# son affichage est perdu d'avance. S'il dit qu'il est allume, notre reglage ne
+# le rejoint pas, et c'est une reparation toute differente. Les deux reponses
+# sont utiles ; l'absence de reponse l'est aussi, et elle est dite telle quelle
+# plutot que rendue en vert.
+verdict=$(systemctl show --property=ShowStatus 2>/dev/null | sed 's/^ShowStatus=//')
+case "$verdict" in
+    "") dire "extinction : PID 1 n'expose pas ShowStatus — la question reste ouverte" ;;
+    *)  dire "extinction : PID 1 dit ShowStatus=$verdict" ;;
+esac
+
+# Et notre option atteint-elle seulement le noyau ? La poser dans un fichier ne
+# prouve pas qu'elle arrive : c'est exactement la faute de la regle polkit, qui
+# nommait une action inexistante, et des sept cles libfm posees dans la
+# mauvaise section.
+case "$(cat /proc/cmdline 2>/dev/null)" in
+    *systemd.show_status=false*)
+        dire "extinction : la ligne de commande porte bien systemd.show_status=false" ;;
+    *)
+        dire "extinction : systemd.show_status=false n'est PAS sur la ligne de commande" ;;
+esac
+
 # ---- Et ce qu'elle a ecrit HIER est-il revenu ? -----------------------------
 #
 # « Active » n'est pas « ca marche ». On prouvait que live-boot avait trouve sa
