@@ -1,0 +1,81 @@
+#!/bin/sh
+# Taire le journal d'arrêt, au seul moment où c'est possible.
+#
+# CE QUE LA SONDE A TROUVÉ, ET QUI CLÔT UNE SEMAINE DE TENTATIVES
+#
+# « Enlève les logs quand on éteint le PC » est demandé depuis le 23 septembre.
+# La ligne de commande porte `systemd.show_status=false` depuis ce jour-là, et
+# `/etc/systemd/system.conf.d` porte `ShowStatus=no`. Mesuré le 30 septembre :
+# aucun effet, 10481 pixels d'encre avant, 10745 après.
+#
+# Les deux sondes ont répondu, et ensemble elles désignent la cause :
+#
+#     extinction : PID 1 dit ShowStatus=no                  (au démarrage)
+#     extinction (pendant) : ShowStatus=yes                 (pendant l'arrêt)
+#
+# Notre réglage est donc **correct et appliqué** — et systemd le **rallume**
+# lui-même quand la transaction d'arrêt commence. Une semaine de corrections
+# portait sur une valeur qui était juste, et qui est écrasée à la seconde où
+# elle compte. *Une mesure prise au mauvais moment n'est pas fausse : elle
+# répond parfaitement à une question qu'on n'a pas posée.*
+#
+# COMMENT ON LE RÉÉTEINT, LU DANS LE PAQUET ET NON DE MÉMOIRE
+#
+# `systemd(1)` de systemd 257.13 :
+#
+#     SIGRTMIN+21 — Disables display of status messages on the console […]
+#     You may want to use SetShowStatus() instead of SIGRTMIN+21 in order to
+#     prevent race conditions.
+#
+# et `org.freedesktop.systemd1(5)` :
+#
+#     SetShowStatus(in s mode);
+#     […] configures the display of status messages during bootup AND SHUTDOWN.
+#     The mode parameter can be set to any value that's valid for the
+#     systemd.show_status kernel parameter.
+#
+# On prend donc la méthode, pas le signal — c'est systemd qui le recommande, et
+# la raison qu'il donne (conditions de course) est exactement notre situation :
+# on écrit pendant que lui-même écrit. `busctl` est livré par le paquet systemd
+# (`/usr/bin/busctl`, vérifié dans le .deb) : aucune dépendance nouvelle.
+#
+# QUAND — et c'est tout le sujet
+#
+# systemd rallume l'affichage quand il MET EN FILE la transaction d'arrêt, donc
+# avant qu'aucune unité ne bouge. Ce script est appelé en `ExecStop=` d'une
+# unité liée à `graphical.target` : à l'arrêt, elle est arrêtée AVANT lui, donc
+# dans la toute première vague — le plus tôt qu'on puisse atteindre sans
+# écrire soi-même dans la transaction.
+#
+# CE QU'IL NE FAUT PAS CROIRE
+#
+# Rien ici ne garantit que pas une ligne ne passera : entre le moment où
+# systemd rallume et celui où nous éteignons, quelques unités peuvent avoir
+# parlé. C'est mesurable, et c'est mesuré — la CI compte les pixels d'encre sur
+# les trois photos d'arrêt, et la sonde relit `ShowStatus` à la toute fin. Le
+# verdict viendra de ces deux chiffres, pas de ce commentaire.
+dire () {
+    echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
+}
+
+if ! command -v busctl >/dev/null 2>&1; then
+    dire "extinction : busctl absent, le journal d arret restera visible"
+    exit 0
+fi
+
+if busctl call org.freedesktop.systemd1 /org/freedesktop/systemd1 \
+         org.freedesktop.systemd1.Manager SetShowStatus s "no" >/dev/null 2>&1; then
+    dire "extinction : affichage des messages d etat eteint pour l arret"
+else
+    # Le repli est le signal que la page de manuel décrit, moins propre mais
+    # sans dépendance : mieux vaut une condition de course qu'aucune tentative.
+    if kill -s RTMIN+21 1 2>/dev/null; then
+        dire "extinction : SetShowStatus refuse, repli par SIGRTMIN+21"
+    else
+        dire "extinction : ni SetShowStatus ni SIGRTMIN+21 n ont abouti"
+    fi
+fi
+
+# Toujours 0 : une machine qui ne s'éteint pas serait une panne infiniment pire
+# que quelques lignes de journal à l'écran.
+exit 0

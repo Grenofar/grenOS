@@ -176,6 +176,9 @@ install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-demarrage" "$BUILD/usr/lib/gr
 # affichage. Elle ne corrige rien : elle tranche entre deux causes, et
 # une machine deja posee doit pouvoir repondre sans reinstaller.
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-sonde-arret" "$BUILD/usr/lib/grenos/"
+# Celui qui reteint l affichage des messages d etat des le debut de l arret :
+# systemd le rallume lui-meme, et c est la seule facon de le contredire.
+install -m 0755 "$DEDANS/usr/lib/grenos/grenos-taire-larret" "$BUILD/usr/lib/grenos/"
 # Le depot d'un travail a appliquer au prochain demarrage. Il voyage avec le
 # paquet, donc une machine deja installee le recoit par mise a jour — ce qui
 # est la moindre des choses pour un outil dont tout l'objet est d'appliquer des

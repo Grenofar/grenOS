@@ -182,7 +182,20 @@ def commandes_de(chemin):
 
             if not nue or nue.startswith("#"):
                 continue
-            depart = re.match(r"(?:command -v |exec )?([a-z][a-z0-9._+-]{2,})\s", nue)
+            # Le shell voit une COMMANDE la ou ce controle ne voyait que le
+            # premier mot d une ligne. Or `if busctl call ...`, `while pgrep`,
+            # `until timeout ...` et `if ! command -v xcape` commencent tous
+            # par un mot-cle : dix-sept commandes reelles etaient invisibles,
+            # dont `xcape` (la touche Windows), `pkcheck`, `pw-cli`, `paplay`
+            # et `flatpak`. Le garde disait « chaque commande appelee existe »
+            # sans les avoir regardees — cinquieme fois que ce controle lit
+            # mal, et la premiere ou il se taisait au lieu de crier.
+            #
+            # On retire donc les mots-cles en tete, autant de fois qu il y en
+            # a (`if ! command -v x`), avant de lire le premier mot.
+            depart = re.match(
+                r"(?:(?:if|elif|while|until|then|else|do|!)\s+)*"
+                r"(?:command -v |exec )?([a-z][a-z0-9._+-]{2,})\s", nue)
             if depart:
                 noter(depart.group(1))
     return trouvees
