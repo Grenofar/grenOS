@@ -120,9 +120,21 @@ done
 for service in grenos-premier.service grenos-preuve.service \
                grenos-maj-verif.service grenos-maj-verif.timer \
                grenos-maj-auto.service grenos-maj-auto.timer \
-               grenos-maj-demarrage.service; do
+               grenos-maj-demarrage.service \
+               grenos-console-propre.service; do
     install -m 0644 "$DEDANS/etc/systemd/system/$service" "$BUILD/etc/systemd/system/"
 done
+
+# Le silence de systemd et l'absence de lecteur de disquette. Tous deux
+# corrigent ce qu'on voit EN ETEIGNANT, et une machine deja posee doit les
+# recevoir par mise a jour — c'est tout l'objet du chantier « plus jamais
+# d'ISO ». Ces deux chemins-la ne sont a personne d'autre, donc on les livre
+# directement au lieu de passer par les modeles.
+install -d "$BUILD/etc/systemd/system.conf.d" "$BUILD/etc/modprobe.d"
+install -m 0644 "$DEDANS/etc/systemd/system.conf.d/20-grenos-silence.conf" \
+    "$BUILD/etc/systemd/system.conf.d/"
+install -m 0644 "$DEDANS/etc/modprobe.d/grenos-pas-de-disquette.conf" \
+    "$BUILD/etc/modprobe.d/"
 
 # Les entrées de menu, et le raccourci d'installation.
 install -m 0644 "$DEDANS"/usr/share/applications/*.desktop \

@@ -488,6 +488,32 @@ if [ -n "$manque" ]; then
 fi
 echo "grenos: l installateur saura rendre le disque amorcable, en BIOS et en UEFI"
 
+echo "--- grenOS : que verra-t-on en eteignant ---"
+# « a l extinction : pas de logs » est une demande du 23 septembre, « verifiee »
+# pendant une semaine en relisant la ligne de commande du noyau — donc pas
+# verifiee. Le 29, la CI a photographie l'arret pour la premiere fois, et les
+# quatre lignes etaient la.
+#
+# Elles ne sont pas ecrites PENDANT l'arret : ce sont des messages du DEMARRAGE
+# restes sur tty1, que l'on redecouvre a la seconde ou X s'en va. Trois pieces
+# les font disparaitre, et un fichier absent ne fait aucun bruit — d'ou ce
+# garde.
+manque=""
+[ -f /etc/systemd/system/grenos-console-propre.service ] || manque="$manque console-propre"
+[ -f /etc/systemd/system.conf.d/20-grenos-silence.conf ] || manque="$manque silence-systemd"
+[ -f /etc/modprobe.d/grenos-pas-de-disquette.conf ] || manque="$manque pas-de-disquette"
+if [ -n "$manque" ]; then
+    echo "grenos: l ecran d extinction n est pas nettoye :$manque" >&2
+    echo "grenos: les messages du demarrage reapparaitront quand X s en ira" >&2
+    exit 1
+fi
+if ! grep -q 'grenos-console-propre' /usr/lib/grenos/appliquer-systeme; then
+    echo "grenos: appliquer-systeme n active pas grenos-console-propre" >&2
+    echo "grenos: le service serait livre et ne tournerait jamais" >&2
+    exit 1
+fi
+echo "grenos: extinction : tty1 efface, systemd muet, pas de sonde de disquette"
+
 echo "--- grenOS : le volet de l explorateur demande-t-il une icone SOMBRE ---"
 # Papirus-Dark n'a que trois dossiers `devices` : le 16x16 est reel, les 22x22
 # et 24x24 sont des LIENS vers le theme clair. En demandant 20, GTK prenait le

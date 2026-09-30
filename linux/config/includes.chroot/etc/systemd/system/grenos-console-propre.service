@@ -1,0 +1,44 @@
+# Effacer tty1 une fois le bureau ouvert.
+#
+# LA CAUSE, VUE SUR LA PREMIÈRE PHOTO D'EXTINCTION JAMAIS PRISE
+#
+# Les quatre lignes que Grenofar voit en éteignant ne sont PAS écrites pendant
+# l'arrêt. Ce sont des messages du DÉMARRAGE, restés sur tty1 :
+#
+#     RETBleed: WARNING: Spectre v2 mitigation leaves CPU vulnerable…
+#     XFEATURE_XTILE_DATA: calculated size is 0 bytes, cpu state 8192 bytes
+#     I/O error, dev fd0, sector 0 op 0x0:(READ)…
+#     [  OK  ] Started plymouth-poweroff.service…
+#
+# Les trois captures prises pendant l'arrêt sont IDENTIQUES, et la première est
+# prise à l'instant même où l'on appuie : l'écran était donc déjà comme cela
+# avant que l'arrêt ne commence. Pendant toute la session, X couvre tty1 ; à la
+# seconde où X s'en va, le contenu de tty1 réapparaît tel qu'il était resté.
+#
+# Autrement dit : ce n'est pas l'extinction qui écrit, c'est le démarrage qui
+# n'a jamais été effacé. On efface donc une fois, quand le bureau est ouvert et
+# que plus personne ne regarde tty1 — et il n'y a plus rien à redécouvrir.
+#
+# `clear` seul ne suffirait pas : il vide l'écran mais laisse l'historique de
+# défilement, que la console peut réafficher. Il faut les trois séquences —
+# `3J` efface l'historique, `2J` l'écran, `H` remet le curseur en haut.
+#
+# Écrit en ANSI plutôt qu'avec `setterm` : je n'ai pas pu établir à coup sûr
+# quel paquet livre `setterm` sur trixie, et une séquence d'échappement ne
+# dépend d'aucun paquet. Parier sur un binaire pour effacer un écran serait
+# exactement le genre de repli silencieux que cette soirée a passé à fermer.
+[Unit]
+Description=grenOS : effacer la console texte une fois le bureau ouvert
+After=graphical.target
+ConditionPathExists=/dev/tty1
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# `|| true` partout : effacer une console est un confort, jamais une raison
+# d'empêcher une machine de finir son démarrage.
+ExecStart=/bin/sh -c 'printf "\\033[3J\\033[2J\\033[H" > /dev/tty1 2>/dev/null || true'
+StandardOutput=null
+
+[Install]
+WantedBy=graphical.target

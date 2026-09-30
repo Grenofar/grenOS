@@ -23,7 +23,8 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 
 # Le premier écran ne se rallume pas sur une machine déjà nommée : sa condition
 # (l'absence de /etc/grenos/identite) s'en charge, mais autant être clair.
-for service in grenos-premier.service grenos-preuve.service grenos-maj-verif.timer; do
+for service in grenos-premier.service grenos-preuve.service grenos-maj-verif.timer \
+               grenos-console-propre.service; do
     systemctl enable "$service" >/dev/null 2>&1 || true
 done
 
