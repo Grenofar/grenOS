@@ -363,6 +363,38 @@ class Jeux(Gtk.Window):
                     grenosui.lancer(f"xdg-open {a}"), "discret"),
                     False, False, 0)
             bloc.pack_start(ligne, False, False, 0)
+        elif jeu["action"] == "flatpak":
+            # La seule voie Roblox sous Linux est un Flatpak, donc le même
+            # chemin que GrenPlace : un bouton, et tout se met à jour ensemble.
+            if not getattr(self, "vulkan_marche", True):
+                avis = Gtk.Label(
+                    label="Cette machine n'a pas Vulkan : Sober retombera de "
+                          "lui-même sur OpenGL, et Roblox sera plus lent.",
+                    xalign=0)
+                avis.get_style_context().add_class("sous")
+                avis.set_line_wrap(True)
+                bloc.pack_start(avis, False, False, 0)
+
+            ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            if jeux.roblox_pose():
+                ligne.pack_start(grenosui.bouton(
+                    "Jouer", lambda i=jeu["identifiant"]:
+                    grenosui.lancer(f"flatpak run {i}"), "principal"),
+                    False, False, 0)
+                prete = Gtk.Label(label="Sober est installé.", xalign=0)
+                prete.get_style_context().add_class("sous")
+                ligne.pack_start(prete, True, True, 0)
+            else:
+                ligne.pack_start(grenosui.bouton(
+                    "Installer et jouer",
+                    lambda j=jeu: self.installer(j["nom"], "flatpak",
+                                                 j["identifiant"]),
+                    "principal"), False, False, 0)
+                ligne.pack_start(grenosui.bouton(
+                    "Ouvrir le site", lambda a=jeu["adresse"]:
+                    grenosui.lancer(f"xdg-open {a}"), "discret"),
+                    False, False, 0)
+            bloc.pack_start(ligne, False, False, 0)
         else:
             if jeux.fortnite_pose():
                 bloc.pack_start(grenosui.bouton(

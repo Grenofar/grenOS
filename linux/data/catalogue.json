@@ -47,6 +47,17 @@
       "site": "https://prismlauncher.org"
     },
     {
+      "slug": "roblox",
+      "nom": "Roblox",
+      "rayon": "Jeux",
+      "editeur": "VinegarHQ (Sober)",
+      "description": "Des millions de mondes créés par les joueurs. Sous Linux, Roblox passe par Sober, fait par la communauté : il demande une carte capable de Vulkan, et il n'est pas édité par Roblox.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.vinegarhq.Sober.png",
+      "source": "flatpak",
+      "identifiant": "org.vinegarhq.Sober",
+      "site": "https://sober.vinegarhq.org"
+    },
+    {
       "slug": "libreoffice",
       "nom": "LibreOffice",
       "rayon": "Bureautique",

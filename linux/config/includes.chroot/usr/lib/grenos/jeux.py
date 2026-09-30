@@ -53,6 +53,24 @@ OUTILS = [
     },
 ]
 
+# Roblox n'a jamais publié de client Linux. Ce qui marche est **Sober**, du
+# collectif VinegarHQ, et tout ce qui suit vient de leurs propres pages, pas de
+# mémoire (lu le 30 septembre 2026) :
+#
+#   - il est sur Flathub, `org.vinegarhq.Sober`, x86_64 seulement ;
+#   - « No emulators. No virtual machines. » — c'est Roblox porté, pas émulé ;
+#   - « Not affiliated with Roblox », et le code est fermé « to reduce the
+#     potential for abuse (which would lead to Roblox blocking us again) » ;
+#   - il demande SSE4.1/4.2 et une carte Vulkan ; sans Vulkan il retombe de
+#     lui-même sur OpenGL (option `use_opengl`) ;
+#   - Flatpak est sa **seule** distribution : « Is Sober ever going to be
+#     distributed outside of Flatpak? Unfortunately no. »
+#
+# Les deux limites sont dites sur la carte, parce que c'est exactement ce qu'on
+# voudrait savoir avant de cliquer — et la seconde est mesurable ici : la page
+# sait déjà si cette machine a Vulkan.
+ROBLOX = "org.vinegarhq.Sober"
+
 # Les jeux que Grenofar a nommés, avec ce qui est vrai de chacun au
 # 24 septembre 2026. Vérifié à la source, pas de mémoire.
 JEUX = [
@@ -79,6 +97,19 @@ JEUX = [
                 "gratuit, dans le navigateur, avec un compte Microsoft.",
         "action": "nuage",
         "adresse": "https://www.xbox.com/play/games/fortnite/BT5P2X999VH2",
+    },
+    {
+        "cle": "roblox",
+        "nom": "Roblox",
+        "etat": "marche",
+        "note": "Roblox n'a jamais fait de version Linux. Ce qui marche est Sober, "
+                "du collectif VinegarHQ : ce n'est pas un émulateur ni une machine "
+                "virtuelle, c'est Roblox porté sur Linux, et il se met à jour tout "
+                "seul comme le reste. Deux choses à savoir avant de cliquer : il "
+                "n'est pas édité par Roblox, et il veut une carte capable de Vulkan.",
+        "action": "flatpak",
+        "identifiant": ROBLOX,
+        "adresse": "https://sober.vinegarhq.org",
     },
 ]
 
@@ -226,10 +257,10 @@ HEROIC = "com.heroicgameslauncher.hgl"
 EPIC_ROCKET = "https://store.epicgames.com/p/rocket-league"
 
 
-def heroic_pose():
-    """Heroic est-il là ? C'est lui qui ouvre la bibliothèque Epic sous Linux.
+def flatpak_pose(identifiant):
+    """Ce Flatpak est-il là ?
 
-    Sans lancer `flatpak info` : cette question est posée **pendant** que la
+    Sans lancer `flatpak info` : la question est posée **pendant** que la
     fenêtre se construit, donc avant qu'elle s'affiche. `vulkaninfo` avait déjà
     laissé cette page-ci vide pendant vingt-cinq secondes, et la règle qu'on en
     a tirée vaut pour toute détection : on lit, on ne lance pas.
@@ -239,9 +270,19 @@ def heroic_pose():
     """
     for racine in ("/var/lib/flatpak/app",
                    os.path.expanduser("~/.local/share/flatpak/app")):
-        if os.path.isdir(os.path.join(racine, HEROIC)):
+        if os.path.isdir(os.path.join(racine, identifiant)):
             return True
     return False
+
+
+def heroic_pose():
+    """Heroic est-il là ? C'est lui qui ouvre la bibliothèque Epic sous Linux."""
+    return flatpak_pose(HEROIC)
+
+
+def roblox_pose():
+    """Sober est-il là ? C'est lui qui fait tourner Roblox sous Linux."""
+    return flatpak_pose(ROBLOX)
 
 STEAM_RACINES = [
     "~/.var/app/com.valvesoftware.Steam/.steam/steam",   # le Flatpak, le nôtre
