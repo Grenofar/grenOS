@@ -76,6 +76,49 @@ else
     fi
 fi
 
+# ---- Et la splash d'arrêt de Plymouth, qui devrait couvrir tout cela --------
+#
+# DEUX ERREURS DE MA PART, À DIRE AVANT LE RESTE
+#
+# 1. J'avais écrit que `Before=systemd-poweroff.service` plaçait la splash « à
+#    l'instant final, après que tout le journal a défilé ». **C'est faux.**
+#    `Before=` est une borne AU PLUS TARD, pas une date. Avec
+#    `DefaultDependencies=no`, `plymouth-poweroff.service` n'a pour seules
+#    contraintes que `After=getty@tty1 display-manager plymouth-start` — elle
+#    peut donc démarrer TÔT, dès que le gestionnaire de connexion est arrêté.
+#    J'ai lu une borne comme un instant, et j'en ai tiré une conclusion que
+#    j'ai écrite dans le carnet et dans un message de commit.
+#
+# 2. La conclusion « la splash ne couvre rien » reste vraie — mais elle est
+#    vraie parce qu'on l'a VUE sur trois photos, pas à cause de ce raisonnement.
+#    *Un fait juste appuyé sur un raisonnement faux reste un fait, et le
+#    raisonnement reste à jeter.*
+#
+# CE QU'ON MESURE ICI, ET POURQUOI
+#
+# `plymouth-poweroff.service` lance `plymouthd --mode=shutdown` sans `-`, donc
+# son échec ferait rougir l'unité ; mais `ExecStartPost=-/usr/bin/plymouth
+# show-splash` est bien préfixé d'un `-`, **donc son échec est avalé**. C'est
+# exactement la forme qui nous a déjà coûté une semaine ailleurs : la ligne
+# `[ OK ] Started plymouth-poweroff.service` ne prouve rien sur la splash.
+#
+# On le demande donc à la machine, au lieu d'en débattre : plymouthd répond-il,
+# et que rend `show-splash` quand on l'appelle pour de vrai ? Trois réponses
+# possibles, trois causes différentes, et aucune ne se devine depuis le code.
+if command -v plymouth >/dev/null 2>&1; then
+    if plymouth --ping >/dev/null 2>&1; then
+        if plymouth show-splash >/dev/null 2>&1; then
+            dire "extinction : plymouth repond et show-splash a ete accepte"
+        else
+            dire "extinction : plymouth repond mais show-splash a ete REFUSE"
+        fi
+    else
+        dire "extinction : plymouthd ne repond pas, il n y a aucune splash a montrer"
+    fi
+else
+    dire "extinction : plymouth n est pas installe"
+fi
+
 # Toujours 0 : une machine qui ne s'éteint pas serait une panne infiniment pire
 # que quelques lignes de journal à l'écran.
 exit 0
