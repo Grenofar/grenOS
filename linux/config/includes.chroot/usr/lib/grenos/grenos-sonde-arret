@@ -1,0 +1,54 @@
+#!/bin/sh
+# Ce que PID 1 croit AU MOMENT de l'arrêt — pas au démarrage.
+#
+# POURQUOI UNE SECONDE SONDE, ALORS QUE LA PREMIÈRE A RÉPONDU
+#
+# « Enlève les logs quand on éteint le PC » est demandé depuis le 23 septembre.
+# Deux tiers sont faits ; le tiers restant est le vrai journal d'arrêt de
+# systemd, ces lignes « [ OK ] Stopped … » qui défilent à la fin.
+#
+# La sonde du démarrage (`grenos-preuve`) a répondu, et sa réponse a éliminé
+# proprement une hypothèse :
+#
+#     extinction : PID 1 dit ShowStatus=no
+#     extinction : la ligne de commande porte bien systemd.show_status=false
+#
+# Donc notre réglage **atteint** PID 1. Ce n'est pas une option posée dans un
+# fichier que personne ne lit — la faute de la règle polkit et des sept clés
+# libfm. Cette piste-là est fermée.
+#
+# Mais elle mesure au DÉMARRAGE, et le texte sort à l'ARRÊT. Une mesure prise
+# au mauvais moment n'est pas fausse : elle répond parfaitement à une question
+# qu'on n'a pas posée. C'est la quatrième fois cette semaine, et c'est
+# exactement pourquoi cette sonde-ci existe.
+#
+# Deux réponses possibles, et les deux ferment quelque chose :
+#
+#   - `no` à l'arrêt aussi → alors **ce n'est pas PID 1 qui écrit**, et tout
+#     réglage de son affichage était perdu d'avance. Il faudra chercher
+#     ailleurs (systemd-shutdown, ou le noyau) ;
+#   - autre chose que `no` → quelque chose le **rallume** pendant la
+#     transaction d'arrêt, et c'est cela qu'il faut empêcher.
+#
+# On n'essaie rien, on ne corrige rien : on mesure, une fois, et la prochaine
+# décision sera prise sur un fait. C'est la leçon des sept tentatives de la
+# nuit du 26 au 27, où j'ai corrigé un chiffre faux pendant sept tours.
+#
+# Ordonnée comme la splash d'arrêt de Plymouth (`Before=systemd-poweroff`), ce
+# qui est le plus tard possible tout en ayant encore un système. Elle écrit sur
+# le port série, parce qu'à ce moment-là le journal ne sera plus relu.
+dire () {
+    echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
+}
+
+etat=$(systemctl show --property=ShowStatus 2>/dev/null | sed 's/^ShowStatus=//')
+case "$etat" in
+    "") dire "extinction (pendant) : PID 1 ne repond plus sur ShowStatus" ;;
+    no) dire "extinction (pendant) : ShowStatus=no — ce n est PAS PID 1 qui ecrit" ;;
+    *)  dire "extinction (pendant) : ShowStatus=$etat — quelque chose l a rallume" ;;
+esac
+
+# Rendre 0 quoi qu'il arrive : une sonde ne doit jamais retarder un arrêt, ni
+# le faire échouer. Une machine qui ne s'éteint pas serait une panne bien pire
+# que la question qu'on essaie de trancher.
+exit 0

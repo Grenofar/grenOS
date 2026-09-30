@@ -121,7 +121,7 @@ for service in grenos-premier.service grenos-preuve.service \
                grenos-maj-verif.service grenos-maj-verif.timer \
                grenos-maj-auto.service grenos-maj-auto.timer \
                grenos-maj-demarrage.service \
-               grenos-console-propre.service; do
+               grenos-console-propre.service grenos-sonde-arret.service; do
     install -m 0644 "$DEDANS/etc/systemd/system/$service" "$BUILD/etc/systemd/system/"
 done
 
@@ -172,6 +172,10 @@ install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-verif" "$BUILD/usr/lib/grenos
 # ligne il n'arriverait que par une ISO — or tout l'objet de ce chantier est de
 # ne plus jamais avoir a en telecharger une.
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-maj-demarrage" "$BUILD/usr/lib/grenos/"
+# La sonde qui dit, au moment de l arret, ce que PID 1 croit de son
+# affichage. Elle ne corrige rien : elle tranche entre deux causes, et
+# une machine deja posee doit pouvoir repondre sans reinstaller.
+install -m 0755 "$DEDANS/usr/lib/grenos/grenos-sonde-arret" "$BUILD/usr/lib/grenos/"
 # Le depot d'un travail a appliquer au prochain demarrage. Il voyage avec le
 # paquet, donc une machine deja installee le recoit par mise a jour — ce qui
 # est la moindre des choses pour un outil dont tout l'objet est d'appliquer des

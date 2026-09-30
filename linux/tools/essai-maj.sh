@@ -324,6 +324,102 @@ fi
 remettre_les_sources
 echo "maj : le pire des cas laisse la machine demarrable"
 
+# ---- La file de travaux du prochain demarrage -------------------------------
+#
+# Demandee le 27 septembre : « qu on puisse changer des systemes importants et
+# que ca s applique au prochain redemarrage ». Le code existe depuis ce jour-la
+# — et RIEN ne le regardait : ni la CI, ni le hook. C est la pièce dont l echec
+# laisserait une machine en BOUCLE au demarrage, donc la derniere qu il fallait
+# laisser sans preuve.
+#
+# Ses quatre regles sont testees ici, et la deuxieme est la seule qui compte
+# vraiment : un travail qui echoue doit etre ECARTE, jamais rejoue.
+FILE=/var/lib/grenos/au-prochain-demarrage
+TEMOINS=/tmp/travaux-temoins
+rm -rf "$FILE" "$TEMOINS"
+mkdir -p "$FILE" "$TEMOINS"
+
+# Trois travaux : un qui marche, un qui casse, un apres le casse. Le troisieme
+# est la pour prouver qu un echec n arrete pas la file — sans lui, on ne
+# saurait pas distinguer « ecarte » de « tout s est arrete la ».
+# Chacun COMPTE ses passages : c est ce compteur qui dira s il a ete rejoue.
+for N in 10-bon 20-casse 30-apres; do
+    {
+        echo "#!/bin/sh"
+        echo "# Travail d essai $N"
+        echo "echo x >> $TEMOINS/$N"
+        case "$N" in
+            20-casse) echo "exit 1" ;;
+            *)        echo "exit 0" ;;
+        esac
+    } > "$FILE/$N"
+    chmod 0755 "$FILE/$N"
+done
+
+rm -f /run/grenos/maj-resultat
+if "$SCRIPT"; then
+    echo "travaux : le script rend 0 avec une file en attente"
+else
+    echo "travaux : il a rendu une erreur — la machine ne redemarrerait pas" >&2
+    exit 1
+fi
+
+for N in 10-bon 30-apres; do
+    if [ ! -s "$TEMOINS/$N" ]; then
+        echo "travaux : $N n a pas tourne" >&2
+        exit 1
+    fi
+done
+echo "travaux : le travail qui suit un echec a tourne quand meme"
+
+for COUPLE in 10-bon.ok 20-casse.echec 30-apres.ok; do
+    if [ ! -f "$FILE/faits/$COUPLE" ]; then
+        echo "travaux : $COUPLE absent de faits/ — on ne pourra pas relire" >&2
+        ls -1 "$FILE/faits" 2>/dev/null >&2 || true
+        exit 1
+    fi
+done
+echo "travaux : les trois sont dans faits/, chacun avec son verdict"
+
+RESTES=$(ls -1 "$FILE" 2>/dev/null | grep -v '^faits$' || true)
+if [ -n "$RESTES" ]; then
+    echo "travaux : il reste $RESTES dans la file — ils seraient rejoues" >&2
+    exit 1
+fi
+
+# LA regle qui empeche la boucle : on relance le script, et AUCUN travail ne
+# doit repartir. Un compteur qui monte a 2 serait une machine perdue.
+rm -f /run/grenos/maj-resultat
+"$SCRIPT" || true
+for N in 10-bon 20-casse 30-apres; do
+    PASSAGES=$(wc -l < "$TEMOINS/$N" 2>/dev/null || echo 0)
+    if [ "$PASSAGES" -gt 1 ]; then
+        echo "travaux : $N a tourne $PASSAGES fois — c est la boucle qu on redoute" >&2
+        exit 1
+    fi
+done
+echo "travaux : un second demarrage ne rejoue rien, meme pas celui qui a echoue"
+
+# Et la premiere regle : chaque travail est borne dans le temps. Attendre les
+# 600 s du script ne prouverait rien de plus que l outil lui-meme, qu on
+# verifie donc directement — et dans les deux sens, parce qu un `timeout`
+# absent rendrait 127 et se lirait comme un echec ordinaire.
+if ! command -v timeout >/dev/null 2>&1; then
+    echo "travaux : timeout absent — un travail qui attend figerait le demarrage" >&2
+    exit 1
+fi
+if timeout 1 sleep 5 >/dev/null 2>&1; then
+    echo "travaux : timeout n a pas coupe — il ne bornerait rien" >&2
+    exit 1
+fi
+if ! timeout 5 true >/dev/null 2>&1; then
+    echo "travaux : timeout refuse meme ce qui finit — il casserait tout travail" >&2
+    exit 1
+fi
+echo "travaux : chaque travail est borne dans le temps, timeout coupe et laisse passer"
+
+rm -rf "$FILE" "$TEMOINS"
+
 echo "--- l'installateur a-t-il tout ce qu'il lui faut ---"
 # Calamares lit settings.conf, y trouve une suite de modules, et va chercher
 # chacun d'eux sur le disque. Si l'un manque, il s'arrete au lancement avec un

@@ -1,0 +1,25 @@
+# Mesurer, au moment de l'arrêt, ce que PID 1 croit de son affichage.
+#
+# Ordonnée exactement comme `plymouth-poweroff.service`, dont l'ordre a été lu
+# dans le paquet (plymouth 24.004.60-5) : le plus tard possible, tout en ayant
+# encore un système capable de répondre.
+#
+# `DefaultDependencies=no` est obligatoire : sans lui, systemd ajoute les
+# dépendances habituelles, qui incluent `Conflicts=shutdown.target`. L'unité
+# serait alors *arrêtée* par la transaction au lieu d'y être démarrée, et ne
+# dirait jamais rien — une sonde muette qui passerait pour une réponse.
+[Unit]
+Description=grenOS : ce que PID 1 croit au moment de l arret
+DefaultDependencies=no
+After=getty@tty1.service display-manager.service
+Before=systemd-poweroff.service systemd-reboot.service systemd-halt.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/grenos/grenos-sonde-arret
+StandardOutput=null
+TimeoutStartSec=10
+
+[Install]
+WantedBy=poweroff.target reboot.target halt.target
