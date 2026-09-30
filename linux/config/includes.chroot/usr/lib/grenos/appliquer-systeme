@@ -37,8 +37,28 @@ else
 fi
 
 # L'écran de chargement reste jusqu'à l'extinction.
-for service in plymouth-poweroff plymouth-reboot plymouth-halt plymouth-kexec; do
-    systemctl enable "${service}.service" >/dev/null 2>&1 || true
+#
+# CETTE BOUCLE APPELAIT `systemctl enable` ET N'A JAMAIS RIEN FAIT.
+#
+# Lu dans `plymouth_24.004.60-5_amd64.deb` le 30 septembre : aucune des quatre
+# unités n'a de section `[Install]`. Or `systemctl enable` n'a rien à faire
+# d'une unité qui n'en a pas — il n'y a aucun `WantedBy=` à honorer — et le
+# `|| true` avalait ce qu'il en disait. Pendant des jours on a cru activer
+# quelque chose.
+#
+# Elles sont en réalité câblées par des LIENS livrés dans le paquet :
+# `poweroff.target.wants/plymouth-poweroff.service`, et les trois autres de
+# même. C'est pour cela qu'elles démarrent quand même — la ligne
+# « [ OK ] Started plymouth-poweroff.service » de la capture d'arrêt le
+# prouvait, et c'est elle qui aurait dû nous mettre la puce à l'oreille.
+#
+# On vérifie donc ce qui les câble vraiment, au lieu d'appeler une commande qui
+# échoue en silence. Si un jour Debian retire ces liens, on le saura.
+for cible in poweroff reboot halt kexec; do
+    lien="/usr/lib/systemd/system/${cible}.target.wants/plymouth-${cible}.service"
+    if [ ! -e "$lien" ]; then
+        echo "grenos: attention : plymouth-${cible} n est pas cable par son paquet"
+    fi
 done
 
 # ---- Nos choix d'applications par défaut ------------------------------------
