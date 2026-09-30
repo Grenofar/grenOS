@@ -17,6 +17,63 @@ def _pactl(*arguments):
         return ""
 
 
+# Le profil d'une sortie, en français.
+#
+# POURQUOI NOUS, ALORS QUE LA TRADUCTION EXISTE DÉJÀ
+#
+# Le sélecteur de sortie affichait « Audio interne Analog Stereo » — la moitié
+# de la phrase traduite, l'autre non. Trouvé le 28 septembre en agrandissant la
+# capture du panneau de son, et la cause a été suivie jusqu'au bout :
+#
+#   - `wireplumber/scripts/monitors/alsa.lua` passe le nom de l'appareil par
+#     `I18n.gettext()`, d'où « Built-in Audio » → « Audio interne » ;
+#   - puis il colle le profil derrière, SANS le traduire — `libspa-alsa.so` ne
+#     contient pas un seul symbole gettext, vérifié.
+#
+# Et le détail qui décide : **la traduction existe sur la machine**.
+# `libpipewire-0.3-common` livre `/usr/share/locale/fr/LC_MESSAGES/pipewire.mo`,
+# qui contient « Analog Stereo » → « Stéréo analogique ». Elle est là, personne
+# ne l'appelle. C'est un défaut de WirePlumber, pas de grenOS — mais c'est
+# notre écran, et c'est celui qu'on ouvre le jour où il n'y a pas de son.
+#
+# Les plus longs d'abord : « Digital Stereo (HDMI) » doit être reconnu avant
+# « Stereo », sans quoi on traduirait la moitié d'une moitié.
+PROFILS = (
+    ("Digital Surround 7.1 (HDMI)", "Surround numérique 7.1 (HDMI)"),
+    ("Digital Surround 5.1 (HDMI)", "Surround numérique 5.1 (HDMI)"),
+    ("Digital Stereo (IEC958)", "Stéréo numérique (S/PDIF)"),
+    ("Digital Stereo (HDMI)", "Stéréo numérique (HDMI)"),
+    ("Analog Surround 7.1", "Surround analogique 7.1"),
+    ("Analog Surround 5.1", "Surround analogique 5.1"),
+    ("Analog Stereo Duplex", "Stéréo analogique bidirectionnelle"),
+    ("Analog Stereo Output", "Sortie stéréo analogique"),
+    ("Analog Stereo Input", "Entrée stéréo analogique"),
+    ("Analog Stereo", "Stéréo analogique"),
+    ("Analog Mono", "Mono analogique"),
+    ("Digital Stereo", "Stéréo numérique"),
+    ("Line Out", "Sortie ligne"),
+    ("Headphones", "Casque"),
+    ("Headset", "Micro-casque"),
+    ("Speakers", "Haut-parleurs"),
+    ("Internal Microphone", "Micro interne"),
+    ("Microphone", "Micro"),
+)
+
+
+def profil_en_francais(description):
+    """Le nom d'une sortie, entièrement en français.
+
+    On ne touche QUE ce qui s'affiche : l'identifiant de la sortie, lui, reste
+    celui de PipeWire, sans quoi on ne saurait plus la sélectionner.
+    """
+    if not description:
+        return description
+    for anglais, francais in PROFILS:
+        if anglais in description:
+            description = description.replace(anglais, francais)
+    return description
+
+
 def sorties():
     """Les sorties audio disponibles : [(identifiant, nom lisible)]."""
     trouvees = []
@@ -29,7 +86,7 @@ def sorties():
         elif ligne.startswith("Description:"):
             description = ligne.split(":", 1)[1].strip()
             if nom:
-                trouvees.append((nom, description or nom))
+                trouvees.append((nom, profil_en_francais(description) or nom))
                 nom, description = "", ""
     return trouvees
 
