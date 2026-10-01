@@ -588,18 +588,28 @@ python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "system_powerdown"
 # donc tout de suite, puis toutes les demi-secondes. Une image live n'a presque
 # rien a ecrire sur disque, et c'est tant mieux — mais cela laisse une fenetre
 # tres etroite pour la photographier.
+# VINGT photos au lieu de dix, toutes les 0,25 s au lieu de 0,5.
+#
+# La fenetre d observation variait du simple au decuple : 1, 3, 10 puis 1
+# captures sur quatre tours du meme jour. Un tour a UNE photo ne prouve rien,
+# et c est pourtant sur un tour a une photo que j ai annonce deux fois que le
+# journal d arret etait parti.
+#
+# On ne peut pas ralentir la machine, mais on peut regarder plus souvent : la
+# meme fenetre donne alors deux fois plus d images, et le garde refuse deja de
+# conclure sous trois.
 EXTINCTION=0
-for instant in 1 2 3 4 5 6 7 8 9 10; do
+for instant in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
   if python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" \
        "$RUNNER_TEMP/ecran-extinction-$instant.ppm" 2>/dev/null; then
     EXTINCTION=$instant
   else
     break   # la machine est partie : il n'y a plus d'ecran a prendre
   fi
-  sleep 0.5
+  sleep 0.25
 done
 echo "extinction : $EXTINCTION capture(s) prises pendant l'arret"
-for instant in 1 2 3 4 5 6 7 8 9 10 11 12; do
+for instant in $(seq 1 20); do
   [ -f "$RUNNER_TEMP/ecran-extinction-$instant.ppm" ] || continue
   # Un ecran de texte est noir a plus de 90 % ; notre fond d'ecran, jamais.
   # `judge` sort deja cette part, et c'est la seule mesure qui distingue

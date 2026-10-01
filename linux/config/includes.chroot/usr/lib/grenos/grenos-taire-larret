@@ -179,7 +179,27 @@ if [ "$MOMENT" = splash ] || [ "$MOMENT" = tout ]; then
     elif [ ! -x /usr/sbin/plymouthd ]; then
         dire "extinction : plymouthd introuvable, la splash ne peut pas etre levee"
     else
-        /usr/sbin/plymouthd --mode=shutdown --attach-to-session >/dev/null 2>&1 || true
+        # `--tty=tty1`, et c'est la seule chose qui change par rapport à
+        # l'unité Debian — la mesure vient de fermer l'autre explication.
+        #
+        # `/dev/dri = by-path card0` : le périphérique de rendu EXISTE. Donc la
+        # bascule en mode texte, que `plymouth(8)` décrit pour les machines
+        # sans KMS, ne vient pas d'une absence de matériel. Il reste la
+        # question du TTY : notre écran est `tty1` (la ligne de commande porte
+        # `console=tty1`), tandis que X vit ailleurs, et `--attach-to-session`
+        # attache le démon au tty de la session — pas forcément celui qu'on
+        # regarde.
+        #
+        # `plymouthd(8)` documente exactement une option pour cela :
+        # « --tty=STRING  TTY to use instead of default ». C'est la seule que
+        # la documentation offre sur ce point, et personne ne l'avait essayée.
+        #
+        # Ce n'est pas une certitude, et la photo tranchera. Mais ce n'est plus
+        # une devinette : les deux autres explications possibles ont été
+        # mesurées et écartées — le thème porte bien nos réglages, et le
+        # matériel de rendu est là.
+        /usr/sbin/plymouthd --mode=shutdown --tty=tty1 --attach-to-session \
+            >/dev/null 2>&1 || true
         if plymouth --ping >/dev/null 2>&1; then
             if plymouth show-splash >/dev/null 2>&1; then
                 dire "extinction : splash levee des le debut de l arret"
