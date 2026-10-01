@@ -557,7 +557,7 @@ class Reglages(Gtk.Window):
         # travail tourne derrière, et cette page raconte ce qu'il fait.
         self.etat_maj = Gtk.Label(label="Prêt.", xalign=0)
         self.barre_maj = Gtk.ProgressBar()
-        self.bouton_maj = grenosui.bouton("Vérifier et installer",
+        self.bouton_maj = grenosui.bouton("Vérifier et préparer",
                                           self.lancer_maj, "principal")
 
         self.details_maj = Gtk.Expander(label="Voir le détail")
@@ -647,6 +647,13 @@ class Reglages(Gtk.Window):
         GLib.idle_add(ajouter)
 
     def lancer_maj(self):
+        # Les deux fenêtres qui mettent à jour — celle-ci et `grenos-maj` —
+        # suivent la même suite : préparer, puis redémarrer. Elles partagent le
+        # même `Travail` et le même service d'avant-bureau ; seul l'habillage
+        # diffère.
+        if getattr(self, "redemarrer_ensuite", False):
+            grenosui.lancer("systemctl reboot")
+            return
         if self.travail_maj.demarrer():
             self.bouton_maj.set_sensitive(False)
             self.bouton_maj.get_child().get_children()[-1].set_text("En cours…")
@@ -655,7 +662,15 @@ class Reglages(Gtk.Window):
         def remettre():
             self.etat_maj.set_text(message)
             self.bouton_maj.set_sensitive(True)
-            self.bouton_maj.get_child().get_children()[-1].set_text("Vérifier et installer")
+            etiquette = self.bouton_maj.get_child().get_children()[-1]
+            # On demande à systemd, pas au texte du message : une phrase qu'on
+            # relit pour décider d'une action est un drapeau déguisé.
+            if bien and module_maj.redemarrage_arme():
+                etiquette.set_text("Redémarrer maintenant")
+                self.redemarrer_ensuite = True
+            else:
+                etiquette.set_text("Vérifier et préparer")
+                self.redemarrer_ensuite = False
             if not bien:
                 self.details_maj.set_expanded(True)
             return False

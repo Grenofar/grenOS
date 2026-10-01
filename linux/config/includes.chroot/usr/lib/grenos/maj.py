@@ -34,6 +34,13 @@ COMMANDE_MAJ = ["apt-get", "-y",
                 "-o", "Dpkg::Options::=--force-confold",
                 "full-upgrade"]
 
+# Ce que lance le BOUTON, qui ne pose plus rien lui-meme.
+#
+# `-d` : telecharger sans installer. Le bouton remplit le cache apt et arme le
+# service d'avant-bureau ; c'est lui, et lui seul, qui pose les paquets —
+# pendant que rien de graphique ne tourne.
+COMMANDE_TELECHARGER = ["apt-get", "-d", "-y", "full-upgrade"]
+
 
 class Travail:
     """Une mise à jour en cours, et ce qu'elle raconte.
@@ -102,77 +109,79 @@ class Travail:
             self.sur_avance(1.0)
             return self.sur_fin("Tout est déjà à jour.", True)
 
-        self.sur_etat(f"{total} paquet{'s' if total > 1 else ''} à installer…")
+        # ---- On TELECHARGE, on n'installe pas ------------------------------
+        #
+        # POURQUOI CE N'EST PLUS LA MEME CHOSE
+        #
+        # Grenofar, le 1er octobre : « quand je mets a jour l'ecran devient
+        # noir, donc on applique la maj apres un redemarrage, pendant le boot ».
+        #
+        # Il a raison, et la cause etait juste en dessous de ces lignes :
+        #
+        #     def _rafraichir_le_bureau(self):
+        #         for programme in ("grenos-shell", "grenos-bureau"):
+        #             subprocess.run(["pkill", "-f", programme], ...)
+        #
+        # On remplacait la barre et le bureau PENDANT qu'ils tournaient, puis on
+        # les tuait pour que le veilleur les relance en version neuve. Entre les
+        # deux, l'ecran est noir. C'etait ecrit comme un service rendu — « sans
+        # cela personne ne verrait la mise a jour » — et c'etait un ecran noir
+        # au milieu d'une session.
+        #
+        # Pire : une session interrompue en plein `dpkg` est la facon classique
+        # de casser une machine. Windows applique hors session pour cette raison
+        # exacte, et c'est ce que Grenofar demandait deja le 26 septembre.
+        #
+        # Donc : on telecharge ici, et c'est `grenos-maj-demarrage` qui pose,
+        # avant le bureau, sur un ecran a nous. `-d` ne touche a rien ; le pire
+        # qui puisse arriver est un cache apt rempli pour rien.
+        self.sur_etat(f"{total} paquet{'s' if total > 1 else ''} a telecharger...")
         faits = [0]
 
         def suivre(ligne):
-            # apt annonce chaque paquet qu'il déballe et qu'il installe : c'est
-            # la seule mesure honnête de l'avancement.
-            if re.match(r"^(Unpacking|Dépaquetage|Setting up|Paramétrage)", ligne):
+            # apt annonce chaque fichier qu'il recupere : c'est la seule mesure
+            # honnete de l'avancement d'un telechargement.
+            if re.match(r"^(Get:|Réception de|Téléchargement)", ligne):
                 faits[0] += 1
-                self.sur_avance(0.25 + 0.7 * min(faits[0] / (total * 2), 1.0))
+                self.sur_avance(0.25 + 0.6 * min(faits[0] / total, 1.0))
 
-        # `full-upgrade` et non `upgrade` : c'est la seule forme qui accepte
-        # d'installer un paquet nouveau. Sans elle, une nouvelle dépendance de
-        # grenos-desktop — un pilote, une bibliothèque de son — est annoncée
-        # puis jamais posée, et la mise à jour ne change rien.
-        #
-        # Et surtout **sans `--with-new-pkgs`**, qui faisait tout échouer.
-        #
-        # Grenofar : « quand j'essaie de mettre à jour il dit error command
-        # line --with-new-pkgs is not understood ». apt n'accepte cette option
-        # que pour `upgrade` ; avec `full-upgrade` il refuse la ligne ENTIÈRE,
-        # donc la mise à jour ne démarrait même pas. Elle était de toute façon
-        # inutile ici : `full-upgrade` installe les paquets nouveaux par
-        # définition — c'est exactement ce que dit le commentaire ci-dessus, et
-        # je l'avais quand même ajoutée par précaution.
-        #
-        # Personne ne l'avait vu parce que l'essai de la CI appelle
-        # `apt-get install`, jamais la commande que cette fenêtre lance
-        # vraiment. Une CI verte prouvait que le dépôt marche, pas que le
-        # bouton marche.
-        code = self._courir(COMMANDE_MAJ, suivre)
+        if self._courir(COMMANDE_TELECHARGER, suivre) != 0:
+            return self.sur_fin(
+                "Le téléchargement s'est arrêté. Le détail est ci-dessous.", False)
 
-        # Le repli : si notre commande échoue, on réessaie la plus nue.
+        # ---- Et on arme le prochain demarrage -------------------------------
         #
-        # C'est la réponse au défaut de conception que le 26 septembre a mis à
-        # nu : **un défaut dans la mise à jour ne peut être réparé que par une
-        # mise à jour**. `--with-new-pkgs` a bloqué le bouton, et le correctif
-        # voyageait dans le paquet que seul ce bouton pouvait installer. Il a
-        # fallu une commande au terminal — exactement ce que Grenofar ne veut
-        # plus jamais avoir à faire.
-        #
-        # `apt-get -y full-upgrade` sans une seule option est la forme la plus
-        # pauvre qui fasse le travail. Si un jour une option que nous ajoutons
-        # est refusée, mal orthographiée ou retirée d'apt, la machine se met à
-        # jour quand même et le dit. Une erreur de notre part doit DÉGRADER, pas
-        # BLOQUER.
-        if code != 0:
-            self.sur_ligne("--- la commande habituelle a échoué, essai de la forme simple ---")
-            code = self._courir(["apt-get", "-y", "full-upgrade"], suivre)
+        # Exactement le geste du menu d'arret (`grenos-arret`), au mot pres :
+        # `systemctl enable grenos-maj-demarrage.service`. Deux chemins vers le
+        # meme service, jamais deux mecanismes — deux copies d'une meme chose
+        # finissent par diverger.
+        self.sur_etat("Préparation du redémarrage…")
+        self.sur_avance(0.9)
+        if self._courir(["systemctl", "enable", "grenos-maj-demarrage.service"]) != 0:
+            return self.sur_fin(
+                "Les paquets sont là, mais le redémarrage n'a pas pu être armé.",
+                False)
 
         self.sur_avance(1.0)
-        if code != 0:
-            return self.sur_fin("L'installation s'est arrêtée. Le détail est ci-dessous.", False)
-        # Une nouvelle barre ou un nouveau bureau viennent d'arriver sur le
-        # disque, mais ceux qui tournent sont les anciens. On les arrête : le
-        # veilleur les relance aussitôt, dans leur nouvelle version. Sans cela,
-        # il faudrait fermer la session pour voir le changement — et personne
-        # ne le ferait, donc personne ne verrait la mise à jour.
-        self._rafraichir_le_bureau()
-
         return self.sur_fin(
-            f"{total} paquet{'s' if total > 1 else ''} installé"
-            f"{'s' if total > 1 else ''}. C'est à jour.", True)
+            f"{total} paquet{'s' if total > 1 else ''} prêt"
+            f"{'s' if total > 1 else ''}. Redémarre pour les installer.", True)
 
-    def _rafraichir_le_bureau(self):
-        """Relance la barre et le bureau si leur programme a change."""
-        for programme in ("grenos-shell", "grenos-bureau"):
-            try:
-                subprocess.run(["pkill", "-f", programme], capture_output=True,
-                               timeout=20)
-            except (OSError, subprocess.SubprocessError):
-                pass
+
+def redemarrage_arme():
+    """La mise à jour attend-elle le prochain démarrage ?
+
+    On interroge systemd plutôt que de garder un drapeau à nous : un drapeau et
+    l'état réel finissent par diverger, et c'est alors le drapeau qu'on croit.
+    `is-enabled` ne demande aucun droit.
+    """
+    try:
+        sortie = subprocess.run(
+            ["systemctl", "is-enabled", "grenos-maj-demarrage.service"],
+            capture_output=True, text=True, timeout=8).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return sortie.strip() == "enabled"
 
 
 # ---- Ce que la vérification quotidienne a trouvé ----------------------------

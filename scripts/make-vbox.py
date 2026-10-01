@@ -119,12 +119,35 @@ def vbox(
     pointing = "USBTablet" if linux else "PS2Mouse"
     # Une carte son, sans quoi il n'y a rien à régler : la machine livrée
     # n'en avait aucune, et la page Son des Réglages aurait répondu « aucune
-    # sortie détectée » quoi qu'on fasse. HDA est ce que Linux pilote le mieux,
-    # et `driver="Default"` laisse VirtualBox choisir la sortie de l'hôte.
+    # sortie détectée » quoi qu'on fasse. HDA est ce que Linux pilote le mieux.
     # L'édition à noyau maison, elle, n'a pas de pile audio : inutile de lui
     # donner une carte.
+    #
+    # `driver="Default"` ÉTAIT FAUX, et ce n'était pas visible.
+    #
+    # Lu dans `VirtualBox-settings.xsd` (schéma 1.20, VirtualBox 7.1), type
+    # `TAudioAdapter` : l'attribut `driver` est `use="required"` et n'accepte
+    # que `Null | OSS | ALSA | Pulse | CoreAudio | MMPM | SolAudio | WinMM |
+    # DirectSound`. **`Default` n'y figure pas** — il est valide ailleurs dans
+    # le schéma (priorité de processus, moteur d'exécution, `provider`), et
+    # c'est précisément ce qui rendait la faute crédible.
+    #
+    # La bonne façon de dire « que VirtualBox choisisse » est l'attribut
+    # `useDefault`, qui existe et vaut `true` par défaut. On l'écrit quand même,
+    # parce qu'un comportement par défaut non écrit est un comportement qu'on
+    # ne relit pas.
+    #
+    # `DirectSound` est la valeur d'un hôte Windows, celui de Grenofar. Avec
+    # `useDefault="true"` elle est de toute façon remplacée par le défaut de
+    # l'hôte, donc le zip reste ouvrable sous Linux ou macOS.
+    #
+    # La CI ne pouvait pas le voir : elle vérifiait que le `.vbox` est du XML
+    # **valide**, ce qu'il était. Du XML valide n'est pas du XML conforme à son
+    # schéma — même famille que `partition.conf` offrant btrfs sans
+    # `mkfs.btrfs`, et que la règle polkit nommant une action inexistante.
     audio = (
-        """      <AudioAdapter controller="HDA" driver="Default" enabled="true"
+        """      <AudioAdapter controller="HDA" driver="DirectSound"
+                    useDefault="true" enabled="true"
                     enabledIn="false" enabledOut="true"/>\n"""
         if linux
         else ""

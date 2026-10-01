@@ -588,6 +588,14 @@ jobs:
             fi
           done
           python3 -c "import sys, xml.etree.ElementTree as X; X.parse(sys.argv[1]); print('le .vbox est du XML valide')" "dist/$NAME.vbox"
+          # Du XML VALIDE n est pas du XML CONFORME. Le 1er octobre, le .vbox
+          # portait `driver="Default"` pour la carte son — une valeur que le
+          # schema de VirtualBox (TAudioAdapter, 1.20) ne connait pas : il
+          # n accepte que Null, OSS, ALSA, Pulse, CoreAudio, MMPM, SolAudio,
+          # WinMM ou DirectSound. L etape ci-dessus disait vert depuis des
+          # semaines, et la machine livree a Grenofar aurait pu n avoir aucun
+          # son. Meme famille que la regle polkit nommant une action inexistante.
+          python3 scripts/verif-vbox.py "dist/$NAME.vbox"
           echo "machine VirtualBox : les trois fichiers sont la, et le .vbox les designe"
           # La page /download promet quatre nombres — 8 Go, quatre coeurs,
           # 256 Mo de video, un disque de 25 Go — que quelqu'un verifiera d'un

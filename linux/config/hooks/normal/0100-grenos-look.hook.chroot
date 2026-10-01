@@ -693,7 +693,13 @@ except Exception as souci:
 # Tout ce qui suit `apt-get`, valeurs comprises : un `-o` dont la valeur
 # differe est une divergence comme une autre.
 attendu = list(maj.COMMANDE_MAJ[1:])
-print("grenos: le bouton lance : %s" % " ".join(maj.COMMANDE_MAJ))
+# Depuis le 1er octobre le BOUTON ne pose plus rien : il telecharge et arme
+# le service d avant-bureau. COMMANDE_MAJ est donc ce que lance CE service,
+# et c est lui que le garde compare — la phrase disait encore « le bouton ».
+print("grenos: la mise a jour au demarrage lance : %s"
+      % " ".join(maj.COMMANDE_MAJ))
+print("grenos: le bouton telecharge : %s"
+      % " ".join(maj.COMMANDE_TELECHARGER))
 
 service = "/etc/systemd/system/grenos-maj-auto.service"
 try:
