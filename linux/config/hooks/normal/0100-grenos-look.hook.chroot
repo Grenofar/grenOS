@@ -958,6 +958,21 @@ done
 theme=$(plymouth-set-default-theme 2>/dev/null || echo "")
 echo "grenos: theme plymouth par defaut : ${theme:-AUCUN}"
 
+# Ce que le thema porte VRAIMENT pour l arret, apres nos sed.
+#
+# Deux tentatives d habillage de cet ecran ont echoue, et a chaque fois j ai
+# mesure la PHOTO sans jamais verifier que ma modification avait seulement
+# atterri. On ne peut pas conclure d une photo noire si l on ignore si le
+# fichier a change : c est la regle de la nuit du 26 — avant de corriger un
+# symptome, verifier que l instrument mesure bien ce qu on croit.
+THEMA=/usr/share/plymouth/themes/spinner/spinner.plymouth
+for mode in shutdown reboot; do
+    extrait=$(sed -n "/^\[$mode\]/,/^\[/p" "$THEMA" 2>/dev/null |
+             grep -E '^(UseEndAnimation|Title|SubTitle)=' |
+             paste -sd" " -)
+    echo "grenos: thema [$mode] : ${extrait:-RIEN}"
+done
+
 echo "--- grenOS : menage ---"
 
 rm -f /usr/share/applications/xfce4-about.desktop

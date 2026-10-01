@@ -146,6 +146,30 @@ else
         else
             dire "extinction : plymouthd demarre mais show-splash a ete REFUSE"
         fi
+        # ---- Et notre phrase, par le seul chemin qu'on ait VU peindre -------
+        #
+        # Deux tentatives pour que cet écran porte notre marque ont échoué, et
+        # toutes deux étaient des réglages du thème :
+        #
+        #   1. `Title=` dans `[shutdown]` — photo restée noire, 100 % ;
+        #   2. `UseEndAnimation=true` — photo restée noire, même taille au
+        #      pixel près (2759 octets, identique à l'image noire).
+        #
+        # Celle-ci n'est pas du même genre, et c'est ce qui la rend défendable :
+        # `plymouth display-message` est **exactement** ce qu'emploie
+        # `grenos-maj-demarrage` ligne 144, sur un écran qui est photographié
+        # et dont on LIT le texte depuis le 28 septembre. Même client, même
+        # démon, même thème. On ne tente pas une troisième variante au hasard :
+        # on emprunte le seul chemin dont on ait la preuve qu'il peint.
+        #
+        # `SuppressMessages=true` n'existe que dans les quatre sections de mise
+        # à jour — vérifié dans le paquet. `[shutdown]` ne l'a pas, donc rien
+        # n'interdit le message ici.
+        if plymouth display-message --text="Extinction de grenOS" >/dev/null 2>&1; then
+            dire "extinction : message affiche sur la splash"
+        else
+            dire "extinction : display-message a ete REFUSE"
+        fi
     else
         dire "extinction : plymouthd n a pas voulu demarrer au debut de l arret"
     fi
