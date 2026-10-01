@@ -905,12 +905,12 @@ VERIF
 
 echo "--- grenOS : la splash d arret peut-elle etre levee ---"
 
-# RAPPORTE, PAS ENCORE BLOQUANT.
-#
-# La regle du projet est tenue depuis le 12 septembre : on ne rend une preuve
+# BLOQUANT depuis le 1er octobre, apres DEUX passages verts
+# (`les 4 fragments plymouth portent la commande du paquet, au - pres`). La
+# regle du projet est tenue depuis le 12 septembre : on ne rend une preuve
 # obligatoire qu APRES l avoir vue verte. Un garde neuf qui refuse a tort coute
 # une construction entiere et fait douter de tous les autres — c est arrive
-# quatre fois a `verif-commandes.py`. Celui-ci sera promu quand il aura passe.
+# quatre fois a `verif-commandes.py`.
 #
 # Ce qu il surveille : nos fragments recopient la commande de l unite Debian,
 # au `-` pres. Si Debian la change — une option, un chemin, un mode —, le
@@ -942,6 +942,11 @@ for unite in plymouth-poweroff plymouth-reboot plymouth-halt plymouth-kexec; do
 done
 if [ "$ecart" = 0 ]; then
     echo "grenos: les 4 fragments plymouth portent la commande du paquet, au - pres"
+else
+    echo "grenos: un fragment plymouth ne correspond plus au paquet" >&2
+    echo "grenos:   sans correction, la splash d arret ne se leverait plus et le" >&2
+    echo "grenos:   journal de systemd reviendrait a l ecran, en silence." >&2
+    exit 1
 fi
 
 # Et la splash doit avoir de quoi se dessiner : le demon, son client, un theme.

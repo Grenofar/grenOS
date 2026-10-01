@@ -113,6 +113,33 @@ sed -i "/^\[system-reset\]/,/^\[/ {
 # photographie l'extinction à chaque image ; si l'écran reste noir, on l'aura
 # su pour le prix d'une construction, et sans rien casser — un titre que
 # personne ne dessine ne coûte rien.
+# CE QUE LA PREMIÈRE TENTATIVE A APPRIS, ET QUI CHANGE LA CIBLE
+#
+# Poser `Title=` dans `[shutdown]` n'a rien donné : la photo est restée d'un
+# noir uniforme, 100 % de couleur dominante. Je l'avais annoncé comme une
+# supposition — « il le lit, c'est sûr ; qu'il le peigne, non » — et la réponse
+# est non.
+#
+# Mais l'écran est noir pour une raison plus large que le titre : **notre fond
+# non plus n'est pas dessiné**. `background-tile.png` est bien dans le thème
+# (c'est lui qu'on voit au chargement), et il n'apparaît pas à l'extinction.
+# Donc le greffon ne peint *rien* dans ce mode, pas seulement pas le titre.
+#
+# La seule ligne que Debian met dans ces deux sections est
+# `UseEndAnimation=false` — vérifié dans le paquet. C'est elle qui éteint tout :
+# sans animation de fin, `two-step` n'a aucune scène à rendre, et il laisse le
+# framebuffer tel quel. On la met donc à `true`, et c'est mesurable d'un coup
+# d'œil : si la photo cesse d'être uniformément noire, le greffon dessine, et
+# notre fond comme notre marque arrivent avec.
+#
+# Risque : nul. Au pire l'écran reste noir et on l'aura su, au pire-pire il
+# montre la roulette de Debian — ce qui est déjà plus que rien, et jamais un
+# journal.
+for mode in shutdown reboot; do
+    sed -i "/^\[$mode\]/,/^\[/ s/^UseEndAnimation=.*/UseEndAnimation=true/" \
+        "$THEME" 2>/dev/null || true
+done
+
 poser_titre () {
     # Idempotent : ce script est rejoué par `appliquer-systeme` après CHAQUE
     # mise à jour. Sans l'effacement préalable, chaque passage ajouterait une
