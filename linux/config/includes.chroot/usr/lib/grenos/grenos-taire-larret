@@ -1,180 +1,224 @@
 #!/bin/sh
-# Taire le journal d'arrêt, au seul moment où c'est possible.
+# Les deux moments de l'arrêt — et il en faut bien DEUX.
 #
-# CE QUE LA SONDE A TROUVÉ, ET QUI CLÔT UNE SEMAINE DE TENTATIVES
+# CE QUE LA CONSTRUCTION 36808719343 A PROUVÉ, EN CASSANT
 #
-# « Enlève les logs quand on éteint le PC » est demandé depuis le 23 septembre.
-# La ligne de commande porte `systemd.show_status=false` depuis ce jour-là, et
-# `/etc/systemd/system.conf.d` porte `ShowStatus=no`. Mesuré le 30 septembre :
-# aucun effet, 10481 pixels d'encre avant, 10745 après.
+# Jusque-là, un seul script faisait deux choses au même instant : éteindre
+# l'affichage des messages d'état, et lever la splash. L'écran était noir et
+# j'en ai conclu que c'était la splash qui couvrait le journal.
 #
-# Les deux sondes ont répondu, et ensemble elles désignent la cause :
+# **C'était faux.** En déplaçant l'unité pour que la splash arrive quand l'écran
+# est libre, j'ai déplacé les DEUX — et le journal est revenu en entier,
+# quarante lignes, photographiées. La mesure est sans appel :
 #
-#     extinction : PID 1 dit ShowStatus=no                  (au démarrage)
-#     extinction (pendant) : ShowStatus=yes                 (pendant l'arrêt)
+#   | moment de l'appel        | journal à l'écran |
+#   |--------------------------|-------------------|
+#   | tôt (avant display-manager) | **aucun**      |
+#   | tard (après display-manager)| les 40 lignes  |
 #
-# Notre réglage est donc **correct et appliqué** — et systemd le **rallume**
-# lui-même quand la transaction d'arrêt commence. Une semaine de corrections
-# portait sur une valeur qui était juste, et qui est écrasée à la seconde où
-# elle compte. *Une mesure prise au mauvais moment n'est pas fausse : elle
-# répond parfaitement à une question qu'on n'a pas posée.*
+# C'est donc `SetShowStatus("no")` qui faisait tout le travail, et il le faisait
+# depuis le premier jour — pendant que je l'avais déclaré inefficace parce que
+# la valeur relue À LA FIN disait `yes`. *J'ai jugé un correctif sur une mesure
+# prise après coup, et attribué son résultat à son voisin.*
 #
-# COMMENT ON LE RÉÉTEINT, LU DANS LE PAQUET ET NON DE MÉMOIRE
+# D'où deux moments, et chacun a sa raison mesurée :
 #
-# `systemd(1)` de systemd 257.13 :
+#   - `taire`  — AVANT que le gestionnaire de connexion s'arrête. systemd
+#     rallume l'affichage quand il met la transaction en file ; l'éteindre plus
+#     tard ne sert à rien, les lignes sont déjà écrites ;
+#   - `splash` — APRÈS. Tant que X possède l'écran, plymouthd démarre, accepte
+#     `show-splash` et `display-message`, et ne peut rien dessiner. La preuve
+#     qu'il SAIT dessiner est la photo de l'écran de mise à jour, prise par la
+#     même CI dans le même QEMU : notre fond, notre logo, notre barre bleue.
 #
-#     SIGRTMIN+21 — Disables display of status messages on the console […]
-#     You may want to use SetShowStatus() instead of SIGRTMIN+21 in order to
-#     prevent race conditions.
-#
-# et `org.freedesktop.systemd1(5)` :
-#
-#     SetShowStatus(in s mode);
-#     […] configures the display of status messages during bootup AND SHUTDOWN.
-#     The mode parameter can be set to any value that's valid for the
-#     systemd.show_status kernel parameter.
-#
-# On prend donc la méthode, pas le signal — c'est systemd qui le recommande, et
-# la raison qu'il donne (conditions de course) est exactement notre situation :
-# on écrit pendant que lui-même écrit. `busctl` est livré par le paquet systemd
-# (`/usr/bin/busctl`, vérifié dans le .deb) : aucune dépendance nouvelle.
-#
-# QUAND — et c'est tout le sujet
-#
-# systemd rallume l'affichage quand il MET EN FILE la transaction d'arrêt, donc
-# avant qu'aucune unité ne bouge. Ce script est appelé en `ExecStop=` d'une
-# unité liée à `graphical.target` : à l'arrêt, elle est arrêtée AVANT lui, donc
-# dans la toute première vague — le plus tôt qu'on puisse atteindre sans
-# écrire soi-même dans la transaction.
-#
-# CE QU'IL NE FAUT PAS CROIRE
-#
-# Rien ici ne garantit que pas une ligne ne passera : entre le moment où
-# systemd rallume et celui où nous éteignons, quelques unités peuvent avoir
-# parlé. C'est mesurable, et c'est mesuré — la CI compte les pixels d'encre sur
-# les trois photos d'arrêt, et la sonde relit `ShowStatus` à la toute fin. Le
-# verdict viendra de ces deux chiffres, pas de ce commentaire.
-dire () {
-    echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
-}
+# Un seul fichier pour les deux, appelé avec un argument : deux copies d'un
+# même code finissent par diverger, et c'est alors celle qu'on regarde qu'on
+# croit.
+MOMENT="${1:-tout}"
 
-if ! command -v busctl >/dev/null 2>&1; then
-    dire "extinction : busctl absent, le journal d arret restera visible"
-    exit 0
-fi
+if [ "$MOMENT" = taire ] || [ "$MOMENT" = tout ]; then
+    # Taire le journal d'arrêt, au seul moment où c'est possible.
+    #
+    # CE QUE LA SONDE A TROUVÉ, ET QUI CLÔT UNE SEMAINE DE TENTATIVES
+    #
+    # « Enlève les logs quand on éteint le PC » est demandé depuis le 23 septembre.
+    # La ligne de commande porte `systemd.show_status=false` depuis ce jour-là, et
+    # `/etc/systemd/system.conf.d` porte `ShowStatus=no`. Mesuré le 30 septembre :
+    # aucun effet, 10481 pixels d'encre avant, 10745 après.
+    #
+    # Les deux sondes ont répondu, et ensemble elles désignent la cause :
+    #
+    #     extinction : PID 1 dit ShowStatus=no                  (au démarrage)
+    #     extinction (pendant) : ShowStatus=yes                 (pendant l'arrêt)
+    #
+    # Notre réglage est donc **correct et appliqué** — et systemd le **rallume**
+    # lui-même quand la transaction d'arrêt commence. Une semaine de corrections
+    # portait sur une valeur qui était juste, et qui est écrasée à la seconde où
+    # elle compte. *Une mesure prise au mauvais moment n'est pas fausse : elle
+    # répond parfaitement à une question qu'on n'a pas posée.*
+    #
+    # COMMENT ON LE RÉÉTEINT, LU DANS LE PAQUET ET NON DE MÉMOIRE
+    #
+    # `systemd(1)` de systemd 257.13 :
+    #
+    #     SIGRTMIN+21 — Disables display of status messages on the console […]
+    #     You may want to use SetShowStatus() instead of SIGRTMIN+21 in order to
+    #     prevent race conditions.
+    #
+    # et `org.freedesktop.systemd1(5)` :
+    #
+    #     SetShowStatus(in s mode);
+    #     […] configures the display of status messages during bootup AND SHUTDOWN.
+    #     The mode parameter can be set to any value that's valid for the
+    #     systemd.show_status kernel parameter.
+    #
+    # On prend donc la méthode, pas le signal — c'est systemd qui le recommande, et
+    # la raison qu'il donne (conditions de course) est exactement notre situation :
+    # on écrit pendant que lui-même écrit. `busctl` est livré par le paquet systemd
+    # (`/usr/bin/busctl`, vérifié dans le .deb) : aucune dépendance nouvelle.
+    #
+    # QUAND — et c'est tout le sujet
+    #
+    # systemd rallume l'affichage quand il MET EN FILE la transaction d'arrêt, donc
+    # avant qu'aucune unité ne bouge. Ce script est appelé en `ExecStop=` d'une
+    # unité liée à `graphical.target` : à l'arrêt, elle est arrêtée AVANT lui, donc
+    # dans la toute première vague — le plus tôt qu'on puisse atteindre sans
+    # écrire soi-même dans la transaction.
+    #
+    # CE QU'IL NE FAUT PAS CROIRE
+    #
+    # Rien ici ne garantit que pas une ligne ne passera : entre le moment où
+    # systemd rallume et celui où nous éteignons, quelques unités peuvent avoir
+    # parlé. C'est mesurable, et c'est mesuré — la CI compte les pixels d'encre sur
+    # les trois photos d'arrêt, et la sonde relit `ShowStatus` à la toute fin. Le
+    # verdict viendra de ces deux chiffres, pas de ce commentaire.
+    dire () {
+        echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
+    }
 
-if busctl call org.freedesktop.systemd1 /org/freedesktop/systemd1 \
-         org.freedesktop.systemd1.Manager SetShowStatus s "no" >/dev/null 2>&1; then
-    dire "extinction : affichage des messages d etat eteint pour l arret"
-else
-    # Le repli est le signal que la page de manuel décrit, moins propre mais
-    # sans dépendance : mieux vaut une condition de course qu'aucune tentative.
-    if kill -s RTMIN+21 1 2>/dev/null; then
-        dire "extinction : SetShowStatus refuse, repli par SIGRTMIN+21"
-    else
-        dire "extinction : ni SetShowStatus ni SIGRTMIN+21 n ont abouti"
-    fi
-fi
-
-# ---- Et la splash d'arrêt de Plymouth, qui devrait couvrir tout cela --------
-#
-# DEUX ERREURS DE MA PART, À DIRE AVANT LE RESTE
-#
-# 1. J'avais écrit que `Before=systemd-poweroff.service` plaçait la splash « à
-#    l'instant final, après que tout le journal a défilé ». **C'est faux.**
-#    `Before=` est une borne AU PLUS TARD, pas une date. Avec
-#    `DefaultDependencies=no`, `plymouth-poweroff.service` n'a pour seules
-#    contraintes que `After=getty@tty1 display-manager plymouth-start` — elle
-#    peut donc démarrer TÔT, dès que le gestionnaire de connexion est arrêté.
-#    J'ai lu une borne comme un instant, et j'en ai tiré une conclusion que
-#    j'ai écrite dans le carnet et dans un message de commit.
-#
-# 2. La conclusion « la splash ne couvre rien » reste vraie — mais elle est
-#    vraie parce qu'on l'a VUE sur trois photos, pas à cause de ce raisonnement.
-#    *Un fait juste appuyé sur un raisonnement faux reste un fait, et le
-#    raisonnement reste à jeter.*
-#
-# CE QU'ON MESURE ICI, ET POURQUOI
-#
-# `plymouth-poweroff.service` lance `plymouthd --mode=shutdown` sans `-`, donc
-# son échec ferait rougir l'unité ; mais `ExecStartPost=-/usr/bin/plymouth
-# show-splash` est bien préfixé d'un `-`, **donc son échec est avalé**. C'est
-# exactement la forme qui nous a déjà coûté une semaine ailleurs : la ligne
-# `[ OK ] Started plymouth-poweroff.service` ne prouve rien sur la splash.
-#
-# On le demande donc à la machine, au lieu d'en débattre : plymouthd répond-il,
-# et que rend `show-splash` quand on l'appelle pour de vrai ? Trois réponses
-# possibles, trois causes différentes, et aucune ne se devine depuis le code.
-# LA RÉPONSE EST ARRIVÉE, ET ELLE DÉSIGNE LE QUAND, PAS LE QUOI
-#
-# La même question a été posée aux deux bouts de l'arrêt, et c'est l'écart qui
-# a tranché :
-#
-#     début : extinction : plymouthd ne repond pas, aucune splash a montrer
-#     fin   : extinction (pendant) : plymouthd repond a la fin de l arret
-#
-# `plymouth-poweroff.service` démarre donc bien son démon — **trop tard**. Tout
-# le journal est déjà écrit quand il arrive. Ce n'est pas Plymouth qui est
-# cassé : c'est son heure. Des deux réparations possibles que la sonde devait
-# départager, c'est la seconde.
-#
-# On lève donc la splash ici, dans la toute première vague de l'arrêt, avec
-# **les commandes exactes de l'unité Debian** (lues dans le paquet plymouth
-# 24.004.60-5) — pas une variante de notre invention :
-#
-#     ExecStart=/usr/sbin/plymouthd --mode=shutdown --attach-to-session
-#     ExecStartPost=-/usr/bin/plymouth show-splash
-#
-# Deux précautions, chacune pour une panne précise :
-#
-#   - on ne démarre que si aucun démon ne répond, sinon on en aurait deux ;
-#   - `grenos-console-propre.service` porte `KillMode=process`, sans quoi
-#     systemd tuerait ce démon avec le groupe de contrôle de l'unité dès la fin
-#     de son arrêt — il serait né et mort dans la même seconde, et la mesure
-#     aurait dit « lancé » en toute bonne foi.
-if ! command -v plymouth >/dev/null 2>&1; then
-    dire "extinction : plymouth n est pas installe"
-elif plymouth --ping >/dev/null 2>&1; then
-    dire "extinction : un plymouthd repondait deja, on ne touche a rien"
-elif [ ! -x /usr/sbin/plymouthd ]; then
-    dire "extinction : plymouthd introuvable, la splash ne peut pas etre levee"
-else
-    /usr/sbin/plymouthd --mode=shutdown --attach-to-session >/dev/null 2>&1 || true
-    if plymouth --ping >/dev/null 2>&1; then
-        if plymouth show-splash >/dev/null 2>&1; then
-            dire "extinction : splash levee des le debut de l arret"
-        else
-            dire "extinction : plymouthd demarre mais show-splash a ete REFUSE"
+    if ! command -v busctl >/dev/null 2>&1; then
+        dire "extinction : busctl absent, le journal d arret restera visible"
         fi
-        # ---- Et notre phrase, par le seul chemin qu'on ait VU peindre -------
-        #
-        # Deux tentatives pour que cet écran porte notre marque ont échoué, et
-        # toutes deux étaient des réglages du thème :
-        #
-        #   1. `Title=` dans `[shutdown]` — photo restée noire, 100 % ;
-        #   2. `UseEndAnimation=true` — photo restée noire, même taille au
-        #      pixel près (2759 octets, identique à l'image noire).
-        #
-        # Celle-ci n'est pas du même genre, et c'est ce qui la rend défendable :
-        # `plymouth display-message` est **exactement** ce qu'emploie
-        # `grenos-maj-demarrage` ligne 144, sur un écran qui est photographié
-        # et dont on LIT le texte depuis le 28 septembre. Même client, même
-        # démon, même thème. On ne tente pas une troisième variante au hasard :
-        # on emprunte le seul chemin dont on ait la preuve qu'il peint.
-        #
-        # `SuppressMessages=true` n'existe que dans les quatre sections de mise
-        # à jour — vérifié dans le paquet. `[shutdown]` ne l'a pas, donc rien
-        # n'interdit le message ici.
-        if plymouth display-message --text="Extinction de grenOS" >/dev/null 2>&1; then
-            dire "extinction : message affiche sur la splash"
-        else
-            dire "extinction : display-message a ete REFUSE"
-        fi
+
+    if busctl call org.freedesktop.systemd1 /org/freedesktop/systemd1 \
+             org.freedesktop.systemd1.Manager SetShowStatus s "no" >/dev/null 2>&1; then
+        dire "extinction : affichage des messages d etat eteint pour l arret"
     else
-        dire "extinction : plymouthd n a pas voulu demarrer au debut de l arret"
+        # Le repli est le signal que la page de manuel décrit, moins propre mais
+        # sans dépendance : mieux vaut une condition de course qu'aucune tentative.
+        if kill -s RTMIN+21 1 2>/dev/null; then
+            dire "extinction : SetShowStatus refuse, repli par SIGRTMIN+21"
+        else
+            dire "extinction : ni SetShowStatus ni SIGRTMIN+21 n ont abouti"
+        fi
     fi
+
 fi
 
-# Toujours 0 : une machine qui ne s'éteint pas serait une panne infiniment pire
+if [ "$MOMENT" = splash ] || [ "$MOMENT" = tout ]; then
+    # ---- Et la splash d'arrêt de Plymouth, qui devrait couvrir tout cela --------
+    #
+    # DEUX ERREURS DE MA PART, À DIRE AVANT LE RESTE
+    #
+    # 1. J'avais écrit que `Before=systemd-poweroff.service` plaçait la splash « à
+    #    l'instant final, après que tout le journal a défilé ». **C'est faux.**
+    #    `Before=` est une borne AU PLUS TARD, pas une date. Avec
+    #    `DefaultDependencies=no`, `plymouth-poweroff.service` n'a pour seules
+    #    contraintes que `After=getty@tty1 display-manager plymouth-start` — elle
+    #    peut donc démarrer TÔT, dès que le gestionnaire de connexion est arrêté.
+    #    J'ai lu une borne comme un instant, et j'en ai tiré une conclusion que
+    #    j'ai écrite dans le carnet et dans un message de commit.
+    #
+    # 2. La conclusion « la splash ne couvre rien » reste vraie — mais elle est
+    #    vraie parce qu'on l'a VUE sur trois photos, pas à cause de ce raisonnement.
+    #    *Un fait juste appuyé sur un raisonnement faux reste un fait, et le
+    #    raisonnement reste à jeter.*
+    #
+    # CE QU'ON MESURE ICI, ET POURQUOI
+    #
+    # `plymouth-poweroff.service` lance `plymouthd --mode=shutdown` sans `-`, donc
+    # son échec ferait rougir l'unité ; mais `ExecStartPost=-/usr/bin/plymouth
+    # show-splash` est bien préfixé d'un `-`, **donc son échec est avalé**. C'est
+    # exactement la forme qui nous a déjà coûté une semaine ailleurs : la ligne
+    # `[ OK ] Started plymouth-poweroff.service` ne prouve rien sur la splash.
+    #
+    # On le demande donc à la machine, au lieu d'en débattre : plymouthd répond-il,
+    # et que rend `show-splash` quand on l'appelle pour de vrai ? Trois réponses
+    # possibles, trois causes différentes, et aucune ne se devine depuis le code.
+    # LA RÉPONSE EST ARRIVÉE, ET ELLE DÉSIGNE LE QUAND, PAS LE QUOI
+    #
+    # La même question a été posée aux deux bouts de l'arrêt, et c'est l'écart qui
+    # a tranché :
+    #
+    #     début : extinction : plymouthd ne repond pas, aucune splash a montrer
+    #     fin   : extinction (pendant) : plymouthd repond a la fin de l arret
+    #
+    # `plymouth-poweroff.service` démarre donc bien son démon — **trop tard**. Tout
+    # le journal est déjà écrit quand il arrive. Ce n'est pas Plymouth qui est
+    # cassé : c'est son heure. Des deux réparations possibles que la sonde devait
+    # départager, c'est la seconde.
+    #
+    # On lève donc la splash ici, dans la toute première vague de l'arrêt, avec
+    # **les commandes exactes de l'unité Debian** (lues dans le paquet plymouth
+    # 24.004.60-5) — pas une variante de notre invention :
+    #
+    #     ExecStart=/usr/sbin/plymouthd --mode=shutdown --attach-to-session
+    #     ExecStartPost=-/usr/bin/plymouth show-splash
+    #
+    # Deux précautions, chacune pour une panne précise :
+    #
+    #   - on ne démarre que si aucun démon ne répond, sinon on en aurait deux ;
+    #   - `grenos-console-propre.service` porte `KillMode=process`, sans quoi
+    #     systemd tuerait ce démon avec le groupe de contrôle de l'unité dès la fin
+    #     de son arrêt — il serait né et mort dans la même seconde, et la mesure
+    #     aurait dit « lancé » en toute bonne foi.
+    if ! command -v plymouth >/dev/null 2>&1; then
+        dire "extinction : plymouth n est pas installe"
+    elif plymouth --ping >/dev/null 2>&1; then
+        dire "extinction : un plymouthd repondait deja, on ne touche a rien"
+    elif [ ! -x /usr/sbin/plymouthd ]; then
+        dire "extinction : plymouthd introuvable, la splash ne peut pas etre levee"
+    else
+        /usr/sbin/plymouthd --mode=shutdown --attach-to-session >/dev/null 2>&1 || true
+        if plymouth --ping >/dev/null 2>&1; then
+            if plymouth show-splash >/dev/null 2>&1; then
+                dire "extinction : splash levee des le debut de l arret"
+            else
+                dire "extinction : plymouthd demarre mais show-splash a ete REFUSE"
+            fi
+            # ---- Et notre phrase, par le seul chemin qu'on ait VU peindre -------
+            #
+            # Deux tentatives pour que cet écran porte notre marque ont échoué, et
+            # toutes deux étaient des réglages du thème :
+            #
+            #   1. `Title=` dans `[shutdown]` — photo restée noire, 100 % ;
+            #   2. `UseEndAnimation=true` — photo restée noire, même taille au
+            #      pixel près (2759 octets, identique à l'image noire).
+            #
+            # Celle-ci n'est pas du même genre, et c'est ce qui la rend défendable :
+            # `plymouth display-message` est **exactement** ce qu'emploie
+            # `grenos-maj-demarrage` ligne 144, sur un écran qui est photographié
+            # et dont on LIT le texte depuis le 28 septembre. Même client, même
+            # démon, même thème. On ne tente pas une troisième variante au hasard :
+            # on emprunte le seul chemin dont on ait la preuve qu'il peint.
+            #
+            # `SuppressMessages=true` n'existe que dans les quatre sections de mise
+            # à jour — vérifié dans le paquet. `[shutdown]` ne l'a pas, donc rien
+            # n'interdit le message ici.
+            if plymouth display-message --text="Extinction de grenOS" >/dev/null 2>&1; then
+                dire "extinction : message affiche sur la splash"
+            else
+                dire "extinction : display-message a ete REFUSE"
+            fi
+        else
+            dire "extinction : plymouthd n a pas voulu demarrer au debut de l arret"
+        fi
+    fi
+
+    # Toujours 0 : une machine qui ne s'éteint pas serait une panne infiniment pire
+    # que quelques lignes de journal à l'écran.
+fi
+
+# Toujours 0 : une machine qui ne s'éteint pas serait une panne bien pire
 # que quelques lignes de journal à l'écran.
 exit 0

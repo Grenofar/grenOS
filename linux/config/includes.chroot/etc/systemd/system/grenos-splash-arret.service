@@ -47,7 +47,7 @@ Before=display-manager.service lightdm.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/true
-ExecStop=/usr/lib/grenos/grenos-taire-larret
+ExecStop=/usr/lib/grenos/grenos-taire-larret splash
 TimeoutStopSec=15
 # Sans lui, systemd tuerait plymouthd avec le groupe de contrôle de cette unité
 # à la seconde où son arrêt se termine : né et mort dans la même seconde, et la

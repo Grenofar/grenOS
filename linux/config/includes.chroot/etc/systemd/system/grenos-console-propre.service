@@ -38,11 +38,18 @@ RemainAfterExit=yes
 # `|| true` partout : effacer une console est un confort, jamais une raison
 # d'empêcher une machine de finir son démarrage.
 ExecStart=/bin/sh -c 'printf "\\033[3J\\033[2J\\033[H" > /dev/tty1 2>/dev/null || true'
-# L'arrêt a sa propre unité depuis le 1er octobre : `grenos-splash-arret`.
-# La levée de splash vivait ici, et c'était le mauvais moment — cette unité
-# est `After=graphical.target`, donc arrêtée AVANT le gestionnaire de
-# connexion, pendant que X possède encore l'écran. plymouthd acceptait tout
-# et ne pouvait rien dessiner. Ici on ne garde que l'effacement de tty1.
+# Et a l'ARRET, la moitie de la question qui se joue ICI, tot.
+#
+# Cette unite est `After=graphical.target`, donc arretee AVANT le gestionnaire
+# de connexion. C'est le mauvais moment pour lever une splash — X possede
+# encore l'ecran — mais c'est le SEUL bon moment pour eteindre l'affichage des
+# messages d'etat : systemd le rallume quand il met la transaction en file, et
+# l'eteindre plus tard ne sert a rien, les lignes sont deja ecrites.
+#
+# Mesure, en deplacant l'appel une fois : tot, aucune ligne a l'ecran ; tard,
+# les quarante. La splash, elle, est levee par `grenos-splash-arret`, apres.
+ExecStop=/usr/lib/grenos/grenos-taire-larret taire
+TimeoutStopSec=10
 StandardOutput=null
 
 [Install]
