@@ -51,14 +51,48 @@ fi
 # pas — après `logo.png` de l'installateur et les dessins de boutons d'openbox.
 # La forme est toujours la même : le programme ne dit rien, il prend son repli
 # et continue.
-for marque in /usr/share/icons/hicolor/256x256/apps/grenos.png \
+#
+# ET SA TAILLE N'EST PAS UN DÉTAIL : À 256 PX, LE TITRE S'ÉCRIT EN TRAVERS
+#
+# Grenofar, le 1er octobre : « le logo dans le boot de l'os est cassé (moche) ».
+# Il n'est pas cassé, il est **recouvert**. Mesuré au pixel sur la capture de
+# l'écran de mise à jour (run `36914474903`, écran de 720 px) :
+#
+#     le carré du logo : y de 120 à 339
+#     le titre         : y de 250 à 285
+#
+# Le titre tombe au milieu du logo, et « Mise à jour de grenOS » se lit en
+# travers du G.
+#
+# La cause tient à la formule du greffon `two-step`, déduite de cette mesure :
+# il place l'image à `(hauteur_écran − hauteur_image) × alignement`. Avec
+# `.22` et une image de 256 px sur 720, le haut tombe à (720−256)×0,22 = 102 et
+# le bas à 358 — alors que le titre, lui, commence vers 260.
+#
+# Autrement dit : **une image de 256 px ne PEUT PAS tenir au-dessus du titre**
+# sur un écran de 720. Ce n'était pas un mauvais réglage d'alignement, c'était
+# une image trop grande, et aucun déplacement ne l'aurait réglé.
+#
+# On prend donc le 128, que `make-deb.sh` produit déjà (16, 22, 24, 32, 48, 64,
+# 128, 256), et on remonte à `.12` :
+#
+#     haut = (720 − 128) × 0,12 = 71      bas = 199      titre = 260
+#
+# Soit 61 px de respiration. Vérifié aussi en 1080p (155 px) et sur un écran de
+# 600 px (29 px) : la formule tient aux trois tailles, ce qui est tout l'intérêt
+# d'avoir une formule plutôt qu'un chiffre.
+#
+# Le 256 reste en repli : si un jour le 128 disparaît, mieux vaut un logo trop
+# grand qu'aucun logo.
+for marque in /usr/share/icons/hicolor/128x128/apps/grenos.png \
+              /usr/share/icons/hicolor/256x256/apps/grenos.png \
               /usr/share/grenos/logo.png; do
     if [ -f "$marque" ]; then
         cp "$marque" "$IMAGES/watermark.png" 2>/dev/null || true
         break
     fi
 done
-sed -i 's/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.22/' \
+sed -i 's/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.12/' \
     "$THEME" 2>/dev/null || true
 
 # La barre de progression à notre bleu, son creux à notre gris.

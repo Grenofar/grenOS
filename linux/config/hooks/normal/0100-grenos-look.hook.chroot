@@ -964,6 +964,39 @@ done
 theme=$(plymouth-set-default-theme 2>/dev/null || echo "")
 echo "grenos: theme plymouth par defaut : ${theme:-AUCUN}"
 
+# La taille du filigrane, parce que c est elle qui decidait du chevauchement.
+#
+# Grenofar : « le logo dans le boot de l os est casse (moche) ». Il etait
+# recouvert : a 256 px sur un ecran de 720, le greffon le pose de 102 a 358, et
+# le titre commence vers 260. Une image trop grande ne peut pas tenir au-dessus
+# du titre, et aucun alignement ne l aurait rattrape.
+#
+# On imprime donc la taille reelle : si quelqu un remet le 256 un jour, cette
+# ligne le dira, au lieu de laisser le titre barrer le logo pendant un mois.
+python3 - <<'FILIGRANE'
+import struct
+chemin = "/usr/share/plymouth/themes/spinner/watermark.png"
+try:
+    with open(chemin, "rb") as f:
+        tete = f.read(24)
+    # La signature PNG ecrite en NOMBRES, pas en echappements : un x89 qui
+    # traverse deux heredocs en ressort en caractere reel, et la comparaison
+    # ne mord plus jamais. C est le piege documente, paye une fois de plus.
+    SIGNATURE = bytes([137, 80, 78, 71, 13, 10, 26, 10])
+    if tete[:8] != SIGNATURE or tete[12:16] != b"IHDR":
+        print("grenos: filigrane plymouth : ce n est pas un PNG")
+    else:
+        l, h = struct.unpack(">II", tete[16:24])
+        # (720 - h) * 0.12 + h  doit rester au-dessus du titre, ~260 px.
+        bas = (720 - h) * 0.12 + h
+        print("grenos: filigrane plymouth : %dx%d, bas a %d px en 720p "
+              "(le titre commence vers 260)" % (l, h, bas))
+        if bas > 244:
+            print("grenos: ATTENTION le filigrane recouvrira le titre")
+except OSError as souci:
+    print("grenos: filigrane plymouth : %s" % souci)
+FILIGRANE
+
 # Ce que le thema porte VRAIMENT pour l arret, apres nos sed.
 #
 # Deux tentatives d habillage de cet ecran ont echoue, et a chaque fois j ai
