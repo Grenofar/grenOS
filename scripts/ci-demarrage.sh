@@ -609,6 +609,24 @@ for instant in 1 2 3 4 5 6; do
            | sed -n 's/.*covers \([0-9]*\)%.*/\1/p' | head -1)
   echo "extinction $instant : couleur dominante ${PART_X:-?} %"
 done
+
+# Et la vraie question : y a-t-il des LIGNES DE SERVICE a l ecran ?
+#
+# « La couleur dominante » ne repond pas. Le 1er octobre j ai fait revenir les
+# quarante lignes du journal d arret en deplacant une unite, et la CI a imprime
+# « 92 % » au lieu de « 100 % » sans qu une seule etape ne rougisse — je l ai
+# vu en ouvrant la photo. Et le jour ou la splash dessinera notre fond, ce
+# pourcentage chutera de la meme facon : le garde refuserait exactement ce
+# qu on cherche a obtenir.
+#
+# On compte donc la signature de systemd et rien d autre : le `[  OK  ]` vert.
+# Mesure sur de vraies captures : 3024 pixels sur la photo de la regression,
+# et ZERO sur chacun de nos ecrans — bureau, Jeux, GrenPlace, Reglages, et
+# l ecran de mise a jour avec notre fond, notre logo et notre barre bleue.
+#
+# RAPPORTE, PAS BLOQUANT : la regle du 12 septembre veut qu on voie vert avant
+# d exiger. Il sera promu au passage suivant.
+python3 scripts/ci-lignes-arret.py "$RUNNER_TEMP"/ecran-extinction-*.ppm || true
 # Et ce que le port serie a dit pendant l'arret : c'est la ou les messages de
 # systemd apparaitraient s'ils apparaissaient.
 # `grep -c` ECRIT « 0 » et SORT EN 1 quand il ne trouve rien. Avec `set -e`,
