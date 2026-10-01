@@ -94,4 +94,38 @@ sed -i "/^\[system-reset\]/,/^\[/ {
     s/^SubTitle=.*/SubTitle=N'éteins pas l'ordinateur./
 }" "$THEME" 2>/dev/null || true
 
+# ---- L'extinction et le redémarrage, à nos couleurs -------------------------
+#
+# Les quatre modes ci-dessus avaient déjà un `Title=` dans le thème de Debian :
+# un `s/^Title=.*/` suffisait. Les sections `[shutdown]` et `[reboot]`, elles,
+# ne portent qu'une ligne — `UseEndAnimation=false` — vérifié dans le paquet
+# `plymouth-themes` 24.004.60-5. Une substitution n'y trouverait rien à
+# remplacer et ne dirait rien : il faut AJOUTER.
+#
+# Pourquoi maintenant : depuis le 1er octobre la splash d'arrêt est enfin levée
+# à temps, et les trois photos d'extinction sont noires — le journal a disparu.
+# Noir, c'est déjà ce que Grenofar demandait ; ce n'est pas encore « notre »
+# écran, et c'est exactement ce qu'il désigne par « ça se voit que l'UI n'est
+# pas la tienne ».
+#
+# On ne promet rien : le greffon `two-step` lit bien un `Title=` dans les
+# sections de mode, mais rien ne garantit qu'il le DESSINE en mode arrêt. La CI
+# photographie l'extinction à chaque image ; si l'écran reste noir, on l'aura
+# su pour le prix d'une construction, et sans rien casser — un titre que
+# personne ne dessine ne coûte rien.
+poser_titre () {
+    # Idempotent : ce script est rejoué par `appliquer-systeme` après CHAQUE
+    # mise à jour. Sans l'effacement préalable, chaque passage ajouterait une
+    # ligne de plus, et le fichier grossirait sans fin — avec un titre doublé
+    # à l'écran dès le deuxième.
+    sed -i "/^\[$1\]/,/^\[/ { /^Title=/d; /^SubTitle=/d; }" "$THEME" 2>/dev/null || true
+    # Ajoutés dans l'ordre inverse : `a` insère juste après l'en-tête, donc le
+    # dernier ajouté se retrouve en premier.
+    sed -i "/^\[$1\]/a SubTitle=$3" "$THEME" 2>/dev/null || true
+    sed -i "/^\[$1\]/a Title=$2" "$THEME" 2>/dev/null || true
+}
+
+poser_titre shutdown "Extinction de grenOS" "Tu peux laisser l'ordinateur."
+poser_titre reboot "Redémarrage de grenOS" "Ce sera rapide."
+
 exit 0
