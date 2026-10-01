@@ -126,3 +126,48 @@ def restaurer():
     if len(lignes) < 2 or not lignes[0] or not lignes[1]:
         return ""
     return appliquer(lignes[0], lignes[1], lignes[2] if len(lignes) > 2 else "")
+
+
+# Les fréquences qu'on propose en plus de celles que le pilote annonce.
+#
+# Ce sont celles des écrans qu'on trouve aujourd'hui, et celles que Grenofar a
+# nommées : « 120 240 fps etc ».
+FREQUENCES_USUELLES = (60, 75, 90, 100, 120, 144, 165, 180, 200, 240, 360)
+
+
+def frequences_proposees(annonces, usuelles=FREQUENCES_USUELLES):
+    """Ce que le menu doit offrir pour une définition donnée.
+
+    Rendu : [(arrondi, valeur_brute, annoncée_par_le_pilote)], croissant.
+
+    POURQUOI CETTE FONCTION EXISTE AILLEURS QUE DANS LA FENÊTRE
+
+    Elle y était, et elle n'était donc exerçable que par une copie — or deux
+    écritures d'une même chose finissent par diverger, et c'est alors la copie
+    qu'on croit. C'est le piège payé sur les icônes, où la planche recopiait le
+    calcul de la construction.
+
+    Chaque entrée garde **son origine**. Une fréquence annoncée s'applique par
+    `appliquer()` ; une fréquence proposée demande d'abord `ajouter_mode()`.
+    Sans ce drapeau il faudrait relire le texte affiché pour décider — et une
+    phrase qu'on relit pour décider d'une action est un drapeau déguisé.
+    """
+    trouvees, deja = [], set()
+    for brut in annonces:
+        try:
+            valeur = float(brut)
+        except (TypeError, ValueError):
+            continue
+        arrondi = round(valeur)
+        if arrondi in deja:
+            # 59.94 et 60.00 arrondissent au même nombre : les montrer toutes
+            # les deux donnerait deux lignes « 60 Hz » dans le menu, et personne
+            # ne saurait laquelle choisir.
+            continue
+        deja.add(arrondi)
+        trouvees.append((arrondi, brut, True))
+    for usuelle in usuelles:
+        if usuelle not in deja:
+            trouvees.append((usuelle, str(usuelle), False))
+    trouvees.sort(key=lambda entree: entree[0])
+    return trouvees

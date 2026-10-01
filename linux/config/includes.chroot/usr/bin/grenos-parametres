@@ -239,70 +239,126 @@ class Reglages(Gtk.Window):
         premier = self.ecrans[0]
         self.modes = sorted(premier["modes"], key=lambda m: module_ecran.surface(m["taille"]),
                             reverse=True)
+
+        # ---- Deux menus, et rien a taper ------------------------------------
+        #
+        # Grenofar, le 1er octobre : « comme Windows, genre il analyse l'ecran
+        # et on peut choisir avec un menu deroulant 120 240 fps etc, pas a
+        # taper ».
+        #
+        # La definition et la frequence etaient DEJA des menus. Ce qui se tapait
+        # etait la troisieme case, « Aller plus haut » : un compteur de 24 a 360
+        # dans une seconde carte, avec son propre bouton « Essayer cette
+        # frequence ». Deux cartes, deux boutons, et un nombre a composer pour
+        # obtenir ce que Windows donne en un clic.
+        #
+        # Les deux sont fondues en UN menu. Ce que le pilote annonce y figure,
+        # et les frequences usuelles qu'il n'annonce pas y figurent aussi, dites
+        # comme telles — parce qu'une machine virtuelle en annonce presque
+        # toujours une seule, et que c'etait tout l'interet de la case libre.
         self.choix_taille = Gtk.ComboBoxText()
-        self.choix_taux = Gtk.ComboBoxText()
         for index, mode in enumerate(self.modes):
-            self.choix_taille.append_text(mode["taille"])
+            largeur, hauteur = mode["taille"].split("x")
+            self.choix_taille.append_text("%s × %s" % (largeur, hauteur))
             if mode["taille"] == premier["actuelle"]:
                 self.choix_taille.set_active(index)
         if self.choix_taille.get_active() < 0:
             self.choix_taille.set_active(0)
+
+        self.choix_taux = Gtk.ComboBoxText()
         self.choix_taille.connect("changed", lambda _: self.relire_taux())
         self.relire_taux()
 
-        # Au-delà de ce que le pilote propose : on calcule la définition
-        # soi-même. Sans cela, impossible de dépasser 60 images par seconde
-        # quand la liste annoncée s'arrête là — ce qui est le cas de presque
-        # toutes les machines virtuelles.
-        self.libre_taux = Gtk.SpinButton.new_with_range(24, 360, 1)
-        self.libre_taux.set_value(120)
+        # Ce que le menu offre VRAIMENT, sur le port série.
+        #
+        # Un menu déroulant qui s'ouvre vide ou qui n'offre qu'une ligne ne fait
+        # rougir aucune étape : c'est exactement l'angle mort de la page Son, à
+        # l'échelle d'un menu. La ligne dit combien de fréquences sont offertes
+        # et combien le pilote en annonce — si un jour la seconde tombe à zéro,
+        # c'est que `xrandr` ne répond plus.
+        annoncees = sum(1 for _a, _b, ann in self.taux_proposes if ann)
+        grenosui.dire(
+            "reglages ecran : %s, %d definitions, %d frequences offertes dont %d annoncees"
+            % (premier["actuelle"] or "inconnue", len(self.modes),
+               len(self.taux_proposes), annoncees))
 
         return self.enveloppe(
             grenosui.titre(
                 "Écran",
-                f"Écran {premier['nom']}, actuellement {premier['actuelle'] or 'inconnu'} "
+                f"Écran {premier['nom']}, actuellement "
+                f"{premier['actuelle'].replace('x', ' × ') or 'inconnu'} "
                 f"à {premier['taux'] or '?'} images par seconde."),
             grenosui.carte(
                 self.ligne("Définition", self.choix_taille),
                 self.ligne("Images par seconde", self.choix_taux),
                 grenosui.bouton("Appliquer", self.appliquer_ecran, "principal"),
                 self.dire_ecran,
-                self.note("Dans une machine virtuelle, la fenêtre peut aussi être "
-                          "redimensionnée librement : la définition suit toute seule."),
-            ),
-            grenosui.carte(
-                self.ligne("Aller plus haut", self.libre_taux),
-                grenosui.bouton("Essayer cette fréquence", self.forcer_taux),
-                self.note("Le pilote n'annonce pas toujours tout ce que l'écran accepte : "
-                          "cette définition est calculée puis essayée sur la définition "
-                          "choisie au-dessus. Si l'écran refuse, rien ne change — et s'il "
-                          "accepte mais que l'image est noire, attends dix secondes : "
-                          "rien n'est enregistré tant que l'essai n'a pas réussi."),
+                self.note("Les fréquences marquées « à essayer » ne sont pas "
+                          "annoncées par le pilote : elles sont calculées puis "
+                          "proposées à l'écran. S'il refuse, rien ne change — et "
+                          "s'il accepte mais que l'image reste noire, attends dix "
+                          "secondes, rien n'est enregistré tant que l'essai n'a "
+                          "pas réussi."),
             ),
         )
 
     def relire_taux(self):
+        """Remplit le menu des fréquences pour la définition choisie.
+
+        Chaque entrée garde SA valeur et SON origine — annoncée par le pilote,
+        ou proposée par nous. Sans cela il faudrait relire le texte affiché pour
+        décider quoi faire, et une phrase qu'on relit pour décider d'une action
+        est un drapeau déguisé.
+        """
         index = max(self.choix_taille.get_active(), 0)
         self.choix_taux.remove_all()
-        for taux in self.modes[index]["taux"]:
-            self.choix_taux.append_text(taux)
-        self.choix_taux.set_active(0)
+        self.taux_proposes = []
 
-    def forcer_taux(self):
-        index = max(self.choix_taille.get_active(), 0)
-        taille = self.modes[index]["taille"]
-        largeur, hauteur = taille.split("x")
-        taux = self.libre_taux.get_value()
-        souci = module_ecran.ajouter_mode(self.ecrans[0]["nom"], largeur, hauteur, taux)
-        self.dire_ecran.set_text(
-            souci or f"Appliqué : {taille} à {taux:.0f} images par seconde.")
+        annonces = self.modes[index]["taux"] if self.modes else []
+        # La fusion vit dans le module, pas ici : c'est la seule facon de
+        # l'exercer avec LA fonction qui tourne, et non avec une copie.
+        self.taux_proposes = module_ecran.frequences_proposees(annonces)
+        for arrondi, _brut, annoncee in self.taux_proposes:
+            self.choix_taux.append_text(
+                "%d Hz" % arrondi if annoncee else "%d Hz — à essayer" % arrondi)
+
+        # On se place sur ce qui tourne en ce moment, pas sur le premier de la
+        # liste : ouvrir une page de réglages ne doit jamais donner l'impression
+        # qu'on va changer quelque chose.
+        courant = self.ecrans[0]["taux"] if self.ecrans else ""
+        choisi = 0
+        if courant:
+            try:
+                vise = round(float(courant))
+                for n, (arrondi, _b, _a) in enumerate(self.taux_proposes):
+                    if arrondi == vise:
+                        choisi = n
+                        break
+            except ValueError:
+                pass
+        self.choix_taux.set_active(choisi)
 
     def appliquer_ecran(self):
         index = max(self.choix_taille.get_active(), 0)
         taille = self.modes[index]["taille"]
-        taux = self.choix_taux.get_active_text() or ""
-        souci = module_ecran.appliquer(self.ecrans[0]["nom"], taille, taux)
-        self.dire_ecran.set_text(souci or f"Appliqué : {taille} à {taux} images par seconde.")
+        choix = self.choix_taux.get_active()
+        if choix < 0 or choix >= len(self.taux_proposes):
+            return self.dire_ecran.set_text("Choisis une fréquence.")
+        arrondi, brut, annoncee = self.taux_proposes[choix]
+
+        if annoncee:
+            souci = module_ecran.appliquer(self.ecrans[0]["nom"], taille, brut)
+        else:
+            # Au-delà de ce que le pilote propose : on calcule la définition
+            # nous-mêmes. Sans cela, impossible de dépasser 60 images par
+            # seconde quand la liste annoncée s'arrête là — ce qui est le cas de
+            # presque toutes les machines virtuelles.
+            largeur, hauteur = taille.split("x")
+            souci = module_ecran.ajouter_mode(self.ecrans[0]["nom"], largeur,
+                                              hauteur, float(brut))
+        self.dire_ecran.set_text(
+            souci or "Appliqué : %s à %d images par seconde."
+            % (taille.replace("x", " × "), arrondi))
 
     # ---- Le son ------------------------------------------------------------
     def page_son(self):
