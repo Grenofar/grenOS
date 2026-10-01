@@ -599,7 +599,7 @@ for instant in 1 2 3 4 5 6 7 8 9 10; do
   sleep 0.5
 done
 echo "extinction : $EXTINCTION capture(s) prises pendant l'arret"
-for instant in 1 2 3 4 5 6; do
+for instant in 1 2 3 4 5 6 7 8 9 10 11 12; do
   [ -f "$RUNNER_TEMP/ecran-extinction-$instant.ppm" ] || continue
   # Un ecran de texte est noir a plus de 90 % ; notre fond d'ecran, jamais.
   # `judge` sort deja cette part, et c'est la seule mesure qui distingue

@@ -47,7 +47,14 @@ Before=display-manager.service lightdm.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/true
-ExecStop=/usr/lib/grenos/grenos-taire-larret splash
+# `tout`, et non `splash`, depuis la photo de la 10e capture du run
+# 36815356430 : elle montre SIX lignes de service survivantes, toutes
+# imprimees APRES l extinction faite tot. systemd a donc rallume
+# l affichage entre les deux moments — il faut l eteindre aux deux.
+#
+# Quarante lignes au depart, six apres le premier geste : le second vise
+# exactement celles-la.
+ExecStop=/usr/lib/grenos/grenos-taire-larret tout
 TimeoutStopSec=15
 # Sans lui, systemd tuerait plymouthd avec le groupe de contrôle de cette unité
 # à la seconde où son arrêt se termine : né et mort dans la même seconde, et la
