@@ -124,6 +124,31 @@ def main():
         print("lignes d arret : le journal de systemd est a l ecran pendant"
               " l extinction")
         return 1
+
+    # UN ECRAN PROPRE SUR DEUX PHOTOS NE PROUVE RIEN, ET CELA M A FAIT ANNONCER
+    # UNE VICTOIRE QUI N EN ETAIT PAS UNE.
+    #
+    # La machine d essai meurt a une vitesse qui varie du simple au decuple.
+    # Quatre tours de suite, le meme jour :
+    #
+    #     3 captures  -> 3024 pixels verts
+    #     1 capture   ->    0          <- « le journal est parti », ai-je ecrit
+    #     10 captures ->  420
+    #     3 captures  -> 3276
+    #
+    # Le tour ou j ai annonce la reparation n avait pris QU UNE photo : l arret
+    # s est termine avant que le journal n ait eu le temps d apparaitre. Zero
+    # vert n y voulait pas dire « rien ne s affiche », mais « on n a pas
+    # regarde assez longtemps ».
+    #
+    # C est exactement la faute que ce depot documente depuis le 26 septembre :
+    # absence de preuve n est pas preuve d absence. On refuse donc de conclure
+    # quand la fenetre d observation a ete trop courte, au lieu de rendre un
+    # vert qui ne veut rien dire.
+    if vues < 3:
+        print("lignes d arret : %d photo(s) seulement — la machine est partie"
+              " trop vite, on ne peut RIEN conclure" % vues)
+        return 0
     print("lignes d arret : %d photo(s), aucune ligne de service a l ecran" % vues)
     return 0
 
