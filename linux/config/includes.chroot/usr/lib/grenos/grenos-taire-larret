@@ -217,6 +217,33 @@ if [ "$MOMENT" = splash ] || [ "$MOMENT" = tout ]; then
 
     # Toujours 0 : une machine qui ne s'éteint pas serait une panne infiniment pire
     # que quelques lignes de journal à l'écran.
+    # ---- Y a-t-il seulement de quoi dessiner ? -----------------------------
+    #
+    # La documentation de Plymouth le dit en toutes lettres (`plymouth(8)`,
+    # paquet 24.004.60-5) :
+    #
+    #     On systems where kernel-based mode setting is not available,
+    #     plymouth falls back to a TEXT MODE boot screen.
+    #
+    # Et c'est exactement ce qu'on observe : notre `display-message` est sorti
+    # **en texte de console, en haut à gauche**, pas sur une splash. Le démon
+    # n'a donc pas de moteur graphique à ce moment-là.
+    #
+    # Reste à savoir pourquoi, et il n'y a que deux possibilités :
+    # ou bien la machine n'a pas de périphérique DRM du tout — auquel cas
+    # couvrir le journal par une splash est **impossible ici**, et il faudra le
+    # dire au lieu de continuer à essayer ; ou bien il existe et quelque chose
+    # le retient, et c'est une autre réparation.
+    #
+    # On ne devine pas : on liste. C'est une lecture de répertoire, elle ne
+    # coûte rien et elle ne peut pas se tromper.
+    if [ -d /dev/dri ]; then
+        cartes=$(ls /dev/dri 2>/dev/null | paste -sd" " -)
+        dire "extinction : /dev/dri = ${cartes:-vide}"
+    else
+        dire "extinction : /dev/dri n existe pas, pas de rendu graphique possible"
+    fi
+
 fi
 
 # Toujours 0 : une machine qui ne s'éteint pas serait une panne bien pire
