@@ -38,22 +38,11 @@ RemainAfterExit=yes
 # `|| true` partout : effacer une console est un confort, jamais une raison
 # d'empêcher une machine de finir son démarrage.
 ExecStart=/bin/sh -c 'printf "\\033[3J\\033[2J\\033[H" > /dev/tty1 2>/dev/null || true'
-# Et à l'ARRÊT, la seconde moitié du même sujet : systemd rallume lui-même
-# l'affichage des messages d'état quand il met la transaction d'arrêt en file,
-# écrasant notre réglage. Les deux sondes l'ont montré — « no » au démarrage,
-# « yes » pendant l'arrêt. Cette unité étant liée à `graphical.target`, elle
-# est arrêtée dans la toute première vague : c'est le plus tôt où l'on puisse
-# parler, et donc le moins de lignes possible avant de se taire.
-ExecStop=/usr/lib/grenos/grenos-taire-larret
-TimeoutStopSec=10
-# `KillMode=process` n'est pas un detail : l'arrêt lève la splash Plymouth, et
-# le démon qu'il démarre vit dans le groupe de contrôle de CETTE unité. Avec le
-# réglage par défaut (`control-group`), systemd le tuerait à la seconde où
-# l'arrêt de l'unité se termine — il serait né et mort dans la même seconde, et
-# la ligne « splash levée » aurait dit vrai sans que rien n'apparaisse.
-# C'est la forme exacte des défauts de cette semaine : une mesure honnête qui
-# décrit un fait sans valeur.
-KillMode=process
+# L'arrêt a sa propre unité depuis le 1er octobre : `grenos-splash-arret`.
+# La levée de splash vivait ici, et c'était le mauvais moment — cette unité
+# est `After=graphical.target`, donc arrêtée AVANT le gestionnaire de
+# connexion, pendant que X possède encore l'écran. plymouthd acceptait tout
+# et ne pouvait rien dessiner. Ici on ne garde que l'effacement de tty1.
 StandardOutput=null
 
 [Install]

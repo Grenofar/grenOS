@@ -1,0 +1,59 @@
+# Lever la splash d'arrêt au seul moment où l'écran est libre.
+#
+# POURQUOI CETTE UNITÉ EXISTE, ET POURQUOI CE N'EST PAS LA PRÉCÉDENTE
+#
+# Quatre tentatives pour que l'écran d'extinction porte notre marque, toutes
+# mesurées, toutes noires :
+#
+#   1. `Title=` dans `[shutdown]`      → photo noire, 100 % ;
+#   2. `UseEndAnimation=true`          → photo noire, 2759 octets ;
+#   3. `plymouth display-message`      → accepté, photo noire ;
+#   4. et le thème porte bien tout cela — l'instrument posé exprès l'a imprimé :
+#      `thema [shutdown] : Title=Extinction de grenOS SubTitle=… UseEndAnimation=true`
+#
+# Donc : la configuration est juste, le démon répond, il accepte `show-splash`
+# ET `display-message`, et rien n'apparaît. Trois variantes de plus auraient été
+# trois devinettes.
+#
+# CE QUI A TRANCHÉ : UNE PHOTO QU'ON AVAIT DÉJÀ
+#
+# L'écran de la mise à jour au redémarrage, pris par la même CI, dans le même
+# QEMU, avec le même démon et le même thème, montre **notre fond, notre logo,
+# notre titre français, notre barre bleue et un message en direct**.
+#
+# Plymouth sait donc dessiner ici. Le noir de l'extinction n'est pas une limite
+# de la machine d'essai — c'est le MOMENT.
+#
+# ET LE MOMENT, C'EST MOI QUI L'AVAIS CHOISI
+#
+# La levée de splash vivait dans `grenos-console-propre.service`, qui est
+# `After=graphical.target`. À l'arrêt l'ordre s'inverse : cette unité est donc
+# arrêtée **avant** le gestionnaire de connexion, c'est-à-dire pendant que X
+# possède encore l'écran. plymouthd démarre, accepte tout ce qu'on lui demande,
+# et ne peut pas prendre le framebuffer. Quand X s'en va, il a déjà renoncé.
+#
+# `Before=display-manager.service` inverse exactement cela : on démarre avant
+# lui, donc on s'arrête **après** lui — l'écran est libre, et c'est toujours
+# bien avant le gros de la transaction d'arrêt.
+#
+# Les deux noms sont cités : `display-manager.service` est un alias de
+# `lightdm.service`, et un ordonnancement qui ne vise qu'un alias est le genre
+# de chose qui marche jusqu'au jour où elle ne marche plus, sans rien dire.
+[Unit]
+Description=grenOS : lever la splash d arret des que l ecran est libre
+Before=display-manager.service lightdm.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/usr/lib/grenos/grenos-taire-larret
+TimeoutStopSec=15
+# Sans lui, systemd tuerait plymouthd avec le groupe de contrôle de cette unité
+# à la seconde où son arrêt se termine : né et mort dans la même seconde, et la
+# ligne « splash levée » aurait dit vrai sans que rien n'apparaisse.
+KillMode=process
+StandardOutput=null
+
+[Install]
+WantedBy=multi-user.target

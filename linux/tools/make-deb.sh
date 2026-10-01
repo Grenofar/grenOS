@@ -121,7 +121,8 @@ for service in grenos-premier.service grenos-preuve.service \
                grenos-maj-verif.service grenos-maj-verif.timer \
                grenos-maj-auto.service grenos-maj-auto.timer \
                grenos-maj-demarrage.service \
-               grenos-console-propre.service grenos-sonde-arret.service; do
+               grenos-console-propre.service grenos-sonde-arret.service \
+               grenos-splash-arret.service; do
     install -m 0644 "$DEDANS/etc/systemd/system/$service" "$BUILD/etc/systemd/system/"
 done
 
