@@ -125,6 +125,14 @@ for service in grenos-premier.service grenos-preuve.service \
     install -m 0644 "$DEDANS/etc/systemd/system/$service" "$BUILD/etc/systemd/system/"
 done
 
+# Les fragments qui laissent passer un plymouthd deja la. Ils voyagent avec le
+# paquet, donc une machine deja posee recoit par mise a jour l arret silencieux
+# — c est tout l objet du chantier « plus jamais d ISO ».
+for unite in plymouth-poweroff plymouth-reboot plymouth-halt plymouth-kexec; do
+    install -d "$BUILD/etc/systemd/system/${unite}.service.d"
+    install -m 0644         "$DEDANS/etc/systemd/system/${unite}.service.d/10-grenos-tolerant.conf"         "$BUILD/etc/systemd/system/${unite}.service.d/"
+done
+
 # Le silence de systemd et l'absence de lecteur de disquette. Tous deux
 # corrigent ce qu'on voit EN ETEIGNANT, et une machine deja posee doit les
 # recevoir par mise a jour — c'est tout l'objet du chantier « plus jamais

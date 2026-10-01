@@ -105,18 +105,50 @@ fi
 # On le demande donc à la machine, au lieu d'en débattre : plymouthd répond-il,
 # et que rend `show-splash` quand on l'appelle pour de vrai ? Trois réponses
 # possibles, trois causes différentes, et aucune ne se devine depuis le code.
-if command -v plymouth >/dev/null 2>&1; then
+# LA RÉPONSE EST ARRIVÉE, ET ELLE DÉSIGNE LE QUAND, PAS LE QUOI
+#
+# La même question a été posée aux deux bouts de l'arrêt, et c'est l'écart qui
+# a tranché :
+#
+#     début : extinction : plymouthd ne repond pas, aucune splash a montrer
+#     fin   : extinction (pendant) : plymouthd repond a la fin de l arret
+#
+# `plymouth-poweroff.service` démarre donc bien son démon — **trop tard**. Tout
+# le journal est déjà écrit quand il arrive. Ce n'est pas Plymouth qui est
+# cassé : c'est son heure. Des deux réparations possibles que la sonde devait
+# départager, c'est la seconde.
+#
+# On lève donc la splash ici, dans la toute première vague de l'arrêt, avec
+# **les commandes exactes de l'unité Debian** (lues dans le paquet plymouth
+# 24.004.60-5) — pas une variante de notre invention :
+#
+#     ExecStart=/usr/sbin/plymouthd --mode=shutdown --attach-to-session
+#     ExecStartPost=-/usr/bin/plymouth show-splash
+#
+# Deux précautions, chacune pour une panne précise :
+#
+#   - on ne démarre que si aucun démon ne répond, sinon on en aurait deux ;
+#   - `grenos-console-propre.service` porte `KillMode=process`, sans quoi
+#     systemd tuerait ce démon avec le groupe de contrôle de l'unité dès la fin
+#     de son arrêt — il serait né et mort dans la même seconde, et la mesure
+#     aurait dit « lancé » en toute bonne foi.
+if ! command -v plymouth >/dev/null 2>&1; then
+    dire "extinction : plymouth n est pas installe"
+elif plymouth --ping >/dev/null 2>&1; then
+    dire "extinction : un plymouthd repondait deja, on ne touche a rien"
+elif [ ! -x /usr/sbin/plymouthd ]; then
+    dire "extinction : plymouthd introuvable, la splash ne peut pas etre levee"
+else
+    /usr/sbin/plymouthd --mode=shutdown --attach-to-session >/dev/null 2>&1 || true
     if plymouth --ping >/dev/null 2>&1; then
         if plymouth show-splash >/dev/null 2>&1; then
-            dire "extinction : plymouth repond et show-splash a ete accepte"
+            dire "extinction : splash levee des le debut de l arret"
         else
-            dire "extinction : plymouth repond mais show-splash a ete REFUSE"
+            dire "extinction : plymouthd demarre mais show-splash a ete REFUSE"
         fi
     else
-        dire "extinction : plymouthd ne repond pas, il n y a aucune splash a montrer"
+        dire "extinction : plymouthd n a pas voulu demarrer au debut de l arret"
     fi
-else
-    dire "extinction : plymouth n est pas installe"
 fi
 
 # Toujours 0 : une machine qui ne s'éteint pas serait une panne infiniment pire

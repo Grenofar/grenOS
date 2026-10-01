@@ -903,6 +903,56 @@ import cairo  # noqa: F401
 print("grenos: les bibliotheques de l'interface repondent")
 VERIF
 
+echo "--- grenOS : la splash d arret peut-elle etre levee ---"
+
+# RAPPORTE, PAS ENCORE BLOQUANT.
+#
+# La regle du projet est tenue depuis le 12 septembre : on ne rend une preuve
+# obligatoire qu APRES l avoir vue verte. Un garde neuf qui refuse a tort coute
+# une construction entiere et fait douter de tous les autres — c est arrive
+# quatre fois a `verif-commandes.py`. Celui-ci sera promu quand il aura passe.
+#
+# Ce qu il surveille : nos fragments recopient la commande de l unite Debian,
+# au `-` pres. Si Debian la change — une option, un chemin, un mode —, le
+# fragment la figerait a l ancienne et la splash ne se leverait plus, SANS que
+# rien ne rougisse. Exerce hors image sur quatre cas : identiques (accepte),
+# option ajoutee, chemin change, mode change (refuses).
+ecart=0
+for unite in plymouth-poweroff plymouth-reboot plymouth-halt plymouth-kexec; do
+    livree="/usr/lib/systemd/system/${unite}.service"
+    notre="/etc/systemd/system/${unite}.service.d/10-grenos-tolerant.conf"
+    if [ ! -f "$livree" ]; then
+        echo "grenos: ATTENTION $livree a disparu du paquet plymouth"
+        ecart=1
+        continue
+    fi
+    if [ ! -f "$notre" ]; then
+        echo "grenos: ATTENTION notre fragment manque pour $unite"
+        ecart=1
+        continue
+    fi
+    sienne=$(grep -m1 '^ExecStart=/' "$livree" | sed 's/^ExecStart=//')
+    notre_cmd=$(grep -m1 '^ExecStart=-' "$notre" | sed 's/^ExecStart=-//')
+    if [ "$sienne" != "$notre_cmd" ]; then
+        echo "grenos: ATTENTION $unite a change chez Debian"
+        echo "grenos:   paquet : $sienne"
+        echo "grenos:   nous   : $notre_cmd"
+        ecart=1
+    fi
+done
+if [ "$ecart" = 0 ]; then
+    echo "grenos: les 4 fragments plymouth portent la commande du paquet, au - pres"
+fi
+
+# Et la splash doit avoir de quoi se dessiner : le demon, son client, un theme.
+# Une splash levee sur un theme absent est un ecran noir, ce qui ne vaut pas
+# mieux qu un journal — et c est le genre d echange qu on a deja failli faire.
+for outil in /usr/sbin/plymouthd /usr/bin/plymouth; do
+    [ -x "$outil" ] || echo "grenos: ATTENTION $outil manque"
+done
+theme=$(plymouth-set-default-theme 2>/dev/null || echo "")
+echo "grenos: theme plymouth par defaut : ${theme:-AUCUN}"
+
 echo "--- grenOS : menage ---"
 
 rm -f /usr/share/applications/xfce4-about.desktop
