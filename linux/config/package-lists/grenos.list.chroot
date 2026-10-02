@@ -384,3 +384,73 @@ console-setup
 locales
 xdg-user-dirs
 sudo
+
+## ---------------------------------------------------------------------------
+## LES PERFORMANCES, ET CE QUI LES GERE VRAIMENT (demande le 1er octobre)
+##
+## « l'os doit pouvoir utiliser ABSOLUMENT TOUTES LES PERF DISPO ET BIEN LES
+## GERER, PRIVILEGIER LES JEUX ».
+##
+## Linux prend deja tout ce que la machine donne : il n'y a pas de bride a
+## lever. Ce qui manque est ailleurs, et chacun de ces paquets repond a un
+## manque precis, mesurable, et aucun n'est ecrit a la main.
+
+## Le gouverneur du processeur. Par defaut Debian laisse `schedutil`, qui monte
+## en frequence APRES avoir vu la charge : dans un jeu, cette fraction de
+## seconde est une saccade. `cpupower` permet de demander `performance`, qui
+## tient la frequence haute. C'est le seul outil du noyau pour cela.
+linux-cpupower
+
+## Repartir les interruptions sur tous les coeurs. Sans lui, le noyau les
+## envoie souvent toutes au coeur 0 : la carte reseau, le disque et le son
+## reveillent le meme coeur, celui-la sature, et les autres attendent. Sur une
+## machine a deux coeurs — une VM — c'est la moitie de la machine qui trinque.
+irqbalance
+
+## Ne plus jamais figer la machine quand la memoire manque. Le noyau seul
+## attend trop longtemps avant de tuer quelque chose : la machine devient
+## injouable plusieurs minutes avant que l'OOM killer ne se decide. `earlyoom`
+## agit avant, sur un seuil, et la machine reste utilisable.
+earlyoom
+
+## De la memoire compressee. Une VM a 8 Go qui lance un jeu ET un navigateur
+## echange sur le disque ; zram echange en RAM compressee, dix fois plus vite.
+## C'est ce que font Fedora, Ubuntu et SteamOS par defaut.
+zram-tools
+
+## ---------------------------------------------------------------------------
+## LES MISES A JOUR DE COMPOSANTS (demande le 1er octobre)
+##
+## « QUE MAJ INTEL AMD PROC ET GPU NVIDIA INTEL AMD SE FASSE DANS MISE A JOUR
+## COMPOSANT ».
+##
+## `fwupd` est l'outil qui fait cela sous Linux, et il n'y en a pas d'autre :
+## c'est lui que Fedora, Ubuntu et Dell emploient. Il parle au LVFS, le depot
+## de micrologiciels des constructeurs, et il met a jour BIOS, controleurs,
+## micrologiciels de GPU et de disque. Les microcodes processeur Intel et AMD,
+## eux, arrivent deja par `intel-microcode` et `amd64-microcode`, qui sont dans
+## cette liste depuis le 24 septembre et que `apt` met a jour comme le reste.
+fwupd
+
+## Et de quoi le voir : la fenetre de GNOME pour les micrologiciels. Elle
+## montre chaque composant, sa version, et ce qui est disponible.
+gnome-firmware
+
+## ---------------------------------------------------------------------------
+## L'ANTIVIRUS (demande le 1er octobre)
+##
+## « ajouter un antivirus linux preinstaller genre malwarebyte ou avast ou peu
+## importe ».
+##
+## Malwarebytes et Avast n'ont PAS de produit Linux de bureau : Avast a retire
+## son antivirus Linux en 2021, et Malwarebytes n'en a jamais publie. Sous
+## Linux, l'antivirus existant est ClamAV — libre, dans Debian, avec sa base de
+## signatures mise a jour par ses auteurs.
+##
+## `clamav-freshclam` telecharge les signatures. Il n'est PAS arme au demarrage :
+## la base fait plusieurs centaines de megaoctets, et la telecharger sans
+## prevenir sur la premiere connexion de quelqu'un serait une mauvaise surprise.
+## C'est la page Securite qui le demande, une fois, en le disant.
+clamav
+clamav-freshclam
+clamtk

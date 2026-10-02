@@ -40,8 +40,26 @@ for outil in grenos-shell grenos-session grenos-menu grenos-fond grenos-veilleur
     install -m 0755 "$DEDANS/usr/bin/$outil" "$BUILD/usr/bin/"
 done
 
-for module in grenosui ecran son materiel maj heure clavier reseau jeux; do
-    install -m 0644 "$DEDANS/usr/lib/grenos/$module.py" "$BUILD/usr/lib/grenos/"
+# TOUS les modules, jamais une liste ecrite a la main.
+#
+# Cette boucle nommait neuf modules un par un. Le 2 octobre, `composants.py` et
+# `securite.py` ont ete ecrits et branches dans les Reglages, et personne ne les
+# a ajoutes ici : l ISO les aurait eus (includes.chroot est copie en entier) et
+# une machine mise a jour par le depot ne les aurait PAS eus. Les deux pages
+# neuves auraient plante a l import, chez Grenofar seulement, et aucune etape
+# n aurait rougi.
+#
+# C est mot pour mot la dette que ce depot a deja payee sur la liste
+# FACULTATIVES de verif-commandes.py : *une liste qu il faut rallonger a chaque
+# fichier ecrit n est pas une liste, c est une dette*. On prend donc tout, et
+# on ecarte seulement les gardes de construction, qui n ont rien a faire sur la
+# machine de quelqu un.
+for source in "$DEDANS"/usr/lib/grenos/*.py; do
+    nom=$(basename "$source")
+    case "$nom" in
+        verif-*) continue ;;
+    esac
+    install -m 0644 "$source" "$BUILD/usr/lib/grenos/"
 done
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-compte" "$BUILD/usr/lib/grenos/"
 
@@ -122,7 +140,7 @@ for service in grenos-premier.service grenos-preuve.service \
                grenos-maj-auto.service grenos-maj-auto.timer \
                grenos-maj-demarrage.service \
                grenos-console-propre.service grenos-sonde-arret.service \
-               grenos-splash-arret.service; do
+               grenos-splash-arret.service grenos-performances.service; do
     install -m 0644 "$DEDANS/etc/systemd/system/$service" "$BUILD/etc/systemd/system/"
 done
 
@@ -188,6 +206,9 @@ install -m 0755 "$DEDANS/usr/lib/grenos/grenos-sonde-arret" "$BUILD/usr/lib/gren
 # Celui qui reteint l affichage des messages d etat des le debut de l arret :
 # systemd le rallume lui-meme, et c est la seule facon de le contredire.
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-taire-larret" "$BUILD/usr/lib/grenos/"
+# Le gouverneur du processeur : un noyau neuf repart sur celui par defaut,
+# donc ce reglage doit voyager avec le paquet et etre rejoue.
+install -m 0755 "$DEDANS/usr/lib/grenos/grenos-performances" "$BUILD/usr/lib/grenos/"
 # Le depot d'un travail a appliquer au prochain demarrage. Il voyage avec le
 # paquet, donc une machine deja installee le recoit par mise a jour — ce qui
 # est la moindre des choses pour un outil dont tout l'objet est d'appliquer des
@@ -268,6 +289,71 @@ dpkg-deb --build --root-owner-group "$META" "$DEB_META"
 echo "$DEB_META"
 
 DEB="$OUT/grenos-desktop_${VERSION}_all.deb"
+# TOUT MODULE QU UN PROGRAMME LIVRE IMPORTE DOIT ETRE DANS LE PAQUET.
+#
+# La boucle ci-dessus prend maintenant tous les .py, donc ce garde ne devrait
+# jamais parler. Il est la pour le jour ou quelqu un la restreindra, ou posera
+# un module ailleurs que dans /usr/lib/grenos : l oubli ne se verrait alors
+# QUE chez quelqu un qui met a jour, jamais dans l image, et jamais en CI.
+#
+# Il lit les `import X` de chaque programme livre, ecarte ce que Python et le
+# systeme fournissent, et exige le fichier dans le paquet.
+python3 - "$BUILD" <<'VERIF'
+import os
+import re
+import sys
+
+racine = sys.argv[1]
+fournis = set(sys.builtin_module_names) | {
+    "os", "sys", "re", "json", "time", "glob", "math", "shutil", "socket",
+    "subprocess", "threading", "datetime", "traceback", "urllib", "html",
+    "collections", "functools", "itertools", "tempfile", "signal", "errno",
+    "random", "hashlib", "textwrap", "unicodedata", "locale", "configparser",
+    "gi", "cairo", "numpy",
+}
+
+modules = {n[:-3] for n in os.listdir(os.path.join(racine, "usr/lib/grenos"))
+           if n.endswith(".py")}
+
+programmes = []
+for dossier in ("usr/bin", "usr/lib/grenos"):
+    chemin = os.path.join(racine, dossier)
+    for nom in sorted(os.listdir(chemin)):
+        plein = os.path.join(chemin, nom)
+        if os.path.isfile(plein):
+            programmes.append(plein)
+
+motif = re.compile(r"^\s*(?:import|from)\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+manquants = []
+for plein in programmes:
+    try:
+        with open(plein, encoding="utf-8") as f:
+            tete = f.readline()
+            if "python" not in tete:
+                continue
+            f.seek(0)
+            lignes = f.read().splitlines()
+    except (OSError, UnicodeDecodeError):
+        continue
+    for ligne in lignes:
+        trouve = motif.match(ligne)
+        if not trouve:
+            continue
+        nom = trouve.group(1)
+        if nom in fournis or nom in modules:
+            continue
+        manquants.append((os.path.basename(plein), nom))
+
+if manquants:
+    for programme, nom in manquants:
+        print("grenos: %s importe %s, qui n est PAS dans le paquet"
+              % (programme, nom), file=sys.stderr)
+    sys.exit(1)
+
+print("grenos: %d module(s) dans le paquet, et tout ce qu on importe y est"
+      % len(modules))
+VERIF
+
 dpkg-deb --build --root-owner-group "$BUILD" "$DEB"
 dpkg-deb --info "$DEB" | head -12
 dpkg-deb --contents "$DEB" | awk '{print $6}' | sort

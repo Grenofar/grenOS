@@ -1,0 +1,23 @@
+# Tenir la fréquence du processeur haute, pour les jeux.
+#
+# Demandé le 1er octobre : « PRIVILEGIER LES JEUX ». Le gouverneur par défaut
+# de Debian monte en fréquence après avoir vu la charge ; dans un jeu, ce
+# retard est une saccade. Celui-ci la tient haute.
+#
+# `After=multi-user.target` et pas plus tôt : le réglage n'a aucune urgence, et
+# le poser pendant le démarrage ne ferait que ralentir ce démarrage. Il est
+# aussi rejoué par `appliquer-systeme` après chaque mise à jour, parce qu'un
+# noyau neuf repart sur le gouverneur par défaut.
+[Unit]
+Description=grenOS : tenir la frequence du processeur haute
+After=multi-user.target
+ConditionPathExists=/sys/devices/system/cpu
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/grenos/grenos-performances
+StandardOutput=null
+
+[Install]
+WantedBy=multi-user.target

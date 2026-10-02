@@ -66,6 +66,28 @@ def lire_ppm(chemin):
     return largeur, hauteur, donnees[i + 1:i + 1 + largeur * hauteur * 3]
 
 
+# COMBIEN DE PIXELS VERTS FONT UNE LIGNE, ET POURQUOI 300 ETAIT AVEUGLE
+#
+# La premiere version refusait au-dela de 300 pixels verts. Ce chiffre venait
+# de la photo de la regression du 1er octobre : 3024 pixels pour QUARANTE
+# lignes. Il etait donc cale sur « beaucoup de lignes », et il ne pouvait pas
+# voir le cas qui reste.
+#
+# Le 2 octobre, le garde a rendu « aucune marque de service (252 verts) » sur
+# une photo qui en portait TROIS, lisibles a l oeil nu. 3024 / 40 = 76 pixels
+# par ligne, 252 / 3 = 84 : les deux mesures s accordent, et 300 valait donc
+# « moins de quatre lignes passent ».
+#
+# Le seuil se deduit maintenant d une mesure et non d un arrondi. Sur les 25
+# captures de nos propres ecrans du run 36926339411 — bureau, menu, Reglages,
+# Jeux, GrenPlace, Son, Taches, explorateur, installateur, UEFI, les trois
+# ecrans de mise a jour — le compte de vert vaut EXACTEMENT ZERO, toutes sans
+# exception. La signature est donc parfaitement specifique, et il n y a aucun
+# rembourrage a payer : 40 attrape une seule ligne et laisse quarante pixels
+# de marge au-dessus de nos ecrans.
+SEUIL_VERT = 40
+
+
 def marques(pixels):
     """Combien de pixels d'un vert et d'un rouge de console.
 
@@ -109,7 +131,7 @@ def main():
         _l, _h, pixels = image
         verts, rouges = marques(pixels)
         nom = chemin.rsplit("/", 1)[-1]
-        if verts > 300:
+        if verts > SEUIL_VERT:
             print("lignes d arret : %s porte %d pixels de [ OK ] vert"
                   " (%d rouges, pour information)" % (nom, verts, rouges))
             coupable = coupable or nom

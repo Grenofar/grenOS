@@ -25,7 +25,7 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 # (l'absence de /etc/grenos/identite) s'en charge, mais autant être clair.
 for service in grenos-premier.service grenos-preuve.service grenos-maj-verif.timer \
                grenos-console-propre.service grenos-sonde-arret.service \
-               grenos-splash-arret.service; do
+               grenos-splash-arret.service grenos-performances.service; do
     systemctl enable "$service" >/dev/null 2>&1 || true
 done
 

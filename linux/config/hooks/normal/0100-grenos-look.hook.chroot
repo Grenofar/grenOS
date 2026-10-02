@@ -182,15 +182,20 @@ manque=""
 grep -q '^branding: grenos' /etc/calamares/settings.conf 2>/dev/null || \
     manque="$manque branding-grenos"
 [ -f /usr/share/calamares/branding/grenos/branding.desc ] || manque="$manque branding.desc"
-grep -q '^initialPartitioningChoice: erase' /etc/calamares/modules/partition.conf 2>/dev/null || \
-    manque="$manque tout-le-disque"
+# Ce garde exigeait que « effacer le disque » soit la case DEJA COCHEE : il
+# protegeait donc le defaut dangereux. Calamares le dit dans son propre fichier
+# d exemple — « in particular, erase is a dangerous choice » — et son defaut a
+# lui est `none`. On exige desormais qu AUCUN choix destructeur ne soit
+# prechoisi, pour que personne ne perde Windows en cliquant « Suivant ».
+grep -q '^initialPartitioningChoice: none' /etc/calamares/modules/partition.conf 2>/dev/null || \
+    manque="$manque rien-de-prechoisi"
 grep -q '^allowManualPartitioning: true' /etc/calamares/modules/partition.conf 2>/dev/null || \
     manque="$manque choix-manuel"
 if [ -n "$manque" ]; then
     echo "grenos: l'installateur est incomplet :$manque" >&2
     exit 1
 fi
-echo "grenos: installateur verifie (nos couleurs, tout le disque par defaut, choix manuel possible)"
+echo "grenos: installateur verifie (nos couleurs, aucun choix destructeur prechoisi, choix manuel possible)"
 
 echo "--- grenOS : le magasin s'appelle-t-il encore GrenPlace ---"
 
