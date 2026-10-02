@@ -362,6 +362,46 @@ if [ "$pilotes" -lt 1 ]; then
 fi
 echo "grenos: $pilotes pilotes VA-API, et vainfo/vdpauinfo pour les interroger"
 
+echo "--- grenOS : l explorateur demande-t-il des valeurs QUE LIBFM CONNAIT ---"
+# UNE CLE QUE PERSONNE NE LIT NE PRODUIT AUCUNE ERREUR.
+#
+# Deux fois deja : nos sept cles `places_*` etaient dans la section [config] au
+# lieu de [places], et libfm les ignorait en silence depuis des semaines — on
+# croyait avoir regle un panneau qu on n avait jamais regle. Le fichier se lit,
+# les cles tombent, rien ne rougit.
+#
+# Ce controle ferme la meme porte un cran plus bas : la cle est au bon endroit,
+# mais sa VALEUR est un mot que libfm ne connait pas. Les noms permis viennent
+# du code, lus le 2 octobre :
+#
+#   view_mode  -> view_mode_names[] de src/gtk/fm-standard-view.c
+#                 icon, compact, thumbnail, list
+#   columns    -> column_infos_raw[] de src/gtk/fm-folder-model.c
+#                 name, desc, size, perm, owner, mtime, dirname, ext
+EXPLO=/etc/xdg/pcmanfm/default/pcmanfm.conf
+manque=""
+if [ ! -f "$EXPLO" ]; then
+    manque="$manque fichier-absent"
+else
+    vue=$(sed -n 's/^view_mode=\(.*\)$/\1/p' "$EXPLO" | head -n 1)
+    case "$vue" in
+        icon|compact|thumbnail|list) ;;
+        *) manque="$manque vue-inconnue($vue)" ;;
+    esac
+    colonnes=$(sed -n 's/^columns=\(.*\)$/\1/p' "$EXPLO" | head -n 1)
+    for colonne in $(echo "$colonnes" | tr ';' ' '); do
+        case "$colonne" in
+            name|desc|size|perm|owner|mtime|dirname|ext) ;;
+            *) manque="$manque colonne-inconnue($colonne)" ;;
+        esac
+    done
+fi
+if [ -n "$manque" ]; then
+    echo "grenos: l explorateur demande ce que libfm ne connait pas :$manque" >&2
+    exit 1
+fi
+echo "grenos: explorateur : vue $vue, colonnes [$colonnes], toutes connues de libfm"
+
 echo "--- grenOS : un jeu passera-t-il VRAIMENT devant le reste ---"
 # GAMEMODE INSTALLE NE VEUT PAS DIRE GAMEMODE QUI SERT.
 #
