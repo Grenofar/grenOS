@@ -37,6 +37,24 @@ else
     systemctl disable grenos-maj-auto.timer >/dev/null 2>&1 || true
 fi
 
+# Les signatures de l'antivirus ne se téléchargent pas toutes seules.
+#
+# Debian **arme** `clamav-freshclam` à l'installation du paquet. Laissé tel
+# quel, une machine neuve tirerait plusieurs centaines de mégaoctets dès sa
+# première connexion, sans rien demander à personne — et notre page Sécurité
+# promet exactement le contraire.
+#
+# Une promesse écrite dans un commentaire et contredite par le paquet, c'est la
+# forme de défaut que ce dépôt passe son temps à trouver. On le désarme donc
+# ici, à chaque mise à jour, parce qu'une réinstallation du paquet le
+# rearmerait.
+#
+# `clamav-daemon` n'est pas installé du tout : c'est le scanner résident, il
+# garde la base en mémoire — plusieurs centaines de mégaoctets en permanence —
+# et Grenofar a demandé l'inverse (« éviter les processus en trop »).
+systemctl disable clamav-freshclam.service >/dev/null 2>&1 || true
+systemctl stop clamav-freshclam.service >/dev/null 2>&1 || true
+
 # L'écran de chargement reste jusqu'à l'extinction.
 #
 # CETTE BOUCLE APPELAIT `systemctl enable` ET N'A JAMAIS RIEN FAIT.

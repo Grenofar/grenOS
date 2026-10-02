@@ -26,7 +26,9 @@ import grenosui  # noqa: E402
 import heure as module_heure  # noqa: E402
 import maj as module_maj  # noqa: E402
 import materiel  # noqa: E402
-import son as module_son  # noqa: E402
+import son as module_son
+import composants as module_composants
+import securite as module_securite  # noqa: E402
 
 COMPTE = "/usr/lib/grenos/grenos-compte"
 
@@ -97,13 +99,18 @@ class Reglages(Gtk.Window):
             "compte": self.page_compte,
             "heure": self.page_heure,
             "maj": self.page_maj,
+            "composants": self.page_composants,
+            "securite": self.page_securite,
             "materiel": self.page_materiel,
         }
         self.garnies = set()
         for nom, titre in (("apparence", "Apparence"), ("ecran", "Écran"),
                            ("son", "Son"), ("reseau", "Réseau"),
                            ("compte", "Compte"), ("heure", "Heure et date"),
-                           ("maj", "Mises à jour"), ("materiel", "Matériel")):
+                           ("maj", "Mises à jour"),
+                           ("composants", "Mise à jour composant"),
+                           ("securite", "Sécurité"),
+                           ("materiel", "Matériel")):
             self.pages.add_titled(
                 Gtk.Box(orientation=Gtk.Orientation.VERTICAL), nom, titre)
         self.pages.connect("notify::visible-child-name", self.garnir)
@@ -359,6 +366,141 @@ class Reglages(Gtk.Window):
         self.dire_ecran.set_text(
             souci or "Appliqué : %s à %d images par seconde."
             % (taille.replace("x", " × "), arrondi))
+
+    # ---- Mise à jour composant ----------------------------------------------
+    def page_composants(self):
+        """Les micrologiciels de la machine, par fwupd.
+
+        RIEN N'EST LU PENDANT QUE LA FENÊTRE SE CONSTRUIT. `fwupdmgr` interroge
+        le matériel et peut prendre plusieurs secondes ; `vulkaninfo` a déjà
+        laissé la page Jeux vide vingt-cinq secondes, et la règle qu'on en a
+        tirée vaut pour toute lecture : la page s'affiche d'abord, elle se
+        remplit ensuite.
+        """
+        self.liste_composants = Gtk.Label(label="Lecture des composants…", xalign=0)
+        self.liste_composants.set_line_wrap(True)
+        self.dire_composants = Gtk.Label(label="", xalign=0)
+        self.dire_composants.get_style_context().add_class("sous")
+
+        threading.Thread(target=self._lire_composants, daemon=True).start()
+
+        return self.enveloppe(
+            grenosui.titre("Mise à jour composant",
+                           "Les micrologiciels de la machine : carte mère, "
+                           "contrôleurs, disques, cartes graphiques."),
+            grenosui.carte(
+                self.liste_composants,
+                grenosui.bouton("Chercher des mises à jour",
+                                self.chercher_composants, "principal"),
+                self.dire_composants,
+            ),
+            # Ce que fwupd ne fait PAS. Le dire ici évite de laisser croire que
+            # cette page couvre tout le matériel — c'est la même honnêteté que
+            # la page Jeux sur Fortnite.
+            grenosui.carte(
+                self.note("Le microcode du processeur Intel ou AMD ne passe pas "
+                          "par ici : il arrive avec « Mettre à jour grenOS », "
+                          "comme le reste du système."),
+                self.note("Le pilote NVIDIA non plus : la page Jeux le propose "
+                          "quand la machine a une carte NVIDIA."),
+            ),
+        )
+
+    def _lire_composants(self):
+        if not module_composants.present():
+            return GLib.idle_add(
+                self.liste_composants.set_text,
+                "fwupd n'est pas installé : aucun composant n'est interrogeable.")
+        trouves = module_composants.composants()
+        if not trouves:
+            texte = ("Aucun composant interrogeable sur cette machine. C'est le "
+                     "cas ordinaire d'une machine virtuelle : elle n'a pas de "
+                     "micrologiciel à mettre à jour.")
+        else:
+            texte = chr(10).join(
+                "%s — version %s%s"
+                % (c["nom"], c["version"],
+                   "" if c["peut_etre_mis_a_jour"] else "  (non modifiable)")
+                for c in trouves)
+        GLib.idle_add(self.liste_composants.set_text, texte)
+        grenosui.dire("reglages composants : %d composant(s) lus par fwupd"
+                      % len(trouves))
+
+    def chercher_composants(self):
+        self.dire_composants.set_text("Lecture chez les constructeurs…")
+        threading.Thread(target=self._chercher_composants, daemon=True).start()
+
+    def _chercher_composants(self):
+        reussi, _dit = module_composants.rafraichir()
+        if not reussi:
+            return GLib.idle_add(
+                self.dire_composants.set_text,
+                "La liste des constructeurs n'a pas pu être relue. Vérifie le réseau.")
+        attendues = module_composants.mises_a_jour()
+        if not attendues:
+            return GLib.idle_add(self.dire_composants.set_text,
+                                 "Tous les composants sont à jour.")
+        GLib.idle_add(
+            self.dire_composants.set_text,
+            chr(10).join("%s : %s vers %s" % (m["nom"], m["de"], m["vers"])
+                         for m in attendues))
+
+    # ---- Sécurité ------------------------------------------------------------
+    def page_securite(self):
+        """L'antivirus, et ce qu'il peut vraiment dire."""
+        self.etat_securite = Gtk.Label(label=module_securite.resume(), xalign=0)
+        self.etat_securite.set_line_wrap(True)
+        self.dire_securite = Gtk.Label(label="", xalign=0)
+        self.dire_securite.get_style_context().add_class("sous")
+
+        grenosui.dire("reglages securite : clamav %s, signatures %s"
+                      % ("present" if module_securite.present() else "absent",
+                         "presentes" if module_securite.signatures()["presentes"]
+                         else "absentes"))
+
+        return self.enveloppe(
+            grenosui.titre("Sécurité",
+                           "ClamAV, l'antivirus libre, et sa base de signatures."),
+            grenosui.carte(
+                self.etat_securite,
+                grenosui.bouton("Télécharger les signatures",
+                                self.telecharger_signatures, "principal"),
+                self.dire_securite,
+                self.note("La base pèse plusieurs centaines de mégaoctets et "
+                          "change tous les jours : elle n'est pas dans l'image, "
+                          "elle se télécharge ici."),
+            ),
+            # Ce qu'un antivirus sous Linux fait, et ce qu'il ne fait pas. Un
+            # antivirus qui laisse croire qu'il protège de tout est pire
+            # qu'aucun.
+            grenosui.carte(
+                self.note("Les logiciels malveillants qui visent un bureau Linux "
+                          "sont rares. ClamAV sert surtout à ne pas faire suivre "
+                          "un fichier infecté à une machine Windows — une clé "
+                          "USB, une pièce jointe, un fichier partagé."),
+                self.note("Ni Malwarebytes ni Avast n'ont de produit Linux de "
+                          "bureau : Avast a retiré le sien en 2021, Malwarebytes "
+                          "n'en a jamais publié."),
+            ),
+        )
+
+    def telecharger_signatures(self):
+        self.dire_securite.set_text("Téléchargement en cours, cela peut durer…")
+        threading.Thread(target=self._telecharger_signatures, daemon=True).start()
+
+    def _telecharger_signatures(self):
+        try:
+            fin = subprocess.run(module_maj.lanceur() + ["freshclam"],
+                                 capture_output=True, text=True, timeout=900)
+            reussi = fin.returncode == 0
+        except (OSError, subprocess.SubprocessError) as souci:
+            reussi, fin = False, None
+            GLib.idle_add(self.dire_securite.set_text, str(souci))
+        if fin is not None:
+            GLib.idle_add(self.dire_securite.set_text,
+                          module_securite.resume() if reussi
+                          else "Le téléchargement n'a pas abouti.")
+        GLib.idle_add(self.etat_securite.set_text, module_securite.resume())
 
     # ---- Le son ------------------------------------------------------------
     def page_son(self):
