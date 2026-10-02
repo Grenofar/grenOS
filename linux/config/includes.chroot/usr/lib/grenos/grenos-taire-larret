@@ -198,8 +198,46 @@ if [ "$MOMENT" = splash ] || [ "$MOMENT" = tout ]; then
         # une devinette : les deux autres explications possibles ont été
         # mesurées et écartées — le thème porte bien nos réglages, et le
         # matériel de rendu est là.
+        # ET ON LUI DEMANDE QUEL GREFFON IL CHOISIT, AU LIEU DE LE DEDUIRE.
+        #
+        # Il reste quatre lignes a l ecran d extinction, et TROIS SONT A NOUS :
+        # « Finished grenos-sonde-arret », « Started plymouth-poweroff »,
+        # « Stopped grenos-splash-arret ». Les trente-six autres ont disparu.
+        #
+        # L hypothese qui colle : plymouthd, faute de pouvoir prendre l ecran
+        # que X detient encore, retombe sur son greffon TEXTE (« details »), et
+        # ce greffon REECRIT a la console les messages d etat que systemd lui
+        # envoie — meme quand systemd a cesse de les ecrire lui-meme. Nous
+        # ferions alors reapparaitre ce que nous venons de faire taire.
+        #
+        # Cette hypothese est verifiable, et je ne la tiens pas encore :
+        # `plymouthd(8)` documente « --debug-file=STRING », et le journal de
+        # debogage nomme le greffon charge. On l ecrit dans /run, qui disparait
+        # au demarrage suivant, et la sonde en rend UNE ligne.
+        #
+        # Si le greffon est « details », la reponse n est pas de regler la
+        # splash : c est de ne pas lever plymouthd du tout a ce moment-la. Et
+        # si c est « two-step », l hypothese est fausse et il faudra chercher
+        # ailleurs. Les deux reponses sont utiles ; aucune n est devinable.
+        mkdir -p /run/grenos 2>/dev/null || true
         /usr/sbin/plymouthd --mode=shutdown --tty=tty1 --attach-to-session \
+            --debug-file=/run/grenos/plymouth-arret.log \
             >/dev/null 2>&1 || true
+        # ON NE DEVINE PAS LA PHRASE, ON CHERCHE LE FICHIER.
+        #
+        # Ma premiere version lisait « Loading plugin: "…/details.so" » avec
+        # les guillemets. Plymouth n en met pas : le motif ne collait a rien,
+        # la ligne aurait dit « inconnu » a tous les coups, et c eut ete une
+        # mesure incapable de se tromper comme de trouver quoi que ce soit.
+        # Exercee avant d etre posee, sur quatre formes de ligne.
+        #
+        # On prend donc le DERNIER greffon charge, repere par son chemin sous
+        # le dossier des greffons de plymouth, sans rien supposer des mots qui
+        # l entourent.
+        greffon=$(grep -o '/[^ "]*/plymouth/[a-z0-9_-]*\.so' \
+                  /run/grenos/plymouth-arret.log 2>/dev/null \
+                  | tail -n 1 | sed 's#.*/##; s#\.so$##')
+        dire "extinction : greffon plymouth = ${greffon:-inconnu}"
         if plymouth --ping >/dev/null 2>&1; then
             if plymouth show-splash >/dev/null 2>&1; then
                 dire "extinction : splash levee des le debut de l arret"
