@@ -634,9 +634,23 @@ done
 # et ZERO sur chacun de nos ecrans — bureau, Jeux, GrenPlace, Reglages, et
 # l ecran de mise a jour avec notre fond, notre logo et notre barre bleue.
 #
-# RAPPORTE, PAS BLOQUANT : la regle du 12 septembre veut qu on voie vert avant
-# d exiger. Il sera promu au passage suivant.
-python3 scripts/ci-lignes-arret.py "$RUNNER_TEMP"/ecran-extinction-*.ppm || true
+# BLOQUANT DEPUIS LE 2 OCTOBRE, APRES DEUX PASSAGES VERTS SUR TROIS PHOTOS :
+#
+#   36955373992  3 photo(s), aucune ligne de service a l ecran
+#   36961800565  3 photo(s), aucune ligne de service a l ecran
+#
+# La regle du 12 septembre est tenue : on ne rend une preuve obligatoire
+# qu APRES l avoir vue verte, deux fois.
+#
+# Et il est SUR a rendre bloquant, parce qu il refuse de conclure sous trois
+# photos et rend 0 dans ce cas : il ne peut echouer que s il a VU des pixels de
+# `[  OK  ]`. La machine d essai meurt a une vitesse qui varie du simple au
+# decuple — un tour a une seule photo ne refusera donc jamais une image a tort.
+#
+# Ce qu il empeche : le retour du journal d arret, qui a mis dix jours a
+# partir, et qu une seule unite mal ordonnee ferait revenir en silence. Le
+# 1er octobre il est revenu EN ENTIER — quarante lignes — et rien n a rougi.
+python3 scripts/ci-lignes-arret.py "$RUNNER_TEMP"/ecran-extinction-*.ppm
 # Et ce que le port serie a dit pendant l'arret : c'est la ou les messages de
 # systemd apparaitraient s'ils apparaissaient.
 # `grep -c` ECRIT « 0 » et SORT EN 1 quand il ne trouve rien. Avec `set -e`,

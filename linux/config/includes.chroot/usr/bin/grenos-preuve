@@ -204,6 +204,19 @@ services=$(systemctl list-units --type=service --state=running --no-legend \
 processus=$(ps -e --no-headers 2>/dev/null | wc -l)
 dire "perf : $services service(s) en marche, $processus processus"
 
+# ET LEURS NOMS, PARCE QU'UN COMPTE NE DÉSIGNE PERSONNE.
+#
+# « 16 services » ne dit pas lequel est de trop. Pour retirer quoi que ce soit
+# il faut pouvoir lire la liste — et pour la lire sans ouvrir une capture, il
+# faut qu'elle tienne sur le port série.
+#
+# On enlève le suffixe `.service`, qui est le même seize fois et ne porte
+# aucune information : il doublerait la longueur de la ligne pour rien.
+noms=$(systemctl list-units --type=service --state=running --no-legend \
+       --no-pager 2>/dev/null | awk '{print $1}' | sed 's/\.service$//' \
+       | sort | tr '\n' ' ')
+dire "perf : en marche = ${noms:-inconnus}"
+
 # Les trois qui prennent le plus de mémoire résidente, avec leur taille. C'est
 # la seule liste qui désigne un coupable plutôt qu'un soupçon : un service qui
 # tourne sans rien consommer ne coûte rien à personne.
