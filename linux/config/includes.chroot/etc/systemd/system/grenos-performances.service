@@ -8,9 +8,20 @@
 # le poser pendant le démarrage ne ferait que ralentir ce démarrage. Il est
 # aussi rejoué par `appliquer-systeme` après chaque mise à jour, parce qu'un
 # noyau neuf repart sur le gouverneur par défaut.
+#
+# `Before=display-manager.service` a été ajouté le 2 octobre, et pour une
+# raison précise : cette unité ajoute aussi le compte au groupe `gamemode`, et
+# `usermod -aG` ne change rien à une session DÉJÀ ouverte — la page de manuel
+# de gamemoded le dit (« and then rebooted »). Si elle passait après lightdm,
+# le droit ne vaudrait qu'au démarrage suivant, à chaque fois, pour toujours.
+#
+# Il n'y a pas de cycle : `display-manager.service` est tiré par
+# `graphical.target`, qui vient après `multi-user.target`. Ce n'est pas prouvé
+# sur une machine, et c'est la prochaine chose que la ligne série dira.
 [Unit]
-Description=grenOS : tenir la frequence du processeur haute
+Description=grenOS : tenir la frequence haute et donner son droit au jeu
 After=multi-user.target
+Before=display-manager.service lightdm.service
 ConditionPathExists=/sys/devices/system/cpu
 
 [Service]

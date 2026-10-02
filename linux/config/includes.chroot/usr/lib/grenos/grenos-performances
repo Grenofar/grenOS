@@ -34,6 +34,49 @@ dire () {
     echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
 }
 
+# ---- Le droit, pour un jeu, de passer devant ---------------------------------
+#
+# CE BLOC EXISTE PARCE QUE MON PROPRE COMMENTAIRE ETAIT FAUX.
+#
+# J'avais écrit, dans `gamemode.ini` et dans la page Jeux, que
+# « `appliquer-systeme` ajoute au groupe gamemode à chaque mise à jour ». C'est
+# vrai, et c'est insuffisant : `appliquer-systeme` ne s'exécute QUE depuis le
+# paquet et depuis la mise à jour au démarrage. Sur l'image live que Grenofar
+# démarre, et sur une installation fraîche avant la première mise à jour,
+# **personne n'ajoute le compte au groupe**.
+#
+# La construction l'a dit elle-même, en une ligne que j'avais rendue
+# facultative exprès : « le groupe gamemode n'existe PAS encore dans l'image ».
+# Il est créé par `systemd-sysusers` au premier démarrage — donc après la
+# construction, et avant ce service-ci.
+#
+# Le faire ici coûte zéro processus de plus : cette unité est un `oneshot` qui
+# existe déjà et qui se termine aussitôt. Grenofar a demandé « éviter les
+# processus en trop » dans la même phrase que « privilégier les jeux » ; en
+# ajouter un pour cela serait lui donner une main et lui reprendre l'autre.
+#
+# `usermod -aG` ne change rien à une session DÉJÀ ouverte — la page de manuel
+# de gamemoded le dit (« and then rebooted »). Ce service passe avant lightdm
+# au démarrage suivant, donc la session en profite.
+groupe_des_jeux () {
+    getent group gamemode >/dev/null 2>&1 || {
+        dire "perf : le groupe gamemode n existe pas, rien a faire"
+        return 0
+    }
+    ajoutes=0
+    for compte in $(awk -F: '$3 >= 1000 && $3 < 60000 {print $1}' /etc/passwd 2>/dev/null); do
+        if id -nG "$compte" 2>/dev/null | tr ' ' '\n' | grep -qx gamemode; then
+            continue
+        fi
+        if usermod -aG gamemode "$compte" >/dev/null 2>&1; then
+            ajoutes=$((ajoutes + 1))
+        fi
+    done
+    dire "perf : $ajoutes compte(s) ajoute(s) au groupe gamemode"
+}
+
+groupe_des_jeux
+
 CPUFREQ=/sys/devices/system/cpu/cpu0/cpufreq
 
 if [ ! -d "$CPUFREQ" ]; then
