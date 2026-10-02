@@ -75,6 +75,12 @@ install -m 0644 "$DEDANS/etc/pipewire/pipewire.conf.d/10-grenos-tampon.conf" \
 install -m 0644 "$DEDANS/etc/pipewire/pipewire.conf.d/20-grenos-temps-reel.conf" \
     "$BUILD/etc/pipewire/pipewire.conf.d/"
 
+# Ce que grenOS demande a GameMode pendant qu'un jeu tourne. Le paquet livre
+# `renice=0`, donc sans ce fichier GameMode ne change PAS la priorite du jeu —
+# tout en accordant le droit de le faire dans limits.d. /etc est le chemin que
+# gamemoded(8) designe, et aucun paquet ne le possede.
+install -m 0644 "$DEDANS/etc/gamemode.ini" "$BUILD/etc/"
+
 # Le droit, pour le son, de passer devant. Mesure sur l'image : rtkit seul ne
 # l'accordait pas — « aucun fil de pipewire en temps reel sur 3 ».
 mkdir -p "$BUILD/etc/security/limits.d"

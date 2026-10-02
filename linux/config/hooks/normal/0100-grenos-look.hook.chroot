@@ -362,6 +362,61 @@ if [ "$pilotes" -lt 1 ]; then
 fi
 echo "grenos: $pilotes pilotes VA-API, et vainfo/vdpauinfo pour les interroger"
 
+echo "--- grenOS : un jeu passera-t-il VRAIMENT devant le reste ---"
+# GAMEMODE INSTALLE NE VEUT PAS DIRE GAMEMODE QUI SERT.
+#
+# Trois pieces, et la chaine casse si une seule manque. Chacune a ete lue dans
+# le paquet le 2 octobre, aucune n est supposee :
+#
+#   1. /usr/games/gamemoderun — et c est /usr/games, PAS /usr/bin. Qui le
+#      cherche au mauvais endroit conclut qu il est absent ;
+#   2. le groupe `gamemode`, cree par systemd-sysusers depuis
+#      /usr/lib/sysusers.d/gamemode.conf. C est lui que nomment les DEUX
+#      fichiers qui donnent le pouvoir : limits.d/10-gamemode.conf
+#      (« @gamemode - nice -10 ») et polkit-1/rules.d/gamemode.rules
+#      (cpugovctl sans mot de passe) ;
+#   3. notre /etc/gamemode.ini avec un renice NON NUL. Le paquet livre
+#      `renice=0` : sans notre fichier, GameMode a le droit de changer la
+#      priorite et ne le fait pas.
+#
+# La troisieme est la plus sournoise, parce que les deux premieres suffisent a
+# faire croire que tout va bien.
+# CE QUI BLOQUE, ET CE QUI NE FAIT QUE PARLER — la regle du 12 septembre.
+#
+# Les trois fichiers sont bloquants : ils viennent de paquets installes ou de
+# includes.chroot, et leur absence est un vrai defaut, pas une surprise de
+# l environnement.
+#
+# Le GROUPE, lui, est seulement rapporte cette fois-ci. Il est cree par
+# systemd-sysusers, declenche par un trigger dpkg quand un fichier arrive dans
+# /usr/lib/sysusers.d — et je n ai jamais vu ce trigger tourner dans un chroot
+# live-build. Le rendre bloquant d emblee, ce serait refuser une image entiere
+# sur une hypothese, exactement comme `verif-commandes.py` l a fait deux fois
+# en lisant `import sys` puis `function` comme des programmes.
+# A promouvoir en bloquant apres l avoir vu vert deux fois.
+manque=""
+[ -x /usr/games/gamemoderun ] || manque="$manque gamemoderun"
+[ -f /usr/share/polkit-1/rules.d/gamemode.rules ] || manque="$manque regle-polkit"
+[ -f /etc/gamemode.ini ] || manque="$manque notre-ini"
+if [ -f /etc/gamemode.ini ]; then
+    grep -qE '^renice=([1-9]|1[0-9]|20)$' /etc/gamemode.ini || \
+        manque="$manque renice-nul"
+fi
+if [ -n "$manque" ]; then
+    echo "grenos: un jeu ne passera PAS devant le reste :$manque" >&2
+    exit 1
+fi
+echo "grenos: gamemoderun present, regle polkit la," \
+     "renice=$(grep -m1 '^renice=' /etc/gamemode.ini | cut -d= -f2)"
+
+if getent group gamemode >/dev/null 2>&1; then
+    echo "grenos: le groupe gamemode existe deja dans l image"
+else
+    echo "grenos: le groupe gamemode n existe PAS encore dans l image —" \
+         "systemd-sysusers le creera au premier demarrage, et" \
+         "appliquer-systeme y ajoutera le compte"
+fi
+
 echo "--- grenOS : savons-nous formater ce que l installateur propose ---"
 # `partition.conf` OFFRE une liste de systemes de fichiers, et une partition
 # EFI, et le chiffrement. Offrir n'est pas savoir faire : chacun de ces choix

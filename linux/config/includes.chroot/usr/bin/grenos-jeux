@@ -210,6 +210,11 @@ class Jeux(Gtk.Window):
                 "principal"))
         self.colonne.pack_start(grenosui.carte(*lignes), False, False, 0)
 
+        # ---- La priorité donnée au jeu ---------------------------------------
+        self.colonne.pack_start(self.section("LA PRIORITÉ DONNÉE AU JEU"),
+                                False, False, 0)
+        self.colonne.pack_start(self.carte_gamemode(), False, False, 0)
+
         # ---- Ce qu'il faut pour jouer ---------------------------------------
         self.colonne.pack_start(self.section("POUR JOUER"), False, False, 0)
         for outil in jeux.OUTILS:
@@ -228,6 +233,74 @@ class Jeux(Gtk.Window):
         etiquette = Gtk.Label(label=texte, xalign=0)
         etiquette.get_style_context().add_class("section")
         return etiquette
+
+    def carte_gamemode(self):
+        """Ce que GameMode fait ici, et la seule chose qui reste à faire.
+
+        POURQUOI CETTE CARTE DIT UN ÉTAT ET PAS UN BOUTON
+
+        Trois moitiés, et une seule se clique :
+
+          - GameMode installé : c'est fait, il est dans l'image ;
+          - la personne dans le groupe `gamemode` : `appliquer-systeme` s'en
+            charge à chaque mise à jour. Mais `usermod -aG` ne change rien à
+            une session DÉJÀ ouverte — la page de manuel du paquet dit « and
+            then rebooted ». La carte doit donc pouvoir dire « pas encore,
+            redémarre » plutôt que de laisser croire ;
+          - l'option de lancement dans Steam : elle vit dans le compte Steam de
+            la personne. Y toucher serait modifier son compte sans le lui
+            demander. On l'écrit, elle la colle.
+
+        La troisième est exactement le genre de chose qu'on ne devine pas, et
+        c'est la même leçon que le moteur Proton-GE de Heroic : tout ce qui ne
+        peut pas être fait à sa place doit au moins être DIT.
+        """
+        lignes = []
+        pose = jeux.gamemode_pose()
+        arme = jeux.gamemode_arme()
+
+        lignes.append(self.ligne(
+            "GameMode", "installé" if pose else "absent"))
+        lignes.append(self.ligne(
+            "Priorité accordée à ce compte",
+            "oui" if arme else ("pas encore" if pose else "—")))
+
+        if pose and arme:
+            note = ("Un jeu lancé par GameMode passe devant le reste : priorité "
+                    "processeur, priorité disque, et l'écran ne s'éteint plus "
+                    "pendant qu'on joue à la manette.")
+        elif pose and not arme:
+            note = ("Tout est en place sauf une chose : ce compte vient d'être "
+                    "ajouté au groupe « gamemode », et cela ne prend effet qu'au "
+                    "prochain démarrage. Jusque-là GameMode tournera sans pouvoir "
+                    "changer la priorité.")
+        else:
+            note = ("GameMode n'est pas sur cette machine. Sans lui, un jeu est "
+                    "traité comme n'importe quel programme.")
+        etiquette = Gtk.Label(label=note, xalign=0)
+        etiquette.set_line_wrap(True)
+        etiquette.get_style_context().add_class("sous")
+        lignes.append(etiquette)
+
+        if pose:
+            titre = Gtk.Label(
+                label="Dans Steam : clic droit sur un jeu → Propriétés → "
+                      "Options de lancement, et colle ceci", xalign=0)
+            titre.set_line_wrap(True)
+            titre.get_style_context().add_class("sous")
+            lignes.append(titre)
+
+            # L'option est dans un champ qu'on peut sélectionner, pas dans une
+            # étiquette : personne ne recopie une ligne à la main sans se
+            # tromper, et « %command% » est précisément le genre de chaîne
+            # qu'on recopie mal.
+            champ = Gtk.Entry()
+            champ.set_text(jeux.OPTION_STEAM)
+            champ.set_editable(False)
+            champ.set_can_focus(True)
+            lignes.append(champ)
+
+        return grenosui.carte(*lignes)
 
     def ligne(self, nom, valeur):
         boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)

@@ -208,11 +208,37 @@ poser fonts-local.conf          /etc/fonts/local.conf
 #
 # On le fait ici parce que c'est le seul endroit qui s'exécute après chaque
 # installation ET après chaque mise à jour.
+# ---- Et le droit, pour un jeu, de passer devant le reste -------------------
+#
+# MÊME DÉFAUT QUE LE SON, TROUVÉ DE LA MÊME FAÇON : EN OUVRANT LE PAQUET.
+#
+# `gamemode` 1.8.2-2 livre `/etc/security/limits.d/10-gamemode.conf`, qui dit
+# exactement « @gamemode - nice -10 » : une règle donnée à un GROUPE. Et
+# `gamemode-daemon` livre `/usr/share/polkit-1/rules.d/gamemode.rules`, qui
+# autorise `cpugovctl` et `gpuclockctl` sans mot de passe — à la seule
+# condition que `subject.isInGroup("gamemode")`.
+#
+# Personne n'est dans ce groupe. Sa page de manuel le dit elle-même, et c'est
+# la phrase qu'il ne faut pas lire en diagonale :
+#
+#     To use this feature, the user must be added to the gamemode group
+#     (and then rebooted): sudo usermod -aG gamemode $(whoami)
+#
+# Sans cela, GameMode démarre, répond, et échoue en silence sur la seule chose
+# qui compte : polkit retombe sur `auth_admin`, et une machine grenOS n'a pas
+# de mot de passe. C'est, à la virgule près, la panne de l'installateur du
+# 25 septembre — une promesse à l'écran sans rien derrière.
 for compte in $(awk -F: '$3 >= 1000 && $3 < 60000 {print $1}' /etc/passwd 2>/dev/null); do
-    if ! id -nG "$compte" 2>/dev/null | tr ' ' '\n' | grep -qx audio; then
-        usermod -aG audio "$compte" >/dev/null 2>&1 || true
-        echo "grenos: $compte ajoute au groupe audio"
-    fi
+    for groupe in audio gamemode; do
+        # Le groupe peut ne pas exister : `gamemode` est créé par
+        # systemd-sysusers depuis /usr/lib/sysusers.d/gamemode.conf, et un
+        # usermod vers un groupe absent échoue. On regarde avant.
+        getent group "$groupe" >/dev/null 2>&1 || continue
+        if ! id -nG "$compte" 2>/dev/null | tr ' ' '\n' | grep -qx "$groupe"; then
+            usermod -aG "$groupe" "$compte" >/dev/null 2>&1 || true
+            echo "grenos: $compte ajoute au groupe $groupe"
+        fi
+    done
 done
 
 # ---- Le dossier au nom abîmé, laissé par l'absence de locale ----------------

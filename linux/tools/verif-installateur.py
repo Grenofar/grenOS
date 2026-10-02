@@ -118,15 +118,29 @@ def verifier(racine=""):
     else:
         with open(partition, encoding="utf-8") as fichier:
             reglage = fichier.read()
+        # LA MEME PROMESSE ETAIT VERIFIEE A DEUX ENDROITS, ET J EN AI CHANGE UN.
+        #
+        # Le 2 octobre, `initialPartitioningChoice` est passe de `erase` a
+        # `none` — parce que prechoisir « effacer le disque » fait perdre
+        # Windows a qui clique « Suivant » sans lire, et que Calamares designe
+        # lui-meme ce choix comme dangereux. J ai change le fichier et le garde
+        # du hook, et OUBLIE celui-ci : la construction a echoue ici, apres
+        # dix-huit minutes.
+        #
+        # C est litteralement la regle que ce depot a tiree des mesures du son :
+        # *deux mesures d une meme chose finissent par diverger*. Ici elles ont
+        # diverge en vingt minutes, et c est la construction qui l a dit.
         promesses = 0
-        for cle, pourquoi in (("initialPartitioningChoice: erase", "tout le disque par defaut"),
+        for cle, pourquoi in (("initialPartitioningChoice: none",
+                               "de laisser le choix (rien de prechoisi)"),
                               ("allowManualPartitioning: true", "le choix manuel")):
             if re.search("^" + re.escape(cle) + r"\s*$", reglage, re.M):
                 promesses += 1
             else:
                 fautes.append(f"partition.conf ne promet pas {pourquoi} ({cle})")
         if promesses == 2:
-            print("partitionnement : tout le disque par defaut, choix manuel possible")
+            print("partitionnement : aucun choix destructeur prechoisi, "
+                  "choix manuel possible")
 
     return fautes
 

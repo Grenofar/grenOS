@@ -280,6 +280,66 @@ def heroic_pose():
     return flatpak_pose(HEROIC)
 
 
+# GameMode : où il est, et pourquoi ce chemin surprend.
+#
+# Le paquet `gamemode` 1.8.2-2 l'installe dans **/usr/games**, pas /usr/bin —
+# vérifié en ouvrant le .deb, pas supposé. /usr/games est dans le PATH de
+# Debian, donc `gamemoderun` s'appelle sans chemin ; mais quelqu'un qui le
+# cherche dans /usr/bin conclurait qu'il est absent.
+GAMEMODERUN = "/usr/games/gamemoderun"
+
+# L'option à coller dans Steam. C'est la chaîne exacte du README du paquet :
+#
+#     Or edit the Steam launch options:  gamemoderun %command%
+#
+# Elle est affichée telle quelle, parce que c'est la seule chose qui ne peut
+# pas être faite à sa place : les options de lancement vivent dans le compte
+# Steam de la personne, et y toucher serait modifier son compte sans le lui
+# demander.
+OPTION_STEAM = "gamemoderun %command%"
+
+
+def gamemode_pose():
+    """GameMode est-il installé ?"""
+    return os.path.exists(GAMEMODERUN)
+
+
+def gamemode_arme(groupes=None):
+    """La personne a-t-elle le droit d'en profiter ?
+
+    POURQUOI CETTE QUESTION N'EST PAS LA MÊME QUE LA PRÉCÉDENTE
+
+    GameMode installé ne fait presque rien tant que la personne n'est pas dans
+    le groupe `gamemode`. Deux fichiers du paquet le disent :
+
+      - `/etc/security/limits.d/10-gamemode.conf` : « @gamemode - nice -10 » ;
+      - `/usr/share/polkit-1/rules.d/gamemode.rules` : l'accès sans mot de passe
+        à `cpugovctl` et `gpuclockctl` est accordé à `subject.isInGroup(
+        "gamemode")`, et à personne d'autre.
+
+    Et sa page de manuel l'écrit noir sur blanc : « To use this feature, the
+    user must be added to the gamemode group (and then rebooted) ».
+
+    Sans cela, le jeu démarre, GameMode répond, et rien ne se passe — en
+    silence. C'est précisément ce qu'on ne peut pas voir sans poser la
+    question, et c'est pour cela qu'elle est posée.
+
+    `appliquer-systeme` ajoute au groupe à chaque mise à jour ; cette fonction
+    vérifie que ça a marché, au lieu de le supposer.
+    """
+    if groupes is None:
+        try:
+            groupes = os.getgroups()
+        except OSError:
+            return False
+        try:
+            import grp
+            groupes = [grp.getgrgid(g).gr_name for g in groupes]
+        except (ImportError, KeyError, OSError):
+            return False
+    return "gamemode" in groupes
+
+
 def roblox_pose():
     """Sober est-il là ? C'est lui qui fait tourner Roblox sous Linux."""
     return flatpak_pose(ROBLOX)
