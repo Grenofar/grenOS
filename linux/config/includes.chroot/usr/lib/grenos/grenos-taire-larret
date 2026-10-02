@@ -175,7 +175,35 @@ if [ "$MOMENT" = splash ] || [ "$MOMENT" = tout ]; then
     if ! command -v plymouth >/dev/null 2>&1; then
         dire "extinction : plymouth n est pas installe"
     elif plymouth --ping >/dev/null 2>&1; then
-        dire "extinction : un plymouthd repondait deja, on ne touche a rien"
+        # « ON NE TOUCHE A RIEN » ETAIT LA MAUVAISE REPONSE, ET QUATRE TOURS
+        # L ONT DIT.
+        #
+        # Comparaison des quatre derniers arrêts, chacun avec sa photo :
+        #
+        #   36926339411  plymouthd déjà là, on ne touche à rien  -> 4 lignes
+        #   36945651822  plymouthd déjà là, on ne touche à rien  -> 1 photo
+        #   36951877600  plymouthd déjà là, on ne touche à rien  -> 1 photo,
+        #                et `ShowStatus=yes` : quelque chose l'a RALLUMÉ
+        #   36955373992  c'est NOUS qui le levons                -> notre splash
+        #
+        # Le seul tour où notre splash est apparue est le seul où nous avons
+        # levé le démon nous-mêmes. Dans les trois autres, celui de
+        # `plymouth-poweroff.service` était arrivé le premier — et il ne dessine
+        # rien.
+        #
+        # Se taire devant un démon déjà présent, c'était donc abandonner l'écran
+        # à celui qui ne sait pas le peindre. On lui demande maintenant la même
+        # chose qu'au nôtre : au pire il refuse, et on n'est pas plus avancé
+        # qu'avant ; au mieux il dessine.
+        dire "extinction : un plymouthd repondait deja, on lui demande quand meme"
+        if plymouth show-splash >/dev/null 2>&1; then
+            dire "extinction : splash demandee au plymouthd deja present"
+        else
+            dire "extinction : le plymouthd deja present a REFUSE show-splash"
+        fi
+        if plymouth display-message --text="Extinction de grenOS" >/dev/null 2>&1; then
+            dire "extinction : message affiche sur la splash existante"
+        fi
     elif [ ! -x /usr/sbin/plymouthd ]; then
         dire "extinction : plymouthd introuvable, la splash ne peut pas etre levee"
     else
@@ -219,9 +247,21 @@ if [ "$MOMENT" = splash ] || [ "$MOMENT" = tout ]; then
         # splash : c est de ne pas lever plymouthd du tout a ce moment-la. Et
         # si c est « two-step », l hypothese est fausse et il faudra chercher
         # ailleurs. Les deux reponses sont utiles ; aucune n est devinable.
+        # `--debug` ET `--debug-file`, PARCE QUE CE SONT DEUX OPTIONS.
+        #
+        # Ma première version ne passait que `--debug-file`, et la ligne est
+        # sortie « greffon plymouth = inconnu » à tous les coups. La page de
+        # manuel de plymouthd(8) les sépare explicitement :
+        #
+        #     --debug             Output debugging information.
+        #     --debug-file=STRING File to write debugging information to.
+        #
+        # L'une dit D'ÉCRIRE, l'autre dit OÙ. Sans la première, le fichier reste
+        # vide — et ma mesure répondait « inconnu » sans pouvoir faire autrement.
+        # Deuxième fois en deux jours qu'une mesure neuve naît sans dents.
         mkdir -p /run/grenos 2>/dev/null || true
         /usr/sbin/plymouthd --mode=shutdown --tty=tty1 --attach-to-session \
-            --debug-file=/run/grenos/plymouth-arret.log \
+            --debug --debug-file=/run/grenos/plymouth-arret.log \
             >/dev/null 2>&1 || true
         # ON NE DEVINE PAS LA PHRASE, ON CHERCHE LE FICHIER.
         #
@@ -234,10 +274,6 @@ if [ "$MOMENT" = splash ] || [ "$MOMENT" = tout ]; then
         # On prend donc le DERNIER greffon charge, repere par son chemin sous
         # le dossier des greffons de plymouth, sans rien supposer des mots qui
         # l entourent.
-        greffon=$(grep -o '/[^ "]*/plymouth/[a-z0-9_-]*\.so' \
-                  /run/grenos/plymouth-arret.log 2>/dev/null \
-                  | tail -n 1 | sed 's#.*/##; s#\.so$##')
-        dire "extinction : greffon plymouth = ${greffon:-inconnu}"
         if plymouth --ping >/dev/null 2>&1; then
             if plymouth show-splash >/dev/null 2>&1; then
                 dire "extinction : splash levee des le debut de l arret"
@@ -268,6 +304,21 @@ if [ "$MOMENT" = splash ] || [ "$MOMENT" = tout ]; then
             else
                 dire "extinction : display-message a ete REFUSE"
             fi
+
+            # ---- ET SEULEMENT MAINTENANT, QUEL GREFFON IL A CHARGÉ -----------
+            #
+            # La lecture était AVANT le `--ping`, donc avant que le démon ait eu
+            # le temps de charger quoi que ce soit : elle ne pouvait qu'arriver
+            # trop tôt. Une mesure prise au mauvais moment n'est pas fausse,
+            # elle mesure autre chose — c'est écrit dans ce dépôt depuis le
+            # 27 septembre, et je viens de le refaire.
+            #
+            # Ici, `show-splash` a déjà répondu : s'il a accepté, le greffon est
+            # chargé et le journal le nomme.
+            greffon=$(grep -o '/[^ "]*/plymouth/[a-z0-9_-]*\.so' \
+                      /run/grenos/plymouth-arret.log 2>/dev/null \
+                      | tail -n 1 | sed 's#.*/##; s#\.so$##')
+            dire "extinction : greffon plymouth = ${greffon:-inconnu}"
         else
             dire "extinction : plymouthd n a pas voulu demarrer au debut de l arret"
         fi
