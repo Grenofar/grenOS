@@ -1075,7 +1075,19 @@ for unite in plymouth-poweroff plymouth-reboot plymouth-halt plymouth-kexec; do
         continue
     fi
     sienne=$(grep -m1 '^ExecStart=/' "$livree" | sed 's/^ExecStart=//')
-    notre_cmd=$(grep -m1 '^ExecStart=-' "$notre" | sed 's/^ExecStart=-//')
+    # NOS FRAGMENTS AJOUTENT UNE OPTION, ET UNE SEULE.
+    #
+    # `--tty=tty1` est la seule difference voulue avec la commande du paquet,
+    # et elle est mesuree : sur cinq arrets, les tours ou plymouthd est lance
+    # AVEC elle peignent notre splash, ceux ou il est lance sans elle laissent
+    # un ecran noir ou le journal. On la retire donc avant de comparer, pour
+    # que le controle continue d attraper TOUT le reste — si Debian change un
+    # mode, un chemin ou une autre option, l ecart se verra encore.
+    #
+    # Autoriser une difference en bloc (« ignore les options en plus ») aurait
+    # rendu ce garde aveugle a ce qu il surveille. On en autorise UNE, nommee.
+    notre_cmd=$(grep -m1 '^ExecStart=-' "$notre" | sed 's/^ExecStart=-//' \
+                | sed 's/ --tty=tty1//')
     if [ "$sienne" != "$notre_cmd" ]; then
         echo "grenos: ATTENTION $unite a change chez Debian"
         echo "grenos:   paquet : $sienne"
