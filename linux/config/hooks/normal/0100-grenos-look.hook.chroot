@@ -402,6 +402,43 @@ if [ -n "$manque" ]; then
 fi
 echo "grenos: explorateur : vue $vue, colonnes [$colonnes], toutes connues de libfm"
 
+echo "--- grenOS : la colonne Description parle-t-elle francais ---"
+# « FOLDER », SUR CHAQUE LIGNE DE CHAQUE DOSSIER.
+#
+# La vue Details montre la colonne Description, et la capture du 2 octobre la
+# donnait en anglais. Verifie dans `shared-mime-info` 2.4-5+b2 avant d accuser
+# notre locale : le fichier porte 700 chaines francaises, mais `inode/directory`
+# n en a AUCUNE — treize traductions, et pas le francais. Lacune amont, pas
+# reglage oublie.
+#
+# La specification livree par le paquet decrit le remede : un fichier XML dans
+# `<MIME>/packages/`, puis `update-mime-database`. L information s AJOUTE a
+# celle d amont, donc on n ecrase rien.
+if [ -f /usr/share/mime/packages/grenos-francais.xml ] \
+   && command -v update-mime-database >/dev/null 2>&1; then
+    update-mime-database /usr/share/mime >/dev/null 2>&1 || true
+fi
+
+# ET ON VERIFIE LE RESULTAT, PAS LE FICHIER.
+#
+# Poser le XML ne prouve rien : c est exactement la faute du 28 septembre, ou
+# `logo.png` est arrive, le garde l a vu, et la barre de titre de
+# l installateur n avait pas bouge d un pixel. On demande donc la description a
+# GIO — la meme bibliotheque que l explorateur — sous la locale francaise.
+mot=$(LANG=fr_FR.UTF-8 LC_ALL=fr_FR.UTF-8 python3 -c \
+      'import gi; from gi.repository import Gio; print(Gio.content_type_get_description("inode/directory"))' \
+      2>/dev/null || echo "")
+case "$mot" in
+    Dossier)
+        echo "grenos: description d un dossier en francais : « $mot »" ;;
+    "")
+        echo "grenos: impossible de demander la description a GIO" >&2
+        exit 1 ;;
+    *)
+        echo "grenos: un dossier se dit encore « $mot » et non « Dossier »" >&2
+        exit 1 ;;
+esac
+
 echo "--- grenOS : un jeu passera-t-il VRAIMENT devant le reste ---"
 # GAMEMODE INSTALLE NE VEUT PAS DIRE GAMEMODE QUI SERT.
 #

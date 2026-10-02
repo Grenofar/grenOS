@@ -271,5 +271,15 @@ done
 gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
 gtk-update-icon-cache -f /usr/share/icons/Papirus-Dark >/dev/null 2>&1 || true
 update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+# La base MIME, pour que « Folder » reste « Dossier ».
+#
+# Notre XML comble six descriptions que `shared-mime-info` ne traduit pas en
+# français — à commencer par celle d'un dossier, qui se répète à chaque ligne
+# de l'explorateur. Mais poser le fichier ne suffit pas : la spécification dit
+# que l'application « MUST run the update-mime-database command » après l'avoir
+# installé ou modifié. Sans cette ligne, une machine mise à jour recevrait le
+# fichier et continuerait d'afficher l'anglais — le texte étant lu dans un
+# cache compilé, pas dans le XML.
+update-mime-database /usr/share/mime >/dev/null 2>&1 || true
 
 echo "grenos: systeme branche"

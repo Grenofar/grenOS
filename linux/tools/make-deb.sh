@@ -81,6 +81,15 @@ install -m 0644 "$DEDANS/etc/pipewire/pipewire.conf.d/20-grenos-temps-reel.conf"
 # gamemoded(8) designe, et aucun paquet ne le possede.
 install -m 0644 "$DEDANS/etc/gamemode.ini" "$BUILD/etc/"
 
+# Les six descriptions de types de fichiers que shared-mime-info ne traduit pas
+# en francais — dont celle d un dossier, qui se repete a chaque ligne de
+# l explorateur. `appliquer-systeme` rejoue `update-mime-database` ensuite,
+# sans quoi le fichier arriverait sans effet : le texte est lu dans un cache
+# compile, pas dans le XML.
+mkdir -p "$BUILD/usr/share/mime/packages"
+install -m 0644 "$DEDANS/usr/share/mime/packages/grenos-francais.xml" \
+    "$BUILD/usr/share/mime/packages/"
+
 # Le droit, pour le son, de passer devant. Mesure sur l'image : rtkit seul ne
 # l'accordait pas — « aucun fil de pipewire en temps reel sur 3 ».
 mkdir -p "$BUILD/etc/security/limits.d"

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Les descriptions de types de fichiers qui manquent en français.
+
+  POURQUOI CE FICHIER EXISTE
+
+  Le 2 octobre, la colonne « Description » de l'explorateur a été rendue
+  visible — la vue Détails de Windows la montre. Sur la capture, chaque ligne
+  disait « Folder ». En anglais, dans un système entièrement français, sur la
+  colonne qui se répète à chaque ligne.
+
+  CE N'ÉTAIT PAS NOTRE DÉFAUT, ET IL FALLAIT LE VÉRIFIER AVANT D'ACCUSER
+
+  La locale est bien fr_FR.UTF-8 (les menus de l'explorateur sont en français),
+  et le texte ne vient pas de pcmanfm : il vient de la base MIME partagée.
+  Ouvert dans le paquet `shared-mime-info` 2.4-5+b2 :
+
+    - le fichier porte **700 chaînes françaises** — le français n'est donc pas
+      absent de la base ;
+    - mais `inode/directory` n'en a aucune : treize traductions, et le français
+      n'y est pas (allemand, espagnol, basque, galicien, italien, japonais,
+      polonais, portugais du Brésil, russe, suédois, ukrainien, biélorusse) ;
+    - `text/plain` non plus, ni cinq autres types du quotidien.
+
+  C'est une lacune amont, pas un réglage oublié. Aucune configuration ne peut
+  la combler : il faut ajouter les chaînes.
+
+  LE MÉCANISME EST CELUI QUE LA SPÉCIFICATION DÉCRIT, PAS UN CONTOURNEMENT
+
+  shared-mime-info-spec, livrée dans le paquet :
+
+      Each application that wishes to contribute to the MIME database will
+      install a single XML file, named after the application, into one of the
+      three <MIME>/packages/ directories. After installing, uninstalling or
+      modifying this file, the application MUST run the update-mime-database
+      command.
+
+      comment elements give a human-readable textual description of the MIME
+      type […] There may be many of these elements with different xml:lang
+      attributes to provide the text in multiple languages.
+
+  Et : « the information in each directory is ADDED to the information found in
+  previous directories ». On n'écrase donc rien — ce qui respecte aussi la
+  règle du 24 septembre : deux paquets ne peuvent pas posséder le même chemin,
+  et `packages/grenos-francais.xml` n'appartient à personne d'autre.
+
+  LE COMMENTAIRE ANGLAIS EST RECOPIÉ TEL QUEL
+
+  Chaque type garde son `<comment>` par défaut identique à celui d'amont. Sans
+  lui, une machine en anglais perdrait la description au lieu d'en gagner une
+  en français — on échangerait un défaut contre un autre, ce qui est arrivé une
+  fois de trop dans ce dépôt (le mélangeur ALSA posé à 80 % sur des sorties qui
+  marchaient).
+
+  CE QU'ON NE FAIT PAS
+
+  Aucun `<glob>`, aucun `<magic>` : rien ici ne touche à la DÉTECTION du type
+  d'un fichier. Ce fichier n'ajoute que des mots. Se tromper sur un glob ferait
+  ouvrir un fichier avec le mauvais programme ; se tromper sur un mot ne fait
+  qu'afficher un mot.
+-->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+
+  <!-- Celui-ci se répète à chaque ligne de chaque dossier. -->
+  <mime-type type="inode/directory">
+    <comment>Folder</comment>
+    <comment xml:lang="fr">Dossier</comment>
+  </mime-type>
+
+  <mime-type type="inode/symlink">
+    <comment>Symbolic link</comment>
+    <comment xml:lang="fr">Lien symbolique</comment>
+  </mime-type>
+
+  <mime-type type="text/plain">
+    <comment>Plain text document</comment>
+    <comment xml:lang="fr">Document texte brut</comment>
+  </mime-type>
+
+  <mime-type type="application/x-executable">
+    <comment>Executable</comment>
+    <comment xml:lang="fr">Programme exécutable</comment>
+  </mime-type>
+
+  <mime-type type="application/x-shellscript">
+    <comment>Shell script</comment>
+    <comment xml:lang="fr">Script shell</comment>
+  </mime-type>
+
+  <!-- « Raccourci » et non « entrée de bureau » : c'est le mot que lit
+       quelqu'un qui vient de Windows, et c'est exactement ce que ce fichier
+       est sur le bureau. -->
+  <mime-type type="application/x-desktop">
+    <comment>Desktop entry</comment>
+    <comment xml:lang="fr">Raccourci</comment>
+  </mime-type>
+
+</mime-info>
