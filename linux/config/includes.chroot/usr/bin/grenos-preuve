@@ -180,6 +180,37 @@ if [ -s /run/grenos/maj-telechargee ]; then
     dire "maj: paquets deja telecharges, l installation sera courte"
 fi
 
+# ---- Combien de choses tournent, et lesquelles coûtent le plus ? ------------
+#
+# Grenofar, le 1er octobre : « fais que ça soit rapide, que ça reste fluide,
+# éviter les processus en trop ».
+#
+# ON MESURE D'ABORD. On ne retire rien dans ce passage, et c'est délibéré.
+#
+# Retirer un service parce qu'il « a l'air inutile » est la façon la plus sûre
+# de casser quelque chose qu'on ne verra que chez lui, des semaines plus tard —
+# et ce dépôt a déjà payé cinq fois le prix d'un paquet absent dont l'absence
+# ne fait aucun bruit. Il faut donc un chiffre AVANT, puis un chiffre APRÈS,
+# sans quoi on ne saura même pas si le ménage a servi.
+#
+# Et il y a une raison supplémentaire d'être honnête ici : le 2 octobre j'ai
+# AJOUTÉ deux démons — irqbalance et earlyoom — en travaillant sur les
+# performances, c'est-à-dire l'inverse exact de ce qu'il demandait dans la même
+# phrase. Les deux se défendent (l'un répartit les interruptions sur les
+# cœurs, l'autre évite le gel total quand la mémoire manque), mais ils comptent
+# dans ce chiffre et il ne faut pas les cacher.
+services=$(systemctl list-units --type=service --state=running --no-legend \
+           --no-pager 2>/dev/null | wc -l)
+processus=$(ps -e --no-headers 2>/dev/null | wc -l)
+dire "perf : $services service(s) en marche, $processus processus"
+
+# Les trois qui prennent le plus de mémoire résidente, avec leur taille. C'est
+# la seule liste qui désigne un coupable plutôt qu'un soupçon : un service qui
+# tourne sans rien consommer ne coûte rien à personne.
+gourmands=$(ps -eo rss=,comm= --sort=-rss 2>/dev/null | head -n 3 \
+            | awk '{printf "%s %dMio ", $2, $1/1024}')
+dire "perf : les plus gourmands = ${gourmands:-inconnus}"
+
 # ---- Le magasin peut-il vraiment installer ? --------------------------------
 #
 # La machine d'integration ouvrait GrenPlace et comptait ses applications. Elle
