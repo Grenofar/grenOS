@@ -722,7 +722,28 @@ fi
 #
 #   « emplacements : »  — la barre laterale de l'explorateur voit ce que gvfs
 #     lui propose. C'est la reponse a « est-ce qu'on peut voir les disques ».
-for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau du depot present" "maj: grenos-desktop" "disques : " "persistance : active" "son ouvert" "reglages ouvert" "jeux ouvert" "son : second essai joue" "son : melangeur" "emplacements : "; do
+#
+# DEUX DE PLUS LE 2 OCTOBRE, vues vertes trois fois de suite (runs
+# 36961800565, 36970232858, 36973375527) :
+#
+#   « reglages securite : »  et  « reglages composants : »
+#
+# Ce sont les deux pages que Grenofar a demandees nommement — l antivirus, et
+# « QUE MAJ INTEL AMD PROC ET GPU SE FASSE DANS MISE A JOUR COMPOSANT ». Elles
+# sont neuves, donc personne ne les ouvrirait avant lui.
+#
+# C est l angle mort du 24 septembre, a l echelle d une PAGE et non d une
+# application : le 26, la page Son existait, personne ne l ouvrait, et le
+# travail fusionne n etait verifie nulle part. Une page qui cesse de se
+# construire — un import qui disparait, une fonction renommee — ne ferait
+# rougir aucune etape ; elle planterait chez lui, et seulement chez lui.
+#
+# Ce qu on exige est la LIGNE, pas son contenu : « 0 composant(s) » est la
+# bonne reponse sur une machine virtuelle, et « signatures absentes » est le
+# comportement voulu (la base pese des centaines de Mo et ne doit pas se
+# telecharger sans qu on le demande). Exiger un nombre ferait refuser une image
+# saine.
+for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau du depot present" "maj: grenos-desktop" "disques : " "persistance : active" "son ouvert" "reglages ouvert" "jeux ouvert" "son : second essai joue" "son : melangeur" "emplacements : " "reglages securite : " "reglages composants : "; do
   if grep -aq "grenos: $preuve" "$RUNNER_TEMP/serial.log"; then
     echo "prouve: $preuve"
   else
