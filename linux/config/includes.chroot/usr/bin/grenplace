@@ -37,6 +37,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
 
 import grenosui  # noqa: E402
+import magasin  # noqa: E402
 
 CATALOGUE_EN_LIGNE = (
     "https://tpqzhzuoyqpfairatdrw.supabase.co/storage/v1/object/public/catalogue/magasin.json"
@@ -55,6 +56,10 @@ ICONES_RAYON = {
     "Internet": ["applications-internet", "web-browser"],
     "Développement": ["applications-development", "text-x-script"],
     "Système": ["preferences-system", "applications-system"],
+    # Le rayon neuf du 2 octobre. Papirus n'a pas d'icône « intelligence
+    # artificielle » ; « applications-science » est ce qui s'en approche le
+    # plus, et le repli de dessin prend la suite si le thème ne l'a pas.
+    "Intelligence artificielle": ["applications-science", "system-run"],
 }
 
 # Quand meme le theme ne connait pas l'application, sa tuile prend la couleur
@@ -66,6 +71,7 @@ COULEURS_RAYON = {
     "Internet": "#0ea5a3",
     "Développement": "#f2820c",
     "Système": "#5a6880",
+    "Intelligence artificielle": "#16a34a",
 }
 
 STYLE = """
@@ -88,6 +94,45 @@ STYLE = """
 .etat-installe {
     color: @reussi;
     font-weight: 600;
+}
+
+/* LA BARRE LATÉRALE, COMME LE MAGASIN DE WINDOWS
+ *
+ * Grenofar : « redesign-le pour que ça ressemble aussi à Windows ». Le Microsoft
+ * Store range ses rayons en colonne à gauche, pas en pastilles sur une ligne :
+ * la liste peut s'allonger sans repousser le contenu, et le rayon courant reste
+ * visible pendant qu'on fait défiler.
+ *
+ * Le trait vertical à gauche de l'entrée courante est le marqueur de Windows.
+ * On le dessine avec une bordure, pas une image : il suit la couleur du thème
+ * quand on passe du jour à la nuit. */
+.cote {
+    background-color: transparent;
+    background-image: none;
+    border: none;
+    border-left: 3px solid transparent;
+    border-radius: 0 7px 7px 0;
+    padding: 9px 14px;
+    font-weight: 600;
+}
+.cote:hover { background-color: @survol; }
+.cote:checked {
+    background-color: @survol;
+    border-left-color: @accent;
+    color: @texte;
+}
+.volet {
+    background-color: @fond-creux;
+    border-radius: 10px;
+    padding: 8px 0;
+}
+.pastille {
+    background-image: linear-gradient(to bottom, @accent-clair, @accent);
+    color: #ffffff;
+    border-radius: 999px;
+    padding: 1px 9px;
+    font-size: 11px;
+    font-weight: 700;
 }
 """
 
@@ -253,13 +298,15 @@ def installe(application):
 class Installation(Gtk.Window):
     """La fenêtre qui installe : une barre, une phrase, le détail au besoin."""
 
-    def __init__(self, parent, application, fini):
-        super().__init__(title=f"Installation de {application['nom']}")
+    def __init__(self, parent, application, fini, mise_a_jour=False):
+        verbe = "Mise à jour" if mise_a_jour else "Installation"
+        super().__init__(title=f"{verbe} de {application['nom']}")
         grenosui.poser_taille(self, 640, 380)
         self.set_transient_for(parent)
         self.set_position(Gtk.WindowPosition.CENTER_ON_PARENT)
         self.application = application
         self.fini = fini
+        self.mise_a_jour = mise_a_jour
 
         colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         colonne.set_border_width(24)
@@ -322,24 +369,49 @@ class Installation(Gtk.Window):
                 faits[0] += 1
                 GLib.idle_add(self.barre.set_fraction, min(0.15 + faits[0] / 30, 0.95))
 
-        GLib.idle_add(self.etat.set_text, "Téléchargement et installation…")
+        GLib.idle_add(self.etat.set_text,
+                      "Téléchargement et mise à jour…" if self.mise_a_jour
+                      else "Téléchargement et installation…")
         identifiant = self.application["identifiant"]
         if self.application["source"] == "flatpak":
             self.courir(["flatpak", "remote-add", "--if-not-exists", "flathub",
                          "https://dl.flathub.org/repo/flathub.flatpakrepo"])
-            code = self.courir(["flatpak", "install", "-y", "--noninteractive",
-                                "flathub", identifiant], suivre)
+            if self.mise_a_jour:
+                # `update` nommément, et pas `install` : `install` sur une
+                # application déjà là répond « already installed » et rend 0.
+                # On aurait donc un bouton vert qui ne fait rien — la forme de
+                # défaut que ce dépôt passe son temps à trouver.
+                code = self.courir(["flatpak", "update", "-y", "--noninteractive",
+                                    identifiant], suivre)
+            else:
+                code = self.courir(["flatpak", "install", "-y", "--noninteractive",
+                                    "flathub", identifiant], suivre)
         else:
             self.courir(lanceur() + ["apt-get", "update"])
-            code = self.courir(lanceur() + ["apt-get", "install", "-y", identifiant], suivre)
+            if self.mise_a_jour:
+                # `install` sur un paquet déjà posé le met bien à jour : c'est
+                # le comportement documenté d'apt, et `--only-upgrade` ajoute
+                # la garantie qu'on n'installe rien qui ne soit pas déjà là.
+                code = self.courir(lanceur() + ["apt-get", "install", "-y",
+                                                "--only-upgrade", identifiant],
+                                   suivre)
+            else:
+                code = self.courir(lanceur() + ["apt-get", "install", "-y",
+                                                identifiant], suivre)
 
         GLib.idle_add(self.barre.set_fraction, 1.0)
         if code == 0:
             GLib.idle_add(self.etat.set_text,
-                          f"{self.application['nom']} est installé. Il est dans le menu.")
+                          f"{self.application['nom']} est à jour."
+                          if self.mise_a_jour
+                          else f"{self.application['nom']} est installé. "
+                               "Il est dans le menu.")
         else:
             GLib.idle_add(self.etat.set_text,
-                          "L'installation s'est arrêtée. Le détail est ci-dessous.")
+                          "La mise à jour s'est arrêtée. Le détail est ci-dessous."
+                          if self.mise_a_jour
+                          else "L'installation s'est arrêtée. Le détail est "
+                               "ci-dessous.")
             GLib.idle_add(self.details.set_expanded, True)
         GLib.idle_add(self.fermer.set_sensitive, True)
         GLib.idle_add(self.fini)
@@ -355,10 +427,25 @@ class GrenPlace(Gtk.Window):
         self.rayon = "Tout"
         self.applications = []
         self.origine = ""
+        # Les mises à jour arrivent plus tard que le catalogue : elles
+        # demandent le réseau une seconde fois. `None` veut dire « on ne sait
+        # pas encore », et ce n'est pas la même chose qu'une liste vide — qui
+        # voudrait dire « tout est à jour ». Confondre les deux ferait écrire
+        # « tout est à jour » avant d'avoir regardé.
+        self.retard = None
+
+        # LA DISPOSITION DU MAGASIN DE WINDOWS : UN VOLET, PUIS LE CONTENU.
+        tout = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
+        tout.set_border_width(20)
+        self.add(tout)
+
+        self.volet = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self.volet.get_style_context().add_class("volet")
+        self.volet.set_size_request(196, -1)
+        tout.pack_start(self.volet, False, False, 0)
 
         colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        colonne.set_border_width(26)
-        self.add(colonne)
+        tout.pack_start(colonne, True, True, 0)
 
         self.entete = grenosui.titre("GrenPlace", "Chargement du catalogue…")
         colonne.pack_start(self.entete, False, False, 0)
@@ -367,9 +454,6 @@ class GrenPlace(Gtk.Window):
         self.recherche.set_placeholder_text("Chercher une application")
         self.recherche.connect("search-changed", lambda _: self.remplir())
         colonne.pack_start(self.recherche, False, False, 0)
-
-        self.rayons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        colonne.pack_start(self.rayons, False, False, 0)
 
         defilement = Gtk.ScrolledWindow()
         defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -393,27 +477,64 @@ class GrenPlace(Gtk.Window):
             # du tout sans que rien ne rougisse — et c'est la vitrine.
             grenosui.dire(
                 "grenplace ouvert, %d applications (%s)" % (len(applications), origine))
+            # Et seulement ENSUITE on va demander ce qui a changé : c'est un
+            # second aller-retour sur le réseau, et la fenêtre doit être
+            # affichée avant, pas après.
+            self.chercher_les_retards()
             return False
         GLib.idle_add(poser)
 
     def faire_rayons(self):
-        """Les rayons viennent du catalogue, pas d'une liste écrite d'avance."""
-        for enfant in self.rayons.get_children():
-            self.rayons.remove(enfant)
+        """Le volet de gauche. Les rayons viennent du catalogue, jamais d'une
+        liste écrite d'avance : ajouter un rayon au catalogue doit suffire."""
+        for enfant in self.volet.get_children():
+            self.volet.remove(enfant)
         vus = []
         for application in self.applications:
             if application.get("rayon") and application["rayon"] not in vus:
                 vus.append(application["rayon"])
+
+        self.boutons_volet = {}
         premier = None
         for nom in ["Tout"] + vus:
-            bouton = Gtk.RadioButton.new_with_label_from_widget(premier, nom)
+            etiquette = "Accueil" if nom == "Tout" else nom
+            bouton = Gtk.RadioButton.new_with_label_from_widget(premier, etiquette)
             bouton.set_mode(False)
-            bouton.get_style_context().add_class("rayon")
+            bouton.get_style_context().add_class("cote")
+            # xalign ne suffit pas : c'est l'étiquette DANS le bouton qu'il faut
+            # aligner, sans quoi tout le volet est centré et ne ressemble à rien.
+            for enfant in bouton.get_children():
+                if isinstance(enfant, Gtk.Label):
+                    enfant.set_xalign(0.0)
             if premier is None:
                 premier = bouton
             bouton.connect("toggled", self.changer_rayon, nom)
-            self.rayons.pack_start(bouton, False, False, 0)
-        self.rayons.show_all()
+            self.volet.pack_start(bouton, False, False, 0)
+            self.boutons_volet[nom] = bouton
+
+        self.volet.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL),
+                              False, False, 8)
+
+        # « Mises à jour » est en bas et à part, comme dans le magasin de
+        # Windows : ce n'est pas un rayon du catalogue, c'est l'état de cette
+        # machine-ci.
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        bouton = Gtk.RadioButton.new_with_label_from_widget(premier, "Mises à jour")
+        bouton.set_mode(False)
+        bouton.get_style_context().add_class("cote")
+        for enfant in bouton.get_children():
+            if isinstance(enfant, Gtk.Label):
+                enfant.set_xalign(0.0)
+        bouton.connect("toggled", self.changer_rayon, "Mises à jour")
+        boite.pack_start(bouton, True, True, 0)
+        self.compteur = Gtk.Label(label="")
+        self.compteur.get_style_context().add_class("pastille")
+        self.compteur.set_no_show_all(True)
+        boite.pack_end(self.compteur, False, False, 10)
+        self.volet.pack_start(boite, False, False, 0)
+        self.boutons_volet["Mises à jour"] = bouton
+
+        self.volet.show_all()
 
     def changer_rayon(self, bouton, nom):
         if bouton.get_active():
@@ -436,6 +557,11 @@ class GrenPlace(Gtk.Window):
         self.entete.pack_start(sous, False, False, 0)
         self.entete.show_all()
 
+        if self.rayon == "Mises à jour":
+            self.remplir_mises_a_jour(filtre)
+            self.liste.show_all()
+            return
+
         montrees = 0
         for application in self.applications:
             if self.rayon != "Tout" and application.get("rayon") != self.rayon:
@@ -453,7 +579,56 @@ class GrenPlace(Gtk.Window):
             self.liste.pack_start(grenosui.carte(vide), False, False, 0)
         self.liste.show_all()
 
-    def fiche(self, application):
+    def remplir_mises_a_jour(self, filtre):
+        """La page « Mises à jour ».
+
+        TROIS ÉTATS, ET LE PREMIER EST CELUI QU'ON OUBLIE
+
+        « on ne sait pas encore » n'est pas « tout est à jour ». Les confondre
+        ferait écrire « tout est à jour » avant même d'avoir regardé — c'est la
+        faute exacte de la photo d'extinction noire du 1er octobre, où zéro
+        pixel voulait dire « on n'a pas regardé assez longtemps » et non
+        « rien ne s'affiche ».
+        """
+        if self.retard is None:
+            attente = Gtk.Label(
+                label="Lecture… On demande à Flathub et à Debian ce qui a changé "
+                      "depuis la dernière fois.", xalign=0)
+            attente.set_line_wrap(True)
+            attente.get_style_context().add_class("sous")
+            self.liste.pack_start(grenosui.carte(attente), False, False, 0)
+            return
+
+        if not self.retard:
+            rien = Gtk.Label(
+                label="Tout est à jour. Les applications installées sont à leur "
+                      "dernière version.", xalign=0)
+            rien.set_line_wrap(True)
+            rien.get_style_context().add_class("sous")
+            self.liste.pack_start(grenosui.carte(rien), False, False, 0)
+            return
+
+        tete = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        combien = Gtk.Label(
+            label="%d application%s à mettre à jour"
+                  % (len(self.retard), "s" if len(self.retard) > 1 else ""),
+            xalign=0)
+        combien.get_style_context().add_class("entree-titre")
+        tete.pack_start(combien, True, True, 0)
+        tete.pack_end(grenosui.bouton("Tout mettre à jour",
+                                      self.tout_mettre_a_jour, "principal"),
+                      False, False, 0)
+        self.liste.pack_start(grenosui.carte(tete), False, False, 0)
+
+        for application in self.retard:
+            cherche = (application["nom"] + " "
+                       + application.get("description", "")).lower()
+            if filtre and filtre not in cherche:
+                continue
+            self.liste.pack_start(self.fiche(application, mise_a_jour=True),
+                                  False, False, 0)
+
+    def fiche(self, application, mise_a_jour=False):
         ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
 
         image = logo(application)
@@ -477,7 +652,13 @@ class GrenPlace(Gtk.Window):
         texte.pack_start(origine, False, False, 0)
         ligne.pack_start(texte, True, True, 0)
 
-        if installe(application):
+        if mise_a_jour:
+            ligne.pack_end(
+                grenosui.bouton("Mettre à jour",
+                                lambda a=application: self.installer(a, True),
+                                "principal"),
+                False, False, 0)
+        elif installe(application):
             etat = Gtk.Label(label="Installé")
             etat.get_style_context().add_class("etat-installe")
             ligne.pack_end(etat, False, False, 8)
@@ -488,9 +669,57 @@ class GrenPlace(Gtk.Window):
                 False, False, 0)
         return grenosui.carte(ligne)
 
-    def installer(self, application):
-        fenetre = Installation(self, application, self.remplir)
+    def installer(self, application, mise_a_jour=False):
+        fenetre = Installation(self, application, self.remplir,
+                               mise_a_jour=mise_a_jour)
         fenetre.show_all()
+
+    def tout_mettre_a_jour(self):
+        """Les met à jour l'une après l'autre, dans la même fenêtre.
+
+        POURQUOI PAS `flatpak update -y` TOUT SEUL
+
+        Parce que cela mettrait aussi à jour ce qui ne vient pas de notre
+        catalogue, sans le dire. Le bouton promet « ces applications-là », et
+        c'est exactement celles-là qu'il faut toucher — la promesse à l'écran
+        doit correspondre à ce qui se passe derrière.
+        """
+        restantes = list(self.retard)
+        if not restantes:
+            return
+
+        def suivante(_=None):
+            if not restantes:
+                self.chercher_les_retards()
+                return
+            application = restantes.pop(0)
+            fenetre = Installation(self, application, suivante, mise_a_jour=True)
+            fenetre.show_all()
+
+        suivante()
+
+    def chercher_les_retards(self):
+        """Redemande ce qui a changé, sans figer la fenêtre."""
+        self.retard = None
+        self.remplir()
+
+        def travailler():
+            trouve = magasin.a_mettre_a_jour(self.applications)
+
+            def poser():
+                self.retard = trouve
+                if trouve:
+                    self.compteur.set_text(str(len(trouve)))
+                    self.compteur.show()
+                else:
+                    self.compteur.hide()
+                self.remplir()
+                grenosui.dire("grenplace : %d application(s) a mettre a jour"
+                              % len(trouve))
+                return False
+            GLib.idle_add(poser)
+
+        threading.Thread(target=travailler, daemon=True).start()
 
 
 def main():

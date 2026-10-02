@@ -45,7 +45,12 @@ SOURCE = os.path.join(ICI, "..", "data", "catalogue.json")
 # sans accent ajoute un **deuxième** onglet à côté de « Système », et la
 # personne se demande pourquoi ses applications sont coupées en deux. Un Coder
 # l'a fait le 2026-09-25 sur trois fiches, et rien ne l'aurait vu.
-RAYONS = {"Jeux", "Bureautique", "Création", "Internet", "Développement", "Système"}
+RAYONS = {"Jeux", "Bureautique", "Création", "Internet", "Développement", "Système",
+          # Ajouté le 2 octobre. Ollama n'est ni un paquet Debian ni un Flatpak
+          # — vérifié dans les index de trixie et dans l'API de recherche de
+          # Flathub, qui ne rend que des CLIENTS d'Ollama. Ce rayon porte donc
+          # ce qui existe vraiment et fait tourner un modèle sur la machine.
+          "Intelligence artificielle"}
 
 RETIRES = {
     "gnome-calculator", "cheese", "xsane", "hardinfo",
