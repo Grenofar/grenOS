@@ -11,6 +11,21 @@
 #
 #   grenos-dire "menu ouvert"
 
+# SANS PORT SERIE, PERSONNE NE RELEVERA CE BILLET.
+#
+# `grenos-preuve` s'arrête aussitôt quand `/dev/ttyS0` n'existe pas — et il
+# n'existe ni sur le `.vbox` que nous livrons (`scripts/make-vbox.py` ne
+# déclare aucun UART pour Linux) ni sur un PC d'aujourd'hui. Les billets
+# s'entasseraient alors dans /tmp sans que rien ne les lise : un fichier par
+# ouverture de fenêtre, pour toujours.
+#
+# C'est minuscule, et c'est quand même une fuite. Grenofar a demandé « 100 %
+# clean » ; une boîte aux lettres que personne ne relève n'est pas clean.
+#
+# Le même test que la sonde, au même mot près : `-c` et non `-e`, parce qu'un
+# fichier ordinaire du même nom n'est pas un port série.
+[ -c /dev/ttyS0 ] || exit 0
+
 BOITE=/tmp/grenos-billets
 mkdir -p "$BOITE" 2>/dev/null || exit 0
 chmod 1777 "$BOITE" 2>/dev/null || true

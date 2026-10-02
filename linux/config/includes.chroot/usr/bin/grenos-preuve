@@ -37,6 +37,39 @@ dire () {
     echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
 }
 
+# ---- SANS PORT SERIE, TOUT CE QUI SUIT EST DU TRAVAIL POUR RIEN ------------
+#
+# Grenofar, le 1er octobre : « fais que ça soit rapide, que ça reste fluide,
+# éviter les processus en trop ».
+#
+# Des seize services en marche, quinze sont à Debian et chacun sert à quelque
+# chose — journald, udevd, logind, dbus, polkit, NetworkManager, lightdm,
+# udisks2 (c'est lui qui montre les disques dans l'explorateur)… Le seizième
+# est celui-ci, et c'est le NÔTRE.
+#
+# Il n'existe que pour écrire sur le port série, que la machine d'intégration
+# lit. Or le fichier `.vbox` que nous livrons ne déclare AUCUN port série
+# (`scripts/make-vbox.py` : `serial = ""` pour Linux), et un PC d'aujourd'hui
+# n'en a pas non plus. Chez Grenofar, chaque `dire` part donc dans le vide —
+# après avoir compté les profils ALSA, listé les pilotes VA-API, interrogé le
+# dépôt APT PAR LE RÉSEAU, demandé Flathub (jusqu'à quatre-vingt-dix secondes)
+# et réveillé le moniteur de volumes de GIO. À chaque démarrage.
+#
+# On ne retire donc aucun service : on arrête d'en faire un qui ne sert à
+# personne. C'est la seule chose à couper que la mesure ait désignée, et elle
+# ne coûte rien à la CI, où le port existe.
+#
+# `-c` et pas `-e` : /dev/ttyS0 doit être un périphérique en mode caractère. Un
+# fichier ordinaire du même nom ne serait pas un port série, et le test
+# passerait quand même.
+if [ ! -c /dev/ttyS0 ]; then
+    echo "grenos-preuve : aucun port serie, rien a rapporter — on s arrete" >&2
+    exit 0
+fi
+
+# Combien coûte cette sonde, pour qu'on sache ce qu'on épargne à sa machine.
+DEBUT_SONDE=$(date +%s 2>/dev/null || echo 0)
+
 # ---- Cette image peut-elle se mettre a jour ? -------------------------------
 #
 # Le depot grenOS arrive par config/archives/grenos.list.binary, et rien n'a
@@ -412,6 +445,17 @@ elif [ "${temoin%% *}" = "$demarrage" ]; then
     dire "persistance : le temoin est de CE demarrage, il ne prouve rien"
 else
     dire "persistance : un fichier d'un demarrage PRECEDENT est revenu (${temoin#* })"
+fi
+
+# CE QUE TOUT CE QUI PRECEDE A COUTE.
+#
+# Le chiffre mesure exactement le travail qu'une machine sans port série
+# n'aura plus à faire — c'est la seule façon de savoir si la coupure vaut
+# quelque chose, au lieu de l'affirmer. Tout ce qui suit est une boucle
+# d'attente de quinze minutes : elle ne compte pas, elle dort.
+FIN_SONDE=$(date +%s 2>/dev/null || echo 0)
+if [ "$DEBUT_SONDE" -gt 0 ] && [ "$FIN_SONDE" -ge "$DEBUT_SONDE" ]; then
+    dire "perf : la sonde a pris $((FIN_SONDE - DEBUT_SONDE))s — autant d epargne"
 fi
 
 vu_session=0
