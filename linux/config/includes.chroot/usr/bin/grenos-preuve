@@ -50,14 +50,30 @@ dire () {
 # Il n'existe que pour écrire sur le port série, que la machine d'intégration
 # lit. Or le fichier `.vbox` que nous livrons ne déclare AUCUN port série
 # (`scripts/make-vbox.py` : `serial = ""` pour Linux), et un PC d'aujourd'hui
-# n'en a pas non plus. Chez Grenofar, chaque `dire` part donc dans le vide —
-# après avoir compté les profils ALSA, listé les pilotes VA-API, interrogé le
-# dépôt APT PAR LE RÉSEAU, demandé Flathub (jusqu'à quatre-vingt-dix secondes)
-# et réveillé le moniteur de volumes de GIO. À chaque démarrage.
+# n'en a pas non plus. Chez Grenofar, chaque `dire` part donc dans le vide.
 #
-# On ne retire donc aucun service : on arrête d'en faire un qui ne sert à
-# personne. C'est la seule chose à couper que la mesure ait désignée, et elle
-# ne coûte rien à la CI, où le port existe.
+# CE QUE CELA COÛTE VRAIMENT — ET J'AVAIS ÉCRIT N'IMPORTE QUOI
+#
+# J'avais écrit ici que la sonde interrogeait le dépôt APT par le réseau et
+# Flathub « jusqu'à quatre-vingt-dix secondes ». La ligne de mesure que
+# j'ajoutais dans le même commit a répondu au passage suivant :
+#
+#     perf : la sonde a pris 1s — autant d epargne
+#
+# **Une seconde.** Le chiffre de quatre-vingt-dix était un pire cas théorique,
+# jamais observé, et je l'ai présenté comme le coût réel. *Affirmer un coût
+# qu'on n'a pas mesuré, c'est exactement ce que ce fichier passe son temps à
+# attraper chez les autres.*
+#
+# LE VRAI COÛT EST AILLEURS, ET IL EST RÉEL : après ces préparatifs, ce
+# programme entre dans une boucle d'attente de **quinze minutes** (450 tours de
+# 2 s), pendant laquelle il se réveille toutes les deux secondes pour balayer
+# /tmp. Sur un portable, c'est quinze minutes de réveils qui empêchent le
+# processeur de descendre dans ses états de repos profonds — à chaque
+# démarrage, pour relayer des messages que personne ne lit.
+#
+# On ne retire donc aucun service : on arrête d'en faire tourner un qui ne sert
+# à personne. Et cela ne coûte rien à la CI, où le port existe.
 #
 # `-c` et pas `-e` : /dev/ttyS0 doit être un périphérique en mode caractère. Un
 # fichier ordinaire du même nom ne serait pas un port série, et le test
@@ -449,10 +465,14 @@ fi
 
 # CE QUE TOUT CE QUI PRECEDE A COUTE.
 #
-# Le chiffre mesure exactement le travail qu'une machine sans port série
-# n'aura plus à faire — c'est la seule façon de savoir si la coupure vaut
-# quelque chose, au lieu de l'affirmer. Tout ce qui suit est une boucle
-# d'attente de quinze minutes : elle ne compte pas, elle dort.
+# Mesuré : **1 seconde** (run 36970232858). J'avais écrit plus haut que cela
+# pouvait prendre quatre-vingt-dix secondes ; c'était un pire cas théorique que
+# je donnais pour le coût réel, et cette ligne-ci m'a démenti au premier
+# passage. Elle a payé sa place le jour même.
+#
+# Ce qui suit est la boucle d'attente : quinze minutes de réveils toutes les
+# deux secondes. Elle ne figure pas dans ce chiffre, et c'est pourtant elle qui
+# pèse — mais elle ne peut pas se mesurer ici, puisqu'on est dedans.
 FIN_SONDE=$(date +%s 2>/dev/null || echo 0)
 if [ "$DEBUT_SONDE" -gt 0 ] && [ "$FIN_SONDE" -ge "$DEBUT_SONDE" ]; then
     dire "perf : la sonde a pris $((FIN_SONDE - DEBUT_SONDE))s — autant d epargne"
