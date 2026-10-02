@@ -243,11 +243,11 @@ class Jeux(Gtk.Window):
 
           - GameMode installé : c'est fait, il est dans l'image ;
           - la personne dans le groupe `gamemode` : `grenos-performances`
-            l'ajoute à chaque démarrage, avant lightdm, et `appliquer-systeme`
-            après chaque mise à jour. Mais `usermod -aG` ne change rien à une
-            session DÉJÀ ouverte — la page de manuel du paquet dit « and then
-            rebooted ». La carte doit donc pouvoir dire « pas encore,
-            redémarre » plutôt que de laisser croire ;
+            l'ajoute à chaque démarrage, et `appliquer-systeme` après chaque
+            mise à jour. Mais `usermod -aG` ne change rien à une session DÉJÀ
+            ouverte — la page de manuel du paquet dit « and then rebooted ».
+            La carte doit donc pouvoir dire « pas encore, redémarre » plutôt
+            que de laisser croire ;
           - l'option de lancement dans Steam : elle vit dans le compte Steam de
             la personne. Y toucher serait modifier son compte sans le lui
             demander. On l'écrit, elle la colle.

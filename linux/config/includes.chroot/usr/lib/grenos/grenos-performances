@@ -77,6 +77,36 @@ groupe_des_jeux () {
 
 groupe_des_jeux
 
+# ---- LE GESTIONNAIRE DE CONNEXION EST-IL ENCORE PRÉVU ? ---------------------
+#
+# CETTE LIGNE EXISTE PARCE QUE L'ABSENCE DE BUREAU N'A LAISSÉ AUCUNE TRACE.
+#
+# Le 2 octobre, l'image a démarré jusqu'au premier écran puis s'est arrêtée sur
+# un écran noir. `serial.log` faisait 216 octets, et le journal de la
+# construction ne disait rien : notre ligne de commande porte `quiet` et
+# `loglevel=3`, donc les avertissements de systemd — dont « Job
+# lightdm.service/start deleted to break ordering cycle » — ne sortent nulle
+# part. J'ai dû raisonner au lieu de lire.
+#
+# Cette unité s'exécute précisément au bon moment pour répondre : après
+# `multi-user.target`, c'est-à-dire quand le travail de lightdm est déjà en
+# file s'il doit l'être. Si systemd l'a supprimé pour casser un cycle, il n'y
+# est plus — et c'est la seule différence observable entre « lightdm va
+# démarrer » et « lightdm ne démarrera jamais ».
+#
+# Un faux cycle réintroduit un jour par une unité quelconque se verra alors en
+# UN passage, au lieu de cinq.
+etat_lightdm=$(systemctl is-active display-manager.service 2>/dev/null || true)
+travaux=$(systemctl list-jobs --no-legend --no-pager 2>/dev/null \
+          | grep -c -e display-manager -e lightdm || true)
+if [ "$etat_lightdm" = active ] || [ "$etat_lightdm" = activating ]; then
+    dire "perf : gestionnaire de connexion $etat_lightdm"
+elif [ "${travaux:-0}" -gt 0 ]; then
+    dire "perf : gestionnaire de connexion en file ($travaux travail/travaux)"
+else
+    dire "perf : AUCUN travail lightdm en file — le bureau ne s ouvrira PAS"
+fi
+
 CPUFREQ=/sys/devices/system/cpu/cpu0/cpufreq
 
 if [ ! -d "$CPUFREQ" ]; then

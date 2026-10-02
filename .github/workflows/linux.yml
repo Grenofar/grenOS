@@ -708,3 +708,35 @@ jobs:
           # Une seule ligne, sans continuation : c'est elle qui se perd en
           # chemin, et le garde-fou de la premiere etape la reclame.
           gh release create "$TAG" --title "grenOS Linux ${{ steps.vbox.outputs.stamp }}" --notes-file notes.md "dist/$NAME.iso" "dist/$NAME-virtualbox.zip"
+
+      # LE JOB DOIT ETRE ROUGE QUAND L IMAGE NE DEMARRE PAS.
+      #
+      # Le 2 octobre, la construction 36948925395 s est declaree VERTE alors
+      # que l image n a jamais ouvert de bureau : ecran noir, serial.log de
+      # 216 octets, et « La touche Windows n a pas ouvert le menu » suivi d un
+      # exit 1 dans le journal.
+      #
+      # Rien n a ete publie — la Release exige `steps.boot.outcome == success`,
+      # et cette protection-la a parfaitement joue. Mais au premier coup d oeil
+      # le run disait « success », et c est exactement la couleur qu on regarde
+      # avant de regarder le reste.
+      #
+      # Le `continue-on-error` de l etape de demarrage reste : il est VOULU,
+      # c est lui qui permet de garder les captures et de rendre un verdict
+      # meme quand l image ne demarre pas, et ces captures sont la seule chose
+      # qui permette de comprendre pourquoi. On ne le retire pas ; on ajoute
+      # une derniere etape qui rend la couleur honnete.
+      #
+      # Elle est APRES la Release et apres les artefacts, donc elle ne prive de
+      # rien : tout ce qui devait etre garde l a deja ete.
+      - name: Le verdict honnete
+        if: always()
+        run: |
+          echo "demarrage : ${{ steps.boot.outcome }}"
+          echo "uefi      : ${{ steps.uefi.outcome }}"
+          echo "maj       : ${{ steps.maj.outcome }}"
+          if [ "${{ steps.boot.outcome }}" != "success" ]; then
+            echo "::error::L'image n'a pas montre de bureau. Rien n'a ete publie."
+            exit 1
+          fi
+          echo "l'image a montre un bureau"

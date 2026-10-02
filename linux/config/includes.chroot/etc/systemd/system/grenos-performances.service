@@ -9,19 +9,33 @@
 # aussi rejoué par `appliquer-systeme` après chaque mise à jour, parce qu'un
 # noyau neuf repart sur le gouverneur par défaut.
 #
-# `Before=display-manager.service` a été ajouté le 2 octobre, et pour une
-# raison précise : cette unité ajoute aussi le compte au groupe `gamemode`, et
-# `usermod -aG` ne change rien à une session DÉJÀ ouverte — la page de manuel
-# de gamemoded le dit (« and then rebooted »). Si elle passait après lightdm,
-# le droit ne vaudrait qu'au démarrage suivant, à chaque fois, pour toujours.
+# IL Y A EU UN `Before=display-manager.service` ICI, ET IL A COÛTÉ UN ÉCRAN
+# NOIR. C'est écrit en toutes lettres parce que c'est la seule façon de ne pas
+# le réécrire dans trois jours.
 #
-# Il n'y a pas de cycle : `display-manager.service` est tiré par
-# `graphical.target`, qui vient après `multi-user.target`. Ce n'est pas prouvé
-# sur une machine, et c'est la prochaine chose que la ligne série dira.
+# Je l'avais ajouté pour que l'ajout au groupe `gamemode` vaille dès cette
+# session-là, et j'avais écrit juste à côté : « il n'y a pas de cycle […] ce
+# n'est pas prouvé sur une machine ». La construction `36948925395` a répondu :
+# `serial.log` de 216 octets, dernière ligne « nom choisi », écran **noir**.
+# lightdm n'a jamais démarré.
+#
+# Le cycle, lui, était bien là : cette unité est `After=multi-user.target`,
+# `lightdm.service` est en `Conflicts`/`After` de `getty@tty1.service`, et
+# `getty.target` appartient à `multi-user.target`. systemd casse un cycle en
+# **supprimant un travail** — celui de lightdm. Le bureau ne peut alors plus
+# s'ouvrir, et rien ne le dit sur le port série puisque la ligne de commande
+# porte `quiet`.
+#
+# ET CE N'ÉTAIT PAS UNE PERTE : la page de manuel de gamemoded dit elle-même
+# « the user must be added to the gamemode group (and then rebooted) ». Le
+# droit vaut au démarrage suivant, et c'est le comportement documenté. La page
+# Jeux sait déjà dire « pas encore, redémarre ».
+#
+# *Faire attendre lightdm sur un réglage de confort, c'est faire dépendre tout
+# le bureau de la chose la moins importante du système.*
 [Unit]
 Description=grenOS : tenir la frequence haute et donner son droit au jeu
 After=multi-user.target
-Before=display-manager.service lightdm.service
 ConditionPathExists=/sys/devices/system/cpu
 
 [Service]
@@ -29,6 +43,11 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/lib/grenos/grenos-performances
 StandardOutput=null
+# Borné dans le temps, par principe : plus rien n'attend cette unité, donc un
+# blocage ne peut plus retenir le bureau — mais une unité sans limite reste une
+# unité qui peut rester en marche pour toujours, et `systemctl list-units`
+# compterait un service « en démarrage » éternellement.
+TimeoutStartSec=30
 
 [Install]
 WantedBy=multi-user.target
