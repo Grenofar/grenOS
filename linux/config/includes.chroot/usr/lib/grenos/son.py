@@ -167,3 +167,99 @@ def nom_lisible(identifiant):
         if nom == identifiant:
             return description
     return identifiant
+
+
+# ---------------------------------------------------------------------------
+# POURQUOI N'ENTEND-ON RIEN ? LA QUESTION POSÉE, PLUS DEVINÉE.
+#
+# Grenofar l'a dit trois fois : le 24 septembre, le 27 septembre (« le son
+# fonctionne toujours pas »), et le 7 octobre (« le son focntionne pas »).
+# Trois fois, j'ai cherché une cause et annoncé une correction, et trois fois
+# il est revenu. Le compte exact des hypothèses que j'ai émises sans mesure :
+#
+#   dbus-user-session absent · alsa-ucm-conf absent · rtkit absent · le tampon
+#   trop serré · la priorité temps réel · le mélangeur coupé
+#
+# Six. Les six étaient de vrais manques, aucun n'était SA panne. Et la case B4
+# du plan du 26 septembre disait déjà, en toutes lettres, ce qu'il fallait
+# faire à la place : « c'est le chiffre qui transforme "ça grésille" en
+# diagnostic. Sans lui, la prochaine fois je devinerai encore. » Je n'ai posé
+# que la moitié de la case — le mélangeur et le temps réel — et la prochaine
+# fois est arrivée.
+#
+# Ce que la CI ne peut PAS voir, et qui explique pourquoi le défaut survit :
+# elle a UNE carte, UNE sortie, et le mélangeur d'`intel-hda` sous QEMU sort
+# ouvert. Elle entend un son propre et elle dit vrai. Toutes les pannes
+# ci-dessous demandent une machine qui a plusieurs sorties — c'est-à-dire la
+# sienne, et jamais la nôtre.
+#
+# LA PISTE QUE CE CODE EXISTE POUR TRANCHER : sur une machine avec une carte
+# graphique, PipeWire choisit couramment la sortie HDMI de cette carte comme
+# sortie par défaut. Le son part alors vers l'écran — qui n'a pas forcément de
+# haut-parleurs — pendant que les enceintes analogiques restent muettes. Pile
+# logicielle impeccable, volume à 80 %, mélangeur ouvert, et zéro son.
+# Grenofar a une vraie carte graphique : il a demandé le même jour la mise à
+# jour des pilotes GPU.
+#
+# On ne CORRIGE rien ici, et c'est volontaire. Changer sa sortie par défaut
+# serait décider à sa place laquelle est la bonne — et si ses enceintes sont
+# branchées en HDMI, nous casserions le son de quelqu'un chez qui il marche.
+# C'est la faute exacte du mélangeur posé à 80 % le 27 septembre, qui a fait
+# tomber la crête de 10 584 à 2 215. On nomme, il choisit : le sélecteur de
+# sortie est déjà dans la page.
+# ---------------------------------------------------------------------------
+
+# Ce qui, dans le nom d'une sortie, désigne un écran et non des enceintes.
+# `pactl` nomme ses sorties d'après le profil ALSA : `...hdmi-stereo`,
+# `...hdmi-surround`, et DisplayPort chez les cartes récentes.
+VERS_UN_ECRAN = ("hdmi", "displayport", "display-port")
+
+
+def _vers_un_ecran(nom):
+    nom = (nom or "").lower()
+    return any(marque in nom for marque in VERS_UN_ECRAN)
+
+
+def diagnostic():
+    """Ce qui empêche d'entendre, nommé. Rend (verdict, [soucis]).
+
+    Les soucis sont dans l'ordre où ils tuent le son : pas de carte, puis
+    coupé, puis à zéro, puis envoyé au mauvais endroit. Le premier de la liste
+    est celui qu'il faut regarder — les suivants peuvent n'être que des
+    conséquences.
+    """
+    liste = sorties()
+    soucis = []
+
+    if not liste:
+        # Aucune sortie. Et il faut le dire franchement : aucune mise à jour
+        # ne peut ajouter une carte son à une machine qui n'en déclare pas.
+        return ("Aucune sortie audio : PipeWire ne voit aucune carte son.",
+                ["aucune carte son"])
+
+    courante = sortie_actuelle()
+    lisible = ""
+    for nom, texte in liste:
+        if nom == courante:
+            lisible = texte
+            break
+
+    if muet():
+        soucis.append("la sortie est coupée")
+    niveau = volume()
+    if niveau < 5:
+        soucis.append("le volume de la sortie est à %d %%" % niveau)
+
+    # Le son part-il vers l'écran alors qu'une autre sortie existe ?
+    autres = [texte for nom, texte in liste if not _vers_un_ecran(nom)]
+    if _vers_un_ecran(courante) and autres:
+        soucis.append(
+            "le son part vers l'écran (HDMI) alors qu'une autre sortie existe : "
+            + ", ".join(autres[:2]))
+
+    if not soucis:
+        verdict = "Le son devrait s'entendre sur « %s »." % (lisible or courante
+                                                             or "la sortie par défaut")
+    else:
+        verdict = "Le son ne sortira pas : " + soucis[0] + "."
+    return verdict, soucis

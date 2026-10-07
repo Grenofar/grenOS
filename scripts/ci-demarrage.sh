@@ -995,6 +995,31 @@ else
   echo "::warning::L image n a rien dit sur le decodage video."
 fi
 
+echo "--- par OU le son sort-il ---"
+# Grenofar a dit « pas de son » trois fois : les 24 et 27 septembre, puis le
+# 7 octobre. Trois fois j ai nomme une cause et annonce une correction. Les six
+# manques trouves en chemin etaient reels — dbus-user-session, alsa-ucm-conf,
+# rtkit, le tampon, le temps reel, le melangeur coupe — et AUCUN n etait sa
+# panne.
+#
+# La page savait dire que le melangeur etait ouvert. Elle ne disait pas OU VA
+# LE SON. Sur une machine avec une carte graphique, PipeWire choisit couramment
+# la sortie HDMI : le son part vers l ecran, les enceintes restent muettes, et
+# tout le reste de la mesure est impeccable.
+#
+# CETTE MACHINE NE PEUT PAS MONTRER CE DEFAUT, et c est le point : elle a UNE
+# sortie. La ligne attendue ici est donc « le son devrait s entendre », et elle
+# ne prouve rien du PC de Grenofar — seulement que la mesure existe et parle.
+# C est la meme limite que le son entendu depuis le 26 septembre.
+#
+# Rapporte, pas bloquant.
+grep -a 'grenos: reglages son : sortie' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
+if grep -aq 'grenos: reglages son : sortie' "$RUNNER_TEMP/serial.log"; then
+  echo "son: la page dit desormais par ou le son sort"
+else
+  echo "::warning::La page Son ne dit pas par ou le son sort."
+fi
+
 # Cette image peut-elle se mettre a jour ? L'essai en conteneur prouve
 # que le depot marche ; il ne prouve pas que l'IMAGE le connait. Le
 # depot arrive par config/archives/grenos.list.binary, et personne

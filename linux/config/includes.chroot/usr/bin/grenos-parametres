@@ -627,8 +627,27 @@ class Reglages(Gtk.Window):
         else:
             priorite = "PipeWire ne tourne pas."
 
+        # PAR OÙ LE SON SORT, ET C'EST LA LIGNE QUI MANQUAIT.
+        #
+        # La page savait dire que le mélangeur était ouvert et que PipeWire
+        # tournait en temps réel. Elle ne disait pas **où va le son**. Sur une
+        # machine avec une carte graphique, PipeWire choisit couramment la
+        # sortie HDMI de cette carte : le son part vers l'écran pendant que les
+        # enceintes restent muettes, avec un mélangeur ouvert et un volume à
+        # 80 %. C'est le seul scénario compatible avec tout ce qu'on a mesuré
+        # chez Grenofar — et la CI ne peut pas le voir, puisqu'elle n'a qu'une
+        # seule sortie.
+        #
+        # Elle est posée EN PREMIER parce qu'elle rend les suivantes inutiles :
+        # un mélangeur impeccable n'apprend rien quand le son part ailleurs.
+        try:
+            verdict_sortie, _soucis = module_son.diagnostic()
+        except Exception:                                   # noqa: BLE001
+            verdict_sortie = "Impossible de lire la sortie audio."
+
         self.dire_diag_son.set_text("\n".join(
-            [melangeur, priorite, carte, profils, decodeur, pilotes]))
+            [verdict_sortie, melangeur, priorite, carte, profils, decodeur,
+             pilotes]))
 
         # Et on le dit sur le port série.
         #
@@ -651,6 +670,11 @@ class Reglages(Gtk.Window):
                                        "?" if c["niveau"] is None else "%d%%" % c["niveau"],
                                        "COUPE" if c["coupe"] else "ouvert")
                          for c in lu.get("melangeur", [])) or "illisible"))
+        # Et la sortie, sur sa propre ligne elle aussi. Celle-ci est nouvelle,
+        # et c'est la seule qui puisse trancher entre « la carte est muette »
+        # et « le son va ailleurs » — deux pannes qui donnent exactement le
+        # même silence et qui n'ont rien à voir.
+        grenosui.dire("reglages son : sortie — %s" % verdict_sortie)
         return False
 
     def changer_sortie(self, combo):
