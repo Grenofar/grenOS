@@ -743,7 +743,7 @@ fi
 # comportement voulu (la base pese des centaines de Mo et ne doit pas se
 # telecharger sans qu on le demande). Exiger un nombre ferait refuser une image
 # saine.
-for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau du depot present" "maj: grenos-desktop" "disques : " "persistance : active" "son ouvert" "reglages ouvert" "jeux ouvert" "son : second essai joue" "son : melangeur" "emplacements : " "reglages securite : " "reglages composants : "; do
+for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau du depot present" "maj: grenos-desktop" "disques : " "persistance : active" "son ouvert" "reglages ouvert" "jeux ouvert" "son : second essai joue" "son : melangeur" "emplacements : " "reglages securite : " "reglages composants : " "montage : sans mot de passe — amovible oui, interne oui"; do
   if grep -aq "grenos: $preuve" "$RUNNER_TEMP/serial.log"; then
     echo "prouve: $preuve"
   else
@@ -951,10 +951,25 @@ echo "--- les disques internes sont-ils OUVRABLES, et pas seulement vus ---"
 # assertion morte. L amovible dit oui tout seul (defaut du paquet) ; l interne
 # ne dit oui que grace a notre regle.
 #
-# Rapporte, pas encore bloquant : vu vert zero fois pour l instant.
+# CE BLOC-CI NE BLOQUE PAS, ET CE N EST PAS UN OUBLI : il est apres le
+# `exit 1` de la ligne 785, donc y poser MUET=1 ne ferait RIEN. C est
+# exactement ce que j allais ecrire, et c est la definition d un garde sans
+# dents — vrai, stable, et incapable de refuser quoi que ce soit. La preuve
+# bloquante est dans la liste `for preuve`, plus haut ; ici on ne fait que
+# detailler ce qu on a lu.
+#
+# VU VERT DEUX FOIS (37645051489, 37649999170),
+# regle inchangee depuis le 12 septembre — on ne rend une preuve obligatoire
+# qu apres l avoir vue verte deux fois.
+#
+# Ce qu elle empeche : que la regle polkit udisks2 reparte en silence. Une
+# regle qui n autorise rien ne produit AUCUNE erreur — c est exactement
+# pourquoi l installateur est reste increvable pendant des semaines avec un
+# nom d action inexistant. Sans ce garde, la meme panne revient sans bruit, et
+# Grenofar la redecouvre en cliquant sur un disque qui ne s ouvre pas.
 grep -a 'grenos: montage :' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
 if grep -aq 'grenos: montage : sans mot de passe — amovible oui, interne oui' "$RUNNER_TEMP/serial.log"; then
-  echo "montage: les disques internes s ouvriront sans mot de passe"
+  echo "prouve: les disques internes s ouvriront sans mot de passe"
 elif grep -aq 'grenos: montage : sans mot de passe' "$RUNNER_TEMP/serial.log"; then
   echo "::warning::Un disque interne demande encore un mot de passe que la machine n a pas."
 else
