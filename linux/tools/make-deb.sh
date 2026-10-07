@@ -155,7 +155,7 @@ for service in grenos-premier.service grenos-preuve.service \
                grenos-maj-auto.service grenos-maj-auto.timer \
                grenos-maj-demarrage.service \
                grenos-console-propre.service grenos-sonde-arret.service \
-               grenos-splash-arret.service grenos-performances.service; do
+               grenos-splash-arret.service grenos-performances.service                grenos-video.service; do
     install -m 0644 "$DEDANS/etc/systemd/system/$service" "$BUILD/etc/systemd/system/"
 done
 
@@ -224,6 +224,11 @@ install -m 0755 "$DEDANS/usr/lib/grenos/grenos-taire-larret" "$BUILD/usr/lib/gre
 # Le gouverneur du processeur : un noyau neuf repart sur celui par defaut,
 # donc ce reglage doit voyager avec le paquet et etre rejoue.
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-performances" "$BUILD/usr/lib/grenos/"
+# Ce que la carte graphique sait decoder, dit a Firefox. Il voyage avec le
+# paquet parce que c est la seule chose qui puisse reparer une video qui
+# saccade sur une machine deja installee — exactement ce que Grenofar
+# demande depuis le 7 octobre, et sans retelecharger une image.
+install -m 0755 "$DEDANS/usr/lib/grenos/grenos-video" "$BUILD/usr/lib/grenos/"
 # Le depot d'un travail a appliquer au prochain demarrage. Il voyage avec le
 # paquet, donc une machine deja installee le recoit par mise a jour — ce qui
 # est la moindre des choses pour un outil dont tout l'objet est d'appliquer des

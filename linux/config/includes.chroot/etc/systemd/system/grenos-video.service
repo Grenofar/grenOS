@@ -1,0 +1,37 @@
+# Dire à Firefox ce que la carte graphique de CETTE machine sait décoder.
+#
+# Demandé le 7 octobre : « quand je lance une video youtube et ou short la
+# video bug alors que sur l'os je fais un speedtest ookla avec 300mbits ».
+# Le réseau est hors de cause, il l'a mesuré lui-même ; c'est le décodage.
+#
+# POURQUOI UN SERVICE ET PAS UN FICHIER LIVRÉ
+#
+# La bonne valeur dépend de la carte. `media.av1.enabled` doit rester vrai sur
+# une carte qui décode l'AV1 et devenir faux sur toutes les autres — et nous ne
+# savons pas sur laquelle l'image sera installée. Un fichier livré figerait une
+# réponse pour tout le monde. Celui-ci est écrit à partir de ce que `vainfo`
+# répond sur place.
+#
+# `After=multi-user.target` ET RIEN DE PLUS. Firefox lit ce fichier quand
+# Firefox démarre, donc longtemps après le bureau : il n'y a aucune raison que
+# quoi que ce soit attende ce service. Ajouter `Before=display-manager.service`
+# — ce que j'ai fait le 1er octobre sur `grenos-performances` en écrivant juste
+# à côté qu'il n'y avait pas de cycle — crée un cycle que systemd casse en
+# supprimant le travail de lightdm, et l'image démarre sur un écran noir.
+[Unit]
+Description=grenOS : regler le decodage video du navigateur sur cette carte
+After=multi-user.target
+ConditionPathIsDirectory=/etc/firefox-esr
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/grenos/grenos-video
+StandardOutput=null
+# `vainfo` interroge un pilote, et un pilote peut ne jamais répondre. Le module
+# borne déjà son propre appel ; cette limite est le second filet, pour que
+# `systemctl list-units` ne compte pas un service « en démarrage » éternel.
+TimeoutStartSec=45
+
+[Install]
+WantedBy=multi-user.target

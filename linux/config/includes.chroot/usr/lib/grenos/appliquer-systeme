@@ -25,9 +25,17 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 # (l'absence de /etc/grenos/identite) s'en charge, mais autant être clair.
 for service in grenos-premier.service grenos-preuve.service grenos-maj-verif.timer \
                grenos-console-propre.service grenos-sonde-arret.service \
-               grenos-splash-arret.service grenos-performances.service; do
+               grenos-splash-arret.service grenos-performances.service \
+               grenos-video.service; do
     systemctl enable "$service" >/dev/null 2>&1 || true
 done
+
+# `grenos-video.service` est rejoué ici et pas seulement livré, pour une raison
+# qui vaut d'être écrite : son fichier de préférences dépend de la CARTE, pas
+# de la version. Une mise à jour de Mesa ou l'arrivée d'un pilote change ce que
+# `vainfo` répond, donc la bonne valeur de `media.av1.enabled` change aussi. Le
+# service la remesure à chaque démarrage ; l'activer ici garantit qu'une
+# machine déjà posée l'obtient par mise à jour, sans image.
 
 # L'installation automatique des mises à jour suit ce que la personne a choisi :
 # on ne l'allume jamais de notre propre initiative.

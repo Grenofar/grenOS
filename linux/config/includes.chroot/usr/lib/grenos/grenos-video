@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+# Demander à la carte ce qu'elle décode, et le dire à Firefox.
+#
+# Lancé par `grenos-video.service` à chaque démarrage, et rejoué par
+# `appliquer-systeme` après chaque mise à jour : une carte peut changer, un
+# pilote peut arriver, et le fichier doit suivre la machine et non la version.
+#
+# Il rend TOUJOURS 0. C'est un réglage de confort : il n'a pas le droit
+# d'empêcher une machine de finir son démarrage. La règle a déjà été payée —
+# `grenos-maj-demarrage` rend 0 en toutes circonstances pour la même raison.
+#
+# Et il n'y a ici AUCUN `Before=display-manager.service` : le service est
+# ordonné après `multi-user.target` et rien ne l'attend. Firefox lit ce fichier
+# quand Firefox démarre, c'est-à-dire longtemps après le bureau. Faire attendre
+# lightdm là-dessus a coûté un écran noir le 2 octobre.
+
+import os
+import sys
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import video  # noqa: E402
+
+
+def dire(phrase):
+    """Une ligne sur le port série, quand il y en a un."""
+    try:
+        with open("/dev/ttyS0", "w") as port:
+            port.write("grenos: " + phrase + "\n")
+    except OSError:
+        pass
+
+
+def main():
+    dossier = os.path.dirname(video.FICHIER_PREFS)
+    if not os.path.isdir(dossier):
+        # Pas de Firefox sur cette machine : il n'y a personne à qui parler, et
+        # créer le dossier nous-mêmes le ferait appartenir à deux paquets.
+        dire("video : %s absent, Firefox n est pas installe" % dossier)
+        return
+
+    familles, detail = video.profils_materiels()
+    prefs, verdict = video.decision(familles)
+
+    try:
+        with open(video.FICHIER_PREFS, "w", encoding="utf-8") as fichier:
+            fichier.write(video.texte_du_fichier(familles, detail, prefs, verdict))
+        os.chmod(video.FICHIER_PREFS, 0o644)
+    except OSError as souci:
+        dire("video : ECHEC d ecriture de %s (%s)" % (video.FICHIER_PREFS, souci))
+        return
+
+    # Ce que la machine a mesuré, puis ce qu'elle en a fait. Les deux, parce
+    # que le verdict seul ne permettrait pas de savoir s'il était mérité —
+    # c'est la leçon des sept tentatives de la nuit du 26 : un chiffre faux ne
+    # se contredit jamais tout seul.
+    if familles is None:
+        vu = "vainfo n a pas repondu"
+    elif familles:
+        vu = "decode en materiel : " + " ".join(sorted(familles))
+    else:
+        vu = "aucun decodage materiel"
+    dire("video : %s (%s)" % (vu, detail))
+    dire("video : %s" % verdict)
+    dire("video : %d preference(s) posee(s) dans %s"
+         % (len(prefs), video.FICHIER_PREFS))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as souci:                      # noqa: BLE001
+        # Un réglage de confort qui plante ne doit rien emporter avec lui.
+        dire("video : erreur inattendue (%s)" % souci)
+    sys.exit(0)

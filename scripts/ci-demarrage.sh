@@ -934,6 +934,67 @@ else
   echo "::warning::polkit n autorise pas l installateur sans mot de passe."
 fi
 
+echo "--- les disques internes sont-ils OUVRABLES, et pas seulement vus ---"
+# Grenofar, le 7 octobre : « que l os detecte plusieur disques de stockage ».
+# Ils etaient VUS depuis le 27 septembre — la ligne « emplacements : » le
+# prouve — et ils n etaient pas OUVRABLES. Lu dans udisks2 2.10.1 :
+#
+#     filesystem-mount          allow_active = yes
+#     filesystem-mount-system   allow_active = auth_admin_keep
+#
+# Un disque interne est un « peripherique systeme » : son montage demandait un
+# mot de passe, et une machine grenOS n en a pas. Voir un disque et pouvoir
+# l ouvrir sont deux choses, et nous ne mesurions que la premiere.
+#
+# LES DEUX actions sont demandees, et c est tout l interet : si l amovible et
+# l interne repondaient pareil, la mesure ne distinguerait rien et serait une
+# assertion morte. L amovible dit oui tout seul (defaut du paquet) ; l interne
+# ne dit oui que grace a notre regle.
+#
+# Rapporte, pas encore bloquant : vu vert zero fois pour l instant.
+grep -a 'grenos: montage :' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
+if grep -aq 'grenos: montage : sans mot de passe — amovible oui, interne oui' "$RUNNER_TEMP/serial.log"; then
+  echo "montage: les disques internes s ouvriront sans mot de passe"
+elif grep -aq 'grenos: montage : sans mot de passe' "$RUNNER_TEMP/serial.log"; then
+  echo "::warning::Un disque interne demande encore un mot de passe que la machine n a pas."
+else
+  echo "::warning::L image n a rien dit sur le montage des disques."
+fi
+
+echo "--- le navigateur sait-il ce que cette carte decode ---"
+# « quand je lance une video youtube et ou short la video bug alors que sur l os
+# je fais un speedtest ookla avec 300mbits entrant et sortant » — le reseau est
+# hors de cause, il l a mesure lui-meme.
+#
+# Nous livrions `libavcodec-extra`, sept pilotes VA-API et `vainfo` pour les
+# interroger, et RIEN ne configurait Firefox. Le service mesure maintenant ce
+# que la carte decode et pose les preferences en consequence.
+#
+# Ce qu on lit ici est la MESURE, pas le verdict seul : un verdict sans sa
+# mesure ne permet pas de savoir s il etait merite — la lecon des sept
+# tentatives de la nuit du 26, ou un chiffre faux n a jamais pu se contredire.
+#
+# ET CE QU IL FAUT ATTENDRE DE CETTE MACHINE : QEMU n a aucun decodage video
+# materiel. La bonne reponse ici est donc « aucun decodage materiel », et elle
+# ne prouve rien du PC de Grenofar — seulement que la mesure tourne, qu elle
+# tranche, et qu elle ecrit le fichier. C est exactement la limite du son :
+# la CI entend une carte emulee qui n a pas besoin des profils UCM.
+#
+# Rapporte, pas bloquant. Et il NE FAUT PAS le rendre bloquant sur « decode en
+# materiel » : ce serait exiger de la machine d essai une chose qu elle ne peut
+# pas avoir.
+grep -a 'grenos: video :' "$RUNNER_TEMP/serial.log" | while IFS= read -r ligne; do
+  printf '%s
+' "$ligne" | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+done
+if grep -aq 'grenos: video : .*preference(s) posee(s)' "$RUNNER_TEMP/serial.log"; then
+  echo "video: la carte a ete mesuree et le fichier de Firefox ecrit"
+elif grep -aq 'grenos: video :' "$RUNNER_TEMP/serial.log"; then
+  echo "::warning::Le reglage video a parle sans ecrire son fichier."
+else
+  echo "::warning::L image n a rien dit sur le decodage video."
+fi
+
 # Cette image peut-elle se mettre a jour ? L'essai en conteneur prouve
 # que le depot marche ; il ne prouve pas que l'IMAGE le connait. Le
 # depot arrive par config/archives/grenos.list.binary, et personne

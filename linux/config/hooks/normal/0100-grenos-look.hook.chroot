@@ -651,6 +651,67 @@ if ! grep -q 'grenos-console-propre' /usr/lib/grenos/appliquer-systeme; then
 fi
 echo "grenos: extinction : tty1 efface, systemd muet, pas de sonde de disquette"
 
+echo "--- grenOS : le navigateur sait-il ce que la carte decode ---"
+# Grenofar, le 7 octobre : « quand je lance une video youtube et ou short la
+# video bug alors que sur l os je fais un speedtest ookla avec 300mbits ».
+# Reseau hors de cause, mesure par lui : c est le decodage.
+#
+# NOUS LIVRIONS TOUTE LA PLOMBERIE ET AUCUN REGLAGE. `libavcodec-extra`, sept
+# pilotes VA-API, `vainfo` pour les interroger — et rien, nulle part, ne disait
+# quoi que ce soit a Firefox. Troisieme fois que le meme defaut revient apres
+# `va-driver-all` pose sans libavcodec.
+#
+# Ce garde refuse une image ou le service existe sans etre arme, ou bien ou le
+# dossier que Firefox lit n est pas celui qu on croit. Ce dossier est prouve
+# par le lien symbolique du paquet firefox-esr :
+#     usr/share/firefox-esr/browser/defaults/syspref -> /etc/firefox-esr
+manque=""
+[ -f /etc/systemd/system/grenos-video.service ] || manque="$manque le-service"
+[ -x /usr/lib/grenos/grenos-video ] || manque="$manque le-script"
+[ -f /usr/lib/grenos/video.py ] || manque="$manque le-module"
+if [ -n "$manque" ]; then
+    echo "grenos: le reglage video du navigateur est incomplet :$manque" >&2
+    exit 1
+fi
+if ! grep -q 'grenos-video.service' /usr/lib/grenos/appliquer-systeme; then
+    echo "grenos: appliquer-systeme n active pas grenos-video" >&2
+    echo "grenos: le service serait livre et ne tournerait jamais" >&2
+    exit 1
+fi
+# UN SERVICE QUI FAIT ATTENDRE LIGHTDM COUTE UN ECRAN NOIR. Le 1er octobre
+# j ai ajoute `Before=display-manager.service` a grenos-performances en
+# ecrivant juste a cote qu il n y avait pas de cycle. Il y en avait un, et
+# systemd l a casse en supprimant le travail de lightdm : cinq captures
+# noires. Ce garde empeche de le reecrire ici dans trois jours.
+#
+# ET CE GARDE A COMMENCE PAR REFUSER LE VRAI SERVICE. Sa premiere version
+# cherchait « Before=.*display-manager » dans tout le fichier — or le service
+# porte un commentaire qui explique precisement de ne pas ecrire cette ligne.
+# *Un garde qui lit les commentaires refuse le fichier qui le documente.* Il ne
+# regarde donc que les vraies directives : une ligne qui commence par Before=,
+# le # exclu. Exerce dans les deux sens avant d etre pose.
+if sed -e 's/[[:space:]]*#.*$//' /etc/systemd/system/grenos-video.service      | grep -E '^[[:space:]]*Before='      | grep -q 'display-manager\|lightdm'; then
+    echo "grenos: grenos-video.service fait attendre lightdm sur un reglage de confort" >&2
+    echo "grenos: c est le cycle du 2 octobre, et il rend un ecran noir" >&2
+    exit 1
+fi
+# Le dossier que Firefox lit doit etre celui que le paquet designe. S il
+# changeait de nom a la prochaine version, nous ecririons dans le vide — et
+# rien ne le dirait, puisque Firefox ne se plaint pas d un dossier absent.
+SYSPREF=/usr/share/firefox-esr/browser/defaults/syspref
+if [ -e "$SYSPREF" ]; then
+    CIBLE=$(readlink -f "$SYSPREF" 2>/dev/null || echo "$SYSPREF")
+    if [ "$CIBLE" != "/etc/firefox-esr" ]; then
+        echo "grenos: Firefox lit $CIBLE, pas /etc/firefox-esr" >&2
+        echo "grenos: notre fichier de preferences ne serait jamais lu" >&2
+        exit 1
+    fi
+    echo "grenos: Firefox lit bien /etc/firefox-esr (par son lien syspref)"
+else
+    echo "grenos: ATTENTION le lien syspref de firefox-esr est absent" >&2
+fi
+echo "grenos: reglage video : le service est arme et mesure la carte au demarrage"
+
 echo "--- grenOS : le volet de l explorateur demande-t-il une icone SOMBRE ---"
 # Papirus-Dark n'a que trois dossiers `devices` : le 16x16 est reel, les 22x22
 # et 24x24 sont des LIENS vers le theme clair. En demandant 20, GTK prenait le
