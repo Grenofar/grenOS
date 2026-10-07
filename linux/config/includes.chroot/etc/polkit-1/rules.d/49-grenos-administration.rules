@@ -28,12 +28,41 @@
 // ne correspond à aucune action déclarée : une règle qui n'autorise rien est
 // pire qu'une règle absente, parce qu'elle rassure.
 // ---------------------------------------------------------------------------
+// LA MÊME PANNE, SUR LES DISQUES — trouvée le 7 octobre
+//
+// Grenofar : « que l'os detecte plusieur disques de stockage ». Les disques
+// étaient bien *vus* depuis le 27 septembre (`show_internal_volumes`), et ils
+// ne pouvaient pas être *ouverts*.
+//
+// Lu dans le paquet udisks2 2.10.1-12.1+deb13u2, dans
+// /usr/share/polkit-1/actions/org.freedesktop.UDisks2.policy — pas deviné :
+//
+//     filesystem-mount          allow_active = yes
+//     filesystem-mount-system   allow_active = auth_admin_keep
+//
+// Une clé USB est amovible : elle se monte (`yes`). Un disque interne est un
+// « périphérique système » pour udisks2, et son montage demande un mot de
+// passe d'administrateur. Sur une machine grenOS il n'y en a pas : la demande
+// est insatisfiable, le clic ne fait rien, et rien ne s'affiche.
+//
+// C'est à la virgule près la panne de l'installateur ci-dessus, deux semaines
+// plus tard, sur un autre sous-système. D'où les quatre actions nommées une à
+// une plus bas, et non le préfixe `org.freedesktop.udisks2.` en entier :
+// `modify-device-system` partitionne un disque, et personne ne l'a demandé
+// depuis l'explorateur de fichiers.
+// ---------------------------------------------------------------------------
 polkit.addRule(function (action, subject) {
     // Chacun de ces prefixes correspond a une action REELLEMENT declaree sur
     // cette image, verifiee dans les paquets :
     //   flatpak   -> org.freedesktop.Flatpak.policy
     //   calamares -> com.github.calamares.calamares.policy
     //   systemd   -> org.freedesktop.systemd1.policy, org.freedesktop.timedate1.policy
+    //   udisks2   -> org.freedesktop.UDisks2.policy
+    //
+    // Les quatre actions udisks2 sont nommees ENTIERES, pas en prefixe : ce
+    // sont les seules dont un explorateur de fichiers a besoin sur un disque
+    // interne. Ouvrir « org.freedesktop.udisks2. » en entier donnerait aussi
+    // `modify-device-system`, c'est-a-dire le partitionnement.
     //
     // « org.freedesktop.packagekit. » et « org.debian.apt. » ont ete retires :
     // nous n'installons ni packagekit ni aptdaemon, et le magasin comme les
@@ -44,7 +73,11 @@ polkit.addRule(function (action, subject) {
         "org.freedesktop.Flatpak.",
         "com.github.calamares.calamares.",
         "org.freedesktop.systemd1.",
-        "org.freedesktop.timedate1."
+        "org.freedesktop.timedate1.",
+        "org.freedesktop.udisks2.filesystem-mount-system",
+        "org.freedesktop.udisks2.encrypted-unlock-system",
+        "org.freedesktop.udisks2.eject-media-system",
+        "org.freedesktop.udisks2.power-off-drive-system"
     ];
     if (!subject.isInGroup("sudo")) {
         return polkit.Result.NOT_HANDLED;

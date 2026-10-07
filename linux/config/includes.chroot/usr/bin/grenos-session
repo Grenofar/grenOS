@@ -562,6 +562,46 @@ print('%d disque(s), %d volume(s) : %s' % (
     fi
 ) &
 
+# LA MÊME QUESTION, POUR LES DISQUES — et c'était la même panne.
+#
+# Grenofar, le 7 octobre : « que l'os detecte plusieur disques de stockage ».
+# Ils étaient *vus* depuis le 27 septembre : la ligne « emplacements : » plus
+# haut le prouve. Ils n'étaient pas *ouvrables*. Lu dans le paquet udisks2
+# 2.10.1-12.1+deb13u2 :
+#
+#     filesystem-mount          allow_active = yes             (clé USB)
+#     filesystem-mount-system   allow_active = auth_admin_keep (disque interne)
+#
+# Un disque interne est un « périphérique système » pour udisks2. Cliquer
+# dessus ouvrait donc une demande de mot de passe — sur une machine qui n'en a
+# pas. Exactement l'installateur de septembre, deux semaines plus tard.
+#
+# LES DEUX actions sont interrogées, et c'est le point de la mesure : si
+# l'amovible et l'interne répondaient la même chose, ce contrôle ne
+# distinguerait rien et serait une assertion morte. L'amovible doit dire oui
+# tout seul (c'est le défaut du paquet) ; l'interne ne dit oui que grâce à
+# notre règle. Les voir différer serait le signe que la règle ne s'applique
+# pas.
+(
+    AMOVIBLE=org.freedesktop.udisks2.filesystem-mount
+    INTERNE=org.freedesktop.udisks2.filesystem-mount-system
+    if ! command -v pkcheck >/dev/null 2>&1; then
+        grenos-dire "montage : pkcheck absent, impossible de verifier"
+    else
+        if pkcheck --action-id "$AMOVIBLE" --process $$ >/dev/null 2>&1; then
+            A=oui
+        else
+            A=non
+        fi
+        if pkcheck --action-id "$INTERNE" --process $$ >/dev/null 2>&1; then
+            I=oui
+        else
+            I=non
+        fi
+        grenos-dire "montage : sans mot de passe — amovible $A, interne $I"
+    fi
+) &
+
 # L'accueil, une seule fois, à la première ouverture.
 if [ ! -e "$CONFIG/accueil-vu" ]; then
     touch "$CONFIG/accueil-vu"

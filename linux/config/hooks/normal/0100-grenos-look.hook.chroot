@@ -859,6 +859,55 @@ if trouve != attendu:
     print("grenos:   service : %s" % " ".join(trouve), file=sys.stderr)
     raise SystemExit(1)
 print("grenos: le service automatique lance exactement la meme commande")
+
+# ET LE TROISIEME ENDROIT, QUE CE GARDE NE REGARDAIT PAS.
+#
+# Le commentaire ci-dessus affirmait comparer « le service d avant-bureau ».
+# Il comparait `grenos-maj-auto.service`, c est-a-dire la MINUTERIE qui
+# telecharge. Le script qui POSE reellement les paquets avant le bureau est
+# `/usr/lib/grenos/grenos-maj-demarrage`, et il porte sa propre copie de la
+# commande, ecrite en dur, que rien ne verifiait.
+#
+# Trouve le 7 octobre : les deux etaient d accord par chance. C est exactement
+# la forme du defaut que ce fichier traque partout ailleurs — un garde qui
+# affirme couvrir une chose et en couvre une autre rassure sans protéger.
+script = "/usr/lib/grenos/grenos-maj-demarrage"
+try:
+    brut = open(script, encoding="utf-8").read()
+except OSError:
+    print("grenos: %s est absent" % script, file=sys.stderr)
+    raise SystemExit(1)
+
+# Les continuations de ligne du shell recollees, pour lire la commande entiere.
+plat = brut.replace("\\\n", " ")
+appels = []
+for morceau in re.findall(r"apt-get[^\n|&>]*full-upgrade", plat):
+    jetons = morceau.split()[1:]
+    if "-s" in jetons:
+        continue          # une simulation ne pose rien : elle ne compte pas
+    appels.append(jetons)
+
+if len(appels) != 2:
+    print("grenos: %s devrait lancer apt deux fois (la commande puis le repli), "
+          "il le fait %d fois" % (script, len(appels)), file=sys.stderr)
+    raise SystemExit(1)
+
+if appels[0] != attendu:
+    print("grenos: le script d avant-bureau ne lance pas la commande du module",
+          file=sys.stderr)
+    print("grenos:   module : %s" % " ".join(attendu), file=sys.stderr)
+    print("grenos:   script : %s" % " ".join(appels[0]), file=sys.stderr)
+    raise SystemExit(1)
+
+# Le repli de A3 doit rester la forme la plus NUE : son interet est justement
+# de ne porter aucune option, puisqu une option refusee est ce qui a bloque la
+# mise a jour de Grenofar le 26 septembre.
+if appels[1] != ["-y", "full-upgrade"]:
+    print("grenos: le repli doit etre « apt-get -y full-upgrade », sans option ; "
+          "trouve : %s" % " ".join(appels[1]), file=sys.stderr)
+    raise SystemExit(1)
+
+print("grenos: le script d avant-bureau porte la meme commande, et son repli est nu")
 MAJ
 
 echo "--- grenOS : la mise a jour au demarrage est-elle bien desarmee ---"
