@@ -51,7 +51,8 @@ import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+gi.require_version("Pango", "1.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
 import grenosui  # noqa: E402
 
@@ -180,6 +181,34 @@ def taille_lisible(octets):
         if octets >= seuil:
             return "%s %s" % (grenosui.nombre(octets / seuil), unite)
     return "%d o" % octets
+
+
+def nom_personnel():
+    """Le nom à afficher pour le dossier de la personne.
+
+    POURQUOI CETTE FONCTION EXISTE : j'écrivais `grenosui.identite()` tel quel.
+    Elle rend un **dictionnaire**, pas une chaîne — et GTK a affiché, dans le
+    fil d'Ariane et dans « Ce PC », tout le dictionnaire Python :
+
+        {'login': 'ci', 'nom': 'ci', 'machine': 'grenos', 'clavier': 'fr', …}
+
+    Aucune ligne du port série ne pouvait le dire : la session a annoncé
+    « fichiers ouvert, 6 element(s) », ce qui est vrai et parfaitement inutile
+    ici. Il a fallu ouvrir la capture et la regarder — la leçon du 24 septembre,
+    qui vaut encore : *une capture qu'on ne regarde pas ne prouve que l'absence
+    d'écran noir.*
+
+    Les quatre autres programmes qui appellent `identite()` l'indexent tous
+    (`grenos-shell`, `grenos-parametres`, `grenos-bienvenue`). J'étais le seul
+    à l'afficher brut.
+    """
+    try:
+        valeurs = grenosui.identite()
+    except Exception:                                       # noqa: BLE001
+        return "Dossier personnel"
+    if not isinstance(valeurs, dict):
+        return str(valeurs) or "Dossier personnel"
+    return valeurs.get("nom") or valeurs.get("login") or "Dossier personnel"
 
 
 def genre_du_fichier(info):
@@ -313,7 +342,14 @@ class Explorateur(Gtk.Window):
         ligne.volume = volume
         boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=9)
         boite.pack_start(grenosui.icone(nom_icone, 18), False, False, 0)
-        boite.pack_start(Gtk.Label(label=nom, xalign=0.0), True, True, 0)
+        # Coupee par des points de suspension, et jamais plus large que le
+        # volet. Sans cela, UN SEUL nom long repousse la liste des fichiers
+        # hors de l ecran — c est exactement ce qu a fait le dictionnaire
+        # affiche en entier, et la mise en page entiere en dependait.
+        etiquette = Gtk.Label(label=nom, xalign=0.0)
+        etiquette.set_ellipsize(Pango.EllipsizeMode.END)
+        etiquette.set_max_width_chars(18)
+        boite.pack_start(etiquette, True, True, 0)
         ligne.add(boite)
         return ligne
 
@@ -323,8 +359,7 @@ class Explorateur(Gtk.Window):
             self.liste_pc.remove(vieux)
 
         maison = os.path.expanduser("~")
-        self.liste_pc.add(self._ligne_volet(grenosui.identite() or "Dossier personnel",
-                                            "user-home", maison))
+        self.liste_pc.add(self._ligne_volet(nom_personnel(), "user-home", maison))
         self.liste_pc.add(self._ligne_volet("Système de fichiers", "drive-harddisk", "/"))
 
         for volume in self.moniteur.get_volumes():
@@ -579,7 +614,7 @@ class Explorateur(Gtk.Window):
             self.fil.remove(vieux)
         maison = os.path.expanduser("~")
         if self.dossier == maison or self.dossier.startswith(maison + os.sep):
-            morceaux = [(grenosui.identite() or "Dossier personnel", maison)]
+            morceaux = [(nom_personnel(), maison)]
             reste = self.dossier[len(maison):].strip(os.sep)
             courant = maison
         else:
@@ -596,6 +631,10 @@ class Explorateur(Gtk.Window):
                 fleche.get_style_context().add_class("separateur-miette")
                 self.fil.pack_start(fleche, False, False, 0)
             bouton = Gtk.Button(label=texte)
+            interieur = bouton.get_child()
+            if isinstance(interieur, Gtk.Label):
+                interieur.set_ellipsize(Pango.EllipsizeMode.END)
+                interieur.set_max_width_chars(24)
             bouton.get_style_context().add_class("miette")
             bouton.set_relief(Gtk.ReliefStyle.NONE)
             bouton.connect("clicked", lambda _b, c=cible: self.aller(c))
