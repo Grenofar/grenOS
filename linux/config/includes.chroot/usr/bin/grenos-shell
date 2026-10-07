@@ -42,7 +42,17 @@ MENU_HAUTEUR = 640
 BARRE = os.path.join(grenosui.REGLAGES, "barre.json")
 
 EPINGLES_PAR_DEFAUT = [
-    {"nom": "Fichiers", "commande": "pcmanfm", "icone": "grenos-fichiers"},
+    # LA TUILE BASCULE SUR NOTRE EXPLORATEUR, et pas avant aujourd hui.
+    #
+    # Elle lancait `pcmanfm`. Le notre a ete vu s ouvrir deux fois en CI, et
+    # sa capture a ete REGARDEE : volet « Acces rapide » puis « Ce PC »,
+    # quatre colonnes triables, barre d etat qui compte. Basculer avant
+    # aurait pu retirer son gestionnaire de fichiers a quelqu un.
+    #
+    # pcmanfm reste installe et dans le menu : si le notre tombe un jour,
+    # il y a toujours de quoi ouvrir un dossier. Un remplacement qui ne
+    # laisse pas de porte de sortie n est pas un remplacement.
+    {"nom": "Fichiers", "commande": "grenos-fichiers", "icone": "grenos-fichiers"},
     {"nom": "Web", "commande": "firefox-esr", "icone": "firefox-esr"},
     {"nom": "Terminal", "commande": "x-terminal-emulator", "icone": "utilities-terminal"},
     {"nom": "GrenPlace", "commande": "grenplace", "icone": "grenplace"},

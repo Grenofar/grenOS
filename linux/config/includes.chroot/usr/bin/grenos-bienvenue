@@ -36,7 +36,8 @@ GESTES = [
     ("Naviguer", "Firefox est là, avec ses onglets et ses favoris.",
      "firefox-esr", ["firefox-esr", "web-browser"]),
     ("Tes fichiers", "Ouvrir, renommer, copier, supprimer — et tout ce que tu poses "
-     "sur le bureau reste là.", "pcmanfm", ["grenos-fichiers", "system-file-manager"]),
+     "sur le bureau reste là.", "grenos-fichiers",
+     ["grenos-fichiers", "system-file-manager"]),
     ("Terminal", "Pour qui veut taper des commandes. Les autres n'en ont pas besoin.",
      "x-terminal-emulator", ["utilities-terminal"]),
 ]
