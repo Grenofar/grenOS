@@ -279,6 +279,33 @@ jobs:
           # qu'un controle a vraiment tourne plutot que d'etre saute en silence.
           grep -a "grenos:" "$RUNNER_TEMP/construction-resume.log" || true
           if [ "$RATE" = 1 ]; then
+            # DIRE POURQUOI, PAS SEULEMENT QUE.
+            #
+            # Le 7 octobre au soir, cette etape a echoue et le message etait
+            # « La construction de l'image a echoue ». Il a fallu descendre
+            # dans 6 700 lignes de journal pour trouver la vraie cause, une
+            # seule ligne :
+            #
+            #     xargs: apt-get: terminated by signal 9
+            #
+            # Signal 9, c'est SIGKILL : le tueur de memoire du runner a abattu
+            # apt-get pendant qu'il deballait 997 Mo de paquets. Rien a voir
+            # avec notre code — mais rien ne le disait, et on cherche d abord
+            # chez soi.
+            #
+            # Les trois signatures ci-dessous sont celles qu on a vues ou qui
+            # se ressemblent assez pour valoir la peine d etre nommees. Quand
+            # aucune ne matche, on se tait : inventer une cause est pire que
+            # n en donner aucune.
+            if grep -aqE 'signal 9|Killed|Out of memory|oom-kill' "$RUNNER_TEMP/construction-resume.log"; then
+              echo "::error::PANNE DU RUNNER, PAS DE grenOS : apt-get a ete tue (signal 9 / OOM) pendant l installation. A relancer tel quel."
+            elif grep -aqE 'No space left on device' "$RUNNER_TEMP/construction-resume.log"; then
+              echo "::error::PANNE DU RUNNER, PAS DE grenOS : plus de place disque. A relancer tel quel."
+            elif grep -aqE 'Temporary failure resolving|Connection timed out|Hash Sum mismatch' "$RUNNER_TEMP/construction-resume.log"; then
+              echo "::error::PANNE DE MIROIR, PAS DE grenOS : un depot Debian n a pas repondu. A relancer tel quel."
+            fi
+            free -h || true
+            df -h / || true
             echo "::error::La construction de l'image a echoue."
             tail -n 200 "$RUNNER_TEMP/construction-resume.log"
             exit 1
