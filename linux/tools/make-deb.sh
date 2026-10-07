@@ -31,13 +31,31 @@ mkdir -p "$BUILD/DEBIAN" \
          "$BUILD/etc/polkit-1/rules.d" \
          "$BUILD/etc/systemd/system"
 
-# Les programmes du bureau, tels quels. `grenos-premier` n'en fait pas partie :
-# il ne sert qu'au tout premier démarrage d'une image, et le réinstaller sur
-# une machine déjà nommée n'aurait aucun sens.
-for outil in grenos-shell grenos-session grenos-menu grenos-fond grenos-veilleur \
-             grenos-arret grenos-parametres grenplace grenos-bienvenue grenos-bureau \
-             grenos-theme grenos-maj grenos-taches grenos-connexions grenos-dire grenos-son grenos-jeux; do
-    install -m 0755 "$DEDANS/usr/bin/$outil" "$BUILD/usr/bin/"
+# TOUS les programmes du bureau, jamais une liste ecrite a la main.
+#
+# CETTE BOUCLE NOMMAIT DIX-SEPT PROGRAMMES, ET IL Y EN A VINGT ET UN.
+#
+# Les quatre absents : `grenos-premier` (ecarte expres), `grenos-fichiers`
+# (ecrit le 7 octobre), `grenos-premier-x`, et surtout `grenos-preuve`. Ce
+# dernier est un vrai defaut, et il datait : make-deb livre bien
+# `grenos-preuve.service`, `appliquer-systeme` l active, et son
+# `ExecStart=/usr/bin/grenos-preuve` designait un fichier que le paquet ne
+# contenait pas. Sur l ISO cela marche — includes.chroot est copie en entier.
+# Sur une machine MISE A JOUR par le depot, le service echoue a chaque
+# demarrage, et rien ne le dit.
+#
+# C est exactement le defaut du 2 octobre sur `composants.py` et `securite.py`,
+# a l etage des programmes au lieu de celui des modules. Meme lecon : *une
+# liste qu il faut rallonger a chaque fichier ecrit n est pas une liste, c est
+# une dette*.
+#
+# ET L EXCEPTION D HIER ETAIT ELLE-MEME LE BOGUE : ecarter `grenos-premier`
+# pendant qu on livre `grenos-premier.service` fabrique precisement l unite
+# sans son programme. On prend donc tout. Livrer `grenos-premier` sur une
+# machine deja nommee ne coute rien : son service est conditionne a l absence
+# de /etc/grenos/identite, qui existe sur une machine installee.
+for source in "$DEDANS"/usr/bin/*; do
+    install -m 0755 "$source" "$BUILD/usr/bin/"
 done
 
 # TOUS les modules, jamais une liste ecrite a la main.
@@ -372,6 +390,57 @@ if manquants:
 
 print("grenos: %d module(s) dans le paquet, et tout ce qu on importe y est"
       % len(modules))
+
+# ---------------------------------------------------------------------------
+# CHAQUE SERVICE LIVRE DOIT TROUVER SON PROGRAMME
+#
+# Le controle du dessus ferme la classe « un programme importe un module
+# absent ». Celui-ci ferme sa jumelle, qui a vraiment mordu : « une unite
+# systemd est livree et activee, et son ExecStart designe un fichier que le
+# paquet ne contient pas ».
+#
+# C etait le cas de `grenos-preuve.service` jusqu au 7 octobre. Sur l ISO on
+# ne voit rien, parce que includes.chroot est copie en entier ; c est seulement
+# sur une machine mise a jour par le depot que l unite echoue, a chaque
+# demarrage, sans qu une seule etape rougisse. Exactement la forme que ce
+# depot attrape depuis des semaines : *une promesse a l ecran sans rien
+# derriere*, ici une unite sans son programme.
+#
+# On ne regarde que nos propres chemins. Un ExecStart vers /bin/sh ou vers un
+# binaire de Debian est legitime : ces paquets-la sont des dependances, pas
+# notre contenu.
+import glob as _glob                                        # noqa: E402
+
+absents = []
+for unite in sorted(_glob.glob(os.path.join(racine,
+                                            "etc/systemd/system/*.service"))):
+    with open(unite, encoding="utf-8", errors="replace") as f:
+        for ligne in f:
+            nue = ligne.strip()
+            if not nue.startswith(("ExecStart=", "ExecStartPre=",
+                                   "ExecStartPost=", "ExecStop=")):
+                continue
+            commande = nue.split("=", 1)[1].strip()
+            # systemd accepte les prefixes `-`, `@`, `+`, `!` devant le chemin.
+            commande = commande.lstrip("-@+!").strip()
+            if not commande:
+                continue
+            programme = commande.split()[0]
+            if not programme.startswith(("/usr/bin/grenos", "/usr/lib/grenos",
+                                         "/usr/bin/grenplace")):
+                continue
+            if not os.path.exists(os.path.join(racine, programme.lstrip("/"))):
+                absents.append((os.path.basename(unite), programme))
+
+if absents:
+    for unite, programme in absents:
+        print("grenos: %s lance %s, qui n est PAS dans le paquet"
+              % (unite, programme), file=sys.stderr)
+    print("grenos: l ISO marcherait, une machine mise a jour non — "
+          "le service echouerait a chaque demarrage", file=sys.stderr)
+    sys.exit(1)
+
+print("grenos: chaque service livre trouve son programme dans le paquet")
 VERIF
 
 dpkg-deb --build --root-owner-group "$BUILD" "$DEB"

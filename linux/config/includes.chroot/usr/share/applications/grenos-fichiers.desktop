@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Explorateur de fichiers
+Comment=Tes dossiers et tes disques, comme sous Windows
+Exec=grenos-fichiers %f
+Icon=grenos-fichiers
+Terminal=false
+Categories=System;FileTools;FileManager;
+MimeType=inode/directory;

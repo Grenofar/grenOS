@@ -480,6 +480,46 @@ sleep 12
 python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-explorateur.ppm" || true
 echo "explorateur: capture prise — le panneau « Emplacements » est a regarder"
 
+echo "--- NOTRE explorateur s ouvre-t-il ---"
+# Grenofar, le 7 octobre : « rend explorer le plus proche de celui de windows
+# voir copie exacte un peu retouche pour matcher avec le teme de l os ».
+#
+# Les deux choses qui font l allure de Windows sont les deux que libfm ne
+# laisse pas changer, etablies le 27 septembre en lisant la bibliotheque :
+# le MOT (« Appareils » au lieu de « Ce PC », une chaine traduite dans
+# libfm.so) et l ORDRE (les entrees fixes toujours avant les marque-pages).
+# D ou un explorateur a nous, comme la barre et le bureau.
+#
+# On l ouvre comme Grenofar le ferait : le menu, son nom, Entree. « explor »
+# se tape a l identique en AZERTY — e, x, p, l, o et r sont aux memes
+# positions qu en QWERTY, contrairement au « a » de « install ».
+#
+# TANT QU IL N A PAS ETE VU TOURNER, LA TUILE « Fichiers » DE LA BARRE LANCE
+# TOUJOURS pcmanfm. Basculer avant la preuve retirerait son gestionnaire de
+# fichiers a quelqu un si le notre ne demarrait pas — et c est exactement ce
+# que ce depot s interdit depuis le 12 septembre.
+#
+# Rapporte, pas bloquant : vu vert zero fois.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+sleep 2
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+sleep 4
+for touche in e x p l o r ret; do
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+  sleep 1
+done
+sleep 10
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-fichiers.ppm" || true
+grep -a 'grenos: fichiers ouvert' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
+if grep -aq 'grenos: fichiers ouvert' "$RUNNER_TEMP/serial.log"; then
+  echo "fichiers: notre explorateur s est ouvert et a dit ce qu il contient"
+else
+  echo "::warning::Notre explorateur ne s est pas annonce."
+fi
+# Et on le referme, pour ne pas le laisser devant les captures suivantes.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey alt-f4" || true
+sleep 2
+
 echo "--- les reglages s ouvrent-ils ---"
 # C'est la porte des mises a jour, du son et du mot de passe, et
 # personne ne l'avait jamais ouverte ici. Huit pages construites,

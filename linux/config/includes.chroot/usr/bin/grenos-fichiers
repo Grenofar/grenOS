@@ -1,0 +1,641 @@
+#!/usr/bin/env python3
+"""L'explorateur de fichiers de grenOS, dessiné comme celui de Windows.
+
+Grenofar, le 7 octobre : « rend explorer le plus proche de celui de windows
+voir copie exacte un peu retouché pour matcher avec le teme de l'os ».
+
+POURQUOI UN EXPLORATEUR À NOUS, ALORS QU'IL Y EN A DÉJÀ UN
+
+Parce que les deux choses qui font l'allure de Windows sont précisément les
+deux que libfm ne laisse pas changer. Elles ont été établies le 27 septembre,
+en lisant la bibliothèque et pas sa documentation :
+
+  * LE MOT. Windows dit « Ce PC ». libfm dit « Appareils ». C'est une chaîne
+    traduite à l'intérieur de `libfm.so`, pas une clé de configuration.
+  * L'ORDRE. libfm place toujours ses entrées fixes avant les marque-pages,
+    donc les disques arrivent avant les dossiers usuels. Windows fait
+    l'inverse : « Accès rapide » en haut, « Ce PC » en dessous.
+
+On a passé deux semaines à régler ce qui se règle — `show_internal_volumes`,
+la bonne section `[places]`, l'ordre entre marque-pages, l'icône sombre du
+volet. Tout cela a payé. Ce qui reste demande de dessiner la fenêtre
+nous-mêmes, exactement comme la barre, le bureau et le gestionnaire de tâches,
+que Grenofar avait demandés dans les mêmes termes : « crée ta propre UI ».
+
+CE QUI EST COPIÉ DE WINDOWS, ET CE QUI NE L'EST PAS
+
+Copié : la disposition. Volet de gauche en deux sections, barre d'outils avec
+Précédent / Suivant / Dossier parent, chemin en boutons cliquables, vue
+Détails à quatre colonnes triables, barre d'état qui compte.
+
+Pas copié : aucune icône, aucun logo, aucun nom de Microsoft. Les couleurs
+sont les nôtres — `grenosui` tient la seule palette du système, et ce fichier
+ne connaît que des rôles (fond, texte, accent). C'est la retouche qu'il
+demande « pour matcher avec le thème de l'OS ».
+
+CE QU'IL NE FAUT PAS FAIRE ICI, ET QUI A DÉJÀ COÛTÉ
+
+Ne jamais interroger un service lent pendant la construction de la fenêtre.
+`vulkaninfo` a laissé la page Jeux vide vingt-cinq secondes, et la règle est
+écrite depuis le 25 septembre : mesurer une fois, et jamais dans un
+constructeur. Le contenu d'un dossier se lit donc après le premier affichage.
+"""
+import os
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+
+STYLE = """
+#volet-fichiers {
+    background-color: @fond-creux;
+    border-right: 1px solid @bord;
+}
+
+#volet-fichiers list { background-color: transparent; }
+
+#volet-fichiers row {
+    padding: 5px 10px;
+    border-radius: 7px;
+    margin: 1px 7px;
+}
+
+#volet-fichiers row:selected {
+    background-color: @accent;
+    color: #ffffff;
+}
+
+#volet-fichiers row:hover:not(:selected) { background-color: @survol; }
+
+.section-volet {
+    font-size: 11px;
+    font-weight: 800;
+    color: @texte-faible;
+    letter-spacing: 0.08em;
+    padding: 14px 16px 4px 16px;
+}
+
+#barre-outils {
+    background-image: linear-gradient(to bottom, @fond-clair, @fond-haut);
+    border-bottom: 1px solid @bord;
+    padding: 7px 10px;
+}
+
+#fil-chemin {
+    background-color: @fond-creux;
+    border: 1px solid @bord;
+    border-radius: 7px;
+    padding: 2px 4px;
+}
+
+.miette {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 3px 8px;
+    min-height: 0;
+    color: @texte;
+    font-size: 13px;
+}
+
+.miette:hover { background-color: @survol; border-radius: 5px; }
+
+.separateur-miette { color: @texte-faible; font-size: 13px; }
+
+.bouton-outil {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 5px 8px;
+    min-height: 0;
+    min-width: 0;
+}
+
+.bouton-outil:hover { background-color: @survol; border-radius: 7px; }
+.bouton-outil:disabled { opacity: 0.35; }
+
+#liste-fichiers { background-color: @fond; }
+
+#liste-fichiers header button {
+    background-image: none;
+    background-color: @fond-haut;
+    border: none;
+    border-right: 1px solid @bord;
+    border-bottom: 1px solid @bord;
+    color: @texte-faible;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+}
+
+#liste-fichiers header button:hover { background-color: @survol; }
+
+#barre-etat {
+    background-color: @fond-haut;
+    border-top: 1px solid @bord;
+    padding: 5px 14px;
+    font-size: 12px;
+    color: @texte-faible;
+}
+"""
+
+# Les dossiers de « Accès rapide », dans l'ordre de Windows.
+#
+# On demande leur chemin à GLib plutôt que de coller « ~/Téléchargements » :
+# le 23 septembre, le bureau cherchait ses icônes dans `~/Desktop` alors que
+# le dossier s'appelle `Bureau`, et il est resté vide sans que rien ne le
+# dise. GLib lit `user-dirs.dirs`, qui est la vérité.
+ACCES_RAPIDE = (
+    ("Bureau", GLib.UserDirectory.DIRECTORY_DESKTOP, "user-desktop"),
+    ("Téléchargements", GLib.UserDirectory.DIRECTORY_DOWNLOAD, "folder-download"),
+    ("Documents", GLib.UserDirectory.DIRECTORY_DOCUMENTS, "folder-documents"),
+    ("Images", GLib.UserDirectory.DIRECTORY_PICTURES, "folder-pictures"),
+    ("Musique", GLib.UserDirectory.DIRECTORY_MUSIC, "folder-music"),
+    ("Vidéos", GLib.UserDirectory.DIRECTORY_VIDEOS, "folder-videos"),
+)
+
+
+def taille_lisible(octets):
+    """Une taille en français : « 1,5 Go », jamais « 1.5 GB ».
+
+    Le point décimal anglais s'est affiché pendant des jours dans Jeux et dans
+    le gestionnaire de tâches sans que personne ne le voie, parce qu'une phrase
+    sans accent et un nombre à l'anglaise se lisent encore. `grenosui.nombre()`
+    est la seule façon d'écrire un nombre ici.
+    """
+    if octets is None:
+        return ""
+    if octets < 1024:
+        return "%d o" % octets
+    for seuil, unite in ((1024 ** 3, "Go"), (1024 ** 2, "Mo"), (1024, "Ko")):
+        if octets >= seuil:
+            return "%s %s" % (grenosui.nombre(octets / seuil), unite)
+    return "%d o" % octets
+
+
+def genre_du_fichier(info):
+    """Le mot de la colonne « Type », en français.
+
+    GIO sait le dire, et c'est ce qu'il faut utiliser : le 2 octobre, la vue
+    Détails de pcmanfm affichait « folder » sur chaque ligne, et la cause
+    n'était pas notre locale mais `shared-mime-info`, dont le fichier français
+    ne traduit pas `inode/directory`. Nous avons comblé ce trou par un XML
+    dans `<MIME>/packages/`, donc GIO répond « Dossier » ici aussi.
+    """
+    try:
+        genre = info.get_content_type()
+        if genre:
+            return Gio.content_type_get_description(genre) or ""
+    except Exception:                                       # noqa: BLE001
+        pass
+    return ""
+
+
+class Explorateur(Gtk.Window):
+    def __init__(self, depart=None):
+        super().__init__(title="Explorateur de fichiers")
+        grenosui.poser_taille(self, 1000, 640)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_icon_name("grenos-fichiers")
+        self.connect("destroy", Gtk.main_quit)
+        grenosui.chronometrer(self, "Explorateur de fichiers")
+
+        self.histoire = []
+        self.rang = -1
+        self.dossier = depart or os.path.expanduser("~")
+
+        corps = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.add(corps)
+        corps.pack_start(self._barre_outils(), False, False, 0)
+
+        milieu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        corps.pack_start(milieu, True, True, 0)
+        milieu.pack_start(self._volet(), False, False, 0)
+        milieu.pack_start(self._liste(), True, True, 0)
+
+        self.etat = Gtk.Label(xalign=0.0)
+        self.etat.set_name("barre-etat")
+        corps.pack_start(self.etat, False, False, 0)
+
+        self.connect("key-press-event", self.au_clavier)
+
+    # ---- La barre du haut ---------------------------------------------------
+    def _barre_outils(self):
+        barre = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        barre.set_name("barre-outils")
+
+        def outil(nom_icone, infobulle, action):
+            bouton = Gtk.Button()
+            bouton.set_image(grenosui.icone(nom_icone, 18))
+            bouton.set_tooltip_text(infobulle)
+            bouton.get_style_context().add_class("bouton-outil")
+            bouton.set_relief(Gtk.ReliefStyle.NONE)
+            bouton.connect("clicked", action)
+            barre.pack_start(bouton, False, False, 0)
+            return bouton
+
+        self.bouton_precedent = outil("go-previous", "Précédent", self.au_precedent)
+        self.bouton_suivant = outil("go-next", "Suivant", self.au_suivant)
+        self.bouton_parent = outil("go-up", "Dossier parent", self.au_parent)
+        outil("view-refresh", "Actualiser", lambda _b: self.peupler())
+
+        self.fil = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self.fil.set_name("fil-chemin")
+        barre.pack_start(self.fil, True, True, 6)
+
+        self.cherche = Gtk.SearchEntry()
+        self.cherche.set_placeholder_text("Rechercher")
+        self.cherche.set_width_chars(18)
+        self.cherche.connect("search-changed", lambda _e: self.filtrer())
+        barre.pack_end(self.cherche, False, False, 0)
+        return barre
+
+    # ---- Le volet de gauche -------------------------------------------------
+    def _volet(self):
+        """« Accès rapide » puis « Ce PC » — l'ordre et les mots de Windows.
+
+        C'est exactement ce que libfm ne pouvait pas faire, et c'est toute la
+        raison d'être de ce fichier.
+        """
+        volet = Gtk.ScrolledWindow()
+        volet.set_name("volet-fichiers")
+        volet.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        volet.set_size_request(200, -1)
+
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        volet.add(boite)
+
+        boite.pack_start(self._titre_section("ACCÈS RAPIDE"), False, False, 0)
+        rapide = Gtk.ListBox()
+        rapide.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        boite.pack_start(rapide, False, False, 0)
+        for nom, cle, nom_icone in ACCES_RAPIDE:
+            chemin = GLib.get_user_special_dir(cle)
+            if chemin and os.path.isdir(chemin):
+                rapide.add(self._ligne_volet(nom, nom_icone, chemin))
+        rapide.connect("row-activated", self._volet_choisi)
+        rapide.connect("button-press-event", self._volet_clique)
+
+        boite.pack_start(self._titre_section("CE PC"), False, False, 0)
+        self.liste_pc = Gtk.ListBox()
+        self.liste_pc.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        boite.pack_start(self.liste_pc, False, False, 0)
+        self.liste_pc.connect("row-activated", self._volet_choisi)
+        self.liste_pc.connect("button-press-event", self._volet_clique)
+
+        # Les disques sont demandés au même objet que tout le reste du bureau,
+        # `Gio.VolumeMonitor` — celui que la session interroge déjà pour écrire
+        # la ligne « emplacements : » sur le port série. Une seule source,
+        # sinon les deux finissent par diverger.
+        self.moniteur = Gio.VolumeMonitor.get()
+        for signal_ in ("volume-added", "volume-removed", "mount-added",
+                        "mount-removed"):
+            self.moniteur.connect(signal_, lambda *_a: self.peupler_disques())
+        return volet
+
+    def _titre_section(self, texte):
+        etiquette = Gtk.Label(label=texte, xalign=0.0)
+        etiquette.get_style_context().add_class("section-volet")
+        return etiquette
+
+    def _ligne_volet(self, nom, nom_icone, chemin, volume=None):
+        ligne = Gtk.ListBoxRow()
+        ligne.chemin = chemin
+        ligne.volume = volume
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=9)
+        boite.pack_start(grenosui.icone(nom_icone, 18), False, False, 0)
+        boite.pack_start(Gtk.Label(label=nom, xalign=0.0), True, True, 0)
+        ligne.add(boite)
+        return ligne
+
+    def peupler_disques(self):
+        """« Ce PC » : le dossier personnel, puis les disques de la machine."""
+        for vieux in self.liste_pc.get_children():
+            self.liste_pc.remove(vieux)
+
+        maison = os.path.expanduser("~")
+        self.liste_pc.add(self._ligne_volet(grenosui.identite() or "Dossier personnel",
+                                            "user-home", maison))
+        self.liste_pc.add(self._ligne_volet("Système de fichiers", "drive-harddisk", "/"))
+
+        for volume in self.moniteur.get_volumes():
+            nom = volume.get_name() or "Disque"
+            monte = volume.get_mount()
+            chemin = None
+            if monte is not None:
+                racine = monte.get_root()
+                chemin = racine.get_path() if racine else None
+            # UN VOLUME NON MONTÉ EST QUAND MÊME MONTRÉ, et c'est le point :
+            # jusqu'au 7 octobre, cliquer dessus ne faisait RIEN. udisks2
+            # demande `filesystem-mount-system` pour un disque interne, qui
+            # vaut `auth_admin_keep` — un mot de passe, sur une machine qui
+            # n'en a pas. Notre règle polkit l'autorise désormais, et la
+            # session le prouve à chaque démarrage (« montage : … interne
+            # oui »). Sans cette règle, cette ligne serait une promesse à
+            # l'écran sans rien derrière.
+            self.liste_pc.add(self._ligne_volet(nom, "drive-harddisk", chemin,
+                                                volume=volume))
+        self.liste_pc.show_all()
+
+    def _volet_choisi(self, _liste, ligne):
+        if getattr(ligne, "chemin", None):
+            self.aller(ligne.chemin)
+        elif getattr(ligne, "volume", None) is not None:
+            self.monter_puis_ouvrir(ligne.volume)
+
+    def _volet_clique(self, liste, evenement):
+        """Un seul clic suffit dans le volet, comme dans Windows."""
+        if evenement.button == 1 and evenement.type == Gdk.EventType.BUTTON_PRESS:
+            ligne = liste.get_row_at_y(int(evenement.y))
+            if ligne is not None:
+                liste.select_row(ligne)
+                self._volet_choisi(liste, ligne)
+                return True
+        return False
+
+    def monter_puis_ouvrir(self, volume):
+        """Monter un disque, puis entrer dedans — sans figer la fenêtre."""
+        def fini(source, resultat):
+            try:
+                source.mount_finish(resultat)
+            except GLib.Error as souci:
+                self.etat.set_text("Ce disque n'a pas pu être ouvert : %s"
+                                   % souci.message)
+                return
+            monte = source.get_mount()
+            racine = monte.get_root() if monte else None
+            chemin = racine.get_path() if racine else None
+            if chemin:
+                self.aller(chemin)
+            self.peupler_disques()
+
+        self.etat.set_text("Ouverture du disque…")
+        volume.mount(Gio.MountMountFlags.NONE, Gtk.MountOperation(parent=self),
+                     None, fini)
+
+    # ---- La liste ----------------------------------------------------------
+    def _liste(self):
+        cadre = Gtk.ScrolledWindow()
+        cadre.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+
+        # icône, nom, modifié, type, taille affichée, chemin, est un dossier,
+        # taille pour le tri, date pour le tri
+        self.modele = Gtk.ListStore(str, str, str, str, str, str, bool, "gint64",
+                                    "gint64")
+        self.filtre = self.modele.filter_new()
+        self.filtre.set_visible_func(self._visible)
+        self.tri = Gtk.TreeModelSort(model=self.filtre)
+
+        self.vue = Gtk.TreeView(model=self.tri)
+        self.vue.set_name("liste-fichiers")
+        self.vue.set_rules_hint(False)
+        self.vue.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
+        self.vue.connect("row-activated", self.au_double_clic)
+        self.vue.get_selection().connect("changed", lambda _s: self.dire_le_compte())
+
+        # La colonne Nom porte l'icône, comme dans Windows.
+        colonne = Gtk.TreeViewColumn("Nom")
+        dessin = Gtk.CellRendererPixbuf()
+        colonne.pack_start(dessin, False)
+        colonne.add_attribute(dessin, "icon-name", 0)
+        texte = Gtk.CellRendererText()
+        texte.set_property("ellipsize", 3)  # PANGO_ELLIPSIZE_END
+        colonne.pack_start(texte, True)
+        colonne.add_attribute(texte, "text", 1)
+        colonne.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
+        colonne.set_fixed_width(320)
+        colonne.set_resizable(True)
+        colonne.set_sort_column_id(1)
+        self.vue.append_column(colonne)
+
+        for titre, rang, tri, large in (("Modifié le", 2, 8, 160),
+                                        ("Type", 3, 3, 150),
+                                        ("Taille", 4, 7, 100)):
+            cellule = Gtk.CellRendererText()
+            if titre == "Taille":
+                cellule.set_property("xalign", 1.0)
+            col = Gtk.TreeViewColumn(titre, cellule, text=rang)
+            col.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
+            col.set_fixed_width(large)
+            col.set_resizable(True)
+            col.set_sort_column_id(tri)
+            self.vue.append_column(col)
+
+        # Les dossiers d'abord, puis l'ordre alphabétique — c'est l'ordre de
+        # Windows, et le seul auquel on s'attend en ouvrant un dossier.
+        self.tri.set_sort_column_id(1, Gtk.SortType.ASCENDING)
+        self.tri.set_sort_func(1, self._comparer_noms, None)
+
+        cadre.add(self.vue)
+        return cadre
+
+    def _comparer_noms(self, modele, a, b, _donnee):
+        dossier_a, dossier_b = modele[a][6], modele[b][6]
+        if dossier_a != dossier_b:
+            return -1 if dossier_a else 1
+        return ((modele[a][1].lower() > modele[b][1].lower())
+                - (modele[a][1].lower() < modele[b][1].lower()))
+
+    def _visible(self, modele, iteration, _donnee):
+        cherche = self.cherche.get_text().strip().lower()
+        if not cherche:
+            return True
+        return cherche in (modele[iteration][1] or "").lower()
+
+    def filtrer(self):
+        self.filtre.refilter()
+        self.dire_le_compte()
+
+    # ---- Naviguer -----------------------------------------------------------
+    def aller(self, chemin, memoriser=True):
+        chemin = os.path.abspath(chemin)
+        if not os.path.isdir(chemin):
+            return
+        self.dossier = chemin
+        if memoriser:
+            del self.histoire[self.rang + 1:]
+            self.histoire.append(chemin)
+            self.rang = len(self.histoire) - 1
+        self.peupler()
+
+    def au_precedent(self, _bouton=None):
+        if self.rang > 0:
+            self.rang -= 1
+            self.aller(self.histoire[self.rang], memoriser=False)
+
+    def au_suivant(self, _bouton=None):
+        if self.rang + 1 < len(self.histoire):
+            self.rang += 1
+            self.aller(self.histoire[self.rang], memoriser=False)
+
+    def au_parent(self, _bouton=None):
+        parent = os.path.dirname(self.dossier.rstrip("/")) or "/"
+        if parent != self.dossier:
+            self.aller(parent)
+
+    def au_double_clic(self, vue, chemin_vue, _colonne):
+        ligne = vue.get_model()[chemin_vue]
+        if ligne[6]:
+            self.aller(ligne[5])
+        else:
+            self.ouvrir_avec_le_systeme(ligne[5])
+
+    def ouvrir_avec_le_systeme(self, chemin):
+        """Ouvrir un fichier avec l'application que le système lui associe.
+
+        `xdg-open` est dans l'image (`xdg-utils`, ligne 41 de la liste des
+        paquets) — vérifié, pas supposé : un bouton qui appelle un programme
+        absent est une promesse à l'écran sans rien derrière, et c'est la faute
+        que ce dépôt attrape le plus souvent.
+        """
+        try:
+            subprocess.Popen(["xdg-open", chemin],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError as souci:
+            self.etat.set_text("Impossible d'ouvrir ce fichier : %s" % souci)
+
+    def au_clavier(self, _cadre, evenement):
+        touche = Gdk.keyval_name(evenement.keyval)
+        controle = evenement.state & Gdk.ModifierType.CONTROL_MASK
+        if touche == "BackSpace":
+            self.au_parent()
+            return True
+        if touche == "F5":
+            self.peupler()
+            return True
+        if controle and touche in ("f", "F"):
+            self.cherche.grab_focus()
+            return True
+        if touche == "Escape" and self.cherche.get_text():
+            self.cherche.set_text("")
+            return True
+        return False
+
+    # ---- Remplir ------------------------------------------------------------
+    def peupler(self):
+        self.modele.clear()
+        caches = 0
+        try:
+            noms = os.listdir(self.dossier)
+        except OSError as souci:
+            self.etat.set_text("Ce dossier ne peut pas être lu : %s" % souci)
+            self.refaire_le_fil()
+            return
+
+        for nom in noms:
+            if nom.startswith("."):
+                caches += 1
+                continue
+            complet = os.path.join(self.dossier, nom)
+            fichier = Gio.File.new_for_path(complet)
+            try:
+                info = fichier.query_info(
+                    "standard::content-type,standard::size,standard::icon,"
+                    "standard::is-symlink,time::modified",
+                    Gio.FileQueryInfoFlags.NONE, None)
+            except GLib.Error:
+                continue
+            est_dossier = os.path.isdir(complet)
+            try:
+                mtime = int(os.path.getmtime(complet))
+            except OSError:
+                mtime = 0
+            octets = 0 if est_dossier else (info.get_size() or 0)
+            nom_icone = "folder" if est_dossier else "text-x-generic"
+            icone = info.get_icon()
+            if icone is not None and hasattr(icone, "get_names"):
+                noms_possibles = icone.get_names()
+                if noms_possibles:
+                    nom_icone = noms_possibles[0]
+            self.modele.append([
+                nom_icone, nom,
+                time.strftime("%d/%m/%Y %H:%M", time.localtime(mtime)) if mtime else "",
+                "Dossier de fichiers" if est_dossier else genre_du_fichier(info),
+                "" if est_dossier else taille_lisible(octets),
+                complet, est_dossier, octets, mtime,
+            ])
+
+        self.caches = caches
+        self.refaire_le_fil()
+        self.dire_le_compte()
+        self.bouton_precedent.set_sensitive(self.rang > 0)
+        self.bouton_suivant.set_sensitive(self.rang + 1 < len(self.histoire))
+        self.bouton_parent.set_sensitive(self.dossier != "/")
+        self.set_title("%s — Explorateur de fichiers"
+                       % (os.path.basename(self.dossier) or "Système de fichiers"))
+
+    def refaire_le_fil(self):
+        """Le chemin en boutons cliquables, comme la barre d'adresse Windows."""
+        for vieux in self.fil.get_children():
+            self.fil.remove(vieux)
+        maison = os.path.expanduser("~")
+        if self.dossier == maison or self.dossier.startswith(maison + os.sep):
+            morceaux = [(grenosui.identite() or "Dossier personnel", maison)]
+            reste = self.dossier[len(maison):].strip(os.sep)
+            courant = maison
+        else:
+            morceaux = [("Système de fichiers", "/")]
+            reste = self.dossier.strip(os.sep)
+            courant = "/"
+        for morceau in [m for m in reste.split(os.sep) if m]:
+            courant = os.path.join(courant, morceau)
+            morceaux.append((morceau, courant))
+
+        for index, (texte, cible) in enumerate(morceaux):
+            if index:
+                fleche = Gtk.Label(label="›")
+                fleche.get_style_context().add_class("separateur-miette")
+                self.fil.pack_start(fleche, False, False, 0)
+            bouton = Gtk.Button(label=texte)
+            bouton.get_style_context().add_class("miette")
+            bouton.set_relief(Gtk.ReliefStyle.NONE)
+            bouton.connect("clicked", lambda _b, c=cible: self.aller(c))
+            self.fil.pack_start(bouton, False, False, 0)
+        self.fil.show_all()
+
+    def dire_le_compte(self):
+        """La barre d'état de Windows : combien d'éléments, combien choisis."""
+        total = len(self.filtre)
+        mot = "élément" if total <= 1 else "éléments"
+        texte = "%d %s" % (total, mot)
+        choisis = self.vue.get_selection().count_selected_rows()
+        if choisis > 1:
+            texte += "   ·   %d sélectionnés" % choisis
+        elif choisis == 1:
+            texte += "   ·   1 sélectionné"
+        if getattr(self, "caches", 0):
+            texte += "   ·   %d masqué%s" % (self.caches,
+                                             "s" if self.caches > 1 else "")
+        self.etat.set_text(texte)
+
+
+def main():
+    grenosui.nommer()
+    grenosui.habiller()
+    grenosui.ajouter_style(STYLE)
+    depart = sys.argv[1] if len(sys.argv) > 1 else None
+    fenetre = Explorateur(depart)
+    fenetre.peupler_disques()
+    fenetre.aller(fenetre.dossier)
+    fenetre.show_all()
+    # Ce que la machine d'intégration lira : une fenêtre qui s'ouvre ne prouve
+    # rien si personne ne dit ce qu'elle contient. C'est la leçon du
+    # 24 septembre, où `bureau pret, 0 icones` passait au vert depuis des
+    # jours.
+    grenosui.dire("fichiers ouvert, %d element(s) dans %s, %d entree(s) dans Ce PC"
+                  % (len(fenetre.modele), os.path.basename(fenetre.dossier) or "/",
+                     len(fenetre.liste_pc.get_children())))
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()
