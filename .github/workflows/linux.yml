@@ -78,8 +78,30 @@ jobs:
           df -h /
 
       - name: Outils de l'hôte
+        # BORNEE DANS LE TEMPS, ET ELLE NE L ETAIT PAS.
+        #
+        # Le 7 octobre, cette etape est restee VINGT-CINQ MINUTES sur un
+        # `apt-get update` — un miroir du runner qui ne repondait plus. Sans
+        # limite, elle aurait tenu la construction entiere jusqu au delai par
+        # defaut de GitHub, soit six heures, pour une image que personne
+        # n aurait vue. Il a fallu pousser sur la branche pour la tuer, parce
+        # que le jeton du worker ne peut pas annuler un run (403, note du
+        # 24 septembre).
+        #
+        # Dix minutes suffisent largement : au tour precedent, les etapes 7 a
+        # 11 ont tenu en moins de cinq. Au-dela, ce n est plus de la lenteur.
+        timeout-minutes: 10
         run: |
-          sudo apt-get update -qq
+          # Trois essais, chacun borne. Un miroir qui ne repond pas est une
+          # panne passagere : la retenter coute quelques secondes, et
+          # echouer tout de suite coute une construction.
+          for essai in 1 2 3; do
+            if timeout 180 sudo apt-get update -qq; then
+              break
+            fi
+            echo "apt-get update : essai $essai sans reponse, on recommence"
+            sleep 5
+          done
           # gdisk et e2fsprogs servent au disque de persistance, construit avant
           # le demarrage : la machine d'essai doit partir sur celui qu'on livre.
           sudo apt-get install -y -qq qemu-system-x86 qemu-utils zip python3 gdisk e2fsprogs
