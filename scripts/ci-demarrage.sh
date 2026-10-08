@@ -528,24 +528,14 @@ fi
 # NOMBRE. On exige donc que le compte AUGMENTE. « h » occupe la meme touche
 # en AZERTY qu en QWERTY, donc sendkey dit bien ce qu on croit.
 #
-# Rapporte, pas bloquant : vu vert zero fois.
-avant=$(grep -a 'grenos: fichiers ouvert' "$RUNNER_TEMP/serial.log" | tail -1 \
-        | sed -n 's/.*ouvert, \([0-9]*\) element.*/\1/p')
+# On ne frappe QUE la touche ici. Le verdict est rendu plus bas, dans la
+# region bloquante : `MUET=0` est reinitialise apres ce point, donc y poser
+# MUET=1 ne ferait rien — c est le piege qui m a deja coute un garde sans
+# dents, et il est documente deux fois dans ce fichier.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-h" || true
 sleep 4
-apres=$(grep -a 'grenos: fichiers : Ctrl+H' "$RUNNER_TEMP/serial.log" | tail -1 \
-        | sed -n 's/.*, \([0-9]*\) element.*/\1/p')
 grep -a 'grenos: fichiers : Ctrl+H' "$RUNNER_TEMP/serial.log" | tail -1 \
   | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
-if [ -z "$apres" ]; then
-  echo "::warning::Ctrl+H n a rien dit — la touche n est pas arrivee, ou pas liee."
-elif [ -z "$avant" ]; then
-  echo "::warning::On ne sait pas combien d elements il y avait avant Ctrl+H."
-elif [ "$apres" -gt "$avant" ]; then
-  echo "fichiers: Ctrl+H obeit — $avant element(s) puis $apres, notre explorateur ECOUTE"
-else
-  echo "::warning::Ctrl+H a repondu mais le compte n a pas monte ($avant -> $apres)."
-fi
 
 # Et on le referme, pour ne pas le laisser devant les captures suivantes.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey alt-f4" || true
@@ -824,6 +814,33 @@ for preuve in "grenplace ouvert" "maj: depot grenOS configure" "maj: trousseau d
 done
 if grep -aq 'grenos: disques : aucun' "$RUNNER_TEMP/serial.log"; then
   echo "::error::Le systeme ne voit aucun disque : l'installateur n'aurait rien a proposer."
+  MUET=1
+fi
+
+# NOTRE EXPLORATEUR OBEIT-IL ? La touche a ete frappee bien plus haut ; c est
+# ici qu on en juge, parce que `MUET` ne vit qu a partir d ici.
+#
+# VU VERT DEUX FOIS (37743261563, 37747818526), les deux fois 6 puis 16 —
+# regle inchangee depuis le 12 septembre.
+#
+# Ce qu elle empeche : que la fenetre redevienne sourde sans bruit. Une
+# liaison de touche qui disparait ne produit AUCUNE erreur, l explorateur
+# s ouvre et se photographie exactement pareil, et Grenofar le decouvre en
+# appuyant. Le compte doit MONTER : quatre facons d echouer, toutes exercees.
+avant=$(grep -a 'grenos: fichiers ouvert' "$RUNNER_TEMP/serial.log" | tail -1 \
+        | sed -n 's/.*ouvert, \([0-9]*\) element.*/\1/p')
+apres=$(grep -a 'grenos: fichiers : Ctrl+H' "$RUNNER_TEMP/serial.log" | tail -1 \
+        | sed -n 's/.*, \([0-9]*\) element.*/\1/p')
+if [ -z "$apres" ]; then
+  echo "::error::Ctrl+H n a rien dit — la touche n est pas arrivee, ou n est plus liee."
+  MUET=1
+elif [ -z "$avant" ]; then
+  echo "::error::On ne sait pas combien d elements il y avait avant Ctrl+H."
+  MUET=1
+elif [ "$apres" -gt "$avant" ]; then
+  echo "prouve: Ctrl+H obeit — $avant element(s) puis $apres, notre explorateur ECOUTE"
+else
+  echo "::error::Ctrl+H a repondu mais le compte n a pas monte ($avant -> $apres)."
   MUET=1
 fi
 
