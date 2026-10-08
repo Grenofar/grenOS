@@ -516,6 +516,37 @@ if grep -aq 'grenos: fichiers ouvert' "$RUNNER_TEMP/serial.log"; then
 else
   echo "::warning::Notre explorateur ne s est pas annonce."
 fi
+
+# --- ET MAINTENANT : OBEIT-IL ? -------------------------------------------
+# Une fenetre qui s affiche ne prouve pas qu elle ecoute. C est l angle mort
+# du 23 septembre, a l echelle de l explorateur : le clic droit, les copies,
+# les renommages, les raccourcis — rien de tout cela n a jamais ete exerce
+# par la machine.
+#
+# Ctrl+H est le seul geste qu on puisse lui demander sans risque : il ne
+# touche aucun fichier, il se defait en le refrappant, et son effet est un
+# NOMBRE. On exige donc que le compte AUGMENTE. « h » occupe la meme touche
+# en AZERTY qu en QWERTY, donc sendkey dit bien ce qu on croit.
+#
+# Rapporte, pas bloquant : vu vert zero fois.
+avant=$(grep -a 'grenos: fichiers ouvert' "$RUNNER_TEMP/serial.log" | tail -1 \
+        | sed -n 's/.*ouvert, \([0-9]*\) element.*/\1/p')
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-h" || true
+sleep 4
+apres=$(grep -a 'grenos: fichiers : Ctrl+H' "$RUNNER_TEMP/serial.log" | tail -1 \
+        | sed -n 's/.*, \([0-9]*\) element.*/\1/p')
+grep -a 'grenos: fichiers : Ctrl+H' "$RUNNER_TEMP/serial.log" | tail -1 \
+  | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
+if [ -z "$apres" ]; then
+  echo "::warning::Ctrl+H n a rien dit — la touche n est pas arrivee, ou pas liee."
+elif [ -z "$avant" ]; then
+  echo "::warning::On ne sait pas combien d elements il y avait avant Ctrl+H."
+elif [ "$apres" -gt "$avant" ]; then
+  echo "fichiers: Ctrl+H obeit — $avant element(s) puis $apres, notre explorateur ECOUTE"
+else
+  echo "::warning::Ctrl+H a repondu mais le compte n a pas monte ($avant -> $apres)."
+fi
+
 # Et on le referme, pour ne pas le laisser devant les captures suivantes.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey alt-f4" || true
 sleep 2

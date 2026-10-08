@@ -1024,8 +1024,22 @@ class Explorateur(Gtk.Window):
             self._dire("%d élément(s) mis à la corbeille." % faits)
 
     def action_basculer_caches(self):
+        """Ctrl+H, et LA SEULE ACTION QUE LA MACHINE PEUT VERIFIER.
+
+        Jusqu'ici la CI prouvait que cette fenêtre s'affiche, jamais qu'elle
+        obéit — c'est mot pour mot l'angle mort du 23 septembre sur la barre,
+        celui qui aurait laissé passer un bureau sourd. Ctrl+H est le seul
+        geste sans danger : il ne touche aucun fichier, il est réversible, et
+        son effet est un NOMBRE qui doit changer. La ligne ci-dessous est donc
+        la preuve, et elle peut échouer de trois façons : la touche n'est pas
+        liée (aucune ligne), elle est liée à autre chose (le nombre ne bouge
+        pas), ou le comptage est faux (il bouge du mauvais côté).
+        """
         self.montrer_caches = not self.montrer_caches
         self.peupler()
+        grenosui.dire("fichiers : Ctrl+H -> %s, %d element(s) affiche(s)"
+                      % ("caches montres" if self.montrer_caches
+                         else "caches remasques", len(self.filtre)))
 
     def action_nouveau_dossier(self):
         nom = self._demander("Nouveau dossier", "Nom du dossier :",
