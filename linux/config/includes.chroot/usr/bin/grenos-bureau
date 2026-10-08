@@ -63,6 +63,73 @@ STYLE = """
 """
 
 
+# ---- LA GRILLE, ET POURQUOI ELLE EST UNE SEULE FONCTION -------------------
+#
+# Grenofar : « quand on déplace des raccourcis, il faut que ça soit gradué,
+# on peut pas mettre où on veut, fais comme Windows. » Windows a « Aligner
+# les icônes sur la grille », et c'est ALLUMÉ par défaut.
+#
+# Le bureau avait déjà une grille — `LARGEUR_CASE`, `HAUTEUR_CASE`, `MARGE`
+# servaient à poser les icônes au premier démarrage — mais un glissement
+# déposait l'icône au pixel près, donc de travers. Les deux calculs vivent
+# désormais au même endroit : deux grilles d'une même chose finiraient par
+# diverger, et c'est alors l'une des deux qu'on croit.
+#
+# ET UNE CASE NE PREND QU'UNE ICÔNE : sans cela, lâcher une icône sur une
+# autre les empilerait exactement, et la seconde disparaîtrait sous la
+# première. Windows pousse à la case libre la plus proche ; nous aussi.
+
+
+def derniere_case(largeur, hauteur):
+    """La dernière colonne et la dernière ligne qui tiennent à l'écran."""
+    return (max(0, (largeur - MARGE - LARGEUR_CASE) // LARGEUR_CASE),
+            max(0, (hauteur - BARRE - MARGE - HAUTEUR_CASE) // HAUTEUR_CASE))
+
+
+def coin_de(colonne, ligne):
+    """Le coin haut gauche d'une case, en pixels."""
+    return MARGE + colonne * LARGEUR_CASE, MARGE + ligne * HAUTEUR_CASE
+
+
+def case_de(x, y, largeur, hauteur):
+    """La case la plus proche d'un point, bornée à l'écran.
+
+    `round` et non `//` : on va vers la case la PLUS PROCHE, pas vers celle
+    d'au-dessus. Lâcher une icône aux neuf dixièmes d'une case doit la faire
+    descendre, pas remonter.
+    """
+    cmax, lmax = derniere_case(largeur, hauteur)
+    colonne = int(round((x - MARGE) / float(LARGEUR_CASE)))
+    ligne = int(round((y - MARGE) / float(HAUTEUR_CASE)))
+    return max(0, min(cmax, colonne)), max(0, min(lmax, ligne))
+
+
+def caler(x, y, largeur, hauteur, occupees=()):
+    """Caler un point sur la grille, et sur une case LIBRE.
+
+    Rend le coin de la case visée si elle est libre, sinon celui de la case
+    libre la plus proche — d'abord les voisines immédiates, puis plus loin.
+    Si tout est pris, on rend quand même la case visée : superposer vaut
+    mieux que refuser le déplacement sans rien dire.
+    """
+    prises = {(int(a), int(b)) for a, b in occupees}
+    cmax, lmax = derniere_case(largeur, hauteur)
+    vise_c, vise_l = case_de(x, y, largeur, hauteur)
+    for rayon in range(0, cmax + lmax + 2):
+        voisines = []
+        for dc in range(-rayon, rayon + 1):
+            for dl in range(-rayon, rayon + 1):
+                if max(abs(dc), abs(dl)) != rayon:
+                    continue
+                c, l = vise_c + dc, vise_l + dl
+                if 0 <= c <= cmax and 0 <= l <= lmax:
+                    voisines.append((abs(dc) + abs(dl), abs(dc), c, l))
+        for _, _, c, l in sorted(voisines):
+            if coin_de(c, l) not in prises:
+                return coin_de(c, l)
+    return coin_de(vise_c, vise_l)
+
+
 def dossier_bureau():
     """Le dossier « Bureau » de la personne, créé s'il n'existe pas encore.
 
@@ -154,6 +221,7 @@ class Bureau(Gtk.Window):
         self.positions = self.lire_positions()
         self.choisie = None
         self.glisse = None
+        self.recalees = 0
 
         self.fond = Gtk.DrawingArea()
         self.fond.connect("draw", self.peindre_fond)
@@ -235,15 +303,14 @@ class Bureau(Gtk.Window):
             json.dump(self.positions, f, indent=1, ensure_ascii=False)
 
     def place_libre(self, occupees):
-        """La première case vide, en colonnes, de haut en bas."""
-        colonnes = max(1, (self.hauteur - 2 * MARGE - BARRE) // HAUTEUR_CASE)
-        index = 0
-        while True:
-            x = MARGE + (index // colonnes) * LARGEUR_CASE
-            y = MARGE + (index % colonnes) * HAUTEUR_CASE
-            if (x, y) not in occupees:
-                return x, y
-            index += 1
+        """La première case vide, en colonnes, de haut en bas — comme Windows."""
+        cmax, lmax = derniere_case(self.largeur, self.hauteur)
+        for colonne in range(cmax + 1):
+            for ligne in range(lmax + 1):
+                coin = coin_de(colonne, ligne)
+                if coin not in occupees:
+                    return coin
+        return coin_de(0, 0)
 
     def remplir(self):
         for enfant in self.plan.get_children():
@@ -255,19 +322,30 @@ class Bureau(Gtk.Window):
             noms = []
 
         occupees = set()
+        self.recalees = 0
+        change = False
         for nom in noms:
             if nom.startswith("."):
                 continue
             chemin = os.path.join(self.dossier, nom)
             place = self.positions.get(nom)
             if place:
-                x, y = int(place[0]), int(place[1])
+                # Une position gardée d'avant la grille est recalée une fois,
+                # exactement comme Windows le fait en allumant l'alignement.
+                x, y = caler(int(place[0]), int(place[1]),
+                             self.largeur, self.hauteur, occupees)
+                if [x, y] != [int(place[0]), int(place[1])]:
+                    self.recalees += 1
             else:
                 x, y = self.place_libre(occupees)
+            if self.positions.get(nom) != [x, y]:
                 self.positions[nom] = [x, y]
+                change = True
             occupees.add((x, y))
             self.plan.put(self.faire_icone(nom, chemin), x, y)
 
+        if change:
+            self.ecrire_positions()
         self.plan.show_all()
 
     def faire_icone(self, nom, chemin):
@@ -327,9 +405,17 @@ class Bureau(Gtk.Window):
         return True
 
     def poser(self, widget, _evenement, nom):
-        """Une icône déplacée reste où on l'a lâchée, y compris au prochain démarrage."""
+        """Une icône lâchée se CALE sur la grille, et y reste au redémarrage.
+
+        Elle suit le doigt au pixel pendant le glissement — sans quoi on ne
+        verrait pas ce qu'on déplace — et c'est au lâcher qu'elle se range.
+        """
         if self.glisse is not None and self.glisse[4] is widget:
             x, y = self.plan.child_get(widget, "x", "y")
+            prises = [tuple(p) for autre, p in self.positions.items()
+                      if autre != nom and p]
+            x, y = caler(x, y, self.largeur, self.hauteur, prises)
+            self.plan.move(widget, x, y)
             self.positions[nom] = [x, y]
             self.ecrire_positions()
             self.glisse = None
@@ -371,10 +457,14 @@ class Bureau(Gtk.Window):
                     subprocess.run(["cp", "-a", source, cible], check=False)
             except OSError:
                 continue
-            # Posée là où la souris l'a lâchée, pas au bout de la file.
-            self.positions[os.path.basename(cible)] = [
-                max(0, int(x) - LARGEUR_CASE // 2),
-                max(0, int(y) - HAUTEUR_CASE // 2)]
+            # Posée près de l'endroit lâché, mais calée sur la grille : une
+            # icône venue d'ailleurs s'aligne comme les autres.
+            nom_cible = os.path.basename(cible)
+            prises = [tuple(p) for autre, p in self.positions.items()
+                      if autre != nom_cible and p]
+            self.positions[nom_cible] = list(caler(
+                int(x) - LARGEUR_CASE // 2, int(y) - HAUTEUR_CASE // 2,
+                self.largeur, self.hauteur, prises))
             self.ecrire_positions()
         self.remplir()
 
@@ -495,6 +585,16 @@ def main():
     bureau.show_all()
     grenosui.dire(f"bureau pret, {len(bureau.plan.get_children())} icones "
                   f"dans {os.path.basename(bureau.dossier)}")
+    # Ce que la machine peut vérifier sans souris : que CHAQUE icône posée
+    # tombe sur une case. Si un jour une position échappe à la grille, le
+    # compte ci-dessous cesse d'être égal au nombre d'icônes.
+    sur_grille = sum(1 for p in bureau.positions.values()
+                     if p and coin_de(*case_de(int(p[0]), int(p[1]),
+                                               bureau.largeur, bureau.hauteur))
+                     == (int(p[0]), int(p[1])))
+    grenosui.dire(f"bureau : grille {LARGEUR_CASE}x{HAUTEUR_CASE}, "
+                  f"{sur_grille}/{len(bureau.positions)} icone(s) calee(s), "
+                  f"{bureau.recalees} recalee(s)")
 
     # `grenos-fond` prévient d'un changement de thème ou de fond d'écran.
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, bureau.repeindre)

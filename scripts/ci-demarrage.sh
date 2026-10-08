@@ -922,6 +922,24 @@ else
   echo "prouve: Ctrl+Maj+N ECRIT ($apres -> $apresn) puis REFUSE — notre explorateur agit sur le disque"
 fi
 
+# ET IL SAIT RENOMMER : F2 sur le dossier que la creation vient de choisir.
+#
+# VU VERT DEUX FOIS (37816092066, 37821348037), les deux fois « Nouveau
+# dossier » devenu « essi » — regle inchangee depuis le 12 septembre.
+#
+# Ce qu elle empeche : qu une selection cassee rende F2 inerte sans un mot.
+# Creer puis renommer est la chaine complete d un explorateur qui sert : la
+# premiere moitie etait deja bloquante, la seconde l est maintenant.
+if grep -aq 'grenos: fichiers : F2 -> « Nouveau dossier » est devenu' "$RUNNER_TEMP/serial.log"; then
+  echo "prouve: F2 RENOMME le dossier que Ctrl+Maj+N venait de choisir"
+elif grep -aq 'grenos: fichiers : F2' "$RUNNER_TEMP/serial.log"; then
+  echo "::error::F2 a repondu sans renommer : $(grep -a 'grenos: fichiers : F2' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]')"
+  MUET=1
+else
+  echo "::error::F2 n a rien dit — la touche n est pas arrivee, ou plus rien n est selectionne apres une creation."
+  MUET=1
+fi
+
 # L'installateur a-t-il OUVERT SA FENETRE ?
 #
 # `pkcheck : autorise sans mot de passe` dit seulement que polkit laisserait
