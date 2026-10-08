@@ -41,6 +41,7 @@ Ne jamais interroger un service lent pendant la construction de la fenêtre.
 constructeur. Le contenu d'un dossier se lit donc après le premier affichage.
 """
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -139,6 +140,10 @@ STYLE = """
 }
 
 #liste-fichiers header button:hover { background-color: @survol; }
+
+.raccourci-menu { color: @texte-faible; font-size: 12px; }
+
+.titre-propriete { color: @texte-faible; font-size: 13px; font-weight: 600; }
 
 #barre-etat {
     background-color: @fond-haut;
@@ -240,6 +245,11 @@ class Explorateur(Gtk.Window):
 
         self.histoire = []
         self.rang = -1
+        # Le presse-papier est a NOUS, pas celui de X : on colle des fichiers,
+        # pas du texte, et deux explorateurs ouverts ne doivent pas se marcher
+        # dessus. `couper` dit si le collage deplace ou duplique.
+        self.presse_papier = []
+        self.couper = False
         self.dossier = depart or os.path.expanduser("~")
 
         corps = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -276,6 +286,8 @@ class Explorateur(Gtk.Window):
         self.bouton_suivant = outil("go-next", "Suivant", self.au_suivant)
         self.bouton_parent = outil("go-up", "Dossier parent", self.au_parent)
         outil("view-refresh", "Actualiser", lambda _b: self.peupler())
+        outil("folder-new", "Nouveau dossier",
+              lambda _b: self.action_nouveau_dossier())
 
         self.fil = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.fil.set_name("fil-chemin")
@@ -435,6 +447,7 @@ class Explorateur(Gtk.Window):
         self.vue.set_rules_hint(False)
         self.vue.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
         self.vue.connect("row-activated", self.au_double_clic)
+        self.vue.connect("button-press-event", self.au_clic_droit)
         self.vue.get_selection().connect("changed", lambda _s: self.dire_le_compte())
 
         # La colonne Nom porte l'icône, comme dans Windows.
@@ -553,6 +566,29 @@ class Explorateur(Gtk.Window):
         if touche == "Escape" and self.cherche.get_text():
             self.cherche.set_text("")
             return True
+        # LES RACCOURCIS DE WINDOWS, aux memes touches. Ils ne font rien quand
+        # le champ de recherche a le focus : Ctrl+C y doit copier du texte,
+        # pas des fichiers.
+        if self.cherche.has_focus():
+            return False
+        if touche == "F2":
+            self.action_renommer()
+            return True
+        if touche == "Delete":
+            self.action_corbeille()
+            return True
+        if controle and touche in ("c", "C"):
+            self.action_copier()
+            return True
+        if controle and touche in ("x", "X"):
+            self.action_couper()
+            return True
+        if controle and touche in ("v", "V"):
+            self.action_coller()
+            return True
+        if controle and touche in ("a", "A"):
+            self.vue.get_selection().select_all()
+            return True
         return False
 
     # ---- Remplir ------------------------------------------------------------
@@ -640,6 +676,297 @@ class Explorateur(Gtk.Window):
             bouton.connect("clicked", lambda _b, c=cible: self.aller(c))
             self.fil.pack_start(bouton, False, False, 0)
         self.fil.show_all()
+
+    # ---- Le clic droit, et ce qu'on peut faire d'un fichier ----------------
+    #
+    # C'était le plus gros écart restant avec Windows. On pouvait regarder, pas
+    # agir : ni renommer, ni copier, ni supprimer, ni créer un dossier.
+    #
+    # SUPPRIMER VEUT DIRE METTRE À LA CORBEILLE, JAMAIS EFFACER.
+    #
+    # `Gio.File.trash()` et rien d'autre. C'est ce que fait Windows avec la
+    # touche Suppr, et c'est réversible — or ce programme tourne sur les
+    # fichiers de quelqu'un. Si la corbeille n'est pas disponible (cela arrive
+    # sur un disque externe sans dossier .Trash), on le DIT et on ne fait
+    # rien : se rabattre en silence sur un effacement définitif serait une
+    # surprise destructrice, c'est-à-dire la pire version de « une promesse à
+    # l'écran sans rien derrière ».
+
+    def chemins_choisis(self):
+        """Les chemins des lignes sélectionnées, dans l'ordre affiché."""
+        modele, lignes = self.vue.get_selection().get_selected_rows()
+        return [modele[chemin][5] for chemin in lignes]
+
+    def au_clic_droit(self, vue, evenement):
+        if evenement.button != 3:
+            return False
+        trouve = vue.get_path_at_pos(int(evenement.x), int(evenement.y))
+        if trouve is not None:
+            chemin_vue = trouve[0]
+            selection = vue.get_selection()
+            # Clic droit sur une ligne non sélectionnée : Windows la
+            # sélectionne d'abord. Sur une ligne déjà dans la sélection, il
+            # garde la sélection entière — sans quoi un clic droit sur dix
+            # fichiers choisis n'en viserait qu'un.
+            if not selection.path_is_selected(chemin_vue):
+                selection.unselect_all()
+                selection.select_path(chemin_vue)
+        else:
+            vue.get_selection().unselect_all()
+        self.menu_contextuel().popup_at_pointer(evenement)
+        return True
+
+    def menu_contextuel(self):
+        choisis = self.chemins_choisis()
+        menu = Gtk.Menu()
+
+        def entree(texte, action, actif=True, raccourci=""):
+            element = Gtk.MenuItem()
+            boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+            boite.pack_start(Gtk.Label(label=texte, xalign=0.0), True, True, 0)
+            if raccourci:
+                rappel = Gtk.Label(label=raccourci, xalign=1.0)
+                rappel.get_style_context().add_class("raccourci-menu")
+                boite.pack_end(rappel, False, False, 0)
+            element.add(boite)
+            element.set_sensitive(actif)
+            element.connect("activate", lambda _e: action())
+            menu.append(element)
+
+        if choisis:
+            entree("Ouvrir", self.action_ouvrir)
+            entree("Renommer", self.action_renommer, len(choisis) == 1, "F2")
+            menu.append(Gtk.SeparatorMenuItem())
+            entree("Copier", self.action_copier, raccourci="Ctrl+C")
+            entree("Couper", self.action_couper, raccourci="Ctrl+X")
+            entree("Coller", self.action_coller, bool(self.presse_papier),
+                   "Ctrl+V")
+            menu.append(Gtk.SeparatorMenuItem())
+            entree("Mettre à la corbeille", self.action_corbeille,
+                   raccourci="Suppr")
+            menu.append(Gtk.SeparatorMenuItem())
+            entree("Propriétés", self.action_proprietes, len(choisis) == 1)
+        else:
+            entree("Nouveau dossier", self.action_nouveau_dossier)
+            entree("Coller", self.action_coller, bool(self.presse_papier),
+                   "Ctrl+V")
+            menu.append(Gtk.SeparatorMenuItem())
+            entree("Actualiser", self.peupler, raccourci="F5")
+
+        menu.show_all()
+        return menu
+
+    # ---- Ce que chaque entrée fait -----------------------------------------
+    def action_ouvrir(self):
+        for chemin in self.chemins_choisis():
+            if os.path.isdir(chemin):
+                self.aller(chemin)
+                return
+            self.ouvrir_avec_le_systeme(chemin)
+
+    def _demander(self, titre, question, defaut=""):
+        """Une petite boîte à une seule question. Rend None si on annule."""
+        boite = Gtk.Dialog(title=titre, transient_for=self, modal=True)
+        boite.add_button("Annuler", Gtk.ResponseType.CANCEL)
+        valider = boite.add_button("Valider", Gtk.ResponseType.OK)
+        valider.get_style_context().add_class("suggested-action")
+        boite.set_default_response(Gtk.ResponseType.OK)
+        champ = Gtk.Entry(text=defaut, activates_default=True)
+        champ.set_width_chars(34)
+        corps = boite.get_content_area()
+        corps.set_spacing(10)
+        corps.set_border_width(14)
+        corps.pack_start(Gtk.Label(label=question, xalign=0.0), False, False, 0)
+        corps.pack_start(champ, False, False, 0)
+        boite.show_all()
+        # Le nom sans son extension est présélectionné, comme dans Windows :
+        # renommer « photo.jpg » en « vacances.jpg » ne doit pas obliger à
+        # retaper l'extension.
+        base, extension = os.path.splitext(defaut)
+        champ.select_region(0, len(base) if extension else -1)
+        reponse = boite.run()
+        texte = champ.get_text().strip()
+        boite.destroy()
+        return texte if reponse == Gtk.ResponseType.OK and texte else None
+
+    def _dire(self, texte):
+        self.etat.set_text(texte)
+
+    def action_renommer(self):
+        choisis = self.chemins_choisis()
+        if len(choisis) != 1:
+            return
+        ancien = choisis[0]
+        nom = self._demander("Renommer", "Nouveau nom :",
+                             os.path.basename(ancien))
+        if not nom:
+            return
+        if "/" in nom:
+            self._dire("Un nom de fichier ne peut pas contenir « / ».")
+            return
+        neuf = os.path.join(os.path.dirname(ancien), nom)
+        if os.path.exists(neuf):
+            self._dire("« %s » existe déjà ici." % nom)
+            return
+        try:
+            os.rename(ancien, neuf)
+        except OSError as souci:
+            self._dire("Renommage impossible : %s" % souci.strerror)
+            return
+        self.peupler()
+
+    def action_copier(self):
+        self.presse_papier = list(self.chemins_choisis())
+        self.couper = False
+        self._dire("%d élément(s) copié(s)." % len(self.presse_papier))
+
+    def action_couper(self):
+        self.presse_papier = list(self.chemins_choisis())
+        self.couper = True
+        self._dire("%d élément(s) prêt(s) à être déplacé(s)."
+                   % len(self.presse_papier))
+
+    def _nom_libre(self, dossier, nom):
+        """« photo.jpg » → « photo (copie).jpg », puis « (copie 2) », etc.
+
+        Windows ajoute « - Copie ». On ne l'écrase jamais en silence : un
+        fichier remplacé sans le dire est la seule faute de ce programme qui
+        ne se rattrape pas.
+        """
+        cible = os.path.join(dossier, nom)
+        if not os.path.exists(cible):
+            return cible
+        base, extension = os.path.splitext(nom)
+        for numero in range(1, 100):
+            suffixe = " (copie)" if numero == 1 else " (copie %d)" % numero
+            cible = os.path.join(dossier, base + suffixe + extension)
+            if not os.path.exists(cible):
+                return cible
+        return None
+
+    def action_coller(self):
+        if not self.presse_papier:
+            return
+        faits, soucis = 0, []
+        for source in self.presse_papier:
+            if not os.path.exists(source):
+                soucis.append(os.path.basename(source) + " a disparu")
+                continue
+            if os.path.abspath(source) == os.path.abspath(self.dossier):
+                soucis.append("on ne colle pas un dossier dans lui-même")
+                continue
+            cible = self._nom_libre(self.dossier, os.path.basename(source))
+            if cible is None:
+                soucis.append("trop de copies de " + os.path.basename(source))
+                continue
+            try:
+                if self.couper:
+                    shutil.move(source, cible)
+                elif os.path.isdir(source):
+                    shutil.copytree(source, cible)
+                else:
+                    shutil.copy2(source, cible)
+                faits += 1
+            except (OSError, shutil.Error) as souci:
+                soucis.append("%s : %s" % (os.path.basename(source), souci))
+        if self.couper:
+            self.presse_papier = []
+            self.couper = False
+        self.peupler()
+        if soucis:
+            self._dire("%d fait(s), %s" % (faits, " ; ".join(soucis[:2])))
+        else:
+            self._dire("%d élément(s) collé(s)." % faits)
+
+    def action_corbeille(self):
+        """À la corbeille, et seulement à la corbeille."""
+        choisis = self.chemins_choisis()
+        if not choisis:
+            return
+        faits, refus = 0, []
+        for chemin in choisis:
+            try:
+                Gio.File.new_for_path(chemin).trash(None)
+                faits += 1
+            except GLib.Error as souci:
+                refus.append("%s : %s" % (os.path.basename(chemin),
+                                          souci.message))
+        self.peupler()
+        if refus:
+            # On ne propose PAS d'effacer définitivement à la place. Si la
+            # corbeille ne veut pas, la personne décide, pas nous.
+            self._dire("Corbeille impossible pour %d élément(s) — %s"
+                       % (len(refus), refus[0]))
+        else:
+            self._dire("%d élément(s) mis à la corbeille." % faits)
+
+    def action_nouveau_dossier(self):
+        nom = self._demander("Nouveau dossier", "Nom du dossier :",
+                             "Nouveau dossier")
+        if not nom:
+            return
+        if "/" in nom:
+            self._dire("Un nom de dossier ne peut pas contenir « / ».")
+            return
+        cible = os.path.join(self.dossier, nom)
+        if os.path.exists(cible):
+            self._dire("« %s » existe déjà ici." % nom)
+            return
+        try:
+            os.mkdir(cible)
+        except OSError as souci:
+            self._dire("Création impossible : %s" % souci.strerror)
+            return
+        self.peupler()
+
+    def action_proprietes(self):
+        choisis = self.chemins_choisis()
+        if len(choisis) != 1:
+            return
+        chemin = choisis[0]
+        try:
+            etat = os.stat(chemin)
+        except OSError as souci:
+            self._dire("Lecture impossible : %s" % souci.strerror)
+            return
+        if os.path.isdir(chemin):
+            genre, taille = "Dossier de fichiers", ""
+        else:
+            fichier = Gio.File.new_for_path(chemin)
+            try:
+                info = fichier.query_info("standard::content-type",
+                                          Gio.FileQueryInfoFlags.NONE, None)
+                genre = genre_du_fichier(info) or "Fichier"
+            except GLib.Error:
+                genre = "Fichier"
+            taille = "%s (%s octets)" % (taille_lisible(etat.st_size),
+                                         grenosui.nombre(etat.st_size, 0))
+
+        boite = Gtk.Dialog(title="Propriétés", transient_for=self, modal=True)
+        boite.add_button("Fermer", Gtk.ResponseType.CLOSE)
+        grille = Gtk.Grid(row_spacing=8, column_spacing=18)
+        grille.set_border_width(16)
+        lignes = [
+            ("Nom", os.path.basename(chemin)),
+            ("Type", genre),
+            ("Emplacement", os.path.dirname(chemin)),
+            ("Taille", taille),
+            ("Modifié le", time.strftime("%d/%m/%Y %H:%M",
+                                         time.localtime(etat.st_mtime))),
+        ]
+        for rang, (etiquette, valeur) in enumerate(l for l in lignes if l[1]):
+            titre = Gtk.Label(label=etiquette, xalign=0.0)
+            titre.get_style_context().add_class("titre-propriete")
+            grille.attach(titre, 0, rang, 1, 1)
+            texte = Gtk.Label(label=valeur, xalign=0.0)
+            texte.set_selectable(True)
+            texte.set_max_width_chars(48)
+            texte.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+            grille.attach(texte, 1, rang, 1, 1)
+        boite.get_content_area().add(grille)
+        boite.show_all()
+        boite.run()
+        boite.destroy()
 
     def dire_le_compte(self):
         """La barre d'état de Windows : combien d'éléments, combien choisis."""
