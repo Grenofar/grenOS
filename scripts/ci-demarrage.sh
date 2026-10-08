@@ -565,6 +565,31 @@ else
   echo "::warning::Ctrl+Maj+N : $cree creation(s), $refus refus — attendu au moins 1 et 1 (rapporte, pas bloquant)"
 fi
 
+# --- ET LE RENOMMER : F2 sur le dossier qu on vient de creer --------------
+# Creer choisit desormais le dossier neuf, comme Windows — c est ce qui rend
+# ce geste possible : sans selection, F2 ne trouverait rien et ne ferait rien.
+# On ne vise donc JAMAIS une ligne par son rang, qui bougerait au premier
+# fichier de plus ; on renomme ce que la creation vient de designer.
+#
+# « e », « s » et « i » occupent la meme touche en AZERTY qu en QWERTY, donc
+# sendkey ecrit bien « essi » et pas autre chose. Le nom entier est
+# preselectionne dans la boite, comme dans Windows : la frappe le remplace.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey f2" || true
+sleep 3
+for touche in e s s i ret; do
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+  sleep 1
+done
+sleep 2
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-renomme.ppm" || true
+grep -a 'grenos: fichiers : F2' "$RUNNER_TEMP/serial.log" \
+  | tr -d '[:cntrl:]' | sed 's/^.*grenos: /  /' || true
+if grep -aq 'grenos: fichiers : F2 -> ' "$RUNNER_TEMP/serial.log"; then
+  echo "fichiers: F2 RENOMME — la machine a cree un dossier puis l a renomme"
+else
+  echo "::warning::F2 n a rien renomme (rapporte, pas bloquant)"
+fi
+
 # Et on le referme, pour ne pas le laisser devant les captures suivantes.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey alt-f4" || true
 sleep 2

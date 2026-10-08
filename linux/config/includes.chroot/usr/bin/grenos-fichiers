@@ -870,7 +870,6 @@ class Explorateur(Gtk.Window):
             entree("Coller", self.action_coller, bool(self.presse_papier),
                    "Ctrl+V")
             menu.append(Gtk.SeparatorMenuItem())
-            menu.append(Gtk.SeparatorMenuItem())
             entree("Masquer les fichiers cachés" if self.montrer_caches
                    else "Afficher les fichiers cachés",
                    self.action_basculer_caches, raccourci="Ctrl+H")
@@ -916,6 +915,14 @@ class Explorateur(Gtk.Window):
         self.etat.set_text(texte)
 
     def action_renommer(self):
+        """F2, et un défaut qui était là depuis le premier jour.
+
+        Valider SANS rien changer répondait « "X" existe déjà ici. » — le
+        fichier se heurtait à lui-même. Windows ne dit rien dans ce cas, et
+        il a raison : *un nom inchangé n'est pas un conflit*. C'est la forme
+        exacte du garde qui refuse le fichier qu'il documente, trouvée ici en
+        cherchant comment la machine pourrait exercer F2 sans danger.
+        """
         choisis = self.chemins_choisis()
         if len(choisis) != 1:
             return
@@ -926,17 +933,26 @@ class Explorateur(Gtk.Window):
             return
         if "/" in nom:
             self._dire("Un nom de fichier ne peut pas contenir « / ».")
+            grenosui.dire("fichiers : F2 refuse — un nom porte un /")
             return
         neuf = os.path.join(os.path.dirname(ancien), nom)
+        if neuf == ancien:
+            grenosui.dire("fichiers : F2 -> nom inchange, rien a faire")
+            return
         if os.path.exists(neuf):
             self._dire("« %s » existe déjà ici." % nom)
+            grenosui.dire("fichiers : F2 refuse — « %s » existe deja" % nom)
             return
         try:
             os.rename(ancien, neuf)
         except OSError as souci:
             self._dire("Renommage impossible : %s" % souci.strerror)
+            grenosui.dire("fichiers : F2 a echoue — %s" % souci.strerror)
             return
         self.peupler()
+        self.choisir_le_chemin(neuf)
+        grenosui.dire("fichiers : F2 -> « %s » est devenu « %s »"
+                      % (os.path.basename(ancien), nom))
 
     def action_copier(self):
         self.presse_papier = list(self.chemins_choisis())
@@ -1085,8 +1101,31 @@ class Explorateur(Gtk.Window):
                           % souci.strerror)
             return
         self.peupler()
+        # Windows choisit le dossier qu'il vient de créer, et c'est ce qui
+        # rend le geste suivant possible : renommer, ouvrir, couper. Sans
+        # cela, F2 juste après ne trouverait aucune sélection et ne ferait
+        # rien — on créerait une porte sans poignée.
+        self.choisir_le_chemin(cible)
         grenosui.dire("fichiers : Ctrl+Maj+N -> dossier cree, "
                       "%d element(s) affiche(s)" % len(self.filtre))
+
+    def choisir_le_chemin(self, chemin):
+        """Sélectionner la ligne qui porte ce chemin, et la faire voir.
+
+        On parcourt le modèle TRIÉ, celui que la vue affiche : les index du
+        ListStore ne sont pas ceux des lignes à l'écran, et viser les mauvais
+        sélectionnerait un voisin. Rend True si la ligne a été trouvée.
+        """
+        iteration = self.tri.get_iter_first()
+        while iteration is not None:
+            if self.tri[iteration][5] == chemin:
+                self.vue.get_selection().select_iter(iteration)
+                ligne = self.tri.get_path(iteration)
+                self.vue.set_cursor(ligne, None, False)
+                self.vue.scroll_to_cell(ligne, None, False, 0.0, 0.0)
+                return True
+            iteration = self.tri.iter_next(iteration)
+        return False
 
     def action_nouvelle_fenetre(self):
         """Ctrl+N : une seconde fenêtre sur le même dossier.
