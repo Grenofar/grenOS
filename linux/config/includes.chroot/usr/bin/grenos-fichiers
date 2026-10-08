@@ -1050,23 +1050,43 @@ class Explorateur(Gtk.Window):
                          else "caches remasques", len(self.filtre)))
 
     def action_nouveau_dossier(self):
+        """Ctrl+Maj+N, et LA PREMIERE ACTION QUI ECRIT QUE LA MACHINE EXERCE.
+
+        Ctrl+H prouvait qu'on écoute ; il ne touche aucun fichier. Créer un
+        dossier est le plus petit geste qui *change quelque chose*, et c'est
+        le seul qu'on puisse demander au clavier sans rien taper : la boîte
+        arrive avec « Nouveau dossier » déjà écrit et Entrée valide. Deux
+        touches, aucune lettre, donc aucun piège AZERTY.
+
+        Les trois sorties parlent sur le port série, et c'est délibéré :
+        refrapper le même raccourci doit **refuser**, et un garde qu'on n'a
+        pas vu refuser n'est pas un garde. La machine exerce donc les deux
+        sens d'affilée.
+        """
         nom = self._demander("Nouveau dossier", "Nom du dossier :",
                              "Nouveau dossier")
         if not nom:
             return
         if "/" in nom:
             self._dire("Un nom de dossier ne peut pas contenir « / ».")
+            grenosui.dire("fichiers : Ctrl+Maj+N refuse — un nom porte un /")
             return
         cible = os.path.join(self.dossier, nom)
         if os.path.exists(cible):
             self._dire("« %s » existe déjà ici." % nom)
+            grenosui.dire("fichiers : Ctrl+Maj+N refuse — « %s » existe deja"
+                          % nom)
             return
         try:
             os.mkdir(cible)
         except OSError as souci:
             self._dire("Création impossible : %s" % souci.strerror)
+            grenosui.dire("fichiers : Ctrl+Maj+N a echoue — %s"
+                          % souci.strerror)
             return
         self.peupler()
+        grenosui.dire("fichiers : Ctrl+Maj+N -> dossier cree, "
+                      "%d element(s) affiche(s)" % len(self.filtre))
 
     def action_nouvelle_fenetre(self):
         """Ctrl+N : une seconde fenêtre sur le même dossier.

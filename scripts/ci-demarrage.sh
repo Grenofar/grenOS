@@ -537,6 +537,34 @@ sleep 4
 grep -a 'grenos: fichiers : Ctrl+H' "$RUNNER_TEMP/serial.log" | tail -1 \
   | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
 
+# --- ET MAINTENANT : SAIT-IL ECRIRE ? -------------------------------------
+# Ctrl+H prouve qu il ECOUTE. Il ne touche aucun fichier, donc il ne prouve
+# rien de ce qu on fait vraiment dans un explorateur. Creer un dossier est le
+# plus petit geste qui CHANGE quelque chose, et le seul qu on puisse demander
+# sans taper une lettre : la boite arrive avec « Nouveau dossier » deja ecrit
+# et Entree valide. Deux touches, aucun piege AZERTY — « n » occupe la meme
+# place sur les deux claviers.
+#
+# ON LE FRAPPE DEUX FOIS, et c est tout l interet : le second passage doit
+# REFUSER (« existe deja »). Un garde qu on n a pas vu refuser n est pas un
+# garde, et sans ce second coup la ligne serait une assertion morte.
+for essai in 1 2; do
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-shift-n" || true
+  sleep 3
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
+  sleep 3
+done
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-nouveau-dossier.ppm" || true
+grep -a 'grenos: fichiers : Ctrl+Maj+N' "$RUNNER_TEMP/serial.log" \
+  | tr -d '[:cntrl:]' | sed 's/^.*grenos: /  /' || true
+cree=$(grep -ac 'grenos: fichiers : Ctrl+Maj+N -> dossier cree' "$RUNNER_TEMP/serial.log" || true)
+refus=$(grep -ac 'grenos: fichiers : Ctrl+Maj+N refuse' "$RUNNER_TEMP/serial.log" || true)
+if [ "$cree" -ge 1 ] && [ "$refus" -ge 1 ]; then
+  echo "fichiers: Ctrl+Maj+N ECRIT puis REFUSE — notre explorateur agit sur le disque"
+else
+  echo "::warning::Ctrl+Maj+N : $cree creation(s), $refus refus — attendu au moins 1 et 1 (rapporte, pas bloquant)"
+fi
+
 # Et on le referme, pour ne pas le laisser devant les captures suivantes.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey alt-f4" || true
 sleep 2
