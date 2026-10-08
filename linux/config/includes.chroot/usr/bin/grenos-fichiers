@@ -99,6 +99,17 @@ STYLE = """
     padding: 2px 4px;
 }
 
+/* Le second visage de la meme barre : memes bords, meme fond, meme hauteur,
+   pour que passer des boutons au texte ne fasse pas sauter la fenetre. */
+#champ-chemin {
+    background-color: @fond-creux;
+    border: 1px solid @accent;
+    border-radius: 7px;
+    padding: 3px 8px;
+    color: @texte;
+    font-size: 13px;
+}
+
 .miette {
     background: transparent;
     border: none;
@@ -294,9 +305,26 @@ class Explorateur(Gtk.Window):
         outil("folder-new", "Nouveau dossier",
               lambda _b: self.action_nouveau_dossier())
 
+        # LA BARRE D'ADRESSE DE WINDOWS A DEUX VISAGES, et c'est le second
+        # qu'on n'avait pas : des boutons cliquables, et — sur Ctrl+L, F4 ou
+        # un clic dans le vide à droite du chemin — un champ où l'on TAPE un
+        # chemin. Les deux se relaient dans la même place, comme là-bas.
         self.fil = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.fil.set_name("fil-chemin")
-        barre.pack_start(self.fil, True, True, 6)
+
+        clic_vide = Gtk.EventBox()
+        clic_vide.add(self.fil)
+        clic_vide.connect("button-press-event", self._clic_dans_le_fil)
+
+        self.champ_chemin = Gtk.Entry()
+        self.champ_chemin.set_name("champ-chemin")
+        self.champ_chemin.connect("activate", self._chemin_tape)
+
+        self.adresse = Gtk.Stack()
+        self.adresse.set_transition_type(Gtk.StackTransitionType.NONE)
+        self.adresse.add_named(clic_vide, "miettes")
+        self.adresse.add_named(self.champ_chemin, "champ")
+        barre.pack_start(self.adresse, True, True, 6)
 
         self.cherche = Gtk.SearchEntry()
         self.cherche.set_placeholder_text("Rechercher")
@@ -557,9 +585,28 @@ class Explorateur(Gtk.Window):
             self.etat.set_text("Impossible d'ouvrir ce fichier : %s" % souci)
 
     def au_clavier(self, _cadre, evenement):
+        """Les raccourcis de l'Explorateur, aux touches que Microsoft publie.
+
+        Relus sur sa page « Keyboard shortcuts in Windows » plutôt que de
+        mémoire, et la relecture a servi : **Retour arrière y veut dire
+        « Navigate to the previous folder »**, c'est-à-dire PRÉCÉDENT, pas
+        « dossier parent » comme nous le faisions. Le parent, c'est Alt+Flèche
+        haut. Trois raccourcis de navigation manquaient entièrement
+        (Alt+Gauche, Alt+Droite, Alt+Haut).
+        """
         touche = Gdk.keyval_name(evenement.keyval)
         controle = evenement.state & Gdk.ModifierType.CONTROL_MASK
-        if touche == "BackSpace":
+        alt = evenement.state & Gdk.ModifierType.MOD1_MASK
+        majuscule = evenement.state & Gdk.ModifierType.SHIFT_MASK
+
+        # Navigation : jamais confondue avec de la frappe, donc en premier.
+        if alt and touche == "Left":
+            self.au_precedent()
+            return True
+        if alt and touche == "Right":
+            self.au_suivant()
+            return True
+        if alt and touche == "Up":
             self.au_parent()
             return True
         if touche == "F5":
@@ -568,14 +615,34 @@ class Explorateur(Gtk.Window):
         if controle and touche in ("f", "F"):
             self.cherche.grab_focus()
             return True
-        if touche == "Escape" and self.cherche.get_text():
-            self.cherche.set_text("")
+        if touche == "F4" or (controle and touche in ("l", "L")):
+            self.ouvrir_la_barre_d_adresse()
             return True
-        # LES RACCOURCIS DE WINDOWS, aux memes touches. Ils ne font rien quand
-        # le champ de recherche a le focus : Ctrl+C y doit copier du texte,
-        # pas des fichiers.
-        if self.cherche.has_focus():
+        if touche == "Escape":
+            if self.barre_d_adresse_ouverte():
+                self.fermer_la_barre_d_adresse()
+                return True
+            if self.cherche.get_text():
+                self.cherche.set_text("")
+                return True
+        if controle and majuscule and touche in ("n", "N"):
+            self.action_nouveau_dossier()
+            return True
+        if controle and touche in ("n", "N"):
+            self.action_nouvelle_fenetre()
+            return True
+
+        # LES RACCOURCIS QUI AGISSENT SUR DES FICHIERS s'arrêtent net dès
+        # qu'on est en train d'écrire. Sans cette barrière, Suppr frappé au
+        # milieu d'un chemin enverrait la sélection à la corbeille, et Retour
+        # arrière quitterait le dossier au lieu d'effacer une lettre — ce
+        # dernier défaut était là, dans le champ de recherche, depuis le
+        # premier jour.
+        if self.cherche.has_focus() or self.champ_chemin.has_focus():
             return False
+        if touche == "BackSpace":
+            self.au_precedent()
+            return True
         if controle and touche in ("h", "H"):
             self.action_basculer_caches()
             return True
@@ -686,6 +753,46 @@ class Explorateur(Gtk.Window):
             self.fil.pack_start(bouton, False, False, 0)
         self.fil.show_all()
 
+    # ---- La barre d'adresse qu'on peut taper --------------------------------
+    def barre_d_adresse_ouverte(self):
+        return self.adresse.get_visible_child_name() == "champ"
+
+    def ouvrir_la_barre_d_adresse(self):
+        """Ctrl+L, F4, ou un clic dans le vide : le chemin devient un champ."""
+        self.champ_chemin.set_text(self.dossier)
+        self.adresse.set_visible_child_name("champ")
+        self.champ_chemin.grab_focus()
+        self.champ_chemin.select_region(0, -1)
+
+    def fermer_la_barre_d_adresse(self):
+        self.adresse.set_visible_child_name("miettes")
+        self.vue.grab_focus()
+
+    def _clic_dans_le_fil(self, _boite, _evenement):
+        # Les boutons du chemin mangent leur propre clic : on n'arrive ici que
+        # pour le vide à leur droite, exactement comme dans Windows.
+        self.ouvrir_la_barre_d_adresse()
+        return True
+
+    def _chemin_tape(self, champ):
+        """Entrée dans le champ : y aller, ou DIRE pourquoi on n'y va pas.
+
+        Un champ qui avale un chemin faux sans rien dire ferait croire qu'il a
+        obéi. On garde donc le champ ouvert avec le texte fautif, et la barre
+        d'état nomme la raison.
+        """
+        vise = os.path.abspath(os.path.expanduser(champ.get_text().strip()))
+        if os.path.isdir(vise):
+            self.fermer_la_barre_d_adresse()
+            self.aller(vise)
+            return
+        if os.path.isfile(vise):
+            self.fermer_la_barre_d_adresse()
+            self.aller(os.path.dirname(vise))
+            self.ouvrir_avec_le_systeme(vise)
+            return
+        self._dire("Ce dossier n'existe pas : %s" % vise)
+
     # ---- Le clic droit, et ce qu'on peut faire d'un fichier ----------------
     #
     # C'était le plus gros écart restant avec Windows. On pouvait regarder, pas
@@ -756,7 +863,10 @@ class Explorateur(Gtk.Window):
             menu.append(Gtk.SeparatorMenuItem())
             entree("Propriétés", self.action_proprietes, len(choisis) == 1)
         else:
-            entree("Nouveau dossier", self.action_nouveau_dossier)
+            entree("Nouveau dossier", self.action_nouveau_dossier,
+                   raccourci="Ctrl+Maj+N")
+            entree("Nouvelle fenêtre", self.action_nouvelle_fenetre,
+                   raccourci="Ctrl+N")
             entree("Coller", self.action_coller, bool(self.presse_papier),
                    "Ctrl+V")
             menu.append(Gtk.SeparatorMenuItem())
@@ -935,6 +1045,22 @@ class Explorateur(Gtk.Window):
             self._dire("Création impossible : %s" % souci.strerror)
             return
         self.peupler()
+
+    def action_nouvelle_fenetre(self):
+        """Ctrl+N : une seconde fenêtre sur le même dossier.
+
+        On relance le programme qui tourne (`sys.argv[0]`) plutôt qu'un nom
+        deviné : s'il s'exécute, celui-là existe forcément.
+        """
+        programme = os.path.abspath(sys.argv[0])
+        if not os.path.exists(programme):
+            programme = "grenos-fichiers"
+        try:
+            subprocess.Popen([programme, self.dossier],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        except OSError as souci:
+            self._dire("Nouvelle fenêtre impossible : %s" % souci)
 
     def action_proprietes(self):
         choisis = self.chemins_choisis()
