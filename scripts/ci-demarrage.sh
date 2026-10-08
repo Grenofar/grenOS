@@ -557,13 +557,9 @@ done
 python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-nouveau-dossier.ppm" || true
 grep -a 'grenos: fichiers : Ctrl+Maj+N' "$RUNNER_TEMP/serial.log" \
   | tr -d '[:cntrl:]' | sed 's/^.*grenos: /  /' || true
-cree=$(grep -ac 'grenos: fichiers : Ctrl+Maj+N -> dossier cree' "$RUNNER_TEMP/serial.log" || true)
-refus=$(grep -ac 'grenos: fichiers : Ctrl+Maj+N refuse' "$RUNNER_TEMP/serial.log" || true)
-if [ "$cree" -ge 1 ] && [ "$refus" -ge 1 ]; then
-  echo "fichiers: Ctrl+Maj+N ECRIT puis REFUSE — notre explorateur agit sur le disque"
-else
-  echo "::warning::Ctrl+Maj+N : $cree creation(s), $refus refus — attendu au moins 1 et 1 (rapporte, pas bloquant)"
-fi
+# Le verdict est rendu plus bas, dans la region bloquante — meme raison que
+# pour Ctrl+H, et on ne le mesure QU UNE FOIS : deux mesures d une meme chose
+# finissent par diverger.
 
 # --- ET LE RENOMMER : F2 sur le dossier qu on vient de creer --------------
 # Creer choisit desormais le dossier neuf, comme Windows — c est ce qui rend
@@ -895,6 +891,35 @@ elif [ "$apres" -gt "$avant" ]; then
 else
   echo "::error::Ctrl+H a repondu mais le compte n a pas monte ($avant -> $apres)."
   MUET=1
+fi
+
+# ET IL SAIT ECRIRE : Ctrl+Maj+N cree un dossier, puis REFUSE le meme.
+#
+# VU VERT DEUX FOIS (37810436377, 37816092066), les deux fois 16 puis 17 et
+# un refus — regle inchangee depuis le 12 septembre.
+#
+# Ce qu elle empeche : qu on publie un explorateur qui ne sait plus rien
+# creer. Ctrl+H prouve qu il ecoute, et un explorateur qui ecoute sans
+# pouvoir ecrire est une visionneuse. Les deux sens comptent : sans le refus,
+# la ligne serait une assertion morte — vraie, stable, incapable de se
+# tromper comme de trouver quoi que ce soit.
+apresn=$(grep -a 'grenos: fichiers : Ctrl+Maj+N -> dossier cree' "$RUNNER_TEMP/serial.log" \
+         | tail -1 | sed -n 's/.*, \([0-9]*\) element.*/\1/p')
+refus=$(grep -ac 'grenos: fichiers : Ctrl+Maj+N refuse' "$RUNNER_TEMP/serial.log" || true)
+if [ -z "$apresn" ]; then
+  echo "::error::Ctrl+Maj+N n a rien cree — la touche n est pas arrivee, ou la creation est cassee."
+  MUET=1
+elif [ -z "$apres" ]; then
+  echo "::error::On ne sait pas combien d elements il y avait avant Ctrl+Maj+N."
+  MUET=1
+elif [ "$apresn" -le "$apres" ]; then
+  echo "::error::Ctrl+Maj+N a repondu mais le compte n a pas monte ($apres -> $apresn)."
+  MUET=1
+elif [ "$refus" -lt 1 ]; then
+  echo "::error::Ctrl+Maj+N a cree deux fois le meme dossier : le garde ne refuse plus rien."
+  MUET=1
+else
+  echo "prouve: Ctrl+Maj+N ECRIT ($apres -> $apresn) puis REFUSE — notre explorateur agit sur le disque"
 fi
 
 # L'installateur a-t-il OUVERT SA FENETRE ?
