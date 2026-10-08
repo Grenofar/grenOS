@@ -975,7 +975,15 @@ class Explorateur(Gtk.Window):
             if not os.path.exists(source):
                 soucis.append(os.path.basename(source) + " a disparu")
                 continue
-            if os.path.abspath(source) == os.path.abspath(self.dossier):
+            # UN DOSSIER NE SE COLLE NI DANS LUI-MEME NI PLUS BAS DANS SA
+            # PROPRE DESCENDANCE. Le premier cas etait vu ; le second non, et
+            # il est bien pire : mesure ici, `copytree` recopie sa cible dans
+            # sa cible — 99 niveaux en moins de huit secondes, jusqu a remplir
+            # le disque de quelqu un. Windows refuse ce geste, nous aussi.
+            racine = os.path.abspath(source)
+            ici = os.path.abspath(self.dossier)
+            if ici == racine or (os.path.isdir(source)
+                                 and ici.startswith(racine + os.sep)):
                 soucis.append("on ne colle pas un dossier dans lui-même")
                 continue
             cible = self._nom_libre(self.dossier, os.path.basename(source))
