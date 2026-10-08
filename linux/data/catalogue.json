@@ -532,14 +532,14 @@
     },
     {
       "slug": "whatsapp",
-      "nom": "WhatsApp",
+      "nom": "WhatsApp (ZapZap)",
       "rayon": "Internet",
-      "editeur": "Alberto Mimbrero",
-      "description": "WhatsApp Web dans une fenêtre à part, avec les notifications du bureau. Ce n'est pas une application de Meta : c'est une enveloppe autour du site.",
-      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/io.github.mimbrero.WhatsAppDesktop.png",
+      "editeur": "Rafael Tosta (ZapZap)",
+      "description": "WhatsApp Web dans une fenêtre à part, avec les notifications du bureau. Ce n'est pas une application de Meta, qui n'en publie aucune pour Linux : c'est une enveloppe autour du site, faite par la communauté.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.rtosta.zapzap.png",
       "source": "flatpak",
-      "identifiant": "io.github.mimbrero.WhatsAppDesktop",
-      "site": "https://github.com/mimbrero/WhatsApp-Desktop"
+      "identifiant": "com.rtosta.zapzap",
+      "site": "https://rtosta.com/zapzap/"
     },
     {
       "slug": "element",

@@ -29,6 +29,10 @@ SECTIONS = ("main", "contrib", "non-free")
 
 BUCKET = "catalogue"
 OBJET = "magasin.json"
+# L'appstream d'une application Flathub : 200 si elle existe, 404 si elle a
+# ete retiree. C'est la seule reponse qui dise la verite sur le bouton
+# « Installer » — son icone, elle, survit au paquet sur le CDN.
+APPSTREAM = "https://flathub.org/api/v2/appstream/%s"
 ICI = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.join(ICI, "..", "data", "catalogue.json")
 
@@ -140,6 +144,45 @@ def logo_repond(application):
         return application["slug"], "muet"
 
 
+def flatpak_existe(application):
+    """Cette fiche Flathub designe-t-elle encore une application ?
+
+    LE LOGO NE REPOND PAS A CETTE QUESTION, et c'est la tout le sujet :
+    `io.github.mimbrero.WhatsAppDesktop` a ete retire de Flathub, son
+    appstream rend 404 — et son icone rend toujours 200, parce qu'un fichier
+    laisse sur un CDN survit au paquet. Le controle des logos disait donc oui
+    sur un bouton qui n'installait rien.
+
+    Un paquet Debian absent fait deja echouer la publication. Le meme defaut
+    du cote Flathub ne regardait personne, pour 86 fiches sur 99.
+
+    Trois reponses, comme pour les logos : oui, non, ou muette. « Non » veut
+    dire que Flathub nous dit lui-meme que cette application n'existe plus.
+    Tout le reste — 403, 429, une coupure — est le reseau, pas le catalogue,
+    et ne doit jamais priver quelqu'un d'un catalogue neuf.
+    """
+    if application["source"] != "flatpak":
+        return application["slug"], "sans objet"
+    requete = urllib.request.Request(
+        APPSTREAM % application["identifiant"],
+        headers={"User-Agent": "grenOS"})
+    try:
+        with urllib.request.urlopen(requete, timeout=25) as reponse:
+            donnees = json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as souci:
+        if souci.code in (404, 410):
+            return application["slug"], f"non ({souci.code})"
+        return application["slug"], f"muet ({souci.code})"
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        return application["slug"], "muet"
+    # Une reponse sans nom n'est pas une preuve d'absence : on ne l'a jamais
+    # vue sur une application vivante, mais on ne l'a jamais vue sur une
+    # application morte non plus. On la dit, on ne conclut pas.
+    if not (donnees or {}).get("name"):
+        return application["slug"], "muet (sans nom)"
+    return application["slug"], "oui"
+
+
 def rien_n_a_disparu(applications, url):
     """Le catalogue a-t-il perdu une application en route ?
 
@@ -185,6 +228,22 @@ def verifier_aux_sources(applications):
             if absents:
                 sys.exit("Ces paquets n'existent pas dans trixie, "
                          "le bouton Installer echouerait : " + ", ".join(absents))
+
+    flatpaks = [a for a in applications if a["source"] == "flatpak"]
+    if flatpaks:
+        with concurrent.futures.ThreadPoolExecutor(8) as reunion:
+            dits = sorted(reunion.map(flatpak_existe, flatpaks))
+        partis = [slug for slug, etat in dits if etat.startswith("non")]
+        sourds = [f"{slug} {etat[4:]}".strip() for slug, etat in dits
+                  if etat.startswith("muet")]
+        print(f"applications Flathub : "
+              f"{sum(1 for _, e in dits if e == 'oui')}/{len(dits)} existent")
+        if sourds:
+            print("  sans verdict (le reseau, pas le catalogue) : "
+                  + ", ".join(sourds))
+        if partis:
+            sys.exit("Flathub ne connait plus ces applications, le bouton "
+                     "Installer n'installerait rien : " + ", ".join(partis))
 
     with concurrent.futures.ThreadPoolExecutor(8) as reunion:
         reponses = sorted(reunion.map(logo_repond, applications))
