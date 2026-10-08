@@ -250,6 +250,11 @@ class Explorateur(Gtk.Window):
         # dessus. `couper` dit si le collage deplace ou duplique.
         self.presse_papier = []
         self.couper = False
+        # LA BARRE D ETAT DISAIT « 10 masques » ET RIEN NE PERMETTAIT DE LES
+        # VOIR. C est ma propre faute, et c est la forme que ce depot attrape
+        # depuis des semaines : une promesse a l ecran sans rien derriere.
+        # Windows a la meme bascule, au meme raccourci.
+        self.montrer_caches = False
         self.dossier = depart or os.path.expanduser("~")
 
         corps = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -571,6 +576,9 @@ class Explorateur(Gtk.Window):
         # pas des fichiers.
         if self.cherche.has_focus():
             return False
+        if controle and touche in ("h", "H"):
+            self.action_basculer_caches()
+            return True
         if touche == "F2":
             self.action_renommer()
             return True
@@ -605,7 +613,8 @@ class Explorateur(Gtk.Window):
         for nom in noms:
             if nom.startswith("."):
                 caches += 1
-                continue
+                if not self.montrer_caches:
+                    continue
             complet = os.path.join(self.dossier, nom)
             fichier = Gio.File.new_for_path(complet)
             try:
@@ -751,6 +760,10 @@ class Explorateur(Gtk.Window):
             entree("Coller", self.action_coller, bool(self.presse_papier),
                    "Ctrl+V")
             menu.append(Gtk.SeparatorMenuItem())
+            menu.append(Gtk.SeparatorMenuItem())
+            entree("Masquer les fichiers cachés" if self.montrer_caches
+                   else "Afficher les fichiers cachés",
+                   self.action_basculer_caches, raccourci="Ctrl+H")
             entree("Actualiser", self.peupler, raccourci="F5")
 
         menu.show_all()
@@ -900,6 +913,10 @@ class Explorateur(Gtk.Window):
         else:
             self._dire("%d élément(s) mis à la corbeille." % faits)
 
+    def action_basculer_caches(self):
+        self.montrer_caches = not self.montrer_caches
+        self.peupler()
+
     def action_nouveau_dossier(self):
         nom = self._demander("Nouveau dossier", "Nom du dossier :",
                              "Nouveau dossier")
@@ -979,8 +996,11 @@ class Explorateur(Gtk.Window):
         elif choisis == 1:
             texte += "   ·   1 sélectionné"
         if getattr(self, "caches", 0):
-            texte += "   ·   %d masqué%s" % (self.caches,
-                                             "s" if self.caches > 1 else "")
+            # Quand ils sont montres, ils sont DEJA dans le total : les
+            # recompter comme « masques » serait mentir deux fois.
+            texte += "   ·   %d masqué%s%s" % (
+                self.caches, "s" if self.caches > 1 else "",
+                " (affichés)" if self.montrer_caches else "")
         self.etat.set_text(texte)
 
 
