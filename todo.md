@@ -212,8 +212,8 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | # | Écran | État |
 |---|---|---|
 | I1 | Au tout début **en anglais automatiquement**, puis « Welcome to grenOS », « configurons votre ordinateur en quelques étapes », un bouton **Start** | [à faire] |
-| I2 | **Langue** — toutes les langues du monde, ou anglais et français si c'est trop long —, **région**, **format de date et d'heure**, **en ligne pour avoir l'heure**, bouton Continuer | [écrit] à moitié : le pays existe, le reste non |
-| I3 | **Clavier** : azerty, qwerty, etc., **avec un champ pour le tester**, bouton Continuer | [écrit] pour le choix ; le champ d'essai : [à faire] |
+| I2 | **Langue** — toutes les langues du monde, ou anglais et français si c'est trop long —, **région**, **format de date et d'heure**, **en ligne pour avoir l'heure**, bouton Continuer | [écrit] à moitié : le pays et le fuseau existent. **L'heure en ligne était une promesse vide** — l'interrupteur des Réglages appelle `set-ntp`, et aucun démon n'était livré ; corrigé le 14 octobre, avec un garde. La **langue**, elle, demande d'abord que nos fenêtres soient traduisibles : aucune ne l'est, tout le texte est du français en dur |
+| I3 | **Clavier** : azerty, qwerty, etc., **avec un champ pour le tester**, bouton Continuer | **[prouvé]** — et je l'avais marqué « à faire » à tort : le champ existe (`grenos-premier:215`), la bascule est immédiate (`clavier.appliquer_maintenant`), 16 dispositions. Démenti en relisant le code, pas en le croyant |
 | I4 | **Connexion à Internet** : une liste nette et fluide des réseaux, le mot de passe au clic, un bouton « continuer hors connexion », puis Continuer | [à faire] |
 | I5 | **Votre compte** : un nom qui devient `…@grenos`, un mot de passe au login s'il le souhaite, Continuer | [prouvé] pour le nom et le compte ; le mot de passe optionnel ici : [à faire] |
 | I6 | **Apparence** : sombre ou clair ou auto, choix de couleurs, **aperçu du bureau à droite**, Continuer | [à faire] |

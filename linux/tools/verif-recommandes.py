@@ -76,6 +76,8 @@ AVIS = {
     "unzip": "PRIS — sans lui, pas un seul .zip ne s ouvre",
     "xz-utils": "PRIS — sans lui, pas de .tar.xz, le format de nos propres paquets",
     "fwupd-amd64-signed": "PRIS — micrologiciel signe ; fwupd-signed n existe pas, c est ce nom",
+    "systemd-timesyncd": "PRIS — sans lui, l interrupteur d horloge des Reglages ne regle rien, et une date fausse invalide tout TLS",
+    "time-daemon": "PRIS par systemd-timesyncd, qui le fournit",
     "usb.ids": "LAISSE — nos lectures USB viennent de sysfs, pas d une base de noms",
     "pci.ids": "DEJA LA — libpci3 en DEPEND strictement, lspci nomme donc les cartes",
     "busybox": "LAISSE — initramfs-tools s'en passe, l'image a un vrai shell",

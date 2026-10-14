@@ -1311,6 +1311,50 @@ else
     echo "grenos: xarchiver n est pas livre, rien a verifier"
 fi
 
+echo "--- grenOS : l horloge automatique a-t-elle un demon derriere ---"
+# HUITIEME MORSURE DE `--apt-recommends false`.
+#
+# `grenos-parametres` offre un interrupteur « mettre l heure a l heure par le
+# reseau ». Il appelle `timedatectl set-ntp true`, qui ne fait qu ACTIVER une
+# unite : sans demon, il n y a rien a activer. `systemd` ne fait que
+# recommander `systemd-timesyncd | time-daemon`, donc les deux etaient absents
+# — nomme par notre propre verif-recommandes.py sous « reclame par 1 :
+# systemd ».
+#
+# Et la consequence depasse l horloge : une machine dont la date est fausse ne
+# peut valider aucun certificat TLS. Ni Flathub, ni notre depot de mise a
+# jour. C est la panne de ca-certificates du 26 septembre par un autre chemin,
+# et elle frappe d abord les machines sans pile au BIOS.
+#
+# Le garde est ancre sur ce que le CODE OFFRE, pas sur une liste de paquets :
+# le jour ou l interrupteur disparait, il se tait tout seul.
+if grep -q 'set-ntp' /usr/lib/grenos/heure.py 2> /dev/null; then
+    demon=""
+    if [ -f /usr/lib/systemd/system/systemd-timesyncd.service ]; then
+        demon="systemd-timesyncd"
+    fi
+    # N importe quel autre demon (chrony, ntpsec) se declare la : c est le
+    # repertoire que timedated lui-meme consulte. Chercher seulement
+    # systemd-timesyncd refuserait une image parfaitement reglee autrement.
+    if [ -z "$demon" ]; then
+        for declaration in /usr/lib/systemd/ntp-units.d/*; do
+            if [ -f "$declaration" ]; then
+                demon=$(basename "$declaration")
+                break
+            fi
+        done
+    fi
+    if [ -z "$demon" ]; then
+        echo "grenos: les Reglages offrent la mise a l heure automatique," >&2
+        echo "grenos: et AUCUN demon ne la ferait : set-ntp activerait une" >&2
+        echo "grenos: unite qui n existe pas, et la date resterait fausse" >&2
+        exit 1
+    fi
+    echo "grenos: l horloge automatique a son demon : $demon"
+else
+    echo "grenos: rien n offre la mise a l heure automatique, rien a verifier"
+fi
+
 echo "--- grenOS : menage ---"
 
 rm -f /usr/share/applications/xfce4-about.desktop

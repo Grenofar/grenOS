@@ -134,6 +134,25 @@ steam-devices
 ## il est seulement « fourni » par celui-ci. Vérifié dans l'index.
 fwupd-amd64-signed
 
+## L'HORLOGE : UN INTERRUPTEUR DANS LES RÉGLAGES, ET RIEN DERRIÈRE.
+##
+## `grenos-parametres:950` offre « mettre l'heure à l'heure par le réseau »,
+## qui appelle `timedatectl set-ntp true`. Or `set-ntp` ne fait qu'activer une
+## unité : il faut un démon pour que l'heure bouge. `systemd` ne fait que
+## **recommander** `systemd-timesyncd | time-daemon`, et avec
+## `--apt-recommends false` les deux sont absents — vérifié par notre propre
+## `verif-recommandes.py`, qui les nomme tous les deux sous « réclamé par
+## 1 : systemd ». Huitième morsure du même piège.
+##
+## ET LA CONSÉQUENCE DÉPASSE L'HORLOGE. Une machine dont la date est fausse ne
+## peut pas valider un certificat TLS : ni Flathub, ni notre dépôt de mise à
+## jour, ni rien de ce qui est signé. C'est exactement la panne de
+## `ca-certificates` du 26 septembre, par un autre chemin — et elle frappe
+## d'abord les machines sans pile au BIOS, donc les plus anciennes.
+##
+## 203 Kio.
+systemd-timesyncd
+
 ## Le Bluetooth : le service, l'outil en ligne de commande dont notre fenêtre
 ## Connexions se sert, et de quoi envoyer le son vers un casque sans fil.
 bluez
