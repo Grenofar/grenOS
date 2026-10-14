@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=grenHub
+Comment=L'état complet de la machine, et un diagnostic qui le vérifie
+Exec=grenos-hub
+Icon=grenos-hub
+Terminal=false
+Categories=System;

@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""grenHub — l'état complet de la machine, et un diagnostic qui l'éprouve.
+
+Demandé mot pour mot : « une application centrale qui affiche l'état complet
+de la machine », et « surtout, un mode diagnostic automatique capable de
+tester CPU, RAM, stockage, réseau, GPU, USB, et de produire un rapport ».
+
+Deux moitiés, et la séparation est tout l'intérêt :
+
+* le haut **lit** — processeur, mémoire, carte graphique, disques, réseau,
+  USB, température, batterie, services en échec. Rien n'est touché, rien ne
+  coûte ;
+* le bas **éprouve** — il fait calculer, écrire, relire, et il va chercher le
+  réseau. C'est là que se trouve la différence entre « la machine dit qu'elle
+  a 8 Gio » et « 8 Gio écrits et relus à l'identique ».
+
+Le diagnostic part **après** que la fenêtre est affichée, et dans un fil.
+C'est une règle payée cher : `vulkaninfo` a laissé la page Jeux vide
+vingt-cinq secondes, et personne ne savait si elle était plantée.
+
+Et une chose qu'il ne faut pas enjoliver : ce que grenHub affiche de son
+matériel à lui, personne ici ne l'a jamais vu. La machine d'essai a une carte,
+un disque, aucune batterie et aucune sonde de température. C'est précisément
+pour ça que cette fenêtre existe — pour qu'il puisse enfin me dire ce que sa
+machine répond, au lieu que je le devine.
+"""
+import sys
+import threading
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+import materiel  # noqa: E402
+import sante  # noqa: E402
+
+STYLE = """
+.bloc-titre {
+    font-size: 12px;
+    font-weight: 800;
+    color: @texte-faible;
+    letter-spacing: 0.08em;
+}
+.ligne-nom { font-size: 13px; color: @texte-faible; }
+.ligne-valeur { font-size: 13px; font-weight: 600; color: @texte; }
+.verdict-bon { color: #4ade80; font-weight: 700; }
+.verdict-doute { color: #fbbf24; font-weight: 700; }
+.verdict-rate { color: #f87171; font-weight: 700; }
+.detail { font-size: 12px; color: @texte-faible; }
+"""
+
+PASTILLE = {sante.BON: "verdict-bon", sante.DOUTE: "verdict-doute",
+            sante.RATE: "verdict-rate"}
+MOT = {sante.BON: "bon", sante.DOUTE: "a surveiller", sante.RATE: "en echec"}
+AFFICHE = {sante.BON: "Bon", sante.DOUTE: "À surveiller", sante.RATE: "En échec"}
+
+
+def ligne(nom, valeur):
+    """Une ligne « nom : valeur », alignée comme toutes les autres."""
+    boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+    gauche = Gtk.Label(label=nom, xalign=0)
+    gauche.get_style_context().add_class("ligne-nom")
+    gauche.set_size_request(190, -1)
+    droite = Gtk.Label(label=str(valeur), xalign=0)
+    droite.get_style_context().add_class("ligne-valeur")
+    droite.set_line_wrap(True)
+    droite.set_selectable(True)
+    boite.pack_start(gauche, False, False, 0)
+    boite.pack_start(droite, True, True, 0)
+    return boite
+
+
+def bloc(titre, lignes):
+    """Un pavé de l'état : un intitulé, puis ses lignes."""
+    boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+    etiquette = Gtk.Label(label=titre.upper(), xalign=0)
+    etiquette.get_style_context().add_class("bloc-titre")
+    boite.pack_start(etiquette, False, False, 0)
+    for nom, valeur in lignes:
+        boite.pack_start(ligne(nom, valeur), False, False, 0)
+    return grenosui.carte(boite)
+
+
+class Hub(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="grenHub")
+        grenosui.poser_taille(self, 900, 660)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_icon_name("grenos-hub")
+        self.connect("destroy", Gtk.main_quit)
+        grenosui.chronometrer(self, "grenHub")
+
+        self.blocs = 0
+        self.resultats = []
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        colonne.set_margin_top(24)
+        colonne.set_margin_bottom(24)
+        colonne.set_margin_start(24)
+        colonne.set_margin_end(24)
+        defilement.add(colonne)
+        self.add(defilement)
+
+        colonne.pack_start(grenosui.titre(
+            "grenHub",
+            "Tout ce que cette machine sait d'elle-même, et un diagnostic qui "
+            "le vérifie au lieu de le croire."), False, False, 0)
+
+        for titre, lignes in self.etat():
+            colonne.pack_start(bloc(titre, lignes), False, False, 0)
+            self.blocs += 1
+
+        colonne.pack_start(self.coin_diagnostic(), False, False, 0)
+
+    # -- la moitié qui lit --------------------------------------------------
+
+    def etat(self):
+        """Les pavés de l'état, dans l'ordre où on veut les lire."""
+        machine = sante.demarrage()
+        matos = materiel.resume()
+        paves = []
+
+        paves.append(("La machine", [
+            ("Nom", machine["nom_machine"]),
+            ("Version", machine["version"]),
+            ("Noyau Linux", machine["noyau"]),
+            ("Allumée depuis", sante.duree_lisible(machine["debout"])),
+            ("Genre", "machine virtuelle" if matos["virtuelle"]
+             else "machine réelle"),
+        ]))
+
+        paves.append(("Processeur et mémoire", [
+            ("Processeur", matos["processeur"]),
+            ("Cœurs", matos["coeurs"]),
+            ("Mémoire vive", "%s Go, dont %s Go libres"
+             % (grenosui.nombre(matos["memoire"]),
+                grenosui.nombre(matos["memoire_libre"]))),
+        ]))
+
+        paves.append(("Affichage", [
+            ("Carte", matos["carte"] or "carte inconnue"),
+            ("Pilote", matos["pilote"] or "aucun pilote nommé"),
+        ]))
+
+        disques = matos.get("disques") or []
+        lignes = [(d.get("nom", "disque"),
+                   "%s — %s" % (d.get("taille", "?"), d.get("genre", "?")))
+                  for d in disques]
+        paves.append(("Disques", lignes or [("Aucun", "rien de monté")]))
+
+        cartes = sante.cartes_reseau()
+        lignes = [(c["nom"], "%s, %s%s"
+                   % (c["genre"], c["etat"],
+                      ", " + c["adresse"] if c["adresse"] else ""))
+                  for c in cartes]
+        paves.append(("Réseau", lignes or
+                      [("Aucune", "cette machine n'a pas de carte réseau")]))
+
+        usb = sante.peripheriques_usb()
+        lignes = [(a["nom"], ", ".join(a["pilotes"]) or "aucun pilote")
+                  for a in usb[:8]]
+        if len(usb) > 8:
+            lignes.append(("…", "et %d autre(s)" % (len(usb) - 8)))
+        paves.append(("USB", lignes or [("Aucun", "rien de branché")]))
+
+        chaleurs = sante.temperatures()
+        lignes = [(nom, "%s °C" % grenosui.nombre(degres, 0))
+                  for nom, degres in chaleurs[:6]]
+        pile = sante.batterie()
+        if pile:
+            lignes.append(("Batterie", "%s %%, %s"
+                           % (pile["charge"] if pile["charge"] is not None
+                              else "?", pile["etat"])))
+        paves.append(("Température et énergie", lignes or
+                      [("Aucune sonde", "cette machine n'en déclare pas")]))
+
+        echecs = sante.unites_en_echec()
+        paves.append(("Services", [("En échec", e) for e in echecs] or
+                      [("Tout va bien", "aucun service en échec")]))
+        return paves
+
+    # -- la moitié qui éprouve ---------------------------------------------
+
+    def coin_diagnostic(self):
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        etiquette = Gtk.Label(label="DIAGNOSTIC", xalign=0)
+        etiquette.get_style_context().add_class("bloc-titre")
+        boite.pack_start(etiquette, False, False, 0)
+
+        self.verdict = Gtk.Label(
+            label="Essais en cours — le processeur, la mémoire, le disque, "
+                  "le réseau, l'affichage, l'USB et les services.", xalign=0)
+        self.verdict.get_style_context().add_class("detail")
+        self.verdict.set_line_wrap(True)
+        boite.pack_start(self.verdict, False, False, 0)
+
+        self.liste = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        boite.pack_start(self.liste, False, False, 0)
+
+        self.relancer = grenosui.bouton("Relancer le diagnostic",
+                                        self.au_clic)
+        self.relancer.set_sensitive(False)
+        boite.pack_start(self.relancer, False, False, 0)
+        return grenosui.carte(boite)
+
+    def au_clic(self, _bouton=None):
+        for enfant in self.liste.get_children():
+            self.liste.remove(enfant)
+        self.resultats = []
+        self.relancer.set_sensitive(False)
+        self.verdict.set_text("Essais en cours…")
+        self.lancer()
+
+    def lancer(self):
+        """Partir dans un fil : la fenêtre ne doit jamais attendre."""
+        fil = threading.Thread(target=self._travail, daemon=True)
+        fil.start()
+
+    def _travail(self):
+        resultats = sante.diagnostic(
+            rapporter=lambda r: GLib.idle_add(self._une_ligne, r))
+        GLib.idle_add(self._fini, resultats)
+
+    def _une_ligne(self, resultat):
+        nom, etat, detail = resultat
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        gauche = Gtk.Label(label=nom, xalign=0)
+        gauche.get_style_context().add_class("ligne-nom")
+        gauche.set_size_request(150, -1)
+        pastille = Gtk.Label(label=AFFICHE[etat], xalign=0)
+        pastille.get_style_context().add_class(PASTILLE[etat])
+        pastille.set_size_request(110, -1)
+        droite = Gtk.Label(label=detail, xalign=0)
+        droite.get_style_context().add_class("detail")
+        droite.set_line_wrap(True)
+        droite.set_selectable(True)
+        boite.pack_start(gauche, False, False, 0)
+        boite.pack_start(pastille, False, False, 0)
+        boite.pack_start(droite, True, True, 0)
+        self.liste.pack_start(boite, False, False, 0)
+        boite.show_all()
+        grenosui.dire("hub : diagnostic %s %s" % (nom, MOT[etat]))
+        return False
+
+    def _fini(self, resultats):
+        self.resultats = resultats
+        etat, phrase = sante.verdict(resultats)
+        self.verdict.set_text(phrase)
+        self.verdict.get_style_context().add_class(PASTILLE[etat])
+        self.relancer.set_sensitive(True)
+        grenosui.dire("hub : diagnostic termine — %s, %d point(s)"
+                      % (MOT[etat], len(resultats)))
+        return False
+
+
+def main():
+    grenosui.habiller()
+    grenosui.ajouter_style(STYLE)
+    fenetre = Hub()
+    fenetre.show_all()
+    grenosui.dire("hub ouvert, %d bloc(s) d etat" % fenetre.blocs)
+    # Après l'affichage, jamais avant : une fenêtre qui mesure pendant sa
+    # construction est une fenêtre qui paraît plantée.
+    GLib.idle_add(lambda: (fenetre.lancer(), False)[1])
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

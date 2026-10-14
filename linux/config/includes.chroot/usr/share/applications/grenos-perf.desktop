@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=grenPerf
+Comment=Ce qui tourne en arrière-plan, et ce que ça coûte
+Exec=grenos-perf
+Icon=grenos-perf
+Terminal=false
+Categories=System;

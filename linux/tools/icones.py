@@ -615,6 +615,67 @@ def theme(chemin, taille):
     png(chemin, dessin_theme(taille))
 
 
+def hub(chemin, taille):
+    """grenHub : l'etat de la machine — un trace de pouls.
+
+    Le choix se justifie par l'elimination, pas par le gout : la barre porte
+    deja un sac, un dossier, un haut-parleur, une manette, un engrenage, trois
+    barres et une fleche. Un cadre d'ecran avec quelque chose dedans ferait
+    de la bouillie a seize pixels, et c'est exactement la faute des trois
+    prises RJ45 du 26 septembre — on redessine l'idee au lieu d'en changer.
+
+    Un trace de pouls n'est qu'une ligne brisee epaisse : a seize pixels elle
+    fait deux pixels de large et reste lisible, et aucune autre icone du
+    systeme n'a cette forme.
+    """
+    image, u, v = toile(taille)
+
+    points = ((0.08, 0.54), (0.30, 0.54), (0.40, 0.27),
+              (0.54, 0.77), (0.64, 0.47), (0.92, 0.47))
+    for indice in range(len(points) - 1):
+        (x0, y0), (x1, y1) = points[indice], points[indice + 1]
+        melange = indice / (len(points) - 2)
+        couleur = tuple(ACCENT[c] * (1 - melange) + SECOND[c] * melange
+                        for c in range(3))
+        poser(image, segment(u, v, x0, y0, x1, y1, 0.075), couleur, 1.0)
+
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
+def perf(chemin, taille):
+    """grenPerf : une jauge — un arc epais, et une aiguille.
+
+    L'arc est coupe par un masque ANGULAIRE, jamais par une droite. La lecon
+    date du 26 septembre : couper un cercle par une droite fait arriver l'arc
+    au bord en le rasant, l'antialiasing n'a qu'une fraction de pixel sous la
+    dent, et les bouts sortent en pointilles. Invisible dans la formule,
+    evident sur une planche agrandie.
+    """
+    image, u, v = toile(taille)
+
+    cx, cy = 0.5, 0.60
+    rayon, epaisseur = 0.36, 0.085
+    distance = np.hypot(u - cx, v - cy)
+    anneau = np.clip((epaisseur / 2 - np.abs(distance - rayon)) / 0.012, 0, 1)
+
+    # L'angle est mesure depuis le BAS, et c'est tout l'enjeu : une jauge
+    # s'ouvre en bas, comme un compteur de vitesse. Mesure depuis le haut,
+    # elle s'ouvrait en haut et se lisait comme une loupe — vu sur la planche
+    # agrandie, invisible dans la formule.
+    angle = np.degrees(np.arctan2(u - cx, v - cy))
+    ouvert = np.clip((np.abs(angle) - 45.0) / 6.0, 0.0, 1.0)
+    poser(image, anneau * ouvert, ACCENT, 1.0)
+
+    # L'aiguille monte vers la droite : c'est elle qui dit « vite ».
+    poser(image, segment(u, v, cx, cy, cx + 0.19, cy - 0.19, 0.050),
+          ACCENT_CLAIR, 1.0)
+    # Le moyeu, sinon l'aiguille flotte. Petit : a seize pixels un gros moyeu
+    # mange l'aiguille et l'icone devient une pastille.
+    poser(image, np.clip((0.065 - distance) / 0.012, 0, 1), CLAIR, 0.95)
+
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
@@ -640,6 +701,8 @@ def main():
     maj(os.path.join(dossier, 'grenos-maj.png'), taille)
     installateur(os.path.join(dossier, 'grenos-installer.png'), taille)
     theme(os.path.join(dossier, 'grenos-theme.png'), taille)
+    hub(os.path.join(dossier, 'grenos-hub.png'), taille)
+    perf(os.path.join(dossier, 'grenos-perf.png'), taille)
 
 
 if __name__ == '__main__':

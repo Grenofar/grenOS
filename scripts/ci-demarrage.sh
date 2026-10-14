@@ -307,6 +307,80 @@ fi
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
 sleep 2
 
+echo "--- grenHub s ouvre-t-il, et son diagnostic repond-il ---"
+# Demande mot pour mot : « une application centrale qui affiche l etat complet
+# de la machine », et « un mode diagnostic automatique capable de tester CPU,
+# RAM, stockage, reseau, GPU, USB, et de produire un rapport ».
+#
+# Ouvrir la fenetre ne prouverait que la moitie : une page qui AFFICHE un etat
+# sans jamais l eprouver est exactement ce que ce depot passe son temps a
+# attraper. On attend donc les deux lignes — celle de l ouverture, et celle du
+# verdict — et on imprime chaque point du diagnostic, parce qu un verdict
+# global ne designe personne.
+#
+# « hub » ne designe que grenHub dans le menu, et ses trois lettres sont a la
+# meme place en AZERTY qu en QWERTY.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+sleep 4
+for touche in h u b ret; do
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+  sleep 1
+done
+# Le diagnostic ecrit huit mebioctets sur le disque, les relit, et va chercher
+# le reseau : il faut lui laisser le temps de finir avant de le juger.
+sleep 28
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-hub.ppm" || true
+if grep -aq 'hub ouvert' "$RUNNER_TEMP/serial.log"; then
+  grep -a 'hub ouvert' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+else
+  echo "hub: la fenetre ne s est pas annoncee (test non bloquant, a affiner)"
+fi
+grep -a 'hub : diagnostic ' "$RUNNER_TEMP/serial.log" | sed 's/^.*grenos: //'   | tr -d '[:cntrl:]' | sed 's/^/  /' || true
+echo
+if grep -aq 'hub : diagnostic termine' "$RUNNER_TEMP/serial.log"; then
+  grep -a 'hub : diagnostic termine' "$RUNNER_TEMP/serial.log" | tail -1     | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+else
+  echo "hub: le diagnostic n a pas rendu de verdict (test non bloquant, a affiner)"
+fi
+
+echo "--- grenPerf s ouvre-t-il, et NOMME-t-il ce qui tourne ---"
+# « analyser les taches arriere-plan pas necessaires au bon fonctionnement de
+# l OS, et gestion de la RAM ». Compter les services ne suffit pas : la ligne
+# qu on attend donne la REPARTITION, parce qu un compte ne designe personne.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+sleep 4
+for touche in p e r f ret; do
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+  sleep 1
+done
+sleep 14
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-perf.ppm" || true
+if grep -aq 'perf : grenperf ouvert' "$RUNNER_TEMP/serial.log"; then
+  grep -a 'perf : grenperf ouvert' "$RUNNER_TEMP/serial.log" | tail -1     | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+else
+  echo "perf: grenPerf ne s est pas annonce (test non bloquant, a affiner)"
+fi
+
+# DEUX MESURES D UNE MEME CHOSE FINISSENT PAR DIVERGER.
+#
+# La sonde compte les services en marche, grenPerf les compte aussi. Tant que
+# personne ne les compare, rien n empeche l une de dire 17 et l autre 12 — et
+# c est alors celle qu on regarde qu on croit. On les compare donc ici, et le
+# jour ou elles divergent, la ligne le dira.
+sonde=$(grep -a 'grenos: perf : [0-9]* service(s) en marche' "$RUNNER_TEMP/serial.log" \
+        | tail -1 | sed -n 's/.*perf : \([0-9]*\) service.*/\1/p')
+fenetre=$(grep -a 'grenos: perf : grenperf ouvert' "$RUNNER_TEMP/serial.log" \
+          | tail -1 | sed -n 's/.*ouvert, \([0-9]*\) service.*/\1/p')
+if [ -n "$sonde" ] && [ -n "$fenetre" ]; then
+  if [ "$sonde" = "$fenetre" ]; then
+    echo "perf: la sonde et grenPerf comptent pareil ($sonde services)"
+  else
+    echo "perf: ATTENTION la sonde dit $sonde services, grenPerf dit $fenetre"
+  fi
+else
+  echo "perf: une des deux mesures manque, rien a comparer (non bloquant)"
+fi
+
 echo "--- le son repond-il ---"
 # Le seul reproche de Grenofar qu'on n'ait pas encore pu prouver
 # autrement qu'en comptant les sorties. On clique sur le petit

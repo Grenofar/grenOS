@@ -1,0 +1,266 @@
+#!/usr/bin/env python3
+"""grenPerf — ce qui tourne en arrière-plan, et ce que ça coûte vraiment.
+
+Demandé mot pour mot : « un système grenPerf, pour analyser les tâches
+arrière-plan pas nécessaires au bon fonctionnement de l'OS, et gestion de la
+RAM ».
+
+Ce que cette fenêtre fait, et ce qu'elle ne fait pas — il vaut mieux le dire
+en haut du fichier qu'à l'écran d'un utilisateur déçu :
+
+* elle **nomme**. Chaque service en marche reçoit une classe et une raison.
+  C'est le point dur : « 17 services » ne désigne personne, et sans raison
+  écrite, personne ne peut contredire un verdict ;
+* elle **ne coupe rien**. Arrêter un service du système demande root, et une
+  erreur à cet endroit coûte un démarrage. Le jour où un bouton coupera
+  quelque chose, il passera par polkit comme l'installateur, et il sera
+  exercé contre une machine qui ne redémarre pas.
+
+La mémoire est présentée autrement que par la plupart des moniteurs, et c'est
+volontaire : « 3,1 Go sur 4 utilisés » fait peur et ne veut rien dire, parce
+que le cache compte dedans et se rend à la première demande. La ligne qui
+renseigne est celle que le noyau appelle disponible.
+"""
+import sys
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+import perf  # noqa: E402
+
+RAFRAICHIR = 5  # secondes
+
+STYLE = """
+.bloc-titre {
+    font-size: 12px; font-weight: 800; color: @texte-faible;
+    letter-spacing: 0.08em;
+}
+.gros-chiffre { font-size: 26px; font-weight: 800; color: @texte; }
+.sous-chiffre { font-size: 12px; color: @texte-faible; }
+.classe-indispensable { color: #60a5fa; font-weight: 700; }
+.classe-confort { color: #a78bfa; font-weight: 700; }
+.classe-en-trop { color: #fbbf24; font-weight: 700; }
+.classe-inconnu { color: #94a3b8; font-weight: 700; }
+.service-nom { font-size: 13px; font-weight: 600; color: @texte; }
+.service-raison { font-size: 12px; color: @texte-faible; }
+"""
+
+CLASSES = (
+    (perf.INDISPENSABLE, "Indispensables",
+     "les retirer casse quelque chose que tu utilises"),
+    (perf.CONFORT, "De confort",
+     "ils servent, mais la machine marche sans"),
+    (perf.EN_TROP, "En trop ici",
+     "ils ne servent à rien sur cette machine"),
+    (perf.INCONNU, "Que je ne connais pas",
+     "arrivés avec un paquet ; je ne vais pas deviner ce qu'ils font"),
+)
+
+STYLE_DE_CLASSE = {
+    perf.INDISPENSABLE: "classe-indispensable",
+    perf.CONFORT: "classe-confort",
+    perf.EN_TROP: "classe-en-trop",
+    perf.INCONNU: "classe-inconnu",
+}
+
+
+def jauge(nom, valeur, detail):
+    boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+    haut = Gtk.Label(label=nom.upper(), xalign=0)
+    haut.get_style_context().add_class("bloc-titre")
+    milieu = Gtk.Label(label=valeur, xalign=0)
+    milieu.get_style_context().add_class("gros-chiffre")
+    bas = Gtk.Label(label=detail, xalign=0)
+    bas.get_style_context().add_class("sous-chiffre")
+    bas.set_line_wrap(True)
+    boite.pack_start(haut, False, False, 0)
+    boite.pack_start(milieu, False, False, 0)
+    boite.pack_start(bas, False, False, 0)
+    return boite
+
+
+class Perf(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="grenPerf")
+        grenosui.poser_taille(self, 900, 660)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_icon_name("grenos-perf")
+        self.connect("destroy", Gtk.main_quit)
+        grenosui.chronometrer(self, "grenPerf")
+
+        self.bilan = perf.bilan()
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        for cote in ("top", "bottom", "start", "end"):
+            getattr(colonne, "set_margin_" + cote)(24)
+        defilement.add(colonne)
+        self.add(defilement)
+
+        colonne.pack_start(grenosui.titre(
+            "grenPerf",
+            "Ce que grenOS fait tourner quand tu ne lui demandes rien — "
+            "et pourquoi, service par service."), False, False, 0)
+
+        colonne.pack_start(self.coin_chiffres(), False, False, 0)
+        colonne.pack_start(self.coin_services(), False, False, 0)
+        colonne.pack_start(self.coin_gourmands(), False, False, 0)
+        if self.bilan["demarrage"]:
+            colonne.pack_start(self.coin_demarrage(), False, False, 0)
+
+        GLib.timeout_add_seconds(RAFRAICHIR, self.rafraichir)
+
+    def coin_chiffres(self):
+        memoire = self.bilan["memoire"]
+        boite = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=40)
+        self.jauge_services = jauge(
+            "Services en marche", str(len(self.bilan["services"])),
+            "dont %d indispensables"
+            % len(self.bilan["par_classe"][perf.INDISPENSABLE]))
+        boite.pack_start(self.jauge_services, False, False, 0)
+
+        total = memoire.get("total", 0.0)
+        dispo = memoire.get("disponible", 0.0)
+        self.jauge_memoire = jauge(
+            "Mémoire disponible",
+            "%s Go" % grenosui.nombre(dispo),
+            "sur %s Go — dont %s Go de cache, qui se rend à la première "
+            "demande" % (grenosui.nombre(total),
+                         grenosui.nombre(memoire.get("cache", 0.0))))
+        boite.pack_start(self.jauge_memoire, False, False, 0)
+
+        swap = memoire.get("swap_total", 0.0)
+        self.jauge_swap = jauge(
+            "Fichier d'échange",
+            "%s Go" % grenosui.nombre(memoire.get("swap_utilise", 0.0)),
+            ("sur %s Go" % grenosui.nombre(swap)) if swap
+            else "aucun sur cette machine")
+        boite.pack_start(self.jauge_swap, False, False, 0)
+        return grenosui.carte(boite)
+
+    def coin_services(self):
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        etiquette = Gtk.Label(label="CE QUI TOURNE, ET POURQUOI", xalign=0)
+        etiquette.get_style_context().add_class("bloc-titre")
+        boite.pack_start(etiquette, False, False, 0)
+
+        for classe, intitule, explication in CLASSES:
+            services = self.bilan["par_classe"][classe]
+            if not services:
+                continue
+            tete = Gtk.Label(
+                label="%s — %d : %s" % (intitule, len(services), explication),
+                xalign=0)
+            tete.get_style_context().add_class(STYLE_DE_CLASSE[classe])
+            tete.set_line_wrap(True)
+            boite.pack_start(tete, False, False, 0)
+            for nom, raison in services:
+                ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                                spacing=12)
+                gauche = Gtk.Label(label=nom, xalign=0)
+                gauche.get_style_context().add_class("service-nom")
+                gauche.set_size_request(230, -1)
+                droite = Gtk.Label(label=raison, xalign=0)
+                droite.get_style_context().add_class("service-raison")
+                droite.set_line_wrap(True)
+                ligne.pack_start(gauche, False, False, 0)
+                ligne.pack_start(droite, True, True, 0)
+                boite.pack_start(ligne, False, False, 0)
+
+        note = Gtk.Label(
+            label="grenPerf nomme, il ne coupe rien. Arrêter un service du "
+                  "système demande une autorisation, et une erreur à cet "
+                  "endroit coûte un démarrage : le bouton viendra quand il "
+                  "aura été éprouvé contre une machine qui ne redémarre pas.",
+            xalign=0)
+        note.get_style_context().add_class("service-raison")
+        note.set_line_wrap(True)
+        boite.pack_start(note, False, False, 0)
+        return grenosui.carte(boite)
+
+    def coin_gourmands(self):
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        etiquette = Gtk.Label(label="CE QUI PREND LE PLUS DE MÉMOIRE",
+                              xalign=0)
+        etiquette.get_style_context().add_class("bloc-titre")
+        boite.pack_start(etiquette, False, False, 0)
+        self.liste_gourmands = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                                       spacing=4)
+        boite.pack_start(self.liste_gourmands, False, False, 0)
+        self.remplir_gourmands()
+        return grenosui.carte(boite)
+
+    def remplir_gourmands(self):
+        for enfant in self.liste_gourmands.get_children():
+            self.liste_gourmands.remove(enfant)
+        for nom, pid, mega in self.bilan["gourmands"]:
+            ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            gauche = Gtk.Label(label="%s (%d)" % (nom, pid), xalign=0)
+            gauche.get_style_context().add_class("service-nom")
+            gauche.set_size_request(230, -1)
+            droite = Gtk.Label(label="%s Mio" % grenosui.nombre(mega, 0),
+                               xalign=0)
+            droite.get_style_context().add_class("service-raison")
+            ligne.pack_start(gauche, False, False, 0)
+            ligne.pack_start(droite, False, False, 0)
+            self.liste_gourmands.pack_start(ligne, False, False, 0)
+        self.liste_gourmands.show_all()
+
+    def coin_demarrage(self):
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        etiquette = Gtk.Label(label="CE QUI A LE PLUS RETARDÉ LE DÉMARRAGE",
+                              xalign=0)
+        etiquette.get_style_context().add_class("bloc-titre")
+        boite.pack_start(etiquette, False, False, 0)
+        for nom, duree in self.bilan["demarrage"]:
+            ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            gauche = Gtk.Label(label=nom, xalign=0)
+            gauche.get_style_context().add_class("service-nom")
+            gauche.set_size_request(300, -1)
+            droite = Gtk.Label(label=duree, xalign=0)
+            droite.get_style_context().add_class("service-raison")
+            ligne.pack_start(gauche, False, False, 0)
+            ligne.pack_start(droite, False, False, 0)
+            boite.pack_start(ligne, False, False, 0)
+        return grenosui.carte(boite)
+
+    def rafraichir(self):
+        """Seuls les chiffres bougent : la liste des services, non.
+
+        Reconstruire la liste toutes les cinq secondes ferait sauter le
+        défilement sous le doigt de quelqu'un en train de lire.
+        """
+        self.bilan["memoire"] = perf.memoire()
+        self.bilan["gourmands"] = perf.gourmands()
+        memoire = self.bilan["memoire"]
+        for enfant in self.jauge_memoire.get_children():
+            if enfant.get_style_context().has_class("gros-chiffre"):
+                enfant.set_text("%s Go"
+                                % grenosui.nombre(memoire.get("disponible", 0)))
+        self.remplir_gourmands()
+        return True
+
+
+def main():
+    grenosui.habiller()
+    grenosui.ajouter_style(STYLE)
+    fenetre = Perf()
+    fenetre.show_all()
+    classes = fenetre.bilan["par_classe"]
+    grenosui.dire(
+        "perf : grenperf ouvert, %d service(s) — %d indispensable(s), "
+        "%d de confort, %d en trop, %d inconnu(s)"
+        % (len(fenetre.bilan["services"]),
+           len(classes[perf.INDISPENSABLE]), len(classes[perf.CONFORT]),
+           len(classes[perf.EN_TROP]), len(classes[perf.INCONNU])))
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()
