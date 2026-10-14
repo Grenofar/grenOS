@@ -272,7 +272,8 @@ python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || t
 sleep 2
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
 sleep 4
-for touche in g r e n p ret; do
+# recherche-menu: GrenPlace
+for touche in g r e n p l ret; do
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
   sleep 1
 done
@@ -293,6 +294,7 @@ echo "--- le mode Jeux s ouvre-t-il ---"
 # quatre lettres sont a la meme place en AZERTY qu'en QWERTY.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
 sleep 4
+# recherche-menu: Jeux
 for touche in j e u x ret; do
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
   sleep 1
@@ -322,6 +324,7 @@ echo "--- grenHub s ouvre-t-il, et son diagnostic repond-il ---"
 # meme place en AZERTY qu en QWERTY.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
 sleep 4
+# recherche-menu: grenHub
 for touche in h u b ret; do
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
   sleep 1
@@ -349,6 +352,7 @@ echo "--- grenPerf s ouvre-t-il, et NOMME-t-il ce qui tourne ---"
 # qu on attend donne la REPARTITION, parce qu un compte ne designe personne.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
 sleep 4
+# recherche-menu: grenPerf
 for touche in p e r f ret; do
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
   sleep 1
@@ -578,6 +582,7 @@ python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || t
 sleep 2
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
 sleep 4
+# recherche-menu: Explorateur de fichiers
 for touche in e x p l o r ret; do
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
   sleep 1
@@ -698,6 +703,7 @@ echo "--- l accueil est-il vraiment lent, ou seulement premier ---"
 # meme place en AZERTY qu'en QWERTY.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
 sleep 4
+# recherche-menu: Bienvenue
 for touche in b i e n ret; do
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
   sleep 1
@@ -732,6 +738,7 @@ python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || t
 sleep 2
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
 sleep 4
+# recherche-menu: Installer grenOS
 for touche in i n s t q l l ret; do
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
   sleep 1

@@ -148,11 +148,20 @@ class Hub(Gtk.Window):
             ("Pilote", matos["pilote"] or "aucun pilote nommé"),
         ]))
 
+        # `materiel.genre_du_disque()` écrit déjà la phrase — « SSD de 20 Go »,
+        # « amovible de 32 Go ». La refaire ici donnerait deux descriptions
+        # d'une même chose, et elles finiraient par diverger.
+        #
+        # La première version lisait `d["taille"]` et `d["genre"]`, des clés
+        # devinées : `taille` est un **nombre** en gigaoctets, et `genre`
+        # n'existe pas. La capture du 14 octobre affichait donc
+        # « sdb  21.47483648 — ? », avec le point décimal anglais en prime.
+        # Deviner les clés d'une structure voisine coûte exactement cela.
         disques = matos.get("disques") or []
-        lignes = [(d.get("nom", "disque"),
-                   "%s — %s" % (d.get("taille", "?"), d.get("genre", "?")))
+        lignes = [(d["nom"], "%s%s" % (materiel.genre_du_disque(d),
+                                       ", " + d["modele"] if d["modele"] else ""))
                   for d in disques]
-        paves.append(("Disques", lignes or [("Aucun", "rien de monté")]))
+        paves.append(("Disques", lignes or [("Aucun", "aucun disque vu")]))
 
         cartes = sante.cartes_reseau()
         lignes = [(c["nom"], "%s, %s%s"
@@ -245,7 +254,21 @@ class Hub(Gtk.Window):
         boite.pack_start(droite, True, True, 0)
         self.liste.pack_start(boite, False, False, 0)
         boite.show_all()
-        grenosui.dire("hub : diagnostic %s %s" % (nom, MOT[etat]))
+        # UN VERDICT SANS SA RAISON NE DÉSIGNE PERSONNE.
+        #
+        # Le premier passage a rendu « Services en echec » sur le port série,
+        # et il a fallu ouvrir la capture pour espérer savoir lesquels — alors
+        # que le détail était déjà calculé, à l'écran, juste à côté. C'est mot
+        # pour mot la leçon du 2 octobre : « 16 services » ne dit pas lequel
+        # est de trop, et pour lire la liste sans ouvrir une image, il faut
+        # qu'elle tienne sur le port série.
+        #
+        # Seulement quand ça va mal : sept détails à chaque démarrage
+        # noieraient les lignes qui comptent.
+        if etat == sante.BON:
+            grenosui.dire("hub : diagnostic %s %s" % (nom, MOT[etat]))
+        else:
+            grenosui.dire("hub : diagnostic %s %s — %s" % (nom, MOT[etat], detail))
         return False
 
     def _fini(self, resultats):

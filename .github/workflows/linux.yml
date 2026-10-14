@@ -79,6 +79,16 @@ jobs:
       - name: Aucun echappement egare dans nos scripts shell
         run: python3 linux/tools/verif-shell.py
 
+      # La machine d essai ouvre nos applications en tapant dans le menu. Le
+      # bloc de GrenPlace portait ce commentaire : « grenp ne designe que
+      # lui ». C etait vrai — jusqu a ce que grenHub et grenPerf arrivent, et
+      # que grenperf passe avant grenplace dans l ordre alphabetique. La
+      # machine a ouvert grenPerf en croyant ouvrir GrenPlace, et la preuve
+      # bloquante n est jamais venue. L hypothese etait ecrite en toutes
+      # lettres dans un commentaire, ou aucune machine ne la relisait.
+      - name: Chaque recherche du parcours ne designe qu une application
+        run: python3 linux/tools/verif-recherches.py
+
       - name: Faire de la place
         run: |
           df -h /
