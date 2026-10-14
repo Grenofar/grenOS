@@ -1355,6 +1355,50 @@ else
     echo "grenos: rien n offre la mise a l heure automatique, rien a verifier"
 fi
 
+echo "--- grenOS : le Wi-Fi a-t-il de quoi s authentifier ---"
+# NEUVIEME MORSURE DE `--apt-recommends false`, ET LA PLUS COUTEUSE.
+#
+# NetworkManager ne parle pas lui-meme au Wi-Fi. Il passe par
+# wpa_supplicant, qu il atteint PAR D-BUS : le service active a la demande
+# s appelle `fi.w1.wpa_supplicant1`. Et `network-manager` ne fait que le
+# RECOMMANDER — donc il etait absent, et aucune carte ne pouvait se
+# connecter a un reseau WPA, quel que soit le micrologiciel ajoute.
+#
+# C est la cause premiere de « se connecter au Wi-Fi », le geste de sa
+# promesse « sans terminal » que rien n a jamais prouve — et nous cherchions
+# du cote des micrologiciels.
+#
+# CE QUE CE GARDE REGARDE, ET POURQUOI CE FICHIER-LA. On pourrait chercher le
+# binaire ; le chemin exact est `/usr/sbin/wpa_supplicant` et non `/sbin/`,
+# et un garde ecrit de memoire sur l ancien chemin refuserait une image
+# correcte — ce depot l a deja paye deux fois. Mais surtout, le binaire n est
+# pas le maillon : NetworkManager ne le lance pas, il demande le service a
+# D-Bus. C est donc le fichier de service qu il faut exiger, parce que c est
+# celui dont l absence casse la chaine reelle.
+if [ -x /usr/sbin/NetworkManager ]; then
+    manque=""
+    if [ ! -f /usr/share/dbus-1/system-services/fi.w1.wpa_supplicant1.service ]; then
+        manque="$manque le-service-dbus"
+    fi
+    if [ ! -x /usr/sbin/wpa_supplicant ]; then
+        manque="$manque le-programme"
+    fi
+    if [ -n "$manque" ]; then
+        echo "grenos: NetworkManager est livre sans de quoi s authentifier :$manque" >&2
+        echo "grenos: aucune carte ne pourrait rejoindre un reseau WPA" >&2
+        exit 1
+    fi
+    # La base reglementaire n est pas vitale — sans elle le noyau retombe sur
+    # le domaine « monde » — donc elle est dite, jamais exigee.
+    if [ -f /lib/firmware/regulatory.db ]; then
+        echo "grenos: wifi : wpa_supplicant et sa base reglementaire sont la"
+    else
+        echo "grenos: wifi : wpa_supplicant est la, sans base reglementaire"
+    fi
+else
+    echo "grenos: NetworkManager n est pas livre, rien a verifier"
+fi
+
 echo "--- grenOS : menage ---"
 
 rm -f /usr/share/applications/xfce4-about.desktop

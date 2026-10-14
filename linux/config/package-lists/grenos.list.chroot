@@ -153,6 +153,25 @@ fwupd-amd64-signed
 ## 203 Kio.
 systemd-timesyncd
 
+## LE WI-FI NE POUVAIT PAS MARCHER, SUR AUCUNE CARTE, DEPUIS LE PREMIER JOUR.
+##
+## NetworkManager ne parle pas lui-même au Wi-Fi : il passe par
+## wpa_supplicant, qu'il atteint par D-Bus — le service
+## `fi.w1.wpa_supplicant1` est livré par ce paquet. Et `network-manager` ne
+## fait que le **recommander**, donc avec `--apt-recommends false` il était
+## absent. Nommé par notre propre `verif-recommandes.py` sous « réclamé par
+## 1 : network-manager ». Neuvième morsure du même piège.
+##
+## Conséquence : aucune connexion à un réseau WPA/WPA2/WPA3, quelle que soit
+## la carte et quel que soit le micrologiciel ajouté. C'est la cause première
+## de « se connecter au Wi-Fi », le geste de sa promesse « sans terminal » que
+## rien n'a jamais prouvé — et nous cherchions du côté des micrologiciels.
+##
+## `wireless-regdb` va avec : sans la base réglementaire, le noyau retombe sur
+## le domaine « monde », canaux et puissances réduits. 39 Kio.
+wpasupplicant
+wireless-regdb
+
 ## Le Bluetooth : le service, l'outil en ligne de commande dont notre fenêtre
 ## Connexions se sert, et de quoi envoyer le son vers un casque sans fil.
 bluez
