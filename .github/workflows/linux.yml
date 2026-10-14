@@ -69,6 +69,16 @@ jobs:
       - name: Aucune fenetre n interroge le materiel en se dessinant
         run: python3 linux/tools/verif-fenetres.py
 
+      # La construction 38588801230 est morte apres dix-huit minutes sur une
+      # icone nommee « n ». La cause tenait a deux caracteres : une
+      # continuation de ligne dont l anti-slash avait ete mange, arrivee dans
+      # le fichier sous la forme d un \n litteral, que le shell lit comme la
+      # lettre n. `bash -n` ne voit rien — la ligne est du shell valide.
+      # Septieme fois que ce piege mord ce depot, toujours par une edition en
+      # heredoc. Une regle qu on relit ne vaut pas une machine qui refuse.
+      - name: Aucun echappement egare dans nos scripts shell
+        run: python3 linux/tools/verif-shell.py
+
       - name: Faire de la place
         run: |
           df -h /

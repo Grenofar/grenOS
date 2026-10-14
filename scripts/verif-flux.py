@@ -74,11 +74,22 @@ def verifier(chemin):
 
     for numero, ligne in enumerate(sans_crlf.split("\n"), 1):
         nu = ligne.strip()
-        if BARRE_N in ligne:
+        commentaire = nu.startswith("#")
+        # UN GARDE QUI LIT LES COMMENTAIRES REFUSE LE FICHIER QUI L'EXPLIQUE.
+        #
+        # Ce contrôle a refusé le commentaire qui racontait la panne qu'il
+        # sert à prévenir — la phrase citait la séquence, forcément. C'est mot
+        # pour mot la faute du 7 octobre : le garde du service vidéo cherchait
+        # `Before=.*display-manager` dans tout le fichier, et le service porte
+        # un commentaire qui explique précisément de ne pas écrire cette ligne.
+        #
+        # Le retour chariot isolé, lui, reste traqué partout : il coupe le
+        # YAML en deux où qu'il se trouve, commentaire compris.
+        if BARRE_N in ligne and not commentaire:
             fautes.append((numero, "un « n » precede d'une barre oblique inverse"))
         if "\r" in ligne:
             fautes.append((numero, "un retour chariot isole"))
-        if nu.startswith("#") or not nu:
+        if commentaire or not nu:
             continue
         if rafale_hors_chaine(ligne) is not None:
             fautes.append((numero, "une rafale d'espaces au milieu d'une commande, "
