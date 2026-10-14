@@ -37,7 +37,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 |---|---|---|
 | A1 | Compatibilité **NVMe** : voir et utiliser un disque NVMe | [à faire] — rien ne le vérifie, la machine d'essai n'a que du SATA |
 | A2 | Pilotes **USB au-delà du clavier et de la souris** : manette, webcam, casque | [à faire] |
-| A3 | Plus de **matériel Wi-Fi** reconnu | **la cause premiere est trouvee, et ce n'etait pas les micrologiciels** : `wpasupplicant` etait absent, donc aucune carte ne pouvait rejoindre un reseau WPA. Corrige le 14 octobre, avec un garde. Les micrologiciels par carte restent [a faire] |
+| A3 | Plus de **matériel Wi-Fi** reconnu | **la cause première est trouvée, et ce n'étaient pas les micrologiciels** : `wpasupplicant` etait absent, donc aucune carte ne pouvait rejoindre un réseau WPA. Corrigé le 14 octobre, avec un garde. Les micrologiciels par carte restent [à faire] |
 | A4 | **Son fonctionnel à 100 %**, en VirtualBox comme sur l'ISO | [sa main] — la CI entend un son propre, sa machine reste muette ; la page Son nomme maintenant la sortie |
 | A5 | **UEFI/GPT** vérifié et durci pour les machines modernes | [prouvé] pour le démarrage UEFI (partition EFI au secteur 540, OVMF démarre) ; GPT sur disque installé : [à faire] |
 | A6 | **SMP** : exploiter tous les cœurs | [prouvé] — Linux le fait seul ; ce qui limite, c'est l'hôte |
@@ -238,7 +238,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 |---|---|---|
 | J1 | Installer | [écrit] — l'installateur s'ouvre et est habillé ; aucune installation n'a été menée à son terme |
 | J2 | Démarrer | [prouvé] |
-| J3 | **Se connecter au Wi-Fi** | [a faire] — mais le maillon manquant est nomme : sans `wpasupplicant`, c'etait impossible quelle que soit la carte. Corrige ; QEMU n'ayant pas de Wi-Fi, seule sa machine pourra le prouver |
+| J3 | **Se connecter au Wi-Fi** | [à faire] — mais le maillon manquant est nommé : sans `wpasupplicant`, c'était impossible quelle que soit la carte. Corrigé ; QEMU n'ayant pas de Wi-Fi, seule sa machine pourra le prouver |
 | J4 | Installer une application | [prouvé] — Flathub répond, une application s'installe |
 | J5 | Mettre à jour | [prouvé] — y compris au redémarrage, avant le bureau |
 | J6 | Brancher une clé USB | [à faire] |
