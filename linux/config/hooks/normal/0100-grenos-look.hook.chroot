@@ -1271,6 +1271,45 @@ for mode in shutdown reboot; do
     echo "grenos: thema [$mode] : ${extrait:-RIEN}"
 done
 
+echo "--- grenOS : l archiveur sait-il ouvrir ce qu on telecharge ---"
+# SEPTIEME MORSURE DE `--apt-recommends false`, ET LA PREMIERE QUE PERSONNE
+# N AVAIT NOMMEE.
+#
+# `xarchiver` est dans notre liste depuis des semaines. Ses Recommends sont
+# `7zip, bzip2, unzip, xdg-utils, xz-utils` — lu dans l index de trixie — et
+# avec --apt-recommends false les quatre premiers etaient ABSENTS. Confirme
+# par notre propre verif-recommandes.py, qui les nomme sous « reclame par
+# 1 : xarchiver ».
+#
+# Donc, sur l image publiee : la fenetre s ouvre, montre sa barre d outils, et
+# echoue sur a peu pres tout ce qu un humain telecharge. Une promesse a
+# l ecran sans rien derriere, apres ca-certificates, libgtk-3-bin,
+# desktop-file-utils, alsa-ucm-conf, libavcodec et rtkit.
+#
+# Les noms des binaires sont lus dans les vrais .deb, pas devines : `7zip`
+# installe `7z` (et non `7zip`), `xz-utils` installe `xz`, `unrar-free`
+# installe `unrar-free`. Un garde qui cherche le mauvais fichier refuse une
+# image correcte — ce depot l a deja paye avec verif-commandes.py.
+if command -v xarchiver > /dev/null 2>&1; then
+    manque=""
+    for duo in 7z:7zip unzip:unzip zip:zip bzip2:bzip2 xz:xz-utils \
+               unrar-free:unrar-free; do
+        outil=${duo%%:*}
+        paquet=${duo##*:}
+        command -v "$outil" > /dev/null 2>&1 || manque="$manque $paquet"
+    done
+    if [ -n "$manque" ]; then
+        echo "grenos: xarchiver est livre sans de quoi ouvrir :$manque" >&2
+        echo "grenos: la fenetre s ouvrirait et echouerait sur un .zip" >&2
+        exit 1
+    fi
+    echo "grenos: l archiveur sait ouvrir zip, 7z, xz, bz2 et rar"
+else
+    # Retirer xarchiver est un choix possible ; ce garde ne doit pas
+    # l interdire, seulement interdire de le livrer infirme.
+    echo "grenos: xarchiver n est pas livre, rien a verifier"
+fi
+
 echo "--- grenOS : menage ---"
 
 rm -f /usr/share/applications/xfce4-about.desktop

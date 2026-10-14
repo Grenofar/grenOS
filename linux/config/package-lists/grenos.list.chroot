@@ -86,6 +86,54 @@ xarchiver
 galculator
 xfce4-screenshooter
 
+## CE QUI MANQUAIT À XARCHIVER DEPUIS LE PREMIER JOUR OÙ IL EST LIVRÉ.
+##
+## Il est dans cette liste depuis des semaines. Ses `Recommends` sont
+## `7zip, bzip2, unzip, xdg-utils, xz-utils` — et avec `--apt-recommends false`
+## les quatre premiers étaient ABSENTS. Lu dans l'index de trixie, pas supposé,
+## puis confirmé par notre propre `verif-recommandes.py`, qui les nomme tous
+## les trois (bzip2, unzip, xz-utils) sous « réclamé par 1 : xarchiver ».
+##
+## Conséquence sur l'image publiée aujourd'hui : le gestionnaire d'archives de
+## grenOS s'ouvre, affiche sa fenêtre, et **ne sait ouvrir ni un .zip, ni un
+## .7z, ni un .tar.xz, ni un .tar.bz2** — c'est-à-dire à peu près tout ce qu'un
+## humain télécharge. Une promesse à l'écran sans rien derrière, pour la
+## septième fois par le même piège, après ca-certificates, libgtk-3-bin,
+## desktop-file-utils, alsa-ucm-conf, libavcodec et rtkit.
+##
+## `zip` n'est qu'un `Suggests`, et il est pris quand même : sans lui on peut
+## lire une archive zip sans jamais en créer une, et « Compresser » est le
+## geste que quelqu'un qui vient de Windows cherche en premier. `unrar-free`
+## lit le format rar et vit dans `main` ; `unrar` est en non-free.
+##
+## `p7zip-full` est un paquet de transition de 12 Ko qui ne contient rien :
+## le vrai nom est `7zip`.
+7zip
+bzip2
+unzip
+zip
+xz-utils
+unrar-free
+
+## Les règles udev qui rendent une manette utilisable. Sans elles, une manette
+## Xbox, PlayStation ou Switch branchée en USB est VUE par le noyau et reste
+## inaccessible au jeu, faute de permissions sur le périphérique. 55 Ko, et
+## c'est la réponse exacte à « support manette ».
+##
+## À ne pas confondre avec le paquet `xpad` de trixie, qui est un gestionnaire
+## de pense-bêtes pour X et n'a aucun rapport : le pilote Xbox `xpad` est un
+## module du noyau, pas un paquet Debian. Qui l'installe en croyant bien faire
+## ajoute une application de notes autocollantes à son système.
+steam-devices
+
+## Le micrologiciel signé, que `fwupd` recommande sans en dépendre — donc
+## absent. Sans lui, pas de mise à jour de micrologiciel par capsule UEFI le
+## jour où Secure Boot sera activé. 80 Ko.
+##
+## Le nom est `fwupd-amd64-signed` : `fwupd-signed` N'EXISTE PAS dans trixie,
+## il est seulement « fourni » par celui-ci. Vérifié dans l'index.
+fwupd-amd64-signed
+
 ## Le Bluetooth : le service, l'outil en ligne de commande dont notre fenêtre
 ## Connexions se sert, et de quoi envoyer le son vers un casque sans fil.
 bluez

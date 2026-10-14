@@ -64,7 +64,20 @@ AVIS = {
     "gnome-icon-theme": "LAISSE — 15 Mio d'icones d'un bureau que nous n'avons pas",
     "iso-codes": "LAISSE — 23 Mio ; Calamares nomme ses langues sans",
     "modemmanager": "LAISSE — le reseau mobile n'est pas un sujet ici",
-    "7zip": "LAISSE — xarchiver ouvre deja zip, tar et rar",
+    # CET AVIS ETAIT FAUX, ET C EST LUI QUI A CACHE LE DEFAUT PENDANT DES
+    # SEMAINES. Il disait « LAISSE — xarchiver ouvre deja zip, tar et rar ».
+    # xarchiver n ouvre rien lui-meme : c est une facade qui appelle `unzip`,
+    # `zip`, `7z`, `bzip2` et `xz`. Les cinq etaient absents, donc la fenetre
+    # s ouvrait et echouait sur tout. Ecrit de memoire, l avis a fait taire
+    # l outil meme qui aurait trouve la panne — un registre est aussi faux que
+    # la relecture qui l a rempli.
+    "7zip": "PRIS — xarchiver n ouvre rien seul, il appelle 7z",
+    "bzip2": "PRIS — xarchiver appelle bzip2 ; sans lui, pas de .tar.bz2",
+    "unzip": "PRIS — sans lui, pas un seul .zip ne s ouvre",
+    "xz-utils": "PRIS — sans lui, pas de .tar.xz, le format de nos propres paquets",
+    "fwupd-amd64-signed": "PRIS — micrologiciel signe ; fwupd-signed n existe pas, c est ce nom",
+    "usb.ids": "LAISSE — nos lectures USB viennent de sysfs, pas d une base de noms",
+    "pci.ids": "DEJA LA — libpci3 en DEPEND strictement, lspci nomme donc les cartes",
     "busybox": "LAISSE — initramfs-tools s'en passe, l'image a un vrai shell",
     "console-data": "LAISSE — 2 Mio de dispositions console ; grenOS demarre en graphique",
     # Laissés, et pourquoi.
