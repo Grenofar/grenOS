@@ -141,15 +141,25 @@ for essai in $(seq 1 60); do
   sleep 5
 done
 
-# Apres le nom viennent le choix du parcours, puis l'ecran final. Les deux ont
-# un defaut sense — « Personnalise (recommande) » est deja coche — donc deux
-# Entree suffisent. On les envoie meme si l'une des pages n'existait pas : une
-# Entree de trop sur un bureau deja ouvert ne fait rien.
-for _ in 1 2 3; do
-  sleep 3
+# Apres le nom viennent le parcours, l'apparence, la confidentialite, les
+# mises a jour, les applications, puis l'ecran final. Chacun a un defaut sense,
+# donc Entree suffit a chaque fois.
+#
+# ON NE COMPTE PAS LES ECRANS, on attend le resultat. Compter aurait voulu dire
+# corriger ce chiffre a chaque ecran ajoute — et le jour ou on l'oublie,
+# l'assistant reste ouvert, le bureau ne s'ouvre jamais, et l'essai echoue pour
+# une raison qui n'a rien a voir avec ce qu'on testait. On frappe donc jusqu'a
+# ce que le nom soit pris, avec une borne pour ne pas tourner sans fin.
+for essai in $(seq 1 20); do
+  if grep -q 'nom choisi' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+    echo "l assistant est alle au bout apres $essai Entree(s)"
+    break
+  fi
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
+  sleep 3
 done
-grep -a 'premier : ecran' "$RUNNER_TEMP/serial.log" 2>/dev/null | sed 's/^.*grenos: //' || true
+grep -a 'premier : ecran\|premier : choix' "$RUNNER_TEMP/serial.log" 2>/dev/null \
+  | sed 's/^.*grenos: //' || true
 if ! grep -q 'nom choisi' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
   echo "le nom n'a pas encore ete pris en compte, on continue d'observer"
 fi

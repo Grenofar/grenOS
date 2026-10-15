@@ -177,6 +177,31 @@ def appliquer(login, affiche, disposition="fr", variante="", fuseau="Europe/Pari
     return login
 
 
+def poser_apparence(login, choix):
+    """Le thème choisi, écrit dans le compte de la personne.
+
+    `grenosui.palette()` lit `~/.config/grenos/theme`, donc ce fichier doit
+    appartenir a la personne et pas à root — sinon sa session ne pourra plus
+    en changer, et le bouton des Réglages échouerait en silence.
+
+    « auto » ne s'écrit pas : c'est l'absence de fichier qui veut dire « laisse
+    grenOS décider ». Écrire « auto » dedans ferait lire une valeur inconnue
+    à `palette()`, qui retomberait sur la nuit sans le dire.
+    """
+    if choix not in ("jour", "nuit"):
+        return
+    try:
+        dossier = os.path.join("/home", login, ".config", "grenos")
+        os.makedirs(dossier, exist_ok=True)
+        chemin = os.path.join(dossier, "theme")
+        with open(chemin, "w", encoding="utf-8") as fichier:
+            fichier.write(choix + "\n")
+        subprocess.run(["chown", "-R", "%s:%s" % (login, login),
+                        os.path.join("/home", login, ".config")], check=False)
+    except OSError:
+        pass
+
+
 def garder_choix(reponses):
     """Ce qui a été répondu, pour que les Réglages puissent le relire.
 
@@ -214,6 +239,10 @@ class Assistant(Gtk.Window):
             "clavier": self.ecran_clavier,
             "compte": self.ecran_compte,
             "parcours": self.ecran_parcours,
+            "apparence": self.ecran_apparence,
+            "confidentialite": self.ecran_confidentialite,
+            "majs": self.ecran_majs,
+            "applications": self.ecran_applications,
             "final": self.ecran_final,
         }
         self.cle = None
@@ -463,16 +492,149 @@ class Assistant(Gtk.Window):
             self.reponses["parcours"] = cle
             self.relire()
 
+    def choix_simple(self, cle, propositions):
+        """Une liste de boutons à cocher, un seul actif. Rend le premier.
+
+        Chaque proposition est (valeur, intitulé, explication). L'explication
+        n'est pas décorative : un choix sans conséquence écrite est un choix
+        qu'on fait au hasard, et c'est alors le défaut qui aurait suffi.
+        """
+        premier_bouton = None
+        for valeur, intitule, note in propositions:
+            bouton = Gtk.RadioButton.new_from_widget(premier_bouton)
+            if premier_bouton is None:
+                premier_bouton = bouton
+            boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            titre = Gtk.Label(label=intitule, xalign=0)
+            titre.get_style_context().add_class("choix-titre")
+            detail = Gtk.Label(label=note, xalign=0)
+            detail.get_style_context().add_class("choix-note")
+            detail.set_line_wrap(True)
+            boite.pack_start(titre, False, False, 0)
+            boite.pack_start(detail, False, False, 0)
+            bouton.add(boite)
+            bouton.set_active(self.reponses.get(cle) == valeur)
+            bouton.connect("toggled", self.cocher, cle, valeur)
+            self.corps.pack_start(bouton, False, False, 0)
+
+    def cocher(self, bouton, cle, valeur):
+        if bouton.get_active():
+            self.reponses[cle] = valeur
+
+    def ecran_apparence(self):
+        """I6 — sombre, clair ou automatique.
+
+        « Aperçu du bureau à droite » est dans sa liste, et il n'y est pas :
+        l'assistant tourne avant qu'un bureau existe, donc l'aperçu serait une
+        image dessinée à la main qui ressemble au bureau sans en être un. Le
+        jour où elle divergerait, elle mentirait. On dit donc ce que chaque
+        choix fait, et on le laisse changer d'avis dans les Réglages.
+        """
+        self.corps.pack_start(
+            grenosui.titre("Apparence",
+                           "Tu pourras en changer à tout moment dans "
+                           "Réglages → Apparence."),
+            False, False, 0)
+        self.choix_simple("apparence", (
+            ("auto", "Automatique",
+             "Sombre le soir, clair le jour."),
+            ("nuit", "Sombre",
+             "Le thème de grenOS, celui que tu vois en ce moment."),
+            ("jour", "Clair",
+             "Fond clair, texte sombre."),
+        ))
+
+    def ecran_confidentialite(self):
+        """I9 — et « aucune par défaut » est écrit en toutes lettres."""
+        self.corps.pack_start(
+            grenosui.titre("Vos données vous appartiennent",
+                           "grenOS n'envoie rien que tu n'aies choisi "
+                           "d'envoyer. Aucune télémétrie n'est activée."),
+            False, False, 0)
+        self.choix_simple("telemetrie", (
+            ("aucune", "Aucune (par défaut)",
+             "Rien ne quitte cette machine."),
+            ("minimale", "Minimale et anonyme",
+             "La version de grenOS et le type de matériel, sans identifiant."),
+            ("complete", "Complète",
+             "En plus : les pannes rencontrées, pour les corriger."),
+        ))
+
+    def ecran_majs(self):
+        """I11 — automatiques, me demander, ou manuelles."""
+        self.corps.pack_start(
+            grenosui.titre("Mises à jour",
+                           "Les mises à jour de sécurité comptent plus que "
+                           "tout le reste : c'est par là qu'une machine se "
+                           "fait prendre."),
+            False, False, 0)
+        self.choix_simple("majs", (
+            ("automatiques", "Automatiques (recommandé)",
+             "Téléchargées en arrière-plan, posées au redémarrage."),
+            ("demander", "Me demander",
+             "grenOS prévient, et attend ton accord."),
+            ("manuelles", "Manuelles",
+             "Rien ne bouge tant que tu ne l'as pas demandé."),
+        ))
+
+    def ecran_applications(self):
+        """I12 — proposées, pas imposées.
+
+        Sa phrase : « des applications proposées, pas imposées — grenPerf et
+        GrenAI ne s'installent pas tout seuls ». Les cases sont donc **vides**
+        au départ, et ce qui est déjà là n'est pas represente comme un choix.
+        """
+        self.corps.pack_start(
+            grenosui.titre("Applications",
+                           "Le navigateur, l'explorateur et le lecteur "
+                           "multimédia sont déjà là. Voici ce qu'on peut "
+                           "ajouter — rien n'est coché."),
+            False, False, 0)
+        self.cases = {}
+        for cle, intitule, note in (
+            ("steam", "Steam",
+             "Des milliers de jeux, dont beaucoup de jeux Windows."),
+            ("vscode", "Visual Studio Code",
+             "Un éditeur de code, si cette machine sert à développer."),
+            ("libreoffice", "LibreOffice",
+             "Traitement de texte, tableur, présentations."),
+        ):
+            case = Gtk.CheckButton()
+            boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            titre = Gtk.Label(label=intitule, xalign=0)
+            titre.get_style_context().add_class("choix-titre")
+            detail = Gtk.Label(label=note, xalign=0)
+            detail.get_style_context().add_class("choix-note")
+            detail.set_line_wrap(True)
+            boite.pack_start(titre, False, False, 0)
+            boite.pack_start(detail, False, False, 0)
+            case.add(boite)
+            case.set_active(cle in self.reponses.get("applications", ""))
+            self.cases[cle] = case
+            case.connect("toggled", self.changer_applications)
+            self.corps.pack_start(case, False, False, 0)
+
+    def changer_applications(self, _case):
+        choisies = [cle for cle, case in self.cases.items() if case.get_active()]
+        self.reponses["applications"] = ",".join(sorted(choisies))
+
     def ecran_final(self):
         self.corps.pack_start(
             grenosui.titre("grenOS est prêt",
                            "On applique tes réponses et on ouvre le bureau."),
             False, False, 0)
+        choisies = self.reponses.get("applications", "")
         resume = Gtk.Label(xalign=0, label=(
-            "Compte : %s@%s\nClavier : %s\nParcours : %s"
+            "Compte : %s@%s\nClavier : %s\nParcours : %s\n"
+            "Apparence : %s\nTélémétrie : %s\nMises à jour : %s\n"
+            "Applications à installer : %s"
             % (self.reponses.get("compte", ""), MACHINE,
                self.reponses.get("clavier", "fr"),
-               self.reponses.get("parcours", premier.PERSONNALISE))))
+               self.reponses.get("parcours", premier.PERSONNALISE),
+               self.reponses.get("apparence", "auto"),
+               self.reponses.get("telemetrie", "aucune"),
+               self.reponses.get("majs", "automatiques"),
+               choisies.replace(",", ", ") if choisies else "aucune")))
         resume.get_style_context().add_class("choix-note")
         self.corps.pack_start(grenosui.carte(resume), False, False, 0)
 
@@ -492,8 +654,13 @@ class Assistant(Gtk.Window):
         _, disposition, variante, fuseau = clavier.PAYS[index]
         retenu = appliquer(login, self.reponses.get("nom_affiche") or login,
                            disposition, variante, fuseau)
+        poser_apparence(retenu, self.reponses.get("apparence"))
         garder_choix(self.reponses)
         dire(f"nom choisi, la machine est a {retenu}@{MACHINE}")
+        dire("premier : choix gardes — apparence %s, telemetrie %s, majs %s"
+             % (self.reponses.get("apparence", "auto"),
+                self.reponses.get("telemetrie", "aucune"),
+                self.reponses.get("majs", "automatiques")))
         Gtk.main_quit()
 
 
