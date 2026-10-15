@@ -1,15 +1,27 @@
 #!/usr/bin/env python3
-"""Le tout premier écran de grenOS : « comment vous appelez-vous ? »
+"""L'assistant de première configuration de grenOS.
 
-Il s'affiche une seule fois, avant l'ouverture de session, et il est seul à
-l'écran. Ce qu'on y tape devient le compte de la machine : entrer « lea » donne
-le compte `lea`, la maison `/home/lea`, et l'adresse `lea@grenos` — celle qui
-s'affiche dans le terminal et sur l'écran de connexion.
+Section I de sa liste — le plus détaillé de ses souhaits, et le plus visible :
+c'est le premier écran que voit quelqu'un qui installe grenOS.
 
-Renommer le compte ici, avant qu'une session ne soit ouverte, est le seul
-moment où c'est sûr : plus tard, des processus tiennent le compte et le
-renommage échoue à moitié. C'est la raison de ce programme séparé, lancé par
-`grenos-premier.service` avant le gestionnaire de connexion.
+CE PROGRAMME EST LE SEUL DONT UNE PANNE EMPÊCHE D'ENTRER DANS LA MACHINE. Il
+tourne avant le gestionnaire de connexion, seul à l'écran, et tant qu'il n'a
+pas retenu un nom, aucun compte n'existe. Trois conséquences, toutes
+délibérées :
+
+* l'enchaînement des écrans vit dans `premier.py`, sans une ligne de GTK, et
+  il est exercé en 35 cas. Ici il n'y a que du dessin ;
+* **on ne dessine que les écrans qu'on sait tenir.** `premier.py` décrit les
+  vingt-et-un écrans de sa liste ; cette fenêtre n'en construit que ceux dont
+  elle a le code, et saute les autres au lieu d'afficher une page vide. Une
+  page vide serait une promesse à l'écran sans rien derrière, sur l'écran où
+  elle coûterait le plus cher ;
+* le renommage du compte n'a pas bougé d'une ligne. C'est le seul moment sûr
+  pour renommer — plus tard, des processus tiennent le compte — et c'est du
+  code qui a déjà démarré des centaines de machines.
+
+Renommer ici donne : taper « lea » crée le compte `lea`, la maison
+`/home/lea`, et l'adresse `lea@grenos`.
 """
 import os
 import re
@@ -27,12 +39,23 @@ from gi.repository import Gdk, Gtk  # noqa: E402
 
 import clavier  # noqa: E402
 import grenosui  # noqa: E402
+import premier  # noqa: E402
 
 IDENTITE = "/etc/grenos/identite"
+REGLAGES = "/etc/grenos/premier-choix"
 MACHINE = "grenos"
 # Des noms que le système utilise déjà, ou qui sèmeraient la confusion.
 RESERVES = {"root", "daemon", "bin", "sys", "sync", "nobody", "systemd",
             "lightdm", "messagebus", "grenos", "admin", "user", "live"}
+
+STYLE = """
+.pas { font-size: 12px; color: @texte-faible; letter-spacing: 0.08em; }
+.choix-titre { font-size: 15px; font-weight: 700; color: @texte; }
+.choix-note { font-size: 12px; color: @texte-faible; }
+.apercu { font-size: 13px; color: @texte-faible; }
+.erreur { font-size: 13px; color: #f87171; }
+.sous { font-size: 12px; color: @texte-faible; }
+"""
 
 
 def dire(texte):
@@ -154,7 +177,24 @@ def appliquer(login, affiche, disposition="fr", variante="", fuseau="Europe/Pari
     return login
 
 
-class Premier(Gtk.Window):
+def garder_choix(reponses):
+    """Ce qui a été répondu, pour que les Réglages puissent le relire.
+
+    On écrit **après** le compte, jamais avant : si la machine s'éteint au
+    milieu de l'assistant, mieux vaut n'avoir rien gardé que d'avoir gardé des
+    réponses sans compte à qui les appliquer.
+    """
+    try:
+        os.makedirs(os.path.dirname(REGLAGES), exist_ok=True)
+        with open(REGLAGES, "w", encoding="utf-8") as fichier:
+            fichier.write("# Les réponses de l'assistant de première configuration.\n")
+            for cle in sorted(reponses):
+                fichier.write("%s=%s\n" % (cle, reponses[cle]))
+    except OSError:
+        pass
+
+
+class Assistant(Gtk.Window):
     def __init__(self):
         super().__init__(title="Bienvenue dans grenOS")
         # Aucun gestionnaire de fenêtres ne tourne à ce moment : `fullscreen()`
@@ -167,91 +207,292 @@ class Premier(Gtk.Window):
         self.fullscreen()
         self.connect("destroy", Gtk.main_quit)
 
+        self.reponses = premier.reponses_par_defaut()
+        self.constructeurs = {
+            "bienvenue": self.ecran_bienvenue,
+            "langue": self.ecran_langue,
+            "clavier": self.ecran_clavier,
+            "compte": self.ecran_compte,
+            "parcours": self.ecran_parcours,
+            "final": self.ecran_final,
+        }
+        self.cle = None
+
         centre = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         centre.set_halign(Gtk.Align.CENTER)
         centre.set_valign(Gtk.Align.CENTER)
         self.add(centre)
 
-        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-        colonne.set_size_request(520, -1)
-        centre.pack_start(colonne, False, False, 0)
+        self.colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        self.colonne.set_size_request(560, -1)
+        centre.pack_start(self.colonne, False, False, 0)
 
-        colonne.pack_start(
-            grenosui.titre(
-                "Bienvenue dans grenOS",
-                "Un seul réglage pour commencer : ton nom. Il devient ton compte, "
-                "ta maison et ton adresse sur cette machine.",
-            ),
-            False, False, 0,
-        )
+        self.rang = Gtk.Label(label="", xalign=0)
+        self.rang.get_style_context().add_class("pas")
+        self.colonne.pack_start(self.rang, False, False, 0)
 
-        self.champ = Gtk.Entry()
-        self.champ.set_placeholder_text("Ton nom")
-        self.champ.connect("changed", lambda _: self.relire())
-        self.champ.connect("activate", lambda _: self.valider())
-        colonne.pack_start(self.champ, False, False, 0)
-
-        self.apercu = Gtk.Label(label="", xalign=0)
-        self.apercu.get_style_context().add_class("apercu")
-        colonne.pack_start(self.apercu, False, False, 0)
-
-        # Le clavier, demandé ici et pas ailleurs : sur un clavier belge ou
-        # québécois, une disposition française met les accents et les chiffres
-        # au mauvais endroit — et l'on ne peut alors plus taper son propre mot
-        # de passe. Le changer ici, avant qu'il y ait un mot de passe, est le
-        # bon moment.
-        ligne_pays = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        etiquette = Gtk.Label(label="Ton clavier", xalign=0)
-        etiquette.get_style_context().add_class("sous")
-        ligne_pays.pack_start(etiquette, False, False, 0)
-
-        self.choix_pays = Gtk.ComboBoxText()
-        for nom, _, _, _ in clavier.PAYS:
-            self.choix_pays.append_text(nom)
-        self.choix_pays.set_active(clavier.DEFAUT)
-        self.choix_pays.connect("changed", self.changer_clavier)
-        ligne_pays.pack_start(self.choix_pays, False, False, 0)
-
-        self.essai = Gtk.Entry()
-        self.essai.set_placeholder_text("Tape ici pour essayer : é à ç ù 1 2 3")
-        ligne_pays.pack_start(self.essai, False, False, 0)
-        colonne.pack_start(ligne_pays, False, False, 0)
+        self.corps = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        self.colonne.pack_start(self.corps, False, False, 0)
 
         self.note = Gtk.Label(label="", xalign=0)
         self.note.get_style_context().add_class("erreur")
-        colonne.pack_start(self.note, False, False, 0)
+        self.colonne.pack_start(self.note, False, False, 0)
 
-        self.suite = grenosui.bouton("Commencer", self.valider, "principal")
-        self.suite.set_sensitive(False)
-        colonne.pack_start(self.suite, False, False, 6)
+        pied = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.retour = grenosui.bouton("Retour", lambda *_: self.reculer())
+        pied.pack_start(self.retour, False, False, 0)
+        self.suite = grenosui.bouton("Continuer", lambda *_: self.avancer(),
+                                     "principal")
+        pied.pack_end(self.suite, False, False, 0)
+        self.colonne.pack_start(pied, False, False, 6)
 
+        # ENTRÉE AVANCE, PARTOUT. C'est ce qu'on attend d'un assistant, et
+        # c'est surtout ce qui le rend prévisible : sans cela, la touche
+        # dépend de la fenêtre qui a le clavier, et sur certains écrans aucun
+        # bouton ne l'a. Un champ de saisie garde sa priorité — son propre
+        # signal `activate` fait le même travail.
+        self.connect("key-press-event", self.touche)
+
+        self.aller("bienvenue")
+
+    def touche(self, _fenetre, evenement):
+        if evenement.keyval not in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            return False
+        if isinstance(self.get_focus(), Gtk.Entry):
+            return False
+        self.avancer()
+        return True
+
+    # ------------------------------------------------------------ la mécanique
+
+    def liste(self):
+        """Les écrans de ce parcours QUE L'ON SAIT DESSINER.
+
+        `premier.py` décrit les vingt-et-un écrans de sa liste ; on saute ceux
+        dont le code n'existe pas encore plutôt que d'afficher une page vide.
+        """
+        parcours = self.reponses.get("parcours", premier.PERSONNALISE)
+        return [c for c in premier.ecrans(parcours) if c in self.constructeurs]
+
+    def aller(self, cle):
+        self.cle = cle
+        for enfant in self.corps.get_children():
+            self.corps.remove(enfant)
+        self.note.set_text("")
+        liste = self.liste()
+        rang = liste.index(cle) + 1 if cle in liste else 1
+        self.rang.set_text("ÉTAPE %d SUR %d" % (rang, len(liste)))
+        self.retour.set_sensitive(rang > 1)
+        self.suite.set_label("Démarrer" if cle == "final" else "Continuer")
+        self.constructeurs[cle]()
+        self.corps.show_all()
         self.relire()
+        dire("premier : ecran %s (%d/%d)" % (cle, rang, len(liste)))
+        if cle == "compte":
+            dire("premier ecran affiche, il demande un nom")
 
-    def changer_clavier(self, _combo):
-        """Le clavier change à l'écran tout de suite : on peut l'essayer."""
-        _, disposition, variante, _ = clavier.PAYS[self.choix_pays.get_active()]
-        clavier.appliquer_maintenant(disposition, variante)
+    def avancer(self):
+        possible, pourquoi = premier.peut_continuer(self.cle, self.reponses)
+        if not possible:
+            self.note.set_text(pourquoi)
+            return
+        if self.cle == "final":
+            self.terminer()
+            return
+        liste = self.liste()
+        rang = liste.index(self.cle)
+        if rang + 1 < len(liste):
+            self.aller(liste[rang + 1])
+
+    def reculer(self):
+        liste = self.liste()
+        if self.cle in liste:
+            rang = liste.index(self.cle)
+            if rang > 0:
+                self.aller(liste[rang - 1])
 
     def relire(self):
-        login = en_login(self.champ.get_text())
+        possible, pourquoi = premier.peut_continuer(self.cle, self.reponses)
+        self.suite.set_sensitive(possible)
+        if not possible and self.cle == "compte":
+            # On n'écrit la raison que si quelque chose a été tapé : reprocher
+            # un champ vide à quelqu'un qui vient d'arriver est désagréable.
+            tape = getattr(self, "champ", None)
+            self.note.set_text(pourquoi if (tape and tape.get_text().strip()) else "")
+
+    # --------------------------------------------------------------- les écrans
+
+    def ecran_bienvenue(self):
+        """« Démarre en anglais », mot pour mot dans sa liste.
+
+        C'est la seule page en anglais, et c'est voulu : quelqu'un qui ne lit
+        pas le français doit pouvoir atteindre l'écran où l'on choisit la
+        langue. Tout le reste de l'assistant est en français une fois ce choix
+        fait.
+        """
+        self.corps.pack_start(
+            grenosui.titre("Welcome to grenOS",
+                           "Let's set up your computer in a few steps."),
+            False, False, 0)
+        self.suite.set_label("Start")
+
+    def ecran_langue(self):
+        self.corps.pack_start(
+            grenosui.titre("Langue et région",
+                           "Elle décide de la langue des menus, du format des "
+                           "dates et de l'heure."),
+            False, False, 0)
+        choix = Gtk.ComboBoxText()
+        # Deux langues, et on le dit plutôt que d'en promettre cent : « toutes
+        # les langues du monde, ou anglais et français si c'est trop long ».
+        self.langues = (("Français (France)", "fr_FR"),
+                        ("English (United States)", "en_US"))
+        for intitule, _ in self.langues:
+            choix.append_text(intitule)
+        courante = self.reponses.get("langue", "fr_FR")
+        choix.set_active(next((i for i, (_, code) in enumerate(self.langues)
+                               if code == courante), 0))
+        choix.connect("changed", self.changer_langue)
+        self.corps.pack_start(choix, False, False, 0)
+
+    def changer_langue(self, combo):
+        rang = max(combo.get_active(), 0)
+        self.reponses["langue"] = self.langues[rang][1]
+
+    def ecran_clavier(self):
+        """Le clavier, et un champ pour l'essayer — I3 de sa liste.
+
+        Sur un clavier belge ou québécois, une disposition française met les
+        accents et les chiffres au mauvais endroit, et l'on ne peut alors plus
+        taper son propre mot de passe. Le changer ici, avant qu'il y ait un mot
+        de passe, est le bon moment.
+        """
+        self.corps.pack_start(
+            grenosui.titre("Clavier",
+                           "Choisis la disposition, puis essaie-la dans le "
+                           "champ : ce que tu tapes doit correspondre."),
+            False, False, 0)
+        self.choix_pays = Gtk.ComboBoxText()
+        for nom, _, _, _ in clavier.PAYS:
+            self.choix_pays.append_text(nom)
+        self.choix_pays.set_active(self.reponses.get("clavier_index",
+                                                     clavier.DEFAUT))
+        self.choix_pays.connect("changed", self.changer_clavier)
+        self.corps.pack_start(self.choix_pays, False, False, 0)
+
+        essai = Gtk.Entry()
+        essai.set_placeholder_text("Tape ici pour essayer : é à ç ù 1 2 3")
+        self.corps.pack_start(essai, False, False, 0)
+
+    def changer_clavier(self, combo):
+        """Le clavier change à l'écran tout de suite : on peut l'essayer."""
+        rang = max(combo.get_active(), 0)
+        self.reponses["clavier_index"] = rang
+        _, disposition, variante, _ = clavier.PAYS[rang]
+        self.reponses["clavier"] = disposition
+        clavier.appliquer_maintenant(disposition, variante)
+
+    def ecran_compte(self):
+        self.corps.pack_start(
+            grenosui.titre("Votre compte",
+                           "Ton nom devient ton compte, ta maison et ton "
+                           "adresse sur cette machine."),
+            False, False, 0)
+        self.champ = Gtk.Entry()
+        self.champ.set_placeholder_text("Ton nom")
+        self.champ.connect("changed", lambda _: self.relire_compte())
+        self.champ.connect("activate", lambda _: self.avancer())
+        self.corps.pack_start(self.champ, False, False, 0)
+
+        self.apercu = Gtk.Label(label="", xalign=0)
+        self.apercu.get_style_context().add_class("apercu")
+        self.corps.pack_start(self.apercu, False, False, 0)
+        self.champ.grab_focus()
+
+    def relire_compte(self):
+        tape = self.champ.get_text()
+        login = en_login(tape)
         souci = probleme(login)
         self.apercu.set_text(f"{login}@{MACHINE}" if login else "")
-        self.note.set_text(souci if (souci and self.champ.get_text().strip()) else "")
+        self.reponses["compte"] = login if souci is None else ""
+        self.reponses["nom_affiche"] = tape.strip()
+        self.note.set_text(souci if (souci and tape.strip()) else "")
         self.suite.set_sensitive(souci is None)
 
-    def valider(self):
-        login = en_login(self.champ.get_text())
+    def ecran_parcours(self):
+        """Les trois parcours, choisis après la langue, le clavier et le nom.
+
+        C'est son ordre, et il est juste : demander « quel parcours ? » à
+        quelqu'un qui n'a pas encore choisi sa langue, c'est lui demander de
+        choisir dans une langue qu'il ne lit peut-être pas.
+        """
+        self.corps.pack_start(
+            grenosui.titre("Comment veux-tu continuer ?",
+                           "Tu pourras tout changer plus tard dans les Réglages."),
+            False, False, 0)
+        propositions = (
+            (premier.RAPIDE, "Rapide",
+             "Le moins d'écrans possible. On démarre tout de suite."),
+            (premier.PERSONNALISE, "Personnalisé (recommandé)",
+             "Toutes les questions : réseau, apparence, confidentialité, "
+             "sécurité, sauvegardes."),
+            (premier.DEV, "Dev",
+             "Tout cela, plus le partitionnement, le chiffrement, Secure Boot, "
+             "le swap, les services, le pare-feu et les paramètres du noyau."),
+        )
+        premier_bouton = None
+        for cle, intitule, note in propositions:
+            bouton = Gtk.RadioButton.new_from_widget(premier_bouton)
+            if premier_bouton is None:
+                premier_bouton = bouton
+            boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            titre = Gtk.Label(label=intitule, xalign=0)
+            titre.get_style_context().add_class("choix-titre")
+            detail = Gtk.Label(label=note, xalign=0)
+            detail.get_style_context().add_class("choix-note")
+            detail.set_line_wrap(True)
+            boite.pack_start(titre, False, False, 0)
+            boite.pack_start(detail, False, False, 0)
+            bouton.add(boite)
+            bouton.set_active(self.reponses.get("parcours") == cle)
+            bouton.connect("toggled", self.changer_parcours, cle)
+            self.corps.pack_start(bouton, False, False, 0)
+
+    def changer_parcours(self, bouton, cle):
+        if bouton.get_active():
+            self.reponses["parcours"] = cle
+            self.relire()
+
+    def ecran_final(self):
+        self.corps.pack_start(
+            grenosui.titre("grenOS est prêt",
+                           "On applique tes réponses et on ouvre le bureau."),
+            False, False, 0)
+        resume = Gtk.Label(xalign=0, label=(
+            "Compte : %s@%s\nClavier : %s\nParcours : %s"
+            % (self.reponses.get("compte", ""), MACHINE,
+               self.reponses.get("clavier", "fr"),
+               self.reponses.get("parcours", premier.PERSONNALISE))))
+        resume.get_style_context().add_class("choix-note")
+        self.corps.pack_start(grenosui.carte(resume), False, False, 0)
+
+    # ------------------------------------------------------------------ la fin
+
+    def terminer(self):
+        login = self.reponses.get("compte", "")
         if probleme(login) is not None:
+            self.aller("compte")
             return
-        self.champ.set_sensitive(False)
         self.suite.set_sensitive(False)
+        self.retour.set_sensitive(False)
         self.suite.set_label("Un instant…")
         while Gtk.events_pending():
             Gtk.main_iteration()
-        index = max(self.choix_pays.get_active(), 0)
+        index = self.reponses.get("clavier_index", clavier.DEFAUT)
         _, disposition, variante, fuseau = clavier.PAYS[index]
-        retenu = appliquer(login, self.champ.get_text().strip(),
+        retenu = appliquer(login, self.reponses.get("nom_affiche") or login,
                            disposition, variante, fuseau)
+        garder_choix(self.reponses)
         dire(f"nom choisi, la machine est a {retenu}@{MACHINE}")
         Gtk.main_quit()
 
@@ -271,7 +512,8 @@ def main():
             break
         time.sleep(1)
     grenosui.habiller(grenosui.NUIT)
-    fenetre = Premier()
+    grenosui.ajouter_style(STYLE)
+    fenetre = Assistant()
     fenetre.show_all()
 
     # Aucun gestionnaire de fenêtres ne tourne ici, et c'est lui qui, d'ordinaire,
@@ -282,9 +524,6 @@ def main():
     if surface is not None:
         surface.focus(Gdk.CURRENT_TIME)
     fenetre.present()
-    fenetre.champ.grab_focus()
-
-    dire("premier ecran affiche, il demande un nom")
     Gtk.main()
 
 

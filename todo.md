@@ -211,7 +211,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 | # | Écran | État |
 |---|---|---|
-| I1 | Au tout début **en anglais automatiquement**, puis « Welcome to grenOS », « configurons votre ordinateur en quelques étapes », un bouton **Start** | [à faire] |
+| I1 | Au tout début **en anglais automatiquement**, puis « Welcome to grenOS », « configurons votre ordinateur en quelques étapes », un bouton **Start** | **[écrit]** — l'écran « Welcome to grenOS » avec son bouton **Start**, en anglais, et c'est la seule page qui l'est : quelqu'un qui ne lit pas le français doit pouvoir atteindre l'écran où l'on choisit la langue |
 | I2 | **Langue** — toutes les langues du monde, ou anglais et français si c'est trop long —, **région**, **format de date et d'heure**, **en ligne pour avoir l'heure**, bouton Continuer | [écrit] à moitié : le pays et le fuseau existent. **L'heure en ligne était une promesse vide** — l'interrupteur des Réglages appelle `set-ntp`, et aucun démon n'était livré ; corrigé le 14 octobre, avec un garde. La **langue**, elle, demande d'abord que nos fenêtres soient traduisibles : aucune ne l'est, tout le texte est du français en dur |
 | I3 | **Clavier** : azerty, qwerty, etc., **avec un champ pour le tester**, bouton Continuer | **[prouvé]** — et je l'avais marqué « à faire » à tort : le champ existe (`grenos-premier:215`), la bascule est immédiate (`clavier.appliquer_maintenant`), 16 dispositions. Démenti en relisant le code, pas en le croyant |
 | I4 | **Connexion à Internet** : une liste nette et fluide des réseaux, le mot de passe au clic, un bouton « continuer hors connexion », puis Continuer | [à faire] |
@@ -226,7 +226,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | I13 | **Sauvegardes** : activées ou non, destination (disque externe, NAS, serveur, nuage), **et tester la récupération** | [à faire] |
 | I14 | **Optimisation automatique** : « nous avons détecté votre matériel… », la liste (CPU, GPU, RAM, SSD, NVMe, HDD, Wi-Fi, Bluetooth, audio), « grenOS a trouvé des optimisations possibles », bouton Optimiser | [à faire] |
 | I15 | **Écran final** : il met l'OS en place, installe les applications choisies, règle Ctrl+Alt+Échap selon les choix, puis **« grenOS est prêt »** apparaît | [à faire] |
-| I16 | Après le clavier, la langue et le nom : le choix entre **Rapide**, **Personnalisé (recommandé)** et **Dev** | [à faire] |
+| I16 | Après le clavier, la langue et le nom : le choix entre **Rapide**, **Personnalisé (recommandé)** et **Dev** | **[écrit]** — les trois parcours, choisis **après** la langue, le clavier et le nom, comme il l'a demandé. « Personnalisé (recommandé) » est coché par défaut. La mécanique est exercée en 35 cas : Rapide est inclus dans Personnalisé, et Personnalisé dans Dev — « tout cela plus » n'est pas une façon de parler |
 | I17 | Le parcours **Dev** ajoute : partitionnement, chiffrement, Secure Boot, swap, ordonnanceur, services, réseau, pare-feu, télémétrie, journaux, mises à jour, bac à sable, paramètres du noyau | [à faire] |
 
 ## J. La promesse « sans une ligne de terminal »

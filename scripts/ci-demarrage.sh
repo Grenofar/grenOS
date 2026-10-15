@@ -115,9 +115,18 @@ python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || t
 # Le premier écran demande un nom, et la session ne s'ouvre pas tant
 # qu'il n'en a pas. Il l'annonce sur le port série : on l'attend, on
 # tape « ci », et on valide — exactement ce que fait une personne.
+# L'ASSISTANT A PLUSIEURS ECRANS DEPUIS LE 15 OCTOBRE, et le nom n'est plus
+# sur le premier. Il annonce chaque page sur le port serie (`premier : ecran
+# <cle>`), et la page du nom ajoute `premier ecran affiche, il demande un nom`.
+#
+# On avance donc par Entree jusqu'a cette ligne-la, au lieu de taper le nom a
+# l'aveugle sur la page d'accueil. C'est deliberement une BOUCLE et pas une
+# suite fixe de trois Entree : le jour ou un ecran s'ajoute avant le nom, une
+# suite fixe taperait « ci » au mauvais endroit, et l'essai echouerait pour
+# une raison qui n'a rien a voir avec grenOS.
 for essai in $(seq 1 60); do
   if grep -q 'premier ecran affiche' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
-    echo "premier ecran vu apres $((essai * 5))s"
+    echo "l ecran du nom vu apres $((essai * 5))s"
     python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-nom.ppm" || true
     for touche in c i ret; do
       python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
@@ -125,8 +134,22 @@ for essai in $(seq 1 60); do
     done
     break
   fi
+  if grep -q 'premier : ecran' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+    # L'assistant est la, mais pas encore sur le nom : on avance d'une page.
+    python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
+  fi
   sleep 5
 done
+
+# Apres le nom viennent le choix du parcours, puis l'ecran final. Les deux ont
+# un defaut sense — « Personnalise (recommande) » est deja coche — donc deux
+# Entree suffisent. On les envoie meme si l'une des pages n'existait pas : une
+# Entree de trop sur un bureau deja ouvert ne fait rien.
+for _ in 1 2 3; do
+  sleep 3
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
+done
+grep -a 'premier : ecran' "$RUNNER_TEMP/serial.log" 2>/dev/null | sed 's/^.*grenos: //' || true
 if ! grep -q 'nom choisi' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
   echo "le nom n'a pas encore ete pris en compte, on continue d'observer"
 fi
