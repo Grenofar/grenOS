@@ -57,3 +57,7 @@ __pycache__/
 
 # Les paquets que la CI depose pour que l image les installe elle-meme.
 linux/config/packages.chroot/
+
+# Le site public vit dans son PROPRE depot (Grenofar/grenos-web-download),
+# clone ici par commodite. Il ne doit jamais partir dans celui-ci.
+grenos web download/
