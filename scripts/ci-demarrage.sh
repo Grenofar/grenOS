@@ -677,6 +677,35 @@ sleep 4
 grep -a 'grenos: fichiers : Ctrl+H' "$RUNNER_TEMP/serial.log" | tail -1 \
   | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
 
+# --- LA RECHERCHE : elle existait, et RIEN ne l essayait -------------------
+#
+# Le champ est dans la barre depuis des semaines. La machine exercait Ctrl+H,
+# Ctrl+Maj+N et F2 ; celui-la, non. Un geste qu aucune machine n essaie est un
+# geste dont on ne sait rien — c est « la lecon qui tient tout » du
+# 23 septembre, a l echelle d un champ.
+#
+# Ctrl+F lui donne le clavier, puis on tape « doc ». Sur un dossier qui
+# contient Documents parmi six entrees, le compte DOIT descendre. S il ne
+# descend pas, le champ avale les lettres sans filtrer — et la capture
+# montrerait exactement le meme ecran, donc elle ne dirait rien.
+#
+# « d o c » : trois touches que sendkey rend a l identique en AZERTY comme en
+# QWERTY, contrairement a « q », « a » ou « m ».
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-f" || true
+sleep 1
+for touche in d o c; do
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+  sleep 1
+done
+sleep 2
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-recherche.ppm" || true
+grep -a 'grenos: fichiers : recherche' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
+# Echap remet la liste entiere : sans cela, les gestes suivants travailleraient
+# sur un dossier filtre, et un dossier cree n y apparaitrait pas.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+sleep 2
+
+
 # --- ET MAINTENANT : SAIT-IL ECRIRE ? -------------------------------------
 # Ctrl+H prouve qu il ECOUTE. Il ne touche aucun fichier, donc il ne prouve
 # rien de ce qu on fait vraiment dans un explorateur. Creer un dossier est le

@@ -181,6 +181,19 @@ ACCES_RAPIDE = (
 )
 
 
+def est_une_archive(chemin):
+    """Les formats que l'image sait vraiment ouvrir, et rien de plus.
+
+    La liste suit les outils installes — `7zip`, `unzip`, `bzip2`, `xz-utils`,
+    `unrar-free` — et pas une liste de formats souhaitables. Offrir
+    « Extraire ici » sur un format qu'aucun outil ne lit donnerait un menu qui
+    promet ce qu'il ne sait pas faire.
+    """
+    bas = chemin.lower()
+    return bas.endswith((".zip", ".7z", ".rar", ".tar", ".gz", ".bz2", ".xz",
+                         ".tgz", ".tar.gz", ".tar.bz2", ".tar.xz"))
+
+
 def taille_lisible(octets):
     """Une taille en français : « 1,5 Go », jamais « 1.5 GB ».
 
@@ -535,6 +548,19 @@ class Explorateur(Gtk.Window):
     def filtrer(self):
         self.filtre.refilter()
         self.dire_le_compte()
+        # LA RECHERCHE EXISTAIT ET N'ETAIT PROUVEE PAR RIEN. La machine
+        # d'integration exerçait Ctrl+H, Ctrl+Maj+N et F2 ; ce champ-ci, non.
+        # Un geste qu'aucune machine n'essaie est un geste dont on ne sait
+        # rien — c'est « la leçon qui tient tout » du 23 septembre, à
+        # l'échelle d'un champ.
+        #
+        # Le compte est la seule chose qui prouve que le filtre a MORDU : un
+        # champ qui avale les lettres sans rien filtrer afficherait le même
+        # écran, et la capture ne le dirait pas.
+        cherche = self.cherche.get_text().strip()
+        if cherche:
+            grenosui.dire("fichiers : recherche « %s » -> %d element(s)"
+                          % (cherche, len(self.filtre)))
 
     # ---- Naviguer -----------------------------------------------------------
     def aller(self, chemin, memoriser=True):
@@ -858,6 +884,18 @@ class Explorateur(Gtk.Window):
             entree("Coller", self.action_coller, bool(self.presse_papier),
                    "Ctrl+V")
             menu.append(Gtk.SeparatorMenuItem())
+            # G4 — compresser et extraire, sans quitter l'explorateur.
+            #
+            # « Extraire ici » n'apparaît QUE sur une archive, et « Compresser »
+            # jamais sur une archive seule : proposer d'extraire un fichier
+            # texte, ou de rezipper un zip, serait une entrée qui ne peut
+            # qu'échouer. Un menu qui offre ce qu'il ne sait pas faire est la
+            # faute que ce dépôt attrape depuis des semaines.
+            if all(est_une_archive(c) for c in choisis):
+                entree("Extraire ici", self.action_extraire)
+            else:
+                entree("Compresser en .zip", self.action_compresser)
+            menu.append(Gtk.SeparatorMenuItem())
             entree("Mettre à la corbeille", self.action_corbeille,
                    raccourci="Suppr")
             menu.append(Gtk.SeparatorMenuItem())
@@ -877,6 +915,97 @@ class Explorateur(Gtk.Window):
 
         menu.show_all()
         return menu
+
+    # ---- Compresser et extraire (G4) ---------------------------------------
+    def action_compresser(self):
+        """Mettre ce qui est choisi dans un .zip, à côté.
+
+        POURQUOI `zip` ET PAS `7z`. Les deux sont sur l'image, et 7z compresse
+        mieux. Mais un .zip s'ouvre partout — sur le Windows d'en face, sur un
+        téléphone, dans un courriel — et quelqu'un qui compresse un dossier le
+        fait presque toujours pour l'envoyer. On choisit le format qui arrive
+        à destination, pas celui qui gagne un concours.
+
+        LE NOM NE PEUT PAS ÉCRASER QUELQUE CHOSE. `archive.zip`, puis
+        `archive-2.zip`, etc. Écraser un fichier existant sans le dire serait
+        la pire chose qu'un explorateur puisse faire.
+        """
+        choisis = self.chemins_choisis()
+        if not choisis:
+            return
+        dossier = self.dossier
+        base = (os.path.splitext(os.path.basename(choisis[0]))[0]
+                if len(choisis) == 1 else "archive")
+        cible = os.path.join(dossier, base + ".zip")
+        rang = 2
+        while os.path.exists(cible):
+            cible = os.path.join(dossier, "%s-%d.zip" % (base, rang))
+            rang += 1
+
+        self._dire("Compression en cours…")
+        self._lancer_archive(
+            ["zip", "-r", "-q", cible] + [os.path.basename(c) for c in choisis],
+            dossier, "compression", os.path.basename(cible))
+
+    def action_extraire(self):
+        """Extraire ici, chaque archive dans un dossier à son nom.
+
+        PAS DANS LE DOSSIER COURANT EN VRAC : une archive qui contient trente
+        fichiers à sa racine les déverserait au milieu des autres, et il n'y a
+        aucun moyen simple de revenir en arrière. Un dossier portant le nom de
+        l'archive se referme d'un geste.
+        """
+        for chemin in self.chemins_choisis():
+            if not est_une_archive(chemin):
+                continue
+            nom = os.path.basename(chemin)
+            for fin in (".tar.gz", ".tar.bz2", ".tar.xz"):
+                if nom.lower().endswith(fin):
+                    nom = nom[: -len(fin)]
+                    break
+            else:
+                nom = os.path.splitext(nom)[0]
+            cible = os.path.join(self.dossier, nom)
+            rang = 2
+            while os.path.exists(cible):
+                cible = os.path.join(self.dossier, "%s-%d" % (nom, rang))
+                rang += 1
+            self._dire("Extraction en cours…")
+            # `7z x` lit zip, tar, gz, xz, rar, 7z — un seul outil pour tout
+            # ce que l'image sait ouvrir, donc une seule branche à maintenir.
+            self._lancer_archive(["7z", "x", "-y", "-o" + cible, chemin],
+                                 self.dossier, "extraction",
+                                 os.path.basename(cible))
+            return
+
+    def _lancer_archive(self, commande, dossier, quoi, nom):
+        """Lancer l'outil, dire ce qui s'est passé, et ne jamais planter.
+
+        UN ÉCHEC DE COMPRESSION NE DOIT PAS FERMER LA FENÊTRE. Disque plein,
+        droits refusés, outil absent : on le dit dans la barre d'état et on
+        continue. La fenêtre de quelqu'un qui manipule ses fichiers est le
+        dernier endroit où se permettre une exception non rattrapée.
+        """
+        try:
+            fini = subprocess.run(commande, cwd=dossier, capture_output=True,
+                                  text=True, timeout=300)
+        except FileNotFoundError:
+            self._dire("L'outil d'archive n'est pas installé sur cette machine.")
+            grenosui.dire("fichiers : %s impossible — outil absent" % quoi)
+            return
+        except subprocess.TimeoutExpired:
+            self._dire("L'archive est trop longue : arrêtée après cinq minutes.")
+            grenosui.dire("fichiers : %s coupee apres 300 s" % quoi)
+            return
+        if fini.returncode != 0:
+            raison = (fini.stderr or fini.stdout or "").strip().split(chr(10))[0]
+            self._dire("Échec : %s" % (raison[:90] or "code %d" % fini.returncode))
+            grenosui.dire("fichiers : %s echouee — code %d" % (quoi, fini.returncode))
+            return
+        self.peupler()
+        self._dire("« %s » est prêt." % nom)
+        grenosui.dire("fichiers : %s -> %s, %d element(s) affiche(s)"
+                      % (quoi, nom, len(self.filtre)))
 
     # ---- Ce que chaque entrée fait -----------------------------------------
     def action_ouvrir(self):

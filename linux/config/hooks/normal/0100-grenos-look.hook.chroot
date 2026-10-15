@@ -1358,8 +1358,30 @@ if command -v xarchiver > /dev/null 2>&1; then
 else
     # Retirer xarchiver est un choix possible ; ce garde ne doit pas
     # l interdire, seulement interdire de le livrer infirme.
-    echo "grenos: xarchiver n est pas livre, rien a verifier"
+    echo "grenos: xarchiver n est pas livre, rien a verifier de son cote"
 fi
+
+# ET L EXPLORATEUR, LUI, N A PAS BESOIN DE XARCHIVER POUR PROMETTRE.
+#
+# Depuis le 15 octobre, son menu du clic droit offre « Compresser en .zip » et
+# « Extraire ici », et il appelle `zip` et `7z` DIRECTEMENT. Le controle
+# ci-dessus etait garde derriere la presence de xarchiver : le jour ou l on
+# retirerait xarchiver, il aurait dit « rien a verifier » pendant que le menu
+# continuerait d offrir la compression. Une promesse a l ecran sans rien
+# derriere, et dans le fichier meme qui existe pour les attraper.
+#
+# `/usr/bin/7z` est bien fourni par le paquet `7zip` — lu dans le .deb
+# 25.01+dfsg-1~deb13u2, qui livre 7z, 7za, 7zr et p7zip. Le binaire ne
+# s appelle PAS `7zz` ici.
+menu=""
+command -v zip > /dev/null 2>&1 || menu="$menu zip"
+command -v 7z > /dev/null 2>&1 || menu="$menu 7zip"
+if [ -n "$menu" ]; then
+    echo "grenos: le menu de l explorateur offre la compression sans :$menu" >&2
+    echo "grenos: « Compresser en .zip » et « Extraire ici » echoueraient au clic" >&2
+    exit 1
+fi
+echo "grenos: l explorateur sait compresser (zip) et extraire (7z)"
 
 echo "--- grenOS : l horloge automatique a-t-elle un demon derriere ---"
 # HUITIEME MORSURE DE `--apt-recommends false`.

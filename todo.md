@@ -143,9 +143,9 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | # | Demande | État |
 |---|---|---|
 | G1 | Gestionnaire de fichiers moderne — **onglets** | [à faire] |
-| G2 | — **recherche** | [à faire] |
+| G2 | — **recherche** | **[écrit] — et ma propre liste avait tort** : le champ existe dans la barre depuis des semaines, avec Ctrl+F pour y aller et Échap pour l'effacer. Mais **rien ne l'essayait** : la machine exerçait Ctrl+H, Ctrl+Maj+N et F2, pas celui-là. *Un geste qu'aucune machine n'essaie est un geste dont on ne sait rien.* Elle tape maintenant « doc » et vérifie que le compte **descend** — un champ qui avalerait les lettres sans filtrer montrerait exactement le même écran |
 | G3 | — **aperçu** | [à faire] |
-| G4 | — **compression / décompression** | [à faire] |
+| G4 | — **compression / décompression** | **[écrit]** — « Compresser en .zip » et « Extraire ici » dans le menu du clic droit. **Le .zip plutôt que le 7z** : les deux sont sur l'image et 7z compresse mieux, mais un .zip s'ouvre partout, et quelqu'un qui compresse le fait presque toujours pour envoyer. **Rien ne peut être écrasé** (`archive-2.zip`), et l'extraction va dans un dossier au nom de l'archive — trente fichiers déversés en vrac ne se rattrapent pas. `/usr/bin/7z` vérifié dans le `.deb` 25.01, le binaire ne s'appelle pas `7zz`. Un garde refuse l'image si le menu promet sans que `zip` et `7z` soient là, **même sans xarchiver** : 5 cas, 3 refus |
 | G5 | — **montage de clé USB** | [à faire] |
 | G6 | — **formatage de clé USB** | [à faire] |
 | G7 | **Paramètres système centralisés** | [prouvé] — huit pages, ouvertes et photographiées |
