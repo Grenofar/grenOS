@@ -150,16 +150,44 @@ done
 # l'assistant reste ouvert, le bureau ne s'ouvre jamais, et l'essai echoue pour
 # une raison qui n'a rien a voir avec ce qu'on testait. On frappe donc jusqu'a
 # ce que le nom soit pris, avec une borne pour ne pas tourner sans fin.
-for essai in $(seq 1 20); do
+#
+# ET SUR UN ECRAN, ELLE CHANGE D AVIS. Traverser en appuyant sur Entree prouve
+# que les ecrans s affichent ; ca ne prouve pas qu ils OBEISSENT. C est mot
+# pour mot la lecon du 23 septembre — « la CI prouvait qu un bureau s affiche,
+# jamais qu il obeit » — et elle vaut pour un assistant autant que pour un
+# bureau.
+#
+# L ecran Apparence est celui qu on exerce : son defaut est « Automatique », la
+# fleche du bas descend sur « Sombre », et le resultat est un MOT sur le port
+# serie. Si rien ne bougeait, la ligne finale dirait encore « auto ».
+DESCENDU=""
+for essai in $(seq 1 24); do
   if grep -q 'nom choisi' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
     echo "l assistant est alle au bout apres $essai Entree(s)"
     break
+  fi
+  DERNIER=$(grep -a 'premier : ecran' "$RUNNER_TEMP/serial.log" 2>/dev/null \
+            | tail -n 1 | sed 's/^.*ecran \([a-z]*\).*/\1/')
+  if [ "$DERNIER" = apparence ] && [ -z "$DESCENDU" ]; then
+    python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey down" || true
+    DESCENDU=oui
+    sleep 1
   fi
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
   sleep 3
 done
 grep -a 'premier : ecran\|premier : choix' "$RUNNER_TEMP/serial.log" 2>/dev/null \
   | sed 's/^.*grenos: //' || true
+
+# LE RESULTAT DU CHANGEMENT D AVIS. « auto » est le defaut ; « nuit » ne peut
+# venir que d une fleche qui a vraiment bouge le choix. Rapporte et pas encore
+# bloquant : une preuve neuve attend deux passages verts.
+if grep -aq 'premier : choix gardes — apparence nuit' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+  echo "premier : l assistant OBEIT — l apparence choisie est celle qu on a designee"
+elif grep -aq 'premier : choix gardes' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+  echo "::warning::L'assistant a garde le defaut alors qu'on avait change de choix."
+  grep -a 'premier : choix gardes' "$RUNNER_TEMP/serial.log" | sed 's/^.*grenos: /  /'
+fi
 if ! grep -q 'nom choisi' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
   echo "le nom n'a pas encore ete pris en compte, on continue d'observer"
 fi
