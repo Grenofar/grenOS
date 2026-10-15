@@ -101,6 +101,23 @@ jobs:
         continue-on-error: true
         run: python3 linux/tools/verif-docs.py
 
+      # Un agent a livre `linux/tools/verif-catalogue.py` le 15 octobre, sa
+      # tache a ete marquee **done**, et le fichier ne compilait pas : des
+      # guillemets echappes a la deuxieme ligne. Rien ne l'a vu, parce que la
+      # construction compile ce qui part dans l'image, pas `linux/tools/`, qui
+      # reste sur la machine qui construit. Un outil casse y dormait donc
+      # jusqu'au jour ou quelqu'un l'appelle — c'est-a-dire le jour ou il
+      # devait servir.
+      - name: Nos outils compilent-ils
+        run: python3 linux/tools/verif-outils.py
+
+      # Le 24 septembre, une branche d'agent a REMPLACE le catalogue au lieu
+      # d'y ajouter des fiches, ressuscite le « Magasin » que Grenofar avait
+      # demande de retirer, et mis six outils en ligne de commande dans une
+      # boutique a boutons « Installer ». La CI etait verte.
+      - name: Le catalogue de GrenPlace tient-il debout
+        run: python3 linux/tools/verif-catalogue.py
+
       - name: Faire de la place
         run: |
           df -h /

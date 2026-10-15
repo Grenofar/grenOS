@@ -1090,6 +1090,215 @@
       "source": "flatpak",
       "identifiant": "io.github.radiolamp.mangojuice",
       "site": "https://github.com/radiolamp/mangojuice"
+    },
+    {
+      "slug": "foliate",
+      "nom": "Foliate",
+      "rayon": "Bureautique",
+      "editeur": "John Factotum",
+      "description": "Une liseuse de livres numériques, claire et sans compte.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.github.johnfactotum.Foliate.png",
+      "source": "flatpak",
+      "identifiant": "com.github.johnfactotum.Foliate",
+      "site": "https://johnfactotum.github.io/foliate/"
+    },
+    {
+      "slug": "solanum",
+      "nom": "Solanum",
+      "rayon": "Bureautique",
+      "editeur": "GNOME",
+      "description": "Un minuteur de concentration : on travaille, puis on souffle.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.Solanum.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.Solanum",
+      "site": "https://apps.gnome.org/Solanum/"
+    },
+    {
+      "slug": "planify",
+      "nom": "Planify",
+      "rayon": "Bureautique",
+      "editeur": "Alain M.",
+      "description": "Des listes de tâches avec projets, échéances et rappels.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/io.github.alainm23.planify.png",
+      "source": "flatpak",
+      "identifiant": "io.github.alainm23.planify",
+      "site": "https://useplanify.com"
+    },
+    {
+      "slug": "errands",
+      "nom": "Errands",
+      "rayon": "Bureautique",
+      "editeur": "Vlad Krupinskii",
+      "description": "Des listes de tâches simples, sans rien à configurer.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/io.github.mrvladus.List.png",
+      "source": "flatpak",
+      "identifiant": "io.github.mrvladus.List",
+      "site": "https://github.com/mrvladus/Errands"
+    },
+    {
+      "slug": "teams-for-linux",
+      "nom": "Teams pour Linux",
+      "rayon": "Internet",
+      "editeur": "Ismael Martinez",
+      "description": "Un client Microsoft Teams non officiel, pour les réunions de travail.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.github.IsmaelMartinez.teams_for_linux.png",
+      "source": "flatpak",
+      "identifiant": "com.github.IsmaelMartinez.teams_for_linux",
+      "site": "https://github.com/IsmaelMartinez/teams-for-linux"
+    },
+    {
+      "slug": "vivaldi",
+      "nom": "Vivaldi",
+      "rayon": "Internet",
+      "editeur": "Vivaldi Technologies",
+      "description": "Un navigateur très configurable, avec onglets empilés et notes intégrées.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.vivaldi.Vivaldi.png",
+      "source": "flatpak",
+      "identifiant": "com.vivaldi.Vivaldi",
+      "site": "https://vivaldi.com"
+    },
+    {
+      "slug": "zen-browser",
+      "nom": "Zen Browser",
+      "rayon": "Internet",
+      "editeur": "Zen Team",
+      "description": "Un navigateur fondé sur Firefox, pensé pour la concentration.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/app.zen_browser.zen.png",
+      "source": "flatpak",
+      "identifiant": "app.zen_browser.zen",
+      "site": "https://zen-browser.app"
+    },
+    {
+      "slug": "waterfox",
+      "nom": "Waterfox",
+      "rayon": "Internet",
+      "editeur": "Waterfox",
+      "description": "Un navigateur fondé sur Firefox, sans télémétrie.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/net.waterfox.waterfox.png",
+      "source": "flatpak",
+      "identifiant": "net.waterfox.waterfox",
+      "site": "https://www.waterfox.net"
+    },
+    {
+      "slug": "fragments",
+      "nom": "Fragments",
+      "rayon": "Internet",
+      "editeur": "Felix Häcker",
+      "description": "Un client BitTorrent simple, qui ne demande rien à régler.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/de.haeckerfelix.Fragments.png",
+      "source": "flatpak",
+      "identifiant": "de.haeckerfelix.Fragments",
+      "site": "https://apps.gnome.org/Fragments/"
+    },
+    {
+      "slug": "mission-center",
+      "nom": "Mission Center",
+      "rayon": "Système",
+      "editeur": "Mission Center",
+      "description": "Un moniteur de ressources détaillé : processeur, mémoire, disques, réseau, GPU.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/io.missioncenter.MissionCenter.png",
+      "source": "flatpak",
+      "identifiant": "io.missioncenter.MissionCenter",
+      "site": "https://missioncenter.io"
+    },
+    {
+      "slug": "flatsweep",
+      "nom": "Flatsweep",
+      "rayon": "Système",
+      "editeur": "Giant Pink Robots",
+      "description": "Il nettoie ce que les Flatpak désinstallés laissent derrière eux.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/io.github.giantpinkrobots.flatsweep.png",
+      "source": "flatpak",
+      "identifiant": "io.github.giantpinkrobots.flatsweep",
+      "site": "https://github.com/giantpinkrobots/flatsweep"
+    },
+    {
+      "slug": "pika-backup",
+      "nom": "Pika Backup",
+      "rayon": "Système",
+      "editeur": "GNOME",
+      "description": "Des sauvegardes versionnées et chiffrées, vers un disque externe ou un serveur.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gnome.World.PikaBackup.png",
+      "source": "flatpak",
+      "identifiant": "org.gnome.World.PikaBackup",
+      "site": "https://apps.gnome.org/PikaBackup/"
+    },
+    {
+      "slug": "authenticator",
+      "nom": "Authenticator",
+      "rayon": "Système",
+      "editeur": "Bilal Elmoussaoui",
+      "description": "Les codes à deux facteurs, sur cette machine plutôt que sur un téléphone.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.belmoussaoui.Authenticator.png",
+      "source": "flatpak",
+      "identifiant": "com.belmoussaoui.Authenticator",
+      "site": "https://apps.gnome.org/Authenticator/"
+    },
+    {
+      "slug": "kooha",
+      "nom": "Kooha",
+      "rayon": "Création",
+      "editeur": "Dave Patrick Caberto",
+      "description": "Un enregistreur d'écran simple, avec ou sans le son.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/io.github.seadve.Kooha.png",
+      "source": "flatpak",
+      "identifiant": "io.github.seadve.Kooha",
+      "site": "https://apps.gnome.org/Kooha/"
+    },
+    {
+      "slug": "parabolic",
+      "nom": "Parabolic",
+      "rayon": "Création",
+      "editeur": "Nickvision",
+      "description": "Il télécharge une vidéo ou une piste audio depuis une adresse.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.nickvision.tubeconverter.png",
+      "source": "flatpak",
+      "identifiant": "org.nickvision.tubeconverter",
+      "site": "https://github.com/NickvisionApps/Parabolic"
+    },
+    {
+      "slug": "video-downloader",
+      "nom": "Video Downloader",
+      "rayon": "Création",
+      "editeur": "Unrud",
+      "description": "Il télécharge des vidéos depuis des centaines de sites.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.github.unrud.VideoDownloader.png",
+      "source": "flatpak",
+      "identifiant": "com.github.unrud.VideoDownloader",
+      "site": "https://github.com/Unrud/video-downloader"
+    },
+    {
+      "slug": "colorway",
+      "nom": "Colorway",
+      "rayon": "Création",
+      "editeur": "Lains",
+      "description": "Il compose des palettes de couleurs à partir d'une teinte.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/io.github.lainsce.Colorway.png",
+      "source": "flatpak",
+      "identifiant": "io.github.lainsce.Colorway",
+      "site": "https://github.com/lainsce/Colorway"
+    },
+    {
+      "slug": "blanket",
+      "nom": "Blanket",
+      "rayon": "Création",
+      "editeur": "Rafael Mardojai",
+      "description": "Des sons d'ambiance — pluie, vent, café — pour couvrir le bruit.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.rafaelmardojai.Blanket.png",
+      "source": "flatpak",
+      "identifiant": "com.rafaelmardojai.Blanket",
+      "site": "https://apps.gnome.org/Blanket/"
+    },
+    {
+      "slug": "gaphor",
+      "nom": "Gaphor",
+      "rayon": "Développement",
+      "editeur": "Gaphor",
+      "description": "Un outil de modélisation UML et SysML, léger.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.gaphor.Gaphor.png",
+      "source": "flatpak",
+      "identifiant": "org.gaphor.Gaphor",
+      "site": "https://gaphor.org"
     }
   ]
 }

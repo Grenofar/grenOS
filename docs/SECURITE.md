@@ -4,7 +4,16 @@ grenOS Linux est une distribution basée sur Debian trixie. Si vous découvrez u
 
 ## Comment signaler une faille
 
-Ouvrez une nouvelle issue sur le dépôt GitHub officiel de grenOS :
+**Si la faille est exploitable, ne l'ouvrez pas en issue publique.** Une issue
+est lisible par tout le monde à la seconde où elle est écrite, y compris par
+quelqu'un qui s'en servirait avant que le correctif n'existe. Passez par l'avis
+de sécurité privé de GitHub, qui ne demande aucune adresse courriel et reste
+invisible jusqu'à publication :
+
+https://github.com/Grenofar/grenOS/security/advisories/new
+
+Pour tout le reste — un doute, une question, un durcissement à proposer — une
+issue ordinaire convient très bien :
 https://github.com/Grenofar/grenOS/issues
 
 Dans votre message, veuillez inclure :
@@ -28,6 +37,7 @@ Le noyau Rust situé sous `kernel/` est abandonné depuis le 17 septembre 2026 e
 
 - grenOS ne propose pas de programme de récompense financière (bounty) pour les signalements de sécurité.
 - Nous nous efforçons de répondre rapidement, mais aucun délai de réponse n'est garanti.
-- Tous les signalements sont traités publiquement via les issues GitHub ; aucune adresse e-mail ou formulaire web dédié n'est mis à disposition.
+- Aucune adresse courriel ni formulaire web dédié : tout passe par GitHub.
+- Un avis de sécurité privé reste **invisible** tant qu'il n'est pas publié ; une issue ordinaire, elle, est publique immédiatement.
 
 Nous vous remercions pour votre contribution à la sécurité de grenOS.
