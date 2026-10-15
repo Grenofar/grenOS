@@ -181,6 +181,22 @@ if [ -f /usr/share/grenos/partition.conf ]; then
     cp /usr/share/grenos/partition.conf /etc/calamares/modules/partition.conf || true
 fi
 
+# Et les options de montage, qui décident de ce que le fstab portera.
+#
+# Sans ce fichier, Calamares écrit `defaults` sur chaque ligne — lu dans son
+# code : « If there are no mount options defined then we use the defaults ».
+# Donc aucun `nofail`, donc un disque absent envoie la machine en mode secours
+# derrière un mot de passe root que grenOS ne définit jamais. C'est la ligne
+# A11 de sa liste, et la seule dont l'échec rend une machine inutilisable.
+#
+# Le nôtre recopie les sept `extraMounts` de Debian : les perdre priverait
+# l'installation de /proc, /sys, /dev et /dev/pts, et apt échouerait dans le
+# chroot.
+if [ -f /usr/share/grenos/mount.conf ]; then
+    mkdir -p /etc/calamares/modules
+    cp /usr/share/grenos/mount.conf /etc/calamares/modules/mount.conf || true
+fi
+
 # ---- Les réglages que nous posons chez les autres ---------------------------
 #
 # Ces fichiers appartiennent à openbox, à l'explorateur, à la bibliothèque de

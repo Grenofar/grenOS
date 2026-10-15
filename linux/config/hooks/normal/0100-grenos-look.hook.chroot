@@ -197,6 +197,43 @@ if [ -n "$manque" ]; then
 fi
 echo "grenos: installateur verifie (nos couleurs, aucun choix destructeur prechoisi, choix manuel possible)"
 
+echo "--- grenOS : un disque absent empechera-t-il le demarrage ---"
+# LA LIGNE A11 DE SA LISTE : « un peripherique attendu ne doit jamais faire
+# echouer le demarrage ».
+#
+# Calamares ecrit `defaults` sur chaque ligne du fstab quand aucune option
+# n est declaree — lu dans son code : « If there are no mount options defined
+# then we use the defaults ». Et le mount.conf de Debian ne declare QUE des
+# extraMounts. Donc, sans notre fichier : aucun `nofail` nulle part.
+#
+# Sans `nofail`, un point de montage est REQUIS par local-fs.target, qui porte
+# `OnFailure=emergency.target` (lu dans systemd 257.13). Un second disque
+# debranche envoie donc la machine en mode secours, derriere un mot de passe
+# root que grenOS ne definit jamais. Machine perdue.
+#
+# Le garde verifie DEUX choses, et la seconde est celle qu on oublierait :
+# notre fichier remplace celui de Debian, donc il doit aussi porter ses
+# extraMounts. Sans /dev/pts, apt echoue pendant l installation — le
+# commentaire de Debian le dit lui-meme.
+CONF=/etc/calamares/modules/mount.conf
+manque=""
+if [ ! -f "$CONF" ]; then
+    manque="$manque le-fichier"
+else
+    grep -q 'nofail' "$CONF" || manque="$manque nofail"
+    grep -q 'filesystem: default' "$CONF" || manque="$manque defaut"
+    grep -q 'extraMounts' "$CONF" || manque="$manque extraMounts"
+    grep -q '/dev/pts' "$CONF" || manque="$manque dev-pts"
+    grep -q 'efivarfs' "$CONF" || manque="$manque efivarfs"
+fi
+if [ -n "$manque" ]; then
+    echo "grenos: les options de montage de l installateur sont incompletes :$manque" >&2
+    echo "grenos: sans nofail, un disque absent envoie la machine en mode secours" >&2
+    echo "grenos: sans les extraMounts de Debian, l installation elle-meme echoue" >&2
+    exit 1
+fi
+echo "grenos: fstab : nofail partout, et les montages de l installation sont la"
+
 echo "--- grenOS : le magasin s'appelle-t-il encore GrenPlace ---"
 
 # Grenofar a demande « fais grenplace au lieu de magasin », et le nom est

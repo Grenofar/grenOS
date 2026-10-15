@@ -45,7 +45,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | A8 | Voir **tous les stockages USB / SATA / NVMe** depuis l'explorateur | [prouvé] pour SATA interne (`montage : sans mot de passe — amovible oui, interne oui`) ; USB et NVMe : [à faire] |
 | A9 | **FAT32 est privilégié et ne convient pas** à un usage bureau moderne | [à faire] — l'installateur offre ext4/btrfs/xfs, mais rien ne guide le choix |
 | A10 | Pilotes **Ethernet** — « très ciblé, une machine peut ne pas avoir de réseau » | [à faire] |
-| A11 | **Gestion des erreurs matérielles** : un périphérique attendu et absent doit donner un repli propre, jamais un échec de démarrage | [à faire] — **c'est la première ligne du plan de travail** |
+| A11 | **Gestion des erreurs matérielles** : un périphérique attendu et absent doit donner un repli propre, jamais un échec de démarrage | **la moitié décisive est faite** — Calamares écrivait `defaults` sur chaque ligne du fstab, donc aucun `nofail` : un second disque absent envoyait la machine en mode secours derrière un mot de passe root qui n'existe pas. Vérifié dans le code de calamares 3.3.14 et dans `local-fs.target` de systemd, corrigé le 15 octobre avec un garde. Reste à démarrer la machine d'essai **sans** disque et sans réseau pour le prouver |
 | A12 | Pilotes **NVIDIA / AMD / Intel** modernes, GPU et processeurs | [prouvé] pour les microcodes et les micrologiciels ; les pilotes propriétaires NVIDIA : [à faire] |
 
 ## B. Disques, fichiers, démarrage
