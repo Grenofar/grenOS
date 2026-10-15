@@ -614,8 +614,17 @@ jobs:
       # et ce sont celles de sa liste : aucun disque, aucune carte reseau. Le
       # verdict refuse de conclure si l'absence n'a pas eu lieu.
       #
-      # RAPPORTE, pas bloquant : une preuve ne devient obligatoire qu'apres
-      # deux passages verts. Regle inchangee depuis le 12 septembre.
+      # EXIGE depuis le 15 octobre : vu vert deux fois (38702344584 et
+      # 38708826695), et la regle n'a pas change depuis le 12 septembre. Le
+      # `continue-on-error` reste, parce que c'est lui qui laisse garder la
+      # capture quand la machine ne demarre pas — et c'est la capture qui
+      # permet de comprendre. C'est la porte de la Release qui refuse, et le
+      # verdict honnete qui le dit.
+      #
+      # Son premier passage a d'ailleurs refuse, et il avait raison : la sonde
+      # ecrivait « depot joignable » sur une machine sans carte reseau. Un
+      # garde neuf qui trouve un defaut de l'OS a son premier tour a gagne sa
+      # place.
       - name: Une machine sans disque ni reseau ouvre-t-elle son bureau
         id: sansmat
         if: steps.build.outcome == 'success'
@@ -772,7 +781,7 @@ jobs:
         # Rien n'est publie sans les deux preuves : un bureau qui s'ouvre, et
         # une mise a jour qui s'installe depuis notre depot. Une image qu'on ne
         # peut pas mettre a jour obligerait a tout regraver.
-        if: steps.boot.outcome == 'success' && steps.maj.outcome == 'success' && steps.uefi.outcome == 'success' && steps.majdem.outcome == 'success' && (github.ref == 'refs/heads/main' || inputs.publish)
+        if: steps.boot.outcome == 'success' && steps.maj.outcome == 'success' && steps.uefi.outcome == 'success' && steps.majdem.outcome == 'success' && steps.sansmat.outcome == 'success' && (github.ref == 'refs/heads/main' || inputs.publish)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -825,7 +834,7 @@ jobs:
         if: always()
         # IL N'ETAIT HONNETE QU'AUX TROIS QUARTS, ET CA A COUTE UNE IMAGE.
         #
-        # La Release est gardee par quatre portes. Celle-ci n'en nommait que
+        # La Release est gardee par cinq portes. Celle-ci n'en nommait que
         # trois : `majdem` manquait. Or `majdem` porte un `continue-on-error`,
         # qui rend la *conclusion* verte en laissant l'*outcome* rouge. Le
         # 15 octobre, la construction 38683006441 s'est donc declaree
@@ -842,11 +851,13 @@ jobs:
           echo "uefi      : ${{ steps.uefi.outcome }}"
           echo "maj       : ${{ steps.maj.outcome }}"
           echo "maj-dem   : ${{ steps.majdem.outcome }}"
+          echo "sans-mat  : ${{ steps.sansmat.outcome }}"
           FERMEES=""
           [ "${{ steps.boot.outcome }}" = success ] || FERMEES="$FERMEES demarrage"
           [ "${{ steps.uefi.outcome }}" = success ] || FERMEES="$FERMEES uefi"
           [ "${{ steps.maj.outcome }}" = success ] || FERMEES="$FERMEES maj"
           [ "${{ steps.majdem.outcome }}" = success ] || FERMEES="$FERMEES maj-au-demarrage"
+          [ "${{ steps.sansmat.outcome }}" = success ] || FERMEES="$FERMEES sans-materiel"
           if [ -n "$FERMEES" ]; then
             echo "::error::Rien n'a ete publie. Portes fermees :$FERMEES"
             exit 1
@@ -854,4 +865,4 @@ jobs:
           # On ne dit PAS « l'image est publiee » : la Release demande aussi
           # d'etre sur `main`. Promettre ici une publication qu'une branche
           # n'aura pas serait une promesse a l'ecran sans rien derriere.
-          echo "les quatre preuves sont vertes : rien ne s'oppose a la publication"
+          echo "les cinq preuves sont vertes : rien ne s'oppose a la publication"
