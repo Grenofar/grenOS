@@ -7,17 +7,25 @@
 # LE RESTE : savoir qu un demarrage a echoue. Sans elle, C15 n a rien sur quoi
 # se declencher et C16 n a rien a expliquer.
 #
-# COMMENT ON LE SAIT, et c est tout le sujet. Un demarrage qui echoue ne laisse
-# rien derriere lui — la machine s arrete, ou elle tourne sans bureau, et
-# personne n ecrit « j ai echoue ». On prend donc le probleme par l autre
-# bout : on pose un temoin AU DEBUT de chaque demarrage, et c est l ouverture
-# du bureau qui l efface. Au demarrage suivant, un temoin encore la ne peut
-# vouloir dire qu une chose : le precedent n est jamais arrive au bureau.
+# COMMENT ON LE SAIT. Un demarrage qui echoue ne laisse rien derriere lui : la
+# machine s arrete, ou elle tourne sans bureau, et personne n ecrit « j ai
+# echoue ». On prend donc le probleme par l autre bout — le bureau, quand il
+# s ouvre, DEPOSE UN JETON au nom de ce demarrage. Au demarrage suivant, un
+# demarrage precedent sans jeton ne peut vouloir dire qu une chose.
 #
-# Le temoin porte le `boot_id` du noyau, neuf a chaque demarrage. Sans lui, on
-# relirait le sien et on conclurait a un echec a tous les coups — c est
-# exactement la faute du temoin de persistance du 27 septembre, qui disait
-# « un fichier d un demarrage precedent est revenu » au PREMIER demarrage.
+# LA PREMIERE VERSION FAISAIT L INVERSE, ET ELLE ETAIT FAUSSE. Le service
+# posait un temoin que la session devait EFFACER. Mais la session tourne en
+# tant que la personne, et `/var/lib/grenos` appartient a root : l effacement
+# ne pouvait pas avoir lieu. Pire, il etait garde derriere un `[ -w ]`, donc
+# il echouait EN SILENCE — et la machine d integration a immediatement annonce
+# « le dernier demarrage n a pas ouvert de bureau » sur un demarrage qui avait
+# parfaitement ouvert le sien. Une mesure fausse, stable, qui aurait declenche
+# le mode sans echec a chaque demarrage reussi.
+#
+# Le sens est donc inverse : deposer demande moins de droits qu effacer. Le
+# service cree `bureau/` en 1777 — le bit collant, comme /tmp : chacun y
+# depose, personne n y efface ce qui n est pas a lui — et c est la session qui
+# y ecrit un fichier vide portant le `boot_id`.
 #
 # ET IL NE DOIT JAMAIS BLOQUER UN DEMARRAGE. Il rend toujours 0, et chaque
 # lecture est bornee. Un compteur d echecs qui empeche de demarrer serait la
@@ -26,7 +34,8 @@
 set -u
 
 ETAT=/var/lib/grenos
-TEMOIN="$ETAT/demarrage-en-cours"
+JETONS="$ETAT/bureau"
+PRECEDENT="$ETAT/dernier-demarrage"
 COMPTEUR="$ETAT/demarrages-echoues"
 CAUSE="$ETAT/derniere-cause"
 
@@ -39,6 +48,11 @@ dire() {
 }
 
 mkdir -p "$ETAT" 2>/dev/null || true
+# 1777 : le bit collant. N importe quelle session peut y deposer son jeton,
+# et personne ne peut effacer celui d un autre.
+mkdir -p "$JETONS" 2>/dev/null || true
+chmod 1777 "$JETONS" 2>/dev/null || true
+
 ID=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo inconnu)
 
 # ---------------------------------------------------------------- C16, la cause
@@ -54,55 +68,62 @@ cause_probable() {
         echo "journal indisponible, cause inconnue"
         return
     fi
-    # 1. Le noyau s est-il plaint de lui-meme ?
     noyau=$(timeout 10 journalctl -b -1 -k -p 3 --no-pager -o cat 2>/dev/null \
             | grep -m 1 -i 'kernel panic\|Oops\|BUG:\|general protection fault' || true)
     if [ -n "$noyau" ]; then
         echo "le noyau s est arrete : $(printf '%s' "$noyau" | cut -c1-80)"
         return
     fi
-    # 2. Un pilote a-t-il echoue a se charger ? C est le cas qu il nomme
-    #    lui-meme — « cause probable : pilote reseau ».
     pilote=$(timeout 10 journalctl -b -1 -k --no-pager -o cat 2>/dev/null \
              | grep -m 1 -i 'failed to load firmware\|probe.*failed\|Direct firmware load.*failed' || true)
     if [ -n "$pilote" ]; then
         echo "un pilote n a pas pu se charger : $(printf '%s' "$pilote" | cut -c1-80)"
         return
     fi
-    # 3. Une unite systemd est-elle tombee ? On nomme la premiere, et
-    #    `sante.pourquoi` sait dire POURQUOI elle est tombee.
     unite=$(timeout 10 journalctl -b -1 --no-pager -o cat 2>/dev/null \
             | grep -m 1 -o 'Failed to start [^.]*' || true)
     if [ -n "$unite" ]; then
         echo "un service n a pas demarre : $(printf '%s' "$unite" | cut -c1-80)"
         return
     fi
-    # 4. Et si le journal ne dit rien, on le DIT au lieu d inventer. Une
-    #    machine coupee au bouton ne laisse aucune trace, et c est la
-    #    situation la plus frequente.
+    # Et si le journal ne dit rien, on le DIT au lieu d inventer. Une machine
+    # coupee au bouton ne laisse aucune trace, et c est le cas le plus
+    # frequent — y compris sur la machine d integration, qui est TUEE.
     echo "rien dans le journal : coupure de courant ou arret au bouton"
 }
 
-# ------------------------------------------------- le temoin du demarrage passe
-if [ -f "$TEMOIN" ]; then
-    PASSE=$(head -n 1 "$TEMOIN" 2>/dev/null)
-    if [ "$PASSE" = "$ID" ]; then
-        # Notre propre temoin, relu dans le meme demarrage : il ne prouve
-        # rien, et le dire vaut mieux que compter un echec imaginaire.
-        dire "temoin de CE demarrage, rien a conclure"
-    else
-        N=$(cat "$COMPTEUR" 2>/dev/null)
-        case "$N" in ''|*[!0-9]*) N=0 ;; esac
-        N=$((N + 1))
-        printf '%s\n' "$N" > "$COMPTEUR" 2>/dev/null || true
-        POURQUOI=$(cause_probable)
-        printf '%s\n' "$POURQUOI" > "$CAUSE" 2>/dev/null || true
-        dire "le dernier demarrage n a pas ouvert de bureau ($N d affilee)"
-        dire "cause probable : $POURQUOI"
-    fi
+# ------------------------------------------- le demarrage precedent, juge au jeton
+AVANT=$(head -n 1 "$PRECEDENT" 2>/dev/null)
+if [ -z "$AVANT" ]; then
+    dire "premier demarrage connu, rien a comparer"
+elif [ "$AVANT" = "$ID" ]; then
+    # Le meme `boot_id` : nous relisons notre propre passage. Cela ne peut
+    # arriver que si le service tourne deux fois dans le meme demarrage, et
+    # conclure ici compterait un echec imaginaire — la faute exacte du temoin
+    # de persistance du 27 septembre.
+    dire "deja passe dans CE demarrage, rien a conclure"
+elif [ -e "$JETONS/$AVANT" ]; then
+    printf '0\n' > "$COMPTEUR" 2>/dev/null || true
+    dire "le dernier demarrage avait ouvert son bureau"
 else
-    dire "dernier demarrage : rien a signaler"
+    N=$(cat "$COMPTEUR" 2>/dev/null)
+    case "$N" in ''|*[!0-9]*) N=0 ;; esac
+    N=$((N + 1))
+    printf '%s\n' "$N" > "$COMPTEUR" 2>/dev/null || true
+    POURQUOI=$(cause_probable)
+    printf '%s\n' "$POURQUOI" > "$CAUSE" 2>/dev/null || true
+    dire "le dernier demarrage n a pas ouvert de bureau ($N d affilee)"
+    dire "cause probable : $POURQUOI"
 fi
 
-printf '%s\n' "$ID" > "$TEMOIN" 2>/dev/null || true
+# On garde le dossier de jetons borne : seuls le demarrage precedent et le
+# notre ont encore un sens. Sans ce menage, un an de demarrages s y
+# accumulerait, et personne ne le regarderait jamais.
+for jeton in "$JETONS"/*; do
+    [ -e "$jeton" ] || continue
+    nom=$(basename "$jeton")
+    [ "$nom" = "$AVANT" ] || [ "$nom" = "$ID" ] || rm -f "$jeton" 2>/dev/null || true
+done
+
+printf '%s\n' "$ID" > "$PRECEDENT" 2>/dev/null || true
 exit 0
