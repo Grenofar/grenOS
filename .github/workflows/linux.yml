@@ -89,6 +89,18 @@ jobs:
       - name: Chaque recherche du parcours ne designe qu une application
         run: python3 linux/tools/verif-recherches.py
 
+      # Un document livre par un agent, vert en CI, et faux sur quatre gardes
+      # sur cinq — avec en derniere ligne « aucun chemin n'est invente dans ce
+      # document ». Une CI verte dit que le fichier se lit ; elle ne dit pas
+      # qu'il dit vrai. Ce controle ne verifie que ce qui est mecanique — un
+      # chemin cite existe-t-il —, et il le dit lui-meme : juger une
+      # description reste a la relecture.
+      #
+      # RAPPORTE, pas bloquant : deux passages verts avant d'exiger.
+      - name: Chaque chemin cite par la documentation existe
+        continue-on-error: true
+        run: python3 linux/tools/verif-docs.py
+
       - name: Faire de la place
         run: |
           df -h /

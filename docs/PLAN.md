@@ -20,7 +20,7 @@ Tasks are performed in the order A→B→C→D as specified in the mission descr
 **Task A – Disk image with two kernel slots**
 - Create `kernel/scripts/make-disk.sh` that builds a 64 MiB FAT32 disk image with an MBR partition, two 8 MiB kernel slots (`kernel-a`, `kernel-b`), and a test file `essai.bin`.
 - Create `kernel/limine-disk.conf` with two menu entries pointing to the slots and a 1-second timeout to allow menu access.
-- The script is run from the repository root, like `make-iso.sh`, and writes `kernel/grenos-disk.img`.
+- The script is run from the repository root, like `make-iso.sh`, and writes a generated `grenos-disk.img` under `kernel/`.
 
 **Task B – AHCI (SATA) driver**
 - Implement `kernel/src/ahci.rs` that finds the AHCI controller via PCI (class 0x01, subclass 0x06, prog-if 0x01), maps its registers, brings up ports with a device present, and issues ATA commands (IDENTIFY, READ/WRITE DMA EXT, FLUSH CACHE EXT) using command list and received FIS structures.
@@ -40,7 +40,7 @@ Tasks are performed in the order A→B→C→D as specified in the mission descr
 ## 4. Interfaces
 
 ### Task A
-- `kernel/scripts/make-disk.sh` (executable after `chmod +x`): creates `kernel/grenos-disk.img`.
+- `kernel/scripts/make-disk.sh` (executable after `chmod +x`): creates a generated `grenos-disk.img` under `kernel/`.
 - `kernel/limine-disk.conf`:
   ```
   timeout: 1
@@ -117,7 +117,7 @@ Tasks are performed in the order A→B→C→D as specified in the mission descr
 **Acceptance Criteria**:
 - `kernel/scripts/make-disk.sh` exists and is executable.
 - `kernel/limine-disk.conf` exists with the exact content above.
-- Running the script from the repository root produces `kernel/grenos-disk.img`.
+- Running the script from the repository root produces a generated `grenos-disk.img` under `kernel/`.
 - `cargo build --release` succeeds in `kernel/`.
 - `cargo clippy --release -- -D warnings` reports zero warnings in `kernel/`.
 - QEMU boots the disk image via AHCI and prints `grenOS` on serial.
