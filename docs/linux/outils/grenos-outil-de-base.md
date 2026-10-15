@@ -27,3 +27,4 @@ Au lancement, l'outil :
 - Permet de verrouiller l'écran ou de fermer la session depuis le menu
 
 L'outil ne modifie pas le système en dehors de la session utilisateur et ne nécessite pas de privilèges administratifs pour son fonctionnement normal.
+
