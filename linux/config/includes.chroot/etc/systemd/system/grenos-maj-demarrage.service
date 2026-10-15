@@ -13,7 +13,29 @@
 Description=grenOS : installer les mises a jour avant d ouvrir le bureau
 DefaultDependencies=no
 After=network-online.target local-fs.target
-Wants=network-online.target
+
+# PAS DE `Wants=network-online.target`, ET C'EST DÉLIBÉRÉ.
+#
+# Sa liste dit : « les pilotes Ethernet sont très ciblés — une machine peut
+# simplement ne pas avoir de réseau ». Et cette unité est `Before=lightdm` :
+# tout ce qu'elle attend, le bureau l'attend aussi.
+#
+# Avec `Wants=`, elle TIRAIT `network-online.target` dans la transaction de
+# démarrage. Or `NetworkManager-wait-online.service`, lu dans le paquet
+# network-manager 1.52.1-1, porte `Environment=NM_ONLINE_TIMEOUT=60` : une
+# machine sans réseau, ou dont le câble est débranché, attendait donc jusqu'à
+# une minute devant un écran noir avant d'avoir son bureau. Pour une
+# vérification de mise à jour qui, elle, sait très bien échouer.
+#
+# `After=` seul ne tire rien. systemd.unit(5), mot pour mot : « If unit
+# foo.service contains the setting Before=bar.service **and both units are
+# being started**… » — l'ordre ne s'applique que si l'autre unité est déjà
+# dans la transaction. On garde donc le bon ordre quand quelqu'un d'autre
+# demande le réseau, et on cesse de le demander nous-mêmes.
+#
+# Sans réseau, le script rend quand même 0 : prouvé le 27 septembre
+# (`maj : avec un depot injoignable, il rend quand meme 0`), et son repli nu
+# `apt-get -y full-upgrade` est à `maj.py:152`.
 Before=lightdm.service display-manager.service shutdown.target
 # Et AVANT que Plymouth ne s'en aille : c'est lui qui possède l'écran pendant
 # tout ce qui précède le bureau, et c'est donc lui qui montre la barre de

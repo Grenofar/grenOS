@@ -1436,6 +1436,41 @@ else
     echo "grenos: NetworkManager n est pas livre, rien a verifier"
 fi
 
+echo "--- grenOS : le bureau attend-il un reseau qui n existe pas ---"
+# « Les pilotes Ethernet sont tres cibles — une machine peut simplement ne pas
+# avoir de reseau. » C est sa phrase, et c est la ligne A9 de sa liste.
+#
+# Toute unite qui est `Before=lightdm` fait attendre le BUREAU. Si elle porte
+# en plus `Wants=network-online.target`, elle tire le reseau dans la
+# transaction de demarrage — et `NetworkManager-wait-online.service`, lu dans
+# le paquet network-manager 1.52.1-1, porte `NM_ONLINE_TIMEOUT=60`.
+#
+# Donc : une machine sans reseau attendait jusqu a une minute devant un ecran
+# noir. `After=` seul ne tire rien (systemd.unit(5) : « and both units are
+# being started »), et c est ce qu il faut.
+#
+# LE GARDE EST ANCRE SUR LES DIRECTIVES, PAS SUR LE TEXTE. Le 7 octobre, un
+# garde cherchait `Before=.*display-manager` dans tout le fichier et refusait
+# le service dont le COMMENTAIRE expliquait de ne pas ecrire cette ligne. On
+# retire donc les commentaires d abord.
+fautives=""
+for unite in /etc/systemd/system/grenos-*.service; do
+    [ -f "$unite" ] || continue
+    directives=$(sed 's/#.*//' "$unite")
+    avant_bureau=$(printf '%s\n' "$directives" | grep -c '^Before=.*\(lightdm\|display-manager\)')
+    tire_reseau=$(printf '%s\n' "$directives" | grep -c '^\(Wants\|Requires\|Requisite\|BindsTo\)=.*network-online')
+    if [ "$avant_bureau" -gt 0 ] && [ "$tire_reseau" -gt 0 ]; then
+        fautives="$fautives $(basename "$unite")"
+    fi
+done
+if [ -n "$fautives" ]; then
+    echo "grenos: ces unites font attendre le bureau sur le reseau :$fautives" >&2
+    echo "grenos: une machine sans reseau attendrait une minute devant un ecran noir" >&2
+    echo 'grenos: After= seul suffit : il ordonne sans tirer' >&2
+    exit 1
+fi
+echo "grenos: aucune unite ne fait attendre le bureau sur le reseau"
+
 echo "--- grenOS : menage ---"
 
 rm -f /usr/share/applications/xfce4-about.desktop
