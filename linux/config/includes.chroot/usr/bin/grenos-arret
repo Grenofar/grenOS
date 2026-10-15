@@ -23,6 +23,48 @@ GESTES = [
     ("Éteindre", "Arrêter complètement la machine.", ["systemctl", "poweroff"], "danger"),
 ]
 
+# F1 — LA MISE EN VEILLE, et le fichier qui dit si cette machine en est capable.
+#
+# C'est l'un des trois gestes de sa promesse qui n'étaient pas tenus : « se
+# connecter au Wi-Fi, mettre en veille, récupérer d'une erreur ».
+#
+# `/sys/power/state` porte ce que le noyau sait faire sur CETTE machine :
+# `freeze` est toujours là et ne coupe presque rien, `mem` est la vraie veille
+# (la RAM reste alimentée, le reste s'éteint). Une machine virtuelle n'offre
+# souvent que `freeze`.
+ETATS_VEILLE = "/sys/power/state"
+
+# `allow_active = yes` — lu dans org.freedesktop.login1.policy de systemd
+# 257.13-1~deb13u1. Une session active met donc la machine en veille SANS mot
+# de passe et sans règle polkit à nous. Vérifié dans le .deb, pas supposé :
+# c'est exactement le genre de détail qui avait rendu l'installateur
+# injoignable le 25 septembre.
+
+
+def veille_possible():
+    """Ce que le noyau sait faire ici, ou None.
+
+    ON NE MONTRE PAS UN BOUTON QU'ON NE PEUT PAS TENIR. `systemctl suspend`
+    sur une machine qui ne sait pas se mettre en veille rend une erreur et
+    laisse l'écran tel quel : la personne clique, rien ne se passe, et elle
+    conclut que grenOS est cassé. C'est la faute que ce dépôt attrape depuis
+    des semaines, et elle coûte ici une des onze promesses.
+    """
+    try:
+        with open(ETATS_VEILLE, encoding="utf-8") as fichier:
+            etats = fichier.read().split()
+    except OSError:
+        return None
+    if "mem" in etats:
+        return "mem"
+    # `freeze` suspend les processus sans éteindre quoi que ce soit : c'est une
+    # veille au sens strict, beaucoup moins économe. On l'offre quand même —
+    # elle fait ce qu'on attend d'un clic sur « Mettre en veille » — mais on ne
+    # prétend pas que c'est la même chose.
+    if "freeze" in etats:
+        return "freeze"
+    return None
+
 ATTENTE = "/run/grenos/maj"
 TRAVAUX = "/var/lib/grenos/au-prochain-demarrage"
 
@@ -50,10 +92,19 @@ def gestes():
     éteinte brutalement entre les deux redémarre simplement sans rien
     installer.
     """
+    liste = list(GESTES)
+    etat = veille_possible()
+    if etat:
+        note = ("La machine s'éteint presque entièrement, et retrouve tout "
+                "au réveil." if etat == "mem" else
+                "Les programmes s'arrêtent, la machine reste allumée.")
+        liste.insert(1, ("Mettre en veille", note,
+                         ["systemctl", "suspend"], ""))
+
     combien = combien_attendent()
     travaux = combien_de_travaux()
     if combien <= 0 and travaux <= 0:
-        return GESTES
+        return liste
 
     # Deux choses peuvent attendre le redémarrage, et le bouton doit dire
     # laquelle : des paquets à installer, ou des changements de système mis en
@@ -74,7 +125,7 @@ def gestes():
         ["sh", "-c",
          "systemctl enable grenos-maj-demarrage.service && systemctl reboot"],
         "accent",
-    )] + GESTES
+    )] + liste
 
 
 def combien_de_travaux():
@@ -140,6 +191,14 @@ def main():
     grenosui.habiller()
     fenetre = Arret()
     fenetre.show_all()
+    # F1 — ce que CETTE machine sait faire, dit sur le port série.
+    #
+    # Le mot compte plus que le oui ou le non : `mem` est la vraie veille,
+    # `freeze` n'arrête que les processus. Les confondre dans un seul « oui »
+    # ferait croire qu'une machine virtuelle économise de la batterie.
+    etat = veille_possible()
+    grenosui.dire("arret : %d geste(s), veille %s"
+                  % (len(gestes()), etat or "impossible ici"))
     Gtk.main()
 
 

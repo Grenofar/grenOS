@@ -123,7 +123,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 | # | Demande | État |
 |---|---|---|
-| F1 | **Veille et réveil** | [à faire] — un des trois gestes manquants de sa promesse « sans terminal » |
+| F1 | **Veille et réveil** | **[écrit] pour la veille** — « Mettre en veille » est dans le menu d'arrêt, et **il n'apparaît que si le noyau sait le faire** : `/sys/power/state` est lu avant de l'offrir. Un bouton qui échoue au clic serait pire que pas de bouton. `org.freedesktop.login1.suspend` est en `allow_active = yes` — lu dans le `.deb` de systemd 257.13 — donc aucune règle polkit n'est nécessaire. La session dit ce que la machine sait faire, et **le mot compte plus que le oui** : `mem` est la vraie veille, `freeze` n'arrête que les processus. **Ce qui n'est pas prouvé** : le clic lui-même — l'endormir au milieu du parcours tuerait la construction, et personne ne serait là pour la réveiller. Réveil, extinction, batterie et thermique restent à faire |
 | F2 | **Extinction et redémarrage** | [prouvé] — le menu d'arrêt, et l'écran d'extinction est noir et propre |
 | F3 | **Batterie** | [à faire] |
 | F4 | **Thermique** | [à faire] |

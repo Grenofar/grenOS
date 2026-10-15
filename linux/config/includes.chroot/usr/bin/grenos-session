@@ -646,6 +646,43 @@ print('%d disque(s), %d volume(s) : %s' % (
     fi
 ) &
 
+# F1 — CETTE MACHINE SAIT-ELLE SE METTRE EN VEILLE ?
+#
+# « Mettre en veille » est l'un des trois gestes de sa promesse qui n'étaient
+# pas tenus. Le bouton existe depuis aujourd'hui dans le menu d'arrêt, et il
+# n'apparaît QUE si le noyau sait le faire — un bouton qui échoue au clic
+# serait pire que pas de bouton.
+#
+# C'est la session qui le dit, et pas la machine d'intégration en ouvrant le
+# menu : ce menu-là ne s'atteint pas en tapant son nom, son bouton vit dans le
+# pied du menu des applications. Et cliquer « Mettre en veille » endormirait
+# la machine d'essai au milieu de son parcours, sans personne pour la
+# réveiller — la construction mourrait sur un délai, pour avoir fait
+# exactement ce qu'on lui demandait.
+#
+# LE MOT COMPTE PLUS QUE LE OUI OU LE NON. `mem` est la vraie veille : la
+# mémoire reste alimentée, le reste s'éteint. `freeze` n'arrête que les
+# processus, la machine reste allumée. Les confondre dans un seul « oui »
+# ferait croire qu'une machine virtuelle économise de la batterie.
+#
+# `org.freedesktop.login1.suspend` est en `allow_active = yes` — lu dans le
+# .deb de systemd 257.13-1~deb13u1 —, donc aucune règle polkit n'est
+# nécessaire. Vérifié, pas supposé : c'est ce détail-là qui avait rendu
+# l'installateur injoignable le 25 septembre.
+(
+    ETATS=/sys/power/state
+    if [ -r "$ETATS" ]; then
+        DISPO=$(cat "$ETATS" 2>/dev/null)
+        case " $DISPO " in
+            *" mem "*) grenos-dire "veille : possible (mem) — la machine s eteint presque entierement" ;;
+            *" freeze "*) grenos-dire "veille : seulement freeze — les processus s arretent, la machine reste allumee" ;;
+            *) grenos-dire "veille : impossible, /sys/power/state ne porte que « $DISPO »" ;;
+        esac
+    else
+        grenos-dire "veille : impossible, le noyau n expose pas /sys/power/state"
+    fi
+) &
+
 # C2 — CE QUE CETTE MACHINE-CI SAIT GARANTIR SUR LE RETOUR ARRIÈRE.
 #
 # Sa condition est « impossible à casser, même sur une coupure de courant »,
