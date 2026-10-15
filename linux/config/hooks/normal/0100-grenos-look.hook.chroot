@@ -1445,17 +1445,32 @@ echo "--- grenOS : le bureau attend-il un reseau qui n existe pas ---"
 # transaction de demarrage — et `NetworkManager-wait-online.service`, lu dans
 # le paquet network-manager 1.52.1-1, porte `NM_ONLINE_TIMEOUT=60`.
 #
-# Donc : une machine sans reseau attendait jusqu a une minute devant un ecran
+# Donc : une machine sans reseau attendrait jusqu a une minute devant un ecran
 # noir. `After=` seul ne tire rien (systemd.unit(5) : « and both units are
-# being started »), et c est ce qu il faut.
+# being started »).
+#
+# MAIS CE GARDE, DANS SA PREMIERE VERSION, A COUTE UNE IMAGE — en refusant
+# exactement la ligne qu il fallait garder. Il lui manquait la TROISIEME
+# condition, et c est celle qui decide : une unite DESACTIVEE n entre pas dans
+# la transaction de demarrage, donc elle ne fait attendre personne. Notre
+# `grenos-maj-demarrage` est desactivee par defaut et s arme seulement quand
+# quelqu un clique « Mettre a jour et redemarrer ». En la refusant, j ai fait
+# tourner apt avant que la machine n ait une adresse : le depot n etait pas
+# joignable, rien n a ete installe, et la construction est restee verte en ne
+# publiant rien.
+#
+# L enablement se LIT, il ne s affirme pas : un lien vers l unite sous un
+# dossier `*.wants`. C est la seule chose que systemd regarde.
 #
 # LE GARDE EST ANCRE SUR LES DIRECTIVES, PAS SUR LE TEXTE. Le 7 octobre, un
 # garde cherchait `Before=.*display-manager` dans tout le fichier et refusait
 # le service dont le COMMENTAIRE expliquait de ne pas ecrire cette ligne. On
 # retire donc les commentaires d abord.
 fautives=""
+desarmees=0
 for unite in /etc/systemd/system/grenos-*.service; do
     [ -f "$unite" ] || continue
+    nom=$(basename "$unite")
     directives=$(sed 's/#.*//' "$unite")
     # `|| true` EST OBLIGATOIRE ICI, et c'est la sixième fois que ce dépôt le
     # paye. `grep -c` affiche « 0 » quand il ne trouve rien ET sort en erreur ;
@@ -1471,16 +1486,27 @@ for unite in /etc/systemd/system/grenos-*.service; do
     tire_reseau=$(printf '%s\n' "$directives" \
         | grep -c '^\(Wants\|Requires\|Requisite\|BindsTo\)=.*network-online' || true)
     if [ "$avant_bureau" -gt 0 ] && [ "$tire_reseau" -gt 0 ]; then
-        fautives="$fautives $(basename "$unite")"
+        # `find` rend 0 meme sans resultat, donc pas de `|| true` a ajouter
+        # ici ; mais le test, lui, doit rester dans un `if` et jamais dans un
+        # `&&` : sous `set -e`, un `&&` dont le test echoue emporte le script.
+        # C est la meme famille que le `grep -c` ci-dessus.
+        armee=$(find /etc/systemd/system /usr/lib/systemd/system \
+            -path '*.wants/*' -name "$nom" 2>/dev/null | head -n 1)
+        if [ -n "$armee" ]; then
+            fautives="$fautives $nom"
+        else
+            desarmees=$((desarmees + 1))
+        fi
     fi
 done
 if [ -n "$fautives" ]; then
-    echo "grenos: ces unites font attendre le bureau sur le reseau :$fautives" >&2
+    echo "grenos: ces unites ARMEES font attendre le bureau sur le reseau :$fautives" >&2
     echo "grenos: une machine sans reseau attendrait une minute devant un ecran noir" >&2
-    echo 'grenos: After= seul suffit : il ordonne sans tirer' >&2
+    echo 'grenos: After= seul ordonne sans tirer — mais verifier qu il reste' >&2
+    echo 'grenos: quelqu un pour demander le reseau, sinon apt tourne sans adresse' >&2
     exit 1
 fi
-echo "grenos: aucune unite ne fait attendre le bureau sur le reseau"
+echo "grenos: aucune unite armee ne fait attendre le bureau sur le reseau ($desarmees desarmee(s))"
 
 echo "--- grenOS : menage ---"
 

@@ -109,6 +109,83 @@ def verifier(chemin):
             fautes.append((0, "le YAML ne se lit pas : " + str(souci).split("\n")[0]))
         else:
             fautes += fautes_de_github(arbre, texte)
+            fautes += fautes_de_portes(arbre)
+
+    return fautes
+
+
+def fautes_de_portes(arbre):
+    """Une porte qui bloque la publication doit etre NOMMEE a voix haute.
+
+    LE DEFAUT QUE CE CONTROLE FERME, ET IL A COUTE UNE IMAGE. Le 15 octobre,
+    la construction 38683006441 s'est declaree **success**, ses vingt etapes
+    etaient vertes a l'API, et elle n'a **rien publie**. La Release est gardee
+    par quatre `steps.X.outcome`, et l'une d'elles — `majdem` — porte un
+    `continue-on-error`. Un `continue-on-error` rend la *conclusion* verte en
+    laissant l'*outcome* rouge : l'etape est donc verte partout ou l'on
+    regarde, et elle ferme la porte sans un mot.
+
+    « Le verdict honnete », lui, n'en nommait que trois. La quatrieme pouvait
+    donc tomber en silence. C'est exactement le piege du `| tail` du
+    25 septembre : un garde dont l'echec n'arrive jamais jusqu'a une oreille.
+
+    La regle posee ici : toute porte **qui peut tomber en silence** doit etre
+    citee dans un `run:`. « En silence » se mesure, il ne se suppose pas :
+    c'est l'etape qui porte `continue-on-error`. Une etape sans lui fait
+    rougir l'emploi en tombant, donc son echec a deja une oreille, et
+    l'exiger au verdict ne serait que du bruit — du bruit qui finit par
+    faire ignorer le garde.
+
+    Le seul endroit qui cite des portes dans un `run:` est le verdict
+    honnete, donc cela revient a dire « il nomme toutes les portes muettes » —
+    sans que ce fichier ait besoin de connaitre le nom d'une seule etape.
+
+    Deuxieme faute attrapee au meme endroit, et elle est pire : une porte qui
+    designe une etape **inexistante**. GitHub rend une expression vide, la
+    condition est fausse pour toujours, et l'etape gardee est sautee a chaque
+    tour sans que rien ne le dise. Une publication qui n'arrive jamais.
+    """
+    fautes = []
+    if not isinstance(arbre, dict):
+        return fautes
+    emplois = arbre.get("jobs")
+    if not isinstance(emplois, dict):
+        return fautes
+
+    motif = re.compile(r"steps\.([A-Za-z0-9_-]+)\.outcome")
+    for nom_emploi, emploi in emplois.items():
+        if not isinstance(emploi, dict):
+            continue
+        etapes = [e for e in (emploi.get("steps") or []) if isinstance(e, dict)]
+        # Quelles etapes peuvent tomber sans faire rougir l'emploi.
+        muette = {}
+        for etape in etapes:
+            if etape.get("id") is not None:
+                muette[etape["id"]] = bool(etape.get("continue-on-error"))
+        gardent = {}
+        nommees = set()
+        for rang, etape in enumerate(etapes, 1):
+            condition = etape.get("if")
+            if isinstance(condition, str):
+                for porte in motif.findall(condition):
+                    gardent.setdefault(porte, etape.get("name") or f"etape {rang}")
+            script = etape.get("run")
+            if isinstance(script, str):
+                nommees.update(motif.findall(script))
+        for porte in sorted(gardent):
+            if porte not in muette:
+                fautes.append((0, f"{nom_emploi} : la porte « {porte} » decide "
+                                  f"de « {gardent[porte]} » et aucune etape ne "
+                                  f"porte cet identifiant. La condition sera "
+                                  f"fausse pour toujours et l'etape sautee a "
+                                  f"chaque tour, sans un mot."))
+            elif muette[porte] and porte not in nommees:
+                fautes.append((0, f"{nom_emploi} : la porte « {porte} » decide "
+                                  f"de « {gardent[porte]} », et son etape porte "
+                                  f"continue-on-error : elle peut tomber en "
+                                  f"laissant le run vert. Nomme-la dans le "
+                                  f"verdict honnete, sinon personne ne saura "
+                                  f"pourquoi rien n'a ete publie."))
 
     return fautes
 

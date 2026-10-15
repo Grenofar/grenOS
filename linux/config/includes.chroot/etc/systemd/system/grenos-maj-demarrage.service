@@ -13,29 +13,32 @@
 Description=grenOS : installer les mises a jour avant d ouvrir le bureau
 DefaultDependencies=no
 After=network-online.target local-fs.target
-
-# PAS DE `Wants=network-online.target`, ET C'EST DÉLIBÉRÉ.
+# `Wants=network-online.target` EST NÉCESSAIRE, ET JE L'AI RETIRÉ À TORT.
 #
-# Sa liste dit : « les pilotes Ethernet sont très ciblés — une machine peut
-# simplement ne pas avoir de réseau ». Et cette unité est `Before=lightdm` :
-# tout ce qu'elle attend, le bureau l'attend aussi.
+# Le 15 octobre j'ai supprimé cette ligne en écrivant : « cette unité est
+# `Before=lightdm`, donc tout ce qu'elle attend, le bureau l'attend aussi ;
+# `NetworkManager-wait-online.service` porte `NM_ONLINE_TIMEOUT=60`, donc une
+# machine sans réseau attend une minute devant un écran noir ». Le
+# raisonnement était juste et **sa prémisse était fausse** : cette unité est
+# `disabled` à un démarrage ordinaire — l'image le dit elle-même sur le port
+# série, `maj: installation au demarrage presente, etat disabled` — et une
+# unité désactivée n'entre pas dans la transaction. Elle ne faisait donc
+# attendre personne. J'ai supprimé une attente qui n'existait pas.
 #
-# Avec `Wants=`, elle TIRAIT `network-online.target` dans la transaction de
-# démarrage. Or `NetworkManager-wait-online.service`, lu dans le paquet
-# network-manager 1.52.1-1, porte `Environment=NM_ONLINE_TIMEOUT=60` : une
-# machine sans réseau, ou dont le câble est débranché, attendait donc jusqu'à
-# une minute devant un écran noir avant d'avoir son bureau. Pour une
-# vérification de mise à jour qui, elle, sait très bien échouer.
+# Ce que ça a coûté, mesuré : la construction suivante est repartie verte et
+# **n'a rien publié**. `After=` seul n'ordonne que si quelqu'un d'autre
+# demande le réseau ; ici personne ne le demande, donc apt tournait avant
+# que la machine n'ait une adresse, ne joignait pas le dépôt, et
+# n'installait rien — en rendant 0, comme il le doit. « La mise a jour au
+# redemarrage n'a rien installe : la promesse "plus jamais d'ISO" ne tient
+# pas. »
 #
-# `After=` seul ne tire rien. systemd.unit(5), mot pour mot : « If unit
-# foo.service contains the setting Before=bar.service **and both units are
-# being started**… » — l'ordre ne s'applique que si l'autre unité est déjà
-# dans la transaction. On garde donc le bon ordre quand quelqu'un d'autre
-# demande le réseau, et on cesse de le demander nous-mêmes.
-#
-# Sans réseau, le script rend quand même 0 : prouvé le 27 septembre
-# (`maj : avec un depot injoignable, il rend quand meme 0`), et son repli nu
-# `apt-get -y full-upgrade` est à `maj.py:152`.
+# Et le seul démarrage où cette unité tourne est celui où quelqu'un a cliqué
+# « Mettre à jour et redémarrer ». Attendre le réseau y est exactement ce
+# qu'il a demandé — d'autant que cette unité est `Before=plymouth-quit`,
+# donc l'attente se passe derrière une barre de progression, pas un écran
+# noir.
+Wants=network-online.target
 Before=lightdm.service display-manager.service shutdown.target
 # Et AVANT que Plymouth ne s'en aille : c'est lui qui possède l'écran pendant
 # tout ce qui précède le bureau, et c'est donc lui qui montre la barre de

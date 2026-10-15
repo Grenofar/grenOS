@@ -800,12 +800,35 @@ jobs:
       # rien : tout ce qui devait etre garde l a deja ete.
       - name: Le verdict honnete
         if: always()
+        # IL N'ETAIT HONNETE QU'AUX TROIS QUARTS, ET CA A COUTE UNE IMAGE.
+        #
+        # La Release est gardee par quatre portes. Celle-ci n'en nommait que
+        # trois : `majdem` manquait. Or `majdem` porte un `continue-on-error`,
+        # qui rend la *conclusion* verte en laissant l'*outcome* rouge. Le
+        # 15 octobre, la construction 38683006441 s'est donc declaree
+        # **success** avec ses vingt etapes vertes a l'API, n'a rien publie,
+        # et n'a rien dit : il a fallu lire le journal de l'etape pour
+        # trouver « La mise a jour au redemarrage n'a rien installe ».
+        #
+        # Meme famille que le `| tail` du 25 septembre : un garde dont
+        # l'echec n'arrive jamais jusqu'a une oreille. `verif-flux.py` refuse
+        # desormais le flux si une porte a `continue-on-error` sans etre
+        # nommee ici — les deux listes ne peuvent plus diverger en silence.
         run: |
           echo "demarrage : ${{ steps.boot.outcome }}"
           echo "uefi      : ${{ steps.uefi.outcome }}"
           echo "maj       : ${{ steps.maj.outcome }}"
-          if [ "${{ steps.boot.outcome }}" != "success" ]; then
-            echo "::error::L'image n'a pas montre de bureau. Rien n'a ete publie."
+          echo "maj-dem   : ${{ steps.majdem.outcome }}"
+          FERMEES=""
+          [ "${{ steps.boot.outcome }}" = success ] || FERMEES="$FERMEES demarrage"
+          [ "${{ steps.uefi.outcome }}" = success ] || FERMEES="$FERMEES uefi"
+          [ "${{ steps.maj.outcome }}" = success ] || FERMEES="$FERMEES maj"
+          [ "${{ steps.majdem.outcome }}" = success ] || FERMEES="$FERMEES maj-au-demarrage"
+          if [ -n "$FERMEES" ]; then
+            echo "::error::Rien n'a ete publie. Portes fermees :$FERMEES"
             exit 1
           fi
-          echo "l'image a montre un bureau"
+          # On ne dit PAS « l'image est publiee » : la Release demande aussi
+          # d'etre sur `main`. Promettre ici une publication qu'une branche
+          # n'aura pas serait une promesse a l'ecran sans rien derriere.
+          echo "les quatre preuves sont vertes : rien ne s'oppose a la publication"
