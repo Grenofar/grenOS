@@ -602,6 +602,50 @@ print('%d disque(s), %d volume(s) : %s' % (
     fi
 ) &
 
+# ET LA TROISIÈME FOIS, SUR LES INSTANTANÉS — C1 de sa liste.
+#
+# « À chaque installation de pilote, de mise à jour de noyau ou d'OS, l'OS fait
+# un snapshot. » L'outil est timeshift, et ses DEUX actions sont en
+# `auth_admin` — lu dans son .deb 24.06.6-2, dans un seul fichier
+# `in.teejeetech.pkexec.timeshift.policy`. Sans notre règle, « Instantanés »
+# s'ouvrirait, demanderait un mot de passe que la machine n'a pas, et ne ferait
+# rien. C'est l'installateur de septembre et les disques d'octobre, une
+# troisième fois.
+#
+# TROIS ACTIONS, PAS DEUX, ET LA TROISIÈME EST UN TÉMOIN. Si l'on ne demandait
+# que les deux qu'on ouvre, un polkit qui dirait oui à tout rendrait la même
+# réponse et la mesure serait morte — vraie, stable, incapable de se tromper.
+# `modify-device-system` partitionne un disque, il est en `auth_admin` comme
+# les deux autres, et notre règle ne l'ouvre pas : il DOIT répondre non. S'il
+# répond oui, ce n'est pas timeshift qui est autorisé, c'est tout.
+(
+    GTK=in.teejeetech.pkexec.timeshift-gtk
+    OUTIL=in.teejeetech.pkexec.timeshift
+    TEMOIN=org.freedesktop.udisks2.modify-device-system
+    if ! command -v pkcheck >/dev/null 2>&1; then
+        grenos-dire "instantanes : pkcheck absent, impossible de verifier"
+    elif ! command -v timeshift >/dev/null 2>&1; then
+        grenos-dire "instantanes : timeshift absent de l image"
+    else
+        if pkcheck --action-id "$GTK" --process $$ >/dev/null 2>&1; then
+            G=oui
+        else
+            G=non
+        fi
+        if pkcheck --action-id "$OUTIL" --process $$ >/dev/null 2>&1; then
+            O=oui
+        else
+            O=non
+        fi
+        if pkcheck --action-id "$TEMOIN" --process $$ >/dev/null 2>&1; then
+            T=oui
+        else
+            T=non
+        fi
+        grenos-dire "instantanes : sans mot de passe — fenetre $G, outil $O, temoin $T"
+    fi
+) &
+
 # L'accueil, une seule fois, à la première ouverture.
 if [ ! -e "$CONFIG/accueil-vu" ]; then
     touch "$CONFIG/accueil-vu"

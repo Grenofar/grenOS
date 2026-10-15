@@ -69,6 +69,36 @@ polkit.addRule(function (action, subject) {
     // mises a jour passent par `sudo -n`, jamais par polkit. Reclamer des
     // droits pour un logiciel absent ne protege de rien et fait croire que
     // quelque chose est couvert.
+    // ---------------------------------------------------------------------
+    // ET LA TROISIEME FOIS, SUR LES INSTANTANES — 15 octobre
+    //
+    // C1 de sa liste : « a chaque installation de pilote, de mise a jour de
+    // noyau ou d'OS, l'OS fait un snapshot ». L'outil est timeshift, et ses
+    // DEUX actions sont en `auth_admin`. Lu dans le .deb de timeshift
+    // 24.06.6-2, dans un seul fichier
+    // /usr/share/polkit-1/actions/in.teejeetech.pkexec.timeshift.policy :
+    //
+    //     <action id="in.teejeetech.pkexec.timeshift-gtk">  auth_admin
+    //     <action id="in.teejeetech.pkexec.timeshift">      auth_admin
+    //
+    // Sans ces deux lignes, « Instantanes » s'ouvrirait, demanderait un mot
+    // de passe que la machine n'a pas, et ne ferait rien. Troisieme fois
+    // exactement, apres l'installateur et les disques.
+    // ---------------------------------------------------------------------
+    // UN DEFAUT TROUVE EN RELISANT CE FICHIER, ET IL ETAIT LA DEPUIS LE DEBUT.
+    //
+    // Le commentaire ci-dessus dit que les actions udisks2 sont « nommees
+    // ENTIERES, pas en prefixe ». Le code, lui, faisait `indexOf(...) === 0`
+    // sur TOUTES les entrees : elles etaient donc toutes des prefixes, et
+    // `org.freedesktop.udisks2.filesystem-mount-system` aurait ouvert une
+    // hypothetique `...-system-quelque-chose`. L'intention etait ecrite dans
+    // les donnees — les prefixes voulus finissent par un point, les actions
+    // entieres non — et le code ne l'honorait pas.
+    //
+    // Cela compte deux fois plus ici : `in.teejeetech.pkexec.timeshift` est
+    // un prefixe de `in.teejeetech.pkexec.timeshift-gtk`. En prefixe, le
+    // premier ouvrirait tout ce que timeshift declarera un jour sous ce nom,
+    // sans que personne ne relise cette liste.
     var permis = [
         "org.freedesktop.Flatpak.",
         "com.github.calamares.calamares.",
@@ -77,13 +107,17 @@ polkit.addRule(function (action, subject) {
         "org.freedesktop.udisks2.filesystem-mount-system",
         "org.freedesktop.udisks2.encrypted-unlock-system",
         "org.freedesktop.udisks2.eject-media-system",
-        "org.freedesktop.udisks2.power-off-drive-system"
+        "org.freedesktop.udisks2.power-off-drive-system",
+        "in.teejeetech.pkexec.timeshift-gtk",
+        "in.teejeetech.pkexec.timeshift"
     ];
     if (!subject.isInGroup("sudo")) {
         return polkit.Result.NOT_HANDLED;
     }
     for (var i = 0; i < permis.length; i++) {
-        if (action.id.indexOf(permis[i]) === 0) {
+        var motif = permis[i];
+        var est_prefixe = motif.charAt(motif.length - 1) === ".";
+        if (est_prefixe ? action.id.indexOf(motif) === 0 : action.id === motif) {
             return polkit.Result.YES;
         }
     }

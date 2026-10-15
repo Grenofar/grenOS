@@ -357,9 +357,22 @@ for chemin in glob.glob("/usr/share/polkit-1/actions/*.policy"):
         actions += re.findall(r'<action id="([^"]+)"', fichier.read())
 
 print("grenos: %d actions declarees sur cette image" % len(actions))
+# CE GARDE COMPTAIT AUTREMENT QUE LA REGLE NE DECIDE, et il faut que les deux
+# s'accordent. Depuis le 15 octobre, la regle traite une entree qui finit par
+# un point comme un prefixe et toute autre comme un nom ENTIER — c'est ce que
+# son commentaire annonçait depuis le 7 octobre sans que son code le fasse.
+#
+# Si le garde restait au `startswith`, une entree comme
+# « in.teejeetech.pkexec.times » lui ferait compter deux actions alors que la
+# regle n'en ouvrirait aucune : une regle qui n'autorise rien, exactement ce
+# que ce controle existe pour empecher. Deux mesures d'une meme chose
+# finissent par diverger ; celles-ci divergeaient des leur premier jour.
 orphelins = []
 for prefixe in prefixes:
-    combien = sum(1 for a in actions if a.startswith(prefixe))
+    if prefixe.endswith("."):
+        combien = sum(1 for a in actions if a.startswith(prefixe))
+    else:
+        combien = sum(1 for a in actions if a == prefixe)
     print("grenos:   %-34s %d action(s)" % (prefixe, combien))
     if combien == 0:
         orphelins.append(prefixe)

@@ -80,6 +80,13 @@ AVIS = {
     "time-daemon": "PRIS par systemd-timesyncd, qui le fournit",
     "wpasupplicant": "PRIS — NetworkManager lui parle par D-Bus ; sans lui, AUCUN reseau WPA, sur aucune carte",
     "wireless-regdb": "PRIS — sans la base reglementaire, le noyau retombe sur le domaine monde",
+    # `cron` arrive par timeshift (Depends: cron-daemon | cron) et reclame un
+    # serveur de courrier pour poster la sortie des taches. Une machine de
+    # bureau n en veut pas : installer un MTA ouvrirait un service qui ecoute,
+    # pour livrer des messages que personne ne lira jamais. La sortie des
+    # taches part dans le journal, qui est l endroit ou on la cherche.
+    "default-mta": "LAISSE — un bureau n a pas a faire tourner un serveur de courrier",
+    "mail-transport-agent": "LAISSE — meme raison : la sortie de cron va au journal",
     "usb.ids": "LAISSE — nos lectures USB viennent de sysfs, pas d une base de noms",
     "pci.ids": "DEJA LA — libpci3 en DEPEND strictement, lspci nomme donc les cartes",
     "busybox": "LAISSE — initramfs-tools s'en passe, l'image a un vrai shell",

@@ -540,3 +540,26 @@ gnome-firmware
 clamav
 clamav-freshclam
 clamtk
+
+## C1 — « a chaque installation de pilote, de mise a jour de noyau ou d'OS,
+## l'OS fait un snapshot, et s'il y a un probleme, rollback ».
+##
+## timeshift 24.06.6-2 est le seul outil de Debian qui sache instantaner un
+## ext4 : il copie par rsync et relie en dur ce qui n'a pas change, donc un
+## second instantane ne coute que les differences. Sur btrfs il utilise les
+## sous-volumes, ce qui est mieux — mais `partition.conf` offre ext4 par
+## defaut, et c'est ce que la machine de quelqu'un portera.
+##
+## SES DEUX ACTIONS POLKIT SONT EN `auth_admin`, donc MORTES chez nous tant
+## qu'une regle a nous ne les ouvre pas. Lu dans le .deb, dans
+## /usr/share/polkit-1/actions/in.teejeetech.pkexec.timeshift.policy — un seul
+## fichier, deux actions :
+##   in.teejeetech.pkexec.timeshift-gtk -> /usr/bin/timeshift-gtk
+##   in.teejeetech.pkexec.timeshift     -> /usr/bin/timeshift
+## C'est la panne de l'installateur du 25 septembre et celle des disques du
+## 7 octobre, une troisieme fois : une machine grenOS n'a pas de mot de passe,
+## donc une demande `auth_admin` est insatisfiable et le clic ne fait rien.
+##
+## `pkexec` est son seul Recommends, et il est deja la par une dependance
+## stricte : verifie dans la fermeture des Depends de cette liste, pas suppose.
+timeshift
