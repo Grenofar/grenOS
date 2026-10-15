@@ -676,6 +676,44 @@ def perf(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def secours(chemin, taille):
+    """Mode sans echec : une bouee de sauvetage.
+
+    POURQUOI UNE BOUEE, et pas un bouclier ni un triangle d alerte. Il y a
+    deja un bouclier dans la page Securite, et un triangle dit « danger », pas
+    « voici comment s en sortir ». Une bouee dit exactement ce que cette
+    fenetre est : ce qu on attrape quand ca va mal.
+
+    Et surtout elle est DISTINCTE a seize pixels : un anneau epais coupe par
+    quatre entailles, contre un disque plein (grenPlace), un arc ouvert en bas
+    (grenPerf) et un trace de pouls (grenHub). *Une icone de barre n a pas a
+    etre belle, elle doit etre distincte* — la lecon de la prise reseau,
+    redessinee trois fois avant de changer de sujet.
+    """
+    image, u, v = toile(taille)
+
+    cx, cy = 0.5, 0.5
+    rayon, epaisseur = 0.34, 0.145
+    distance = np.hypot(u - cx, v - cy)
+    anneau = np.clip((epaisseur / 2 - np.abs(distance - rayon)) / 0.012, 0, 1)
+    poser(image, anneau, ACCENT, 1.0)
+
+    # Les quatre entailles claires, aux diagonales. Aux diagonales et pas aux
+    # axes : a seize pixels, une entaille verticale tombe entre deux pixels et
+    # disparait, alors qu une diagonale en couvre toujours au moins un.
+    angle = np.degrees(np.arctan2(u - cx, v - cy))
+    for tour in (45.0, 135.0, -45.0, -135.0):
+        ecart = np.abs(((angle - tour + 180.0) % 360.0) - 180.0)
+        entaille = np.clip((26.0 - ecart) / 7.0, 0, 1)
+        poser(image, anneau * entaille, CLAIR, 1.0)
+
+    # PAS DE « centre vide » a peindre : le masque `anneau` ne couvre que la
+    # couronne, donc le milieu est deja transparent. J avais ecrit ici un bloc
+    # qui peignait une couleur de fond par-dessus — il aurait bouche le trou
+    # au lieu de le creuser, et sur un fond sombre personne ne l aurait vu.
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
@@ -703,6 +741,7 @@ def main():
     theme(os.path.join(dossier, 'grenos-theme.png'), taille)
     hub(os.path.join(dossier, 'grenos-hub.png'), taille)
     perf(os.path.join(dossier, 'grenos-perf.png'), taille)
+    secours(os.path.join(dossier, 'grenos-secours.png'), taille)
 
 
 if __name__ == '__main__':

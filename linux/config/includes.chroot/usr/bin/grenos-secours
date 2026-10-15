@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""Mode sans échec — ce que le dernier démarrage a fait, et ce qu'on peut faire.
+
+C15, C16 et C17 : « après un plantage noyau, un pilote fautif ou un démarrage
+raté, grenOS démarre seul en environnement minimal et dit : le dernier
+démarrage a échoué, cause probable : pilote réseau », avec les boutons qui
+vont avec — désactiver le pilote, restaurer la version précédente, redémarrer
+en mode minimal, analyser.
+
+CE QUE CETTE FENÊTRE FAIT, ET CE QU'ELLE NE FAIT PAS :
+
+* elle **dit**. La cause vient du journal du démarrage précédent, pas d'une
+  supposition, et quand le journal ne dit rien elle l'écrit ainsi ;
+* elle **n'allume que ce qu'elle peut tenir**. Un bouton impossible reste
+  visible mais éteint, avec sa raison à côté. Le cacher ferait croire que
+  grenOS ne sait pas le faire ; l'allumer sans rien derrière serait la faute
+  capitale de ce dépôt ;
+* elle **ne désactive jamais un module du cœur**. `ahci`, `nvme`, `ext4` et
+  leurs voisins sont refusés même si le journal les accuse : les mettre en
+  liste noire empêcherait la machine de voir son disque, c'est-à-dire
+  exactement la panne que ce mode existe pour éviter.
+
+Toute la décision est dans `secours.py`, sans GTK, et elle est exercée en
+20 cas. Ici il n'y a que du dessin et des appels.
+"""
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, "/usr/lib/grenos")
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk  # noqa: E402
+
+import grenosui  # noqa: E402
+import secours  # noqa: E402
+
+STYLE = """
+.cause { font-size: 15px; color: @texte; }
+.raison { font-size: 12px; color: @texte-faible; }
+.compte { font-size: 26px; font-weight: 800; color: #f87171; }
+.rassurant { font-size: 15px; color: @texte-faible; }
+"""
+
+
+def lancer(*commande):
+    """Lancer sans jamais faire tomber la fenêtre.
+
+    Une fenêtre de secours qui se ferme parce qu'un bouton a échoué serait la
+    dernière chose dont quelqu'un a besoin à ce moment-là.
+    """
+    try:
+        subprocess.Popen(commande)
+        return True
+    except OSError:
+        return False
+
+
+class Secours(Gtk.Window):
+    def __init__(self):
+        super().__init__()
+        grenosui.fenetre(self, 720, 560)
+        self.set_title("Mode sans échec de grenOS")
+
+        colonne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        colonne.set_margin_top(22)
+        colonne.set_margin_bottom(22)
+        colonne.set_margin_start(24)
+        colonne.set_margin_end(24)
+
+        combien = secours.echecs()
+        cause = secours.cause()
+
+        if combien > 0:
+            colonne.pack_start(
+                grenosui.titre("Le dernier démarrage n'a pas abouti",
+                               "grenOS n'a pas ouvert son bureau."), False, False, 0)
+            chiffre = Gtk.Label(label=str(combien))
+            chiffre.get_style_context().add_class("compte")
+            chiffre.set_xalign(0)
+            suite = Gtk.Label(
+                label="démarrage(s) d'affilée sans bureau" if combien > 1
+                else "démarrage sans bureau")
+            suite.get_style_context().add_class("raison")
+            suite.set_xalign(0)
+            colonne.pack_start(grenosui.carte(chiffre, suite), False, False, 0)
+        else:
+            colonne.pack_start(
+                grenosui.titre("Tout va bien",
+                               "Le dernier démarrage a ouvert son bureau."),
+                False, False, 0)
+            rassurant = Gtk.Label(
+                label="Cette fenêtre s'ouvre d'elle-même après un démarrage "
+                      "raté. Vous pouvez aussi l'ouvrir quand vous voulez.")
+            rassurant.get_style_context().add_class("rassurant")
+            rassurant.set_xalign(0)
+            rassurant.set_line_wrap(True)
+            colonne.pack_start(grenosui.carte(rassurant), False, False, 0)
+
+        if cause:
+            etiquette = Gtk.Label(label="Cause probable : " + cause)
+            etiquette.get_style_context().add_class("cause")
+            etiquette.set_xalign(0)
+            etiquette.set_line_wrap(True)
+            etiquette.set_selectable(True)
+            colonne.pack_start(grenosui.carte(etiquette), False, False, 0)
+
+        actions = {
+            "analyser": lambda *_: lancer("grenos-hub"),
+            "journal": self.voir_journal,
+            "instantane": lambda *_: lancer("pkexec", "timeshift-gtk"),
+            "pilote": self.desactiver_pilote,
+        }
+        for cle, intitule, possible, pourquoi in secours.propositions():
+            ligne = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            bouton = grenosui.bouton(intitule, actions[cle])
+            bouton.set_sensitive(possible)
+            ligne.pack_start(bouton, False, False, 0)
+            if pourquoi:
+                raison = Gtk.Label(label=pourquoi)
+                raison.get_style_context().add_class("raison")
+                raison.set_xalign(0)
+                raison.set_line_wrap(True)
+                ligne.pack_start(raison, False, False, 0)
+            colonne.pack_start(ligne, False, False, 0)
+
+        self.etat = Gtk.Label(label="")
+        self.etat.get_style_context().add_class("raison")
+        self.etat.set_xalign(0)
+        self.etat.set_line_wrap(True)
+        colonne.pack_start(self.etat, False, False, 0)
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        defilement.add(colonne)
+        self.add(defilement)
+        self.connect("destroy", Gtk.main_quit)
+
+    def voir_journal(self, *_):
+        """Le journal du démarrage précédent, en lecture seule.
+
+        `-b -1`, c'est le démarrage d'AVANT : celui qui a échoué. Le nôtre ne
+        dirait rien d'utile, puisqu'il a réussi — c'est pour cela que nous
+        sommes là pour le lire.
+        """
+        if not lancer("x-terminal-emulator", "-e",
+                      "sh", "-c", "journalctl -b -1 -p err --no-pager | less"):
+            self.etat.set_text("Aucun terminal pour afficher le journal.")
+
+    def desactiver_pilote(self, *_):
+        """Mettre le module accusé en liste noire, au prochain démarrage.
+
+        On écrit par `pkexec`, dans un fichier à nous sous `/etc/modprobe.d/` :
+        aucun paquet ne possède ce chemin, donc dpkg ne refusera rien — la
+        leçon du 24 septembre avec `lightdm-gtk-greeter.conf`.
+
+        Et on le dit : ça ne prend effet qu'au redémarrage. Un bouton qui
+        laisse croire que c'est fait tout de suite envoie quelqu'un rouvrir son
+        Wi-Fi dans la seconde et conclure que grenOS ment.
+        """
+        module = secours.module_fautif(secours.cause())
+        if not module:
+            self.etat.set_text("Aucun pilote nommé : rien n'a été touché.")
+            return
+        ligne = "blacklist %s\n" % module
+        ok = lancer("pkexec", "sh", "-c",
+                    "printf '%s' " + repr(ligne) +
+                    " > /etc/modprobe.d/grenos-secours.conf")
+        if ok:
+            self.etat.set_text(
+                "« %s » sera désactivé au prochain démarrage. "
+                "Le fichier est /etc/modprobe.d/grenos-secours.conf — "
+                "l'effacer remet le pilote." % module)
+        else:
+            self.etat.set_text("La demande d'autorisation n'a pas abouti.")
+
+
+def main():
+    grenosui.habiller()
+    grenosui.ajouter_style(STYLE)
+    fenetre = Secours()
+    fenetre.show_all()
+    combien = secours.echecs()
+    cause = secours.cause()
+    offerts = [c for c, _, possible, _ in secours.propositions() if possible]
+    grenosui.dire("secours : fenetre ouverte, %d echec(s), %d action(s) offerte(s)"
+                  % (combien, len(offerts)))
+    if cause:
+        grenosui.dire("secours : cause affichee — %s" % cause[:70])
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

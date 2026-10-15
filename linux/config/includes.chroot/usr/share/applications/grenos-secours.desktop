@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Mode sans échec
+Comment=Ce que le dernier démarrage a fait, et ce qu'on peut faire
+Exec=grenos-secours
+Icon=grenos-secours
+Terminal=false
+Categories=System;
