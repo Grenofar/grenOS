@@ -1457,8 +1457,19 @@ fautives=""
 for unite in /etc/systemd/system/grenos-*.service; do
     [ -f "$unite" ] || continue
     directives=$(sed 's/#.*//' "$unite")
-    avant_bureau=$(printf '%s\n' "$directives" | grep -c '^Before=.*\(lightdm\|display-manager\)')
-    tire_reseau=$(printf '%s\n' "$directives" | grep -c '^\(Wants\|Requires\|Requisite\|BindsTo\)=.*network-online')
+    # `|| true` EST OBLIGATOIRE ICI, et c'est la sixième fois que ce dépôt le
+    # paye. `grep -c` affiche « 0 » quand il ne trouve rien ET sort en erreur ;
+    # sous le `set -e` de ce hook, l'affectation emporte le script entier. La
+    # construction 38681708753 est morte là, après avoir affiché l'intitulé de
+    # ce contrôle et aucun de ses messages — ce qui est le symptôme exact.
+    #
+    # Et mon essai l'avait laissé passer parce qu'il lançait le fragment SANS
+    # `set -e` : un essai qui ne reproduit pas les conditions de l'appelant
+    # peut rendre vert un script qui va mourir.
+    avant_bureau=$(printf '%s\n' "$directives" \
+        | grep -c '^Before=.*\(lightdm\|display-manager\)' || true)
+    tire_reseau=$(printf '%s\n' "$directives" \
+        | grep -c '^\(Wants\|Requires\|Requisite\|BindsTo\)=.*network-online' || true)
     if [ "$avant_bureau" -gt 0 ] && [ "$tire_reseau" -gt 0 ]; then
         fautives="$fautives $(basename "$unite")"
     fi
