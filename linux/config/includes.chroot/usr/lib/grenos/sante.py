@@ -501,13 +501,47 @@ def essai_usb(racine="/sys/bus/usb/devices"):
             "%d appareil(s), tous avec un pilote" % len(appareils))
 
 
+def pourquoi(unite):
+    """Ce que systemd dit d'un service tombé : la raison, pas le nom.
+
+    « Un service a échoué » ne se répare pas ; « il a dépassé son délai » ou
+    « il est sorti en 100 » se répare. Le premier passage de ce diagnostic a
+    nommé `grenos-maj-verif.service` et s'est arrêté là — il a fallu revenir
+    demander à la machine ce qu'elle savait déjà.
+
+    `Result` vaut `timeout`, `exit-code`, `signal`, `oom-kill`… et
+    `ExecMainStatus` porte le code de sortie. Les deux ensemble suffisent
+    presque toujours.
+    """
+    sortie = _commande(["systemctl", "show", "--no-pager",
+                        "-p", "Result", "-p", "ExecMainStatus",
+                        "-p", "ExecMainCode", unite], delai=5)
+    champs = {}
+    for ligne in sortie.splitlines():
+        cle, _, valeur = ligne.partition("=")
+        champs[cle.strip()] = valeur.strip()
+
+    resultat = champs.get("Result", "")
+    code = champs.get("ExecMainStatus", "")
+    if resultat == "timeout":
+        return "a depasse son delai"
+    if resultat == "oom-kill":
+        return "tue faute de memoire"
+    if resultat == "signal":
+        return "tue par un signal"
+    if resultat == "exit-code" and code:
+        return "sorti en %s" % code
+    return resultat or "raison inconnue"
+
+
 def essai_services():
-    """Est-ce que quelque chose a échoué au démarrage ?"""
+    """Est-ce que quelque chose a échoué au démarrage, et pourquoi ?"""
     echecs = unites_en_echec()
     if not echecs:
         return ("Services", BON, "aucun service en échec")
+    dits = ["%s (%s)" % (unite, pourquoi(unite)) for unite in echecs[:4]]
     return ("Services", RATE,
-            "%d service(s) en échec : %s" % (len(echecs), ", ".join(echecs[:4])))
+            "%d service(s) en échec : %s" % (len(echecs), ", ".join(dits)))
 
 
 ESSAIS = (essai_processeur, essai_memoire, essai_stockage, essai_reseau,
