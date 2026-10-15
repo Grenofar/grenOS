@@ -1,6 +1,13 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { CASCADES, Router, RouterExhaustedError, type UsageStore } from "../src/index.ts";
+import {
+  CASCADES,
+  FORFAIT,
+  Router,
+  RouterExhaustedError,
+  specFor,
+  type UsageStore,
+} from "../src/index.ts";
 
 /**
  * The cascade only misbehaves under conditions that are inconvenient to
@@ -132,13 +139,55 @@ test("the cascade crosses providers when NVIDIA fails", async () => {
 test("a second Gemini floor answers when the first is at high demand", async () => {
   // 2026-09-11: the NIM models timing out or answering 503 while
   // gemini-3.8-flash refused for "high demand", all at once, for most of an hour.
+  //
+  // The second floor is gemini-3.5-flash since 2026-10-15, and the order is
+  // measured, not guessed: on that day gemini-3.7-flash answered UNAVAILABLE
+  // ("currently experiencing high demand") while gemini-3.5-flash answered in
+  // 1.8 s. A floor that is down today belongs below one that is up.
   const calls = stubFetch((m) =>
-    m === "gemini-3.7-flash" ? geminiOk() : new Response("high demand", { status: 503 }),
+    m === "gemini-3.5-flash" ? geminiOk() : new Response("high demand", { status: 503 }),
   );
   const res = await new Router(both()).complete({ role: "coder", system: "s", messages: [] });
 
-  assert.equal(res.model, "gemini-3.7-flash");
-  assert.deepEqual(calls, [NV, NEMO, KIMI, "gemini-3.8-flash", "gemini-3.7-flash"]);
+  assert.equal(res.model, "gemini-3.5-flash");
+  assert.deepEqual(calls, [NV, NEMO, KIMI, "gemini-3.8-flash", "gemini-3.5-flash"]);
+});
+
+test("the paid-tier models sit at the bottom and are never tried first", () => {
+  // They answer 429 in three tenths of a second on the free key: measured on
+  // 2026-10-15. Putting them anywhere but last would spend a cascade step on
+  // a refusal that is certain.
+  //
+  // This guard is the one that matters the day the key becomes paid: whoever
+  // moves gemini-3.1-pro-preview to the front must change this test too, and
+  // therefore must think about it.
+  for (const role of ["master", "architect", "coder", "tester"] as const) {
+    const liste = CASCADES[role];
+    for (const paye of FORFAIT) {
+      const rang = liste.indexOf(paye);
+      if (rang === -1) continue;
+      assert.equal(
+        rang,
+        liste.length - 1 - (liste.length - 1 - rang),
+        `${paye} must stay in ${role}`,
+      );
+      assert.ok(
+        rang >= liste.length - FORFAIT.length,
+        `${paye} must be at the bottom of the ${role} cascade, it is at ${rang}/${liste.length}`,
+      );
+    }
+  }
+});
+
+test("every model named by a cascade exists in the table", () => {
+  // A cascade naming a model that no longer exists is a step that throws
+  // instead of falling through — and it would only show on the day that step
+  // is reached, which is the worst day for it.
+  for (const role of ["master", "architect", "coder", "tester"] as const) {
+    for (const id of CASCADES[role]) {
+      assert.doesNotThrow(() => specFor(id), `${id} (${role})`);
+    }
+  }
 });
 
 test("a retired model is set aside for a day, not retried every tick", async () => {

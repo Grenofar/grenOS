@@ -132,6 +132,94 @@ export const MODELS: Record<string, ModelSpec> = {
     rpm: 15,
     latencyMs: 3000,
   },
+
+  // --- Four more Gemini floors, each one measured, not assumed --------------
+  //
+  // Measured on 2026-10-15 by calling generateContent on every model the key
+  // can list. Sixty-three are listed; these four answered with text. They were
+  // not wired before, and each one carries ITS OWN daily quota — so adding
+  // them does not make the agents smarter, it makes them last longer. That is
+  // what actually stops the factory: not a bad answer, an exhausted day.
+  //
+  // What did NOT answer, and must not be added:
+  //   gemini-4-argon, gemini-3.1-pro-preview, gemini-pro-latest
+  //       -> 429 RESOURCE_EXHAUSTED in 0.3 s. The Pro tier has NO free quota.
+  //          Wiring them would spend a cascade step on an instant failure.
+  //   antigravity-preview-latest
+  //       -> 400, "This model only supports Interactions API". Not reachable
+  //          through generateContent at all.
+  //   gemini-2.5-flash, gemini-2.5-pro -> 404, retired.
+  //   gemini-flash-latest answers, but it is an ALIAS: it almost certainly
+  //          shares the quota of whatever version it points at, so it would
+  //          add a cascade step without adding a budget. Versioned ids only.
+  "gemini-3.5-flash": {
+    provider: "gemini",
+    id: "gemini-3.5-flash",
+    label: "Gemini 3.5 Flash",
+    contextTokens: 1_000_000,
+    dailyRequests: 20,
+    rpm: 15,
+    latencyMs: 2000,
+  },
+  "gemini-3-flash-preview": {
+    provider: "gemini",
+    id: "gemini-3-flash-preview",
+    label: "Gemini 3 Flash Preview",
+    contextTokens: 1_000_000,
+    dailyRequests: 20,
+    rpm: 15,
+    latencyMs: 3000,
+  },
+  "gemini-3.5-flash-lite": {
+    provider: "gemini",
+    id: "gemini-3.5-flash-lite",
+    label: "Gemini 3.5 Flash Lite",
+    contextTokens: 1_000_000,
+    dailyRequests: 20,
+    rpm: 15,
+    latencyMs: 1500,
+  },
+  "gemini-3.1-flash-lite": {
+    provider: "gemini",
+    id: "gemini-3.1-flash-lite",
+    label: "Gemini 3.1 Flash Lite",
+    contextTokens: 1_000_000,
+    dailyRequests: 20,
+    rpm: 15,
+    latencyMs: 1500,
+  },
+
+  // --- The paid tier, ready and deliberately LAST --------------------------
+  //
+  // These are the ones worth having for code. On the free key they answer 429
+  // in a third of a second, so they sit at the BOTTOM of every cascade: the
+  // router walks past a model that is out of quota, and a model that always
+  // refuses costs one wasted call per cascade walk and nothing more.
+  //
+  // The day a paid key is in place they become reachable without a single
+  // line changing — and `coder` should then be reordered to put
+  // gemini-3.1-pro-preview FIRST. That reorder is a deliberate decision, not
+  // something to do blind: it is written here so it can be done in one edit.
+  "gemini-3.1-pro-preview": {
+    provider: "gemini",
+    id: "gemini-3.1-pro-preview",
+    label: "Gemini 3.1 Pro Preview (forfait)",
+    contextTokens: 1_000_000,
+    dailyRequests: 20,
+    rpm: 5,
+    latencyMs: 20_000,
+    timeoutMs: 300_000,
+  },
+  "gemini-4-argon": {
+    provider: "gemini",
+    id: "gemini-4-argon",
+    label: "Gemini 4 Argon (forfait)",
+    contextTokens: 1_000_000,
+    dailyRequests: 20,
+    rpm: 5,
+    latencyMs: 20_000,
+    timeoutMs: 300_000,
+  },
 };
 
 export type ModelRole = "master" | "architect" | "coder" | "tester";
@@ -159,27 +247,64 @@ export const CASCADES: Record<ModelRole, string[]> = {
     "deepseek-ai/deepseek-v4-flash-0731",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-pro-preview",
   ],
   architect: [
     "deepseek-ai/deepseek-v4-flash-0731",
     "nvidia/nemotron-3-super-120b-a12b",
     "moonshotai/kimi-k3",
     "gemini-3.8-flash",
+    "gemini-3.5-flash",
     "gemini-3.7-flash",
+    "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview",
   ],
+  // LE CODEUR EST CELUI QUI COMPTE, et c'est lui qui a le plus d'etages.
+  //
+  // Une tache de code perdue faute de quota, c'est une construction de
+  // quarante minutes qui n'a jamais lieu. On lui donne donc tous les modeles
+  // qui repondent, chacun avec son propre budget du jour.
+  //
+  // `gemini-3.1-pro-preview` est en DERNIER et doit passer en PREMIER le jour
+  // ou la clef est payante : c'est le seul de la liste qui raisonne vraiment
+  // sur du code. Aujourd'hui il rend 429 en trois dixiemes de seconde.
   coder: [
     "deepseek-ai/deepseek-v4-flash-0731",
     "nvidia/nemotron-3-super-120b-a12b",
     "moonshotai/kimi-k3",
     "gemini-3.8-flash",
+    "gemini-3.5-flash",
     "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-4-argon",
   ],
   tester: [
     "nvidia/nemotron-3-super-120b-a12b",
     "deepseek-ai/deepseek-v4-flash-0731",
     "gemini-3.6-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
   ],
 };
+
+/**
+ * Les modeles reserves a une clef payante.
+ *
+ * Ils sont dans les cascades, en dernier, et ils refusent aujourd'hui. Le jour
+ * ou la clef change, `npm run doctor` les verra repondre et il n'y aura
+ * qu'une chose a faire : remonter `gemini-3.1-pro-preview` en tete de
+ * `coder`. Ecrit ici pour que ce soit une ligne a deplacer, pas une enquete a
+ * refaire.
+ */
+export const FORFAIT = ["gemini-3.1-pro-preview", "gemini-4-argon"] as const;
 
 export function specFor(modelId: string): ModelSpec {
   const spec = MODELS[modelId];
