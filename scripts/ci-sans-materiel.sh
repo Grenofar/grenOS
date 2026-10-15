@@ -21,10 +21,21 @@
 #
 # CE QUI REND CETTE PREUVE NON VIDE. Un essai qui enleve une carte reseau et
 # qui ne verifie pas qu elle est partie dirait « vert » meme si QEMU avait
-# ignore l option. On exige donc que la machine CONSTATE l absence :
-# `maj: depot INJOIGNABLE` ne peut sortir que si rien ne repond. Sans cette
-# ligne, le bureau ouvert ne prouverait rien du tout — ce serait le detecteur
-# de trous qui mesurait la diction d une voix.
+# ignore l option. On exige donc que la machine CONSTATE l absence. Sans cela,
+# le bureau ouvert ne prouverait rien — ce serait le detecteur de trous qui
+# mesurait la diction d une voix.
+#
+# ET LE CHOIX DU SIGNAL A ETE DECIDE PAR LA MACHINE, PAS PAR MOI. Au premier
+# passage, le 15 octobre, cet essai a refuse — et il avait raison, pour une
+# raison que je n avais pas prevue : la sonde ecrivait « depot joignable et
+# signature acceptee » sur une machine qui n avait AUCUNE carte reseau.
+# `apt-get update` rend 0 quand il ne joint rien. Le garde neuf a donc trouve
+# un defaut de l OS a son premier tour, et pas dans l essai.
+#
+# On s ancre donc sur la ligne qu on a VUE dire vrai : Flathub rapporte son
+# erreur curl 6, « nom introuvable », et elle ne peut pas sortir d une machine
+# qui a du reseau. La ligne d apt reste, mais comme CONTRADICTION : si elle
+# dit « joignable », quelque chose ment, et on refuse de conclure.
 #
 # Le verdict est un SEUL morceau de code, appele par le vrai parcours comme
 # par l essai (`--juger <journal>`) : deux copies d une meme mesure finissent
@@ -47,12 +58,26 @@ juger() {
         echo "::error::La preuve serait vide — elle ne mesurerait pas l absence."
         return 1
     fi
-    if ! grep -aq 'maj: depot INJOIGNABLE' "$journal"; then
-        echo "::error::La machine n a pas dit que le depot etait injoignable."
+    if grep -aq 'magasin : Flathub repond' "$journal"; then
+        echo "::error::Flathub a repondu : la carte reseau n a pas ete retiree."
+        return 1
+    fi
+    if ! grep -aq 'magasin : FLATHUB INJOIGNABLE' "$journal"; then
+        echo "::error::La machine n a dit NI que Flathub repond NI qu il est injoignable."
         echo "::error::Rien ne prouve que le reseau etait absent : essai sans valeur."
         return 1
     fi
-    echo "sans materiel : le depot est injoignable, l absence est constatee"
+    echo "sans materiel : Flathub est injoignable, l absence de reseau est constatee"
+
+    # 1 bis. ET LE DISQUE ? L intitule de l etape promet deux absences ; sans
+    #        cette mesure il n en prouverait qu une, et promettre plus qu on ne
+    #        montre est le defaut capital de ce depot.
+    if ! grep -aq 'disques vus par les Reglages : 0' "$journal"; then
+        echo "::error::La machine voyait au moins un disque : l absence n a pas eu lieu."
+        grep -a 'disques vus par les Reglages' "$journal" | sed 's/^.*grenos: /  /' || true
+        return 1
+    fi
+    echo "sans materiel : aucun disque vu, l absence de disque est constatee"
 
     # 2. ET LE BUREAU S EST-IL QUAND MEME OUVERT ? C est la demande, mot pour
     #    mot : un peripherique absent ne doit jamais faire echouer le demarrage.

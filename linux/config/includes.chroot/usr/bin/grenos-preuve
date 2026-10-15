@@ -137,8 +137,29 @@ fi
 # `Dir::Etc::sourceparts=/dev/null` ne garde que notre fichier : on veut savoir
 # si NOTRE depot repond, pas si Debian repond. C'est exactement l'operation que
 # fait « Mettre a jour grenOS », signature comprise.
+#
+# `--error-on=any` EST LA LIGNE QUI COMPTE, ET SON ABSENCE A RENDU CETTE
+# MESURE FAUSSE PENDANT DES SEMAINES.
+#
+# Mesure, pas supposition : le 15 octobre, la machine d'integration a demarre
+# avec `-nic none` et AUCUNE carte reseau. Flathub l'a dit sans ambiguite —
+# `magasin : FLATHUB INJOIGNABLE : ... [6]`, et 6 est « nom introuvable ».
+# Cette sonde, sur le meme demarrage, a ecrit « depot joignable et signature
+# acceptee ». `apt-get update` rend donc **0** quand il ne joint rien : il
+# signale l'echec et sort quand meme en reussite.
+#
+# C'est exactement « une mesure fausse ne se contredit jamais » : elle etait
+# verte, stable, et disait l'inverse de la verite sur une machine qui ne
+# pouvait resoudre aucun nom. La ligne que je lis pour croire qu'une mise a
+# jour arrivera disait oui a une machine sans reseau.
+#
+# La forme est lue dans apt-get(8) de trixie, pas ecrite de memoire :
+# « -e any, --error-on=any — Fail the update command if any error occured,
+# even a transient one. » `APT::Update::Error-Mode`, que j'allais poser, n'est
+# documente NI dans apt-get(8) NI dans apt.conf(5) : ce serait une option
+# morte, la faute exacte de `media.ffmpeg.vaapi.enabled` du 7 octobre.
 if [ -n "$depot" ]; then
-    if apt-get update -qq \
+    if apt-get update --error-on=any -qq \
             -o Dir::Etc::sourcelist="$depot" \
             -o Dir::Etc::sourceparts=/dev/null \
             -o APT::Get::List-Cleanup=0 > /tmp/grenos-apt 2>&1; then
