@@ -1,18 +1,16 @@
-# grenOS Project State
+# State of grenOS Linux
 
-**Date**: 2026-09-26 16:39 UTC
+**Date:** 2026-10-15 14:31 UTC
+**Mission:** grenOS Linux: the look, the store and the updates
+**Token budget:** 2,573,579 / 20,000,000 tokens used
 
-## Current Mission
-- **Title**: Le son, la video et un second navigateur
-- **Status**: Completed
-- **Budget Consumed**: ~1,851,514 / 4,000,000 tokens
+## Current Status
+- **Completed:**
+  - `linux/tools/verif-catalogue.py`: Python 3 guard validating `linux/data/catalogue.json` (task `79bf6866`).
+  - `docs/SECURITE.md`: Security vulnerability reporting instructions (task `a8de6872`).
+  - `docs/DEVELOPPEUR.md`: Developer guide for building and testing grenOS Linux (task `1f20af51`).
+- **Blocked:**
+  - Task `e64ec2d3` (adding 21 applications to `linux/data/catalogue.json`) failed with `spec_gap` because the application list was missing from the prompt context.
 
-## What is Done
-- `docs/specs/son-et-video.md`: complete specification of the audio and video hardware pipeline, drivers, configuration, and diagnostics (task 1d987878).
-- `linux/config/includes.chroot/usr/bin/grenos-parametres` & `materiel.py`: non-blocking asynchronous audio and video diagnostic panel implemented and merged into main (commit `e908f54`).
-
-## What is in Flight
-- None.
-
-## What is Blocked
-- None.
+## Next Steps
+- Awaiting human input with the 21 pre-verified application IDs and metadata to re-dispatch the catalogue enrichment task.
