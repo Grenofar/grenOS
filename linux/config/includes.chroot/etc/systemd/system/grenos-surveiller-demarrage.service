@@ -1,0 +1,37 @@
+# C15 : savoir qu'un démarrage a échoué.
+#
+# Il pose un témoin au début de chaque démarrage ; c'est l'ouverture du bureau
+# qui l'efface. Un témoin encore là au démarrage suivant ne peut vouloir dire
+# qu'une chose : le précédent n'est jamais arrivé au bureau.
+#
+# `Before=lightdm` est voulu : le témoin doit être posé AVANT que quoi que ce
+# soit puisse échouer. Mais il n'a aucune dépendance réseau, et il ne tire
+# rien — tout ce qu'il attendrait, le bureau l'attendrait aussi.
+#
+# PAS DE `Wants=network-online.target`, et l'erreur du 15 octobre a appris
+# pourquoi : j'ai retiré cette ligne d'une autre unité sur une prémisse que je
+# n'avais pas vérifiée, et ça a cassé la mise à jour au redémarrage pendant une
+# construction entière. Ici elle n'a jamais eu lieu d'être : lire un fichier
+# local et interroger le journal ne demandent aucun réseau.
+
+[Unit]
+Description=grenOS : le dernier demarrage a-t-il ouvert un bureau
+DefaultDependencies=no
+After=local-fs.target systemd-journald.service
+Before=lightdm.service display-manager.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+# Le script rend toujours 0 : un compteur d'echecs qui empeche de demarrer
+# serait exactement la panne qu'il est cense prevenir.
+ExecStart=/usr/lib/grenos/grenos-surveiller-demarrage
+# Soixante secondes : au-dela, systemd passe a la suite. Interroger un journal
+# abime peut trainer, et mieux vaut ne pas savoir que ne pas demarrer.
+TimeoutStartSec=60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

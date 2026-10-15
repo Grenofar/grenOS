@@ -23,9 +23,17 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 
 # Le premier écran ne se rallume pas sur une machine déjà nommée : sa condition
 # (l'absence de /etc/grenos/identite) s'en charge, mais autant être clair.
+#
+# QUATRIEME LISTE A LA MAIN DE CE DEPOT, et celle-ci est differente des trois
+# autres : toutes les unites ne doivent PAS etre armees. `grenos-maj-demarrage`
+# est desactivee par defaut et ne s arme qu au clic de « Mettre a jour et
+# redemarrer » ; l armer ici la ferait tourner a chaque demarrage. Un glob
+# serait donc faux. La liste reste, et `grenos-surveiller-demarrage` y entre
+# explicitement — elle doit tourner a CHAQUE demarrage, c est tout son objet.
 for service in grenos-premier.service grenos-preuve.service grenos-maj-verif.timer \
                grenos-console-propre.service grenos-sonde-arret.service \
                grenos-splash-arret.service grenos-performances.service \
+               grenos-surveiller-demarrage.service \
                grenos-video.service; do
     systemctl enable "$service" >/dev/null 2>&1 || true
 done

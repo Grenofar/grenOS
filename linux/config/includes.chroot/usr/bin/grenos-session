@@ -663,6 +663,26 @@ print('%d disque(s), %d volume(s) : %s' % (
     fi
 ) &
 
+# C15 — LE BUREAU EST OUVERT, DONC CE DÉMARRAGE A RÉUSSI.
+#
+# C'est le seul endroit qui puisse le dire, et c'est pour cela que l'effacement
+# du témoin vit ici et pas dans `grenos-preuve` : la sonde ne tourne que sur la
+# machine d'intégration, elle s'arrête d'elle-même faute de port série ailleurs.
+# Un témoin effacé seulement en CI aurait fait compter un échec à chaque
+# démarrage réussi sur une vraie machine — une mesure fausse, stable, et qui ne
+# se serait jamais contredite.
+#
+# On efface le témoin ET on remet le compteur à zéro : deux démarrages ratés
+# séparés par un démarrage réussi ne sont pas une suite de deux.
+(
+    ETAT=/var/lib/grenos
+    if [ -w "$ETAT" ] || [ -w "$(dirname "$ETAT")" ]; then
+        rm -f "$ETAT/demarrage-en-cours" 2>/dev/null || true
+        printf '0\n' > "$ETAT/demarrages-echoues" 2>/dev/null || true
+        grenos-dire "secours : ce demarrage a ouvert un bureau, compteur remis a zero"
+    fi
+) &
+
 # L'accueil, une seule fois, à la première ouverture.
 if [ ! -e "$CONFIG/accueil-vu" ]; then
     touch "$CONFIG/accueil-vu"

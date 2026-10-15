@@ -80,8 +80,8 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | C12 | Sauvegardes **chiffrées** | [à faire] |
 | C13 | Sauvegardes **versionnées** | [à faire] |
 | C14 | **Restauration fichier par fichier** | [à faire] |
-| C15 | **Mode sans échec intelligent** : après un plantage noyau, un pilote fautif ou un échec de démarrage, démarrer seul dans un environnement minimal | [à faire] |
-| C16 | Le mode sans échec **nomme la cause probable** : « le dernier démarrage a échoué à cause de… » | [à faire] |
+| C15 | **Mode sans échec intelligent** : après un plantage noyau, un pilote fautif ou un échec de démarrage, démarrer seul dans un environnement minimal | **[écrit] pour la moitié qui manque à tout le reste** — *savoir* qu'un démarrage a échoué. Un démarrage raté ne laisse rien derrière lui, donc on prend le problème par l'autre bout : un témoin posé au début de chaque démarrage, effacé par l'ouverture du bureau. Un témoin encore là au démarrage suivant ne peut vouloir dire qu'une chose. Il porte le `boot_id` du noyau, sans quoi on relirait le sien et on compterait un échec à tous les coups — la faute exacte du témoin de persistance du 27 septembre. 8 cas exercés, **tous rendent 0** : un compteur d'échecs qui empêche de démarrer serait la panne qu'il prévient. **Reste** : démarrer vraiment en environnement minimal au bout de N échecs |
+| C16 | Le mode sans échec **nomme la cause probable** : « le dernier démarrage a échoué à cause de… » | **[écrit]** — la cause est demandée au journal du démarrage précédent, pas devinée, et dans l'ordre du plus grave au plus explicite : panique noyau, puis pilote qui ne se charge pas (son exemple exact), puis service qui n'a pas démarré. **Et si le journal ne dit rien, il le dit** — « coupure de courant ou arrêt au bouton » — au lieu d'inventer une cause. Chaque interrogation est bornée à dix secondes : nous sommes avant le bureau |
 | C17 | Le mode sans échec **propose** : désactiver le pilote, restaurer la version précédente, redémarrer en mode minimal, analyser | [à faire] |
 | C18 | **Recovery plus solide** (sa première liste) | [à faire] |
 

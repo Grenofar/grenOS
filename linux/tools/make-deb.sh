@@ -191,15 +191,21 @@ done
 # livrés à une machine déjà installée. Ajouter un service ou une application
 # demandait de regraver. Ils font partie du paquet désormais.
 
-# Les services : le premier écran, la preuve de session, la vérification des
-# mises à jour et leur installation automatique.
-for service in grenos-premier.service grenos-preuve.service \
-               grenos-maj-verif.service grenos-maj-verif.timer \
-               grenos-maj-auto.service grenos-maj-auto.timer \
-               grenos-maj-demarrage.service \
-               grenos-console-propre.service grenos-sonde-arret.service \
-               grenos-splash-arret.service grenos-performances.service                grenos-video.service; do
-    install -m 0644 "$DEDANS/etc/systemd/system/$service" "$BUILD/etc/systemd/system/"
+# Les services et les minuteries. LA TROISIEME LISTE A LA MAIN DE CE FICHIER,
+# et la troisieme dette de la meme famille : elle portait douze noms, l arbre
+# en porte treize, et le treizieme est celui qui venait d etre ecrit.
+#
+# Une unite oubliee ici ne fait AUCUN bruit : l ISO l a, une machine mise a
+# jour non, et le service qu elle declenche ne tourne simplement jamais chez
+# elle. C est ce qui serait arrive a `grenos-surveiller-demarrage` — donc au
+# detecteur d echec de demarrage, c est-a-dire a la piece censee rattraper les
+# machines en difficulte, absente precisement des machines en difficulte.
+#
+# Le glob prend tout ce que l arbre porte, et l arbre ne porte que nos unites.
+for service in "$DEDANS"/etc/systemd/system/*.service \
+               "$DEDANS"/etc/systemd/system/*.timer; do
+    [ -f "$service" ] || continue
+    install -m 0644 "$service" "$BUILD/etc/systemd/system/"
 done
 
 # Les fragments qui laissent passer un plymouthd deja la. Ils voyagent avec le
