@@ -81,6 +81,31 @@ for source in "$DEDANS"/usr/lib/grenos/*.py; do
 done
 install -m 0755 "$DEDANS/usr/lib/grenos/grenos-compte" "$BUILD/usr/lib/grenos/"
 
+# ET LA MEME DETTE, DANS LE MEME FICHIER, POUR LES AUXILIAIRES QUI NE SONT PAS
+# EN PYTHON. Le commentaire ci-dessus la nomme pour les modules `.py` et la
+# ferme par un glob ; les executables, eux, etaient encore installes un par un,
+# plus bas, a la main. Dix lignes, et il suffisait d en oublier une.
+#
+# Mesure, pas supposition : le 15 octobre, `grenos-instantane` a ete ecrit et
+# appele par `grenos-maj-demarrage`, et il n aurait PAS voyage dans le paquet.
+# L ISO l aurait eu, une machine mise a jour non — et comme l appelant le garde
+# derriere un `[ -x ]`, l instantane n aurait simplement jamais eu lieu chez
+# elle, sans une ligne d erreur. C est le defaut du 1er octobre (`composants.py`
+# et `securite.py` absents de la liste) a l identique.
+#
+# Le glob est desormais la source : il reprend exactement les onze fichiers que
+# la liste a la main portait, plus ceux qu on ecrira. Les `install` nommes plus
+# bas deviennent redondants et sont gardes pour leurs raisons — ils ne peuvent
+# pas diverger dangereusement, le glob etant un sur-ensemble.
+for source in "$DEDANS"/usr/lib/grenos/*; do
+    nom=$(basename "$source")
+    case "$nom" in
+        *.py|verif-*|__pycache__) continue ;;
+    esac
+    [ -f "$source" ] || continue
+    install -m 0755 "$source" "$BUILD/usr/lib/grenos/"
+done
+
 install -m 0644 "$DEDANS/usr/share/xsessions/grenos.desktop" "$BUILD/usr/share/xsessions/"
 
 # Le tampon de PipeWire, sans lequel le son hoquette sous charge. Fichier a

@@ -1,0 +1,103 @@
+#!/bin/sh
+# C1 : « a chaque installation de pilote, de mise a jour de noyau ou d OS,
+# l OS fait un snapshot ».
+#
+# LA REGLE QUI PASSE AVANT TOUTES LES AUTRES : ce script ne doit JAMAIS
+# empecher un demarrage. Il est appele par `grenos-maj-demarrage`, qui tourne
+# avant lightdm — tout ce qu il attend, le bureau l attend aussi. Il rend donc
+# toujours 0, il est borne dans le temps, et il ecrit son verdict au lieu de
+# le faire deviner.
+#
+# C est la ligne A11 de sa liste, appliquee a une piece qui ne lui appartient
+# pas : « un peripherique attendu ne doit jamais faire echouer le demarrage ».
+# Un disque d instantanes est exactement un peripherique attendu.
+#
+# CE QUE CE SCRIPT NE FAIT PAS, ET IL NE FAUT PAS L ENJOLIVER. Il ne couvre
+# pas encore l installation d un pilote isole depuis le magasin : seules la
+# mise a jour d avant-bureau et le bouton « Mettre a jour grenOS » passent
+# par ici. Et il ne donne pas C2 — la restauration de timeshift sur ext4 se
+# fait par rsync, donc elle n est pas atomique et ne survit pas a une coupure
+# de courant.
+
+set -u
+
+VERDICT=/run/grenos/instantane
+RAISON=""
+ETAT=""
+
+dire() {
+    if command -v grenos-dire >/dev/null 2>&1; then
+        grenos-dire "instantane : $1"
+    else
+        echo "grenos: instantane : $1"
+    fi
+}
+
+finir() {
+    mkdir -p /run/grenos 2>/dev/null || true
+    printf '%s %s\n' "$ETAT" "$RAISON" > "$VERDICT" 2>/dev/null || true
+    dire "$ETAT — $RAISON"
+    exit 0
+}
+
+# 1. L outil est-il la ? Sur une image ou timeshift aurait ete retire, on le
+#    dit au lieu de mourir.
+if ! command -v timeshift >/dev/null 2>&1; then
+    ETAT="absent"
+    RAISON="timeshift n est pas installe"
+    finir
+fi
+
+# 2. Y A-T-IL UN DISQUE POUR LES RECEVOIR, et c est le cas qui arrive le plus
+#    souvent : sur une image live, il n y en a aucun. timeshift sans disque
+#    configure pose une question et attend — c est exactement ce qu il ne faut
+#    pas devant un demarrage. On regarde donc AVANT de l appeler.
+#
+#    `backup_device_uuid` est le champ que timeshift ecrit dans sa
+#    configuration quand quelqu un a choisi un disque. Vide ou absent, il n y
+#    a rien a faire, et ce n est pas une panne.
+CONF=/etc/timeshift/timeshift.json
+if [ ! -f "$CONF" ]; then
+    ETAT="aucun-disque"
+    RAISON="timeshift n a pas encore de disque choisi"
+    finir
+fi
+UUID=$(sed -n 's/.*"backup_device_uuid"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+       "$CONF" 2>/dev/null | head -n 1)
+if [ -z "$UUID" ]; then
+    ETAT="aucun-disque"
+    RAISON="aucun disque d instantanes n est choisi"
+    finir
+fi
+
+# 3. Et ce disque existe-t-il vraiment sur CETTE machine ? Un UUID ecrit dans
+#    une configuration ne prouve pas qu un disque repond — c est la lecon de
+#    `logo.png`, pose et sans effet. Si le disque externe est debranche,
+#    timeshift chercherait, et nous attendrions.
+if ! [ -e "/dev/disk/by-uuid/$UUID" ]; then
+    ETAT="disque-absent"
+    RAISON="le disque choisi n est pas branche"
+    finir
+fi
+
+# 4. L instantane lui-meme, BORNE DANS LE TEMPS. `timeout` rend 124 quand il
+#    coupe : on le distingue d une vraie erreur, parce que les deux ne se
+#    corrigent pas pareil.
+ETIQUETTE="${1:-avant une mise a jour de grenOS}"
+if timeout 600 timeshift --create --scripted \
+        --comments "grenOS : $ETIQUETTE" > /tmp/grenos-instantane 2>&1; then
+    ETAT="fait"
+    RAISON="$ETIQUETTE"
+else
+    code=$?
+    if [ "$code" = 124 ]; then
+        ETAT="trop-long"
+        RAISON="coupe apres dix minutes, le demarrage continue"
+    else
+        ETAT="echec"
+        RAISON="timeshift a rendu $code : $(tr -d '\n' < /tmp/grenos-instantane \
+                | cut -c1-90)"
+    fi
+fi
+rm -f /tmp/grenos-instantane
+finir

@@ -46,6 +46,21 @@ AVIS = {
                  "il tue une application avant que la machine ne gèle ; "
                  "ajouté le 2 octobre"),
 
+    # LES TROIS QUE GRENPERF COMPTAIT COMME « INCONNUS », ET QUE J'AI
+    # MOI-MÊME AJOUTÉS. Une page dont le travail est de nommer ne doit pas
+    # rendre « 4 inconnu(s) » pour des services qu'elle a installés la veille.
+    "systemd-timesyncd": (INDISPENSABLE,
+                          "il met l'heure à l'heure, et sans heure juste "
+                          "AUCUNE signature TLS n'est valide : ni le dépôt, "
+                          "ni Flathub, ni un site"),
+    "wpa_supplicant": (INDISPENSABLE,
+                       "c'est lui qui parle le WPA ; sans lui, aucun réseau "
+                       "Wi-Fi protégé, sur aucune carte. Sur une machine "
+                       "câblée il attend sans rien consommer"),
+    "user@1000": (INDISPENSABLE,
+                  "le gestionnaire de la session : c'est sous lui que "
+                  "tournent PipeWire et le bus de la personne"),
+
     "irqbalance": (CONFORT,
                    "il répartit les interruptions sur les cœurs : utile à "
                    "partir de deux cœurs, inutile sur un seul"),

@@ -211,6 +211,26 @@ suivre_dpkg() {
     done
 }
 
+# C1 — L'INSTANTANÉ, JUSTE AVANT QUE DPKG NE TOUCHE AU SYSTÈME.
+#
+# « À chaque installation de pilote, de mise à jour de noyau ou d'OS, l'OS
+# fait un snapshot. » C'est le seul moment où il vaut quelque chose : après,
+# il n'y aurait plus rien à revenir chercher.
+#
+# `grenos-instantane` rend TOUJOURS 0 et il est borné à dix minutes. C'est la
+# règle qui tient tout ce service : le pire des cas laisse la machine
+# démarrable. Un disque d'instantanés absent est le cas ordinaire, pas une
+# panne — sur une image live il n'y en a jamais —, et il le dit ainsi.
+#
+# On l'appelle seulement s'il y a VRAIMENT quelque chose à installer : prendre
+# un instantané pour zéro paquet ferait payer dix minutes à un démarrage qui
+# n'avait rien à faire.
+if [ "$ATTENDUS" -gt 0 ] && [ -x /usr/lib/grenos/grenos-instantane ]; then
+    etape "Instantané du système" 8
+    /usr/lib/grenos/grenos-instantane \
+        "avant l'installation de $ATTENDUS paquet(s)" || true
+fi
+
 DEBUT=$(date +%s)
 etape "Installation des paquets" 10
 apt-get -y \
