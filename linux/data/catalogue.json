@@ -1299,6 +1299,39 @@
       "source": "flatpak",
       "identifiant": "org.gaphor.Gaphor",
       "site": "https://gaphor.org"
+    },
+    {
+      "slug": "pitivi",
+      "nom": "Pitivi",
+      "rayon": "Création",
+      "editeur": "Pitivi",
+      "description": "Un monteur vidéo léger, à la prise en main rapide.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/org.pitivi.Pitivi.png",
+      "source": "flatpak",
+      "identifiant": "org.pitivi.Pitivi",
+      "site": "https://www.pitivi.org"
+    },
+    {
+      "slug": "natron",
+      "nom": "Natron",
+      "rayon": "Création",
+      "editeur": "Natron",
+      "description": "Compositing et effets visuels par nœuds, pour le travail d'après-montage.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/fr.natron.Natron.png",
+      "source": "flatpak",
+      "identifiant": "fr.natron.Natron",
+      "site": "https://natrongithub.github.io"
+    },
+    {
+      "slug": "vidcutter",
+      "nom": "VidCutter",
+      "rayon": "Création",
+      "editeur": "Pete Alexandrou",
+      "description": "Couper et recoller une vidéo sans la réencoder, donc sans perte.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.ozmartians.VidCutter.png",
+      "source": "flatpak",
+      "identifiant": "com.ozmartians.VidCutter",
+      "site": "https://github.com/ozmartian/vidcutter"
     }
   ]
 }
