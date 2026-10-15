@@ -646,6 +646,23 @@ print('%d disque(s), %d volume(s) : %s' % (
     fi
 ) &
 
+# C2 — CE QUE CETTE MACHINE-CI SAIT GARANTIR SUR LE RETOUR ARRIÈRE.
+#
+# Sa condition est « impossible à casser, même sur une coupure de courant »,
+# et elle n'est pas tenable sur ext4 : restaurer y est une recopie de
+# fichiers, donc une coupure au milieu laisse un système à moitié restauré.
+# Sur btrfs, revenir en arrière est un changement de sous-volume par défaut —
+# une seule écriture, que le système de fichiers rend atomique.
+#
+# On le MESURE donc au lieu de promettre la même chose partout. Une promesse
+# vraie sur une machine et fausse sur l'autre est la forme la plus sournoise
+# de « une promesse à l'écran sans rien derrière ».
+(
+    if [ -x /usr/lib/grenos/grenos-retour ]; then
+        /usr/lib/grenos/grenos-retour
+    fi
+) &
+
 # L'accueil, une seule fois, à la première ouverture.
 if [ ! -e "$CONFIG/accueil-vu" ]; then
     touch "$CONFIG/accueil-vu"

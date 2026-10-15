@@ -1,0 +1,77 @@
+#!/bin/sh
+# C2 : « s il y a un probleme, rollback, ca redevient comme avant » — et il a
+# ajoute la condition qui change tout : **le rollback doit etre impossible a
+# casser, meme sur une coupure de courant**.
+#
+# CETTE CONDITION N EST PAS TENABLE SUR EXT4, ET IL FAUT LE DIRE AU LIEU DE LE
+# CONTOURNER. Restaurer un ext4, c est recopier des fichiers par-dessus
+# d autres, un par un : une coupure au milieu laisse un systeme a moitie
+# ancien et a moitie neuf, c est-a-dire pire que les deux. Aucun reglage de
+# timeshift n y change quoi que ce soit — ce n est pas un defaut de timeshift,
+# c est la nature de la copie.
+#
+# Sur btrfs, si : un instantane est un sous-volume, et revenir en arriere est
+# un changement de sous-volume par defaut — UNE ecriture, que le systeme de
+# fichiers rend atomique. Coupure avant : l ancien. Coupure apres : le neuf.
+# Jamais entre les deux. C est exactement ce qu il demande, et c est pour cela
+# que toutes les distributions qui offrent un retour arriere sont sur btrfs.
+#
+# Ce script ne promet donc pas la meme chose partout : il MESURE ce que cette
+# machine-ci sait garantir, et le dit. Une promesse a l ecran sans rien
+# derriere est le defaut capital de ce depot ; une promesse tenue sur une
+# machine et pas sur l autre en est la version la plus sournoise, parce qu
+# elle est vraie quelque part.
+#
+# `defaultFileSystemType` de notre `partition.conf` vaut « ext4 », et btrfs est
+# offert a cote. Tant que ce choix n a pas ete tranche, la plupart des machines
+# seront en ext4, et elles doivent savoir ce qu elles ont.
+
+set -u
+
+dire() {
+    if command -v grenos-dire >/dev/null 2>&1; then
+        grenos-dire "retour : $1"
+    else
+        echo "grenos: retour : $1"
+    fi
+}
+
+# Le systeme de fichiers de la racine, lu a la source. `findmnt` vient de
+# util-linux, present partout ; le repli par /proc/mounts evite de dependre
+# d un paquet pour une mesure aussi simple.
+racine_fs() {
+    if command -v findmnt >/dev/null 2>&1; then
+        findmnt -no FSTYPE / 2>/dev/null && return 0
+    fi
+    awk '$2 == "/" { print $3; exit }' /proc/mounts 2>/dev/null
+}
+
+# Ce que cette machine sait garantir. Trois reponses, trois situations
+# vraiment differentes — et surtout pas une seule phrase rassurante.
+garantie() {
+    fs=$(racine_fs)
+    case "$fs" in
+        btrfs)
+            echo "atomique|btrfs : le retour arriere est un changement de sous-volume, il survit a une coupure de courant"
+            ;;
+        overlay|overlayfs|tmpfs|squashfs|"")
+            echo "aucune|cette machine tourne depuis une image live : rien n est garde, donc rien a retrouver"
+            ;;
+        *)
+            echo "partielle|$fs : le retour arriere recopie des fichiers, une coupure de courant au milieu laisse un systeme a moitie restaure"
+            ;;
+    esac
+}
+
+reponse=$(garantie)
+ETAT=$(printf '%s' "$reponse" | cut -d'|' -f1)
+TEXTE=$(printf '%s' "$reponse" | cut -d'|' -f2-)
+
+mkdir -p /run/grenos 2>/dev/null || true
+printf '%s\n' "$ETAT" > /run/grenos/retour-garantie 2>/dev/null || true
+dire "$TEXTE"
+
+# Et on ne s arrete jamais en erreur : ce script est une MESURE, pas une
+# operation. Le faire echouer ferait echouer ce qui l appelle, et ce qui
+# l appelle tourne avant le bureau.
+exit 0
