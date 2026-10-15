@@ -599,6 +599,29 @@ jobs:
           ISO_MAJDEM: ${{ steps.build.outputs.iso }}
           VERSION_APT: ${{ steps.apt.outputs.version }}
 
+      # A11 : « un peripherique attendu et absent ne doit jamais faire echouer
+      # le demarrage » — la ligne qu'il appelle lui-meme la plus importante de
+      # sa section materiel, et la seule qui n'avait aucune preuve.
+      #
+      # La moitie decisive est faite : Calamares ecrivait `defaults` sans
+      # `nofail`, donc un disque absent envoyait une machine installee en mode
+      # secours derriere un mot de passe root qui n'existe pas. Mais un fichier
+      # pose ne prouve rien — `logo.png` etait pose, son garde le voyait, et la
+      # barre de titre n'avait pas bouge d'un pixel. Il faut RETIRER le
+      # materiel et regarder.
+      #
+      # On retire les deux absences que la machine d'integration sait produire,
+      # et ce sont celles de sa liste : aucun disque, aucune carte reseau. Le
+      # verdict refuse de conclure si l'absence n'a pas eu lieu.
+      #
+      # RAPPORTE, pas bloquant : une preuve ne devient obligatoire qu'apres
+      # deux passages verts. Regle inchangee depuis le 12 septembre.
+      - name: Une machine sans disque ni reseau ouvre-t-elle son bureau
+        id: sansmat
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: scripts/ci-sans-materiel.sh "${{ steps.build.outputs.iso }}"
+
       - name: Garder les captures
         if: always()
         continue-on-error: true
