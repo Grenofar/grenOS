@@ -74,15 +74,69 @@ def verifier(chemin, racine=RACINE):
         cible = os.path.join(racine, cite.rstrip("/"))
         if not os.path.exists(cible):
             fautes.append(cite)
+    fautes.extend(outil_fantome(chemin, racine))
     return fautes
+
+
+# OU VIVENT LES PROGRAMMES QU UN DOCUMENT D OUTIL PEUT DECRIRE.
+LIVRES = (os.path.join("linux", "config", "includes.chroot", "usr", "bin"),
+          os.path.join("linux", "config", "includes.chroot", "usr", "lib",
+                       "grenos"),
+          os.path.join("linux", "tools"),
+          "scripts")
+
+
+def outil_fantome(chemin, racine=RACINE):
+    """Un document d'outil doit porter le nom d'un outil qui existe.
+
+    LE 15 OCTOBRE, DEUX TACHES D AGENT ONT LIVRE
+    `docs/linux/outils/grenos-outil-de-base.md` — « l'outil de base du
+    système grenOS ». **Ce programme n'existe pas**, sous aucun nom : le
+    document pointait vers `grenos-shell` tout en se faisant appeler
+    autrement, et il lui attribuait un verrouillage d'écran, une zone de
+    notification et une roue dentée dont aucune n'apparait dans le code
+    (`verrouill`, `notification`, `roue` : zero occurrence, comptees).
+
+    Les deux taches ont ete marquees **done** et fusionnees toutes seules.
+    Ce garde-ci ne juge pas la description — c'est dit plus haut, et ca ne
+    change pas. Il juge la seule chose qui soit mecanique : le NOM. Un
+    document rangé sous `docs/.../outils/` et nomme d'apres rien est un
+    renvoi vers le vide, et il est pire qu'un document absent, parce qu'on
+    le croit.
+    """
+    dossier = os.path.basename(os.path.dirname(os.path.abspath(chemin)))
+    if dossier != "outils":
+        return []
+    nom = os.path.basename(chemin)[:-3]
+    for coin in LIVRES:
+        for suffixe in ("", ".py", ".sh"):
+            if os.path.exists(os.path.join(racine, coin, nom + suffixe)):
+                return []
+    return ["(aucun outil ne s'appelle « %s »)" % nom]
 
 
 def main(argv):
     docs = argv[1:]
     if not docs:
-        dossier = os.path.join(RACINE, "docs")
-        docs = [os.path.join(dossier, n) for n in sorted(os.listdir(dossier))
-                if n.endswith(".md")]
+        # ON DESCEND DANS LES SOUS-DOSSIERS, et c'est ce qui manquait : le
+        # document fantome du 15 octobre vivait dans `docs/linux/outils/`,
+        # ou ce controle ne regardait pas. Un garde qui ne lit que le premier
+        # etage ne garde que le premier etage.
+        docs = []
+        for ou, _dossiers, fichiers in os.walk(os.path.join(RACINE, "docs")):
+            # `docs/specs/` EST UNE ARCHIVE, pas un guide : chaque spec est
+            # une affirmation a une date, et un chemin qu'elle nomme a pu
+            # etre retire depuis — `bienvenue.html` l'a ete avec KDE,
+            # `grenos-disk.img` avec le noyau Rust. Les corriger reecrirait
+            # ce qui a ete demande ce jour-la ; les refuser remplirait le
+            # journal de fautes qu'on ne veut pas corriger, et un garde
+            # bruyant finit ignore.
+            if os.path.basename(ou) == "specs":
+                continue
+            for nom in sorted(fichiers):
+                if nom.endswith(".md"):
+                    docs.append(os.path.join(ou, nom))
+        docs.sort()
         todo = os.path.join(RACINE, "todo.md")
         if os.path.exists(todo):
             docs.append(todo)

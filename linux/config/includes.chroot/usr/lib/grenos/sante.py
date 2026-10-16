@@ -59,19 +59,25 @@ def _commande(arguments, delai=4):
 # LIRE
 # --------------------------------------------------------------------------
 
-def temperatures(racine="/sys/class/hwmon"):
+def temperatures(racine="/sys/class/hwmon",
+                 racine_thermal="/sys/class/thermal"):
     """Les sondes de température, en degrés, nommées comme le noyau les nomme.
 
     Dans une machine virtuelle il n'y en a aucune, et la fenêtre doit le dire
     au lieu d'afficher un zéro qui ressemble à une mesure.
+
+    Deux arbres sont lus — `hwmon` d'abord, les zones ACPI ensuite — parce
+    qu'une machine peut n'avoir que l'un des deux. Le détail et la raison de
+    l'anti-doublon sont écrits plus bas, à l'endroit où ils s'appliquent.
     """
     trouvees = []
-    try:
-        boitiers = sorted(os.listdir(racine))
-    except OSError:
-        return trouvees
-
-    for boitier in boitiers:
+    # PAS DE `return` ICI QUAND `hwmon` MANQUE, et l'essai l'a attrapé au
+    # premier passage : l'ancienne version rendait la liste vide sans jamais
+    # regarder les zones ACPI, donc une machine qui n'a que celles-ci — un
+    # portable sur deux — s'entendait dire « aucune sonde » en connaissant sa
+    # température. Une absence de dossier n'est pas une panne, c'est le cas
+    # ordinaire dans /sys.
+    for boitier in sorted(_dossiers(racine)):
         dossier = os.path.join(racine, boitier)
         famille = _lire(os.path.join(dossier, "name")) or boitier
         try:
@@ -95,7 +101,82 @@ def temperatures(racine="/sys/class/hwmon"):
             if etiquette and famille and etiquette != famille:
                 nom = "%s — %s" % (famille, etiquette)
             trouvees.append((nom, degres))
+
+    # LES ZONES ACPI, et ce n'est pas un doublon : sur beaucoup de portables
+    # `hwmon` ne porte aucune sonde de température tandis que
+    # `/sys/class/thermal` en porte, parce que c'est le micrologiciel qui les
+    # expose et non une puce de surveillance. Sans ce repli, une machine
+    # entière s'entendrait dire « cette machine n'en déclare pas » alors
+    # qu'elle sait sa température.
+    #
+    # ET ON NE COMPTE PAS DEUX FOIS LA MEME SONDE : les deux arbres exposent
+    # couramment `coretemp` ou `k10temp`, et afficher « Package id 0 » deux
+    # fois ferait douter des deux. On ne garde une zone que si aucune sonde
+    # hwmon ne porte déjà sa valeur au demi-degré près.
+    for zone in sorted(_dossiers(racine_thermal)):
+        dossier = os.path.join(racine_thermal, zone)
+        brut = _lire(os.path.join(dossier, "temp"))
+        if not brut.lstrip("-").isdigit():
+            continue
+        degres = int(brut) / 1000.0
+        if degres <= ZERO_ABSOLU or degres > 150:
+            continue
+        if any(abs(degres - deja) < 0.5 for _n, deja in trouvees):
+            continue
+        genre = _lire(os.path.join(dossier, "type")) or zone
+        trouvees.append((genre, degres))
     return trouvees
+
+
+def _dossiers(racine):
+    """Le contenu d'un dossier de /sys, ou rien. Une absence n'est pas une panne."""
+    try:
+        return os.listdir(racine)
+    except OSError:
+        return []
+
+
+def ventilateurs(racine="/sys/class/hwmon"):
+    """Les ventilateurs et leur vitesse en tours par minute.
+
+    E4 DEMANDE « température, état du matériel », et un agent a livré le
+    16 octobre un module entier pour cela. Il n'est pas repris : la moitié
+    température existait déjà ici, mieux faite — elle écarte les sondes
+    débranchées et nomme chaque sonde comme le noyau la nomme —, et sa
+    version rendait températures et vitesses **dans une seule liste de
+    couples**, où rien ne distingue 2800 tours de 2800 degrés. *Deux lectures
+    d'une même chose finissent par diverger, et c'est alors la copie qu'on
+    croit* : c'est le piège payé quatre fois dans ce dépôt.
+
+    Ce qui manquait vraiment, et qui est ici, c'est le ventilateur. Un
+    ventilateur à zéro tour sur une machine chaude est le signe le plus clair
+    d'une panne matérielle, et aucune de nos pages ne savait le voir.
+
+    Une vitesse de zéro est GARDEE, volontairement : c'est une information,
+    pas une absence. Un ventilateur à l'arrêt se lit « 0 tr/min » et se voit.
+    """
+    trouves = []
+    for boitier in sorted(_dossiers(racine)):
+        dossier = os.path.join(racine, boitier)
+        famille = _lire(os.path.join(dossier, "name")) or boitier
+        for fichier in sorted(_dossiers(dossier)):
+            if not re.fullmatch(r"fan\d+_input", fichier):
+                continue
+            brut = _lire(os.path.join(dossier, fichier))
+            if not brut.isdigit():
+                continue
+            tours = int(brut)
+            # Au-delà de cinquante mille tours, ce n'est plus un ventilateur :
+            # c'est un registre mal lu, et l'afficher ferait passer une
+            # erreur de lecture pour une mesure.
+            if tours > 50000:
+                continue
+            etiquette = _lire(os.path.join(
+                dossier, fichier.replace("_input", "_label")))
+            nom = etiquette or "%s — %s" % (famille,
+                                            fichier.replace("_input", ""))
+            trouves.append((nom, tours))
+    return trouves
 
 
 def batterie(racine="/sys/class/power_supply"):

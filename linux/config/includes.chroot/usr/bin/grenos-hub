@@ -181,6 +181,13 @@ class Hub(Gtk.Window):
         chaleurs = sante.temperatures()
         lignes = [(nom, "%s °C" % grenosui.nombre(degres, 0))
                   for nom, degres in chaleurs[:6]]
+        # LE VENTILATEUR À L'ARRÊT SUR UNE MACHINE CHAUDE est le signe le plus
+        # clair d'une panne matérielle, et aucune de nos pages ne savait le
+        # voir. Il s'affiche sous la température, à côté d'elle, parce que
+        # c'est ensemble que les deux veulent dire quelque chose.
+        souffle = sante.ventilateurs()
+        lignes.extend((nom, "%s tr/min" % grenosui.nombre(tours, 0))
+                      for nom, tours in souffle[:4])
         pile = sante.batterie()
         if pile:
             lignes.append(("Batterie", "%s %%, %s"
@@ -288,6 +295,13 @@ def main():
     fenetre = Hub()
     fenetre.show_all()
     grenosui.dire("hub ouvert, %d bloc(s) d etat" % fenetre.blocs)
+    # CE QUE LA MACHINE A VRAIMENT LU, et non ce que la page a l'intention de
+    # montrer. Sous QEMU les deux comptes valent zero, et c'est exactement ce
+    # qu'il faut entendre : la CI ne pourra jamais prouver qu'une sonde est
+    # bien lue, seulement que la page ne mente pas quand il n'y en a aucune.
+    # Sur sa machine a lui, la meme ligne repondra par des chiffres.
+    grenosui.dire("hub : thermique — %d sonde(s), %d ventilateur(s)"
+                  % (len(sante.temperatures()), len(sante.ventilateurs())))
     # Après l'affichage, jamais avant : une fenêtre qui mesure pendant sa
     # construction est une fenêtre qui paraît plantée.
     GLib.idle_add(lambda: (fenetre.lancer(), False)[1])

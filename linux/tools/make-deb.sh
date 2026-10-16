@@ -112,11 +112,34 @@ install -m 0644 "$DEDANS/usr/share/xsessions/grenos.desktop" "$BUILD/usr/share/x
 # nous dans un dossier de complements : aucun autre paquet ne le possede, donc
 # dpkg ne refusera pas notre paquet — c'est la lecon du 24 septembre avec
 # lightdm-gtk-greeter.
-mkdir -p "$BUILD/etc/pipewire/pipewire.conf.d"
-install -m 0644 "$DEDANS/etc/pipewire/pipewire.conf.d/10-grenos-tampon.conf" \
-    "$BUILD/etc/pipewire/pipewire.conf.d/"
-install -m 0644 "$DEDANS/etc/pipewire/pipewire.conf.d/20-grenos-temps-reel.conf" \
-    "$BUILD/etc/pipewire/pipewire.conf.d/"
+# UN GLOB, PLUS JAMAIS UNE LISTE ECRITE A LA MAIN.
+#
+# Les reglages de /etc partaient dans le paquet par SEPT copies nommees une
+# par une. Elles etaient toutes justes — verifie avant d'ecrire cette ligne,
+# et c'est pour cela qu'elle ne dit pas qu'elles avaient derive. Ce qui est
+# sur, en revanche, c'est que le fichier journald ajoute aujourd'hui aurait
+# manque a la liste : je l'ai pose dans l'image et je ne l'aurais su qu'en
+# voyant, chez lui, un journal qui ne survit pas a l'extinction. C'est
+# exactement le defaut du 1er octobre — `composants.py` et `securite.py`
+# absents de la liste des modules, l'ISO les avait, une machine mise a jour
+# non, et les deux pages neuves plantaient chez lui seul.
+#
+# *Une liste qu'il faut rallonger a chaque fichier ecrit n'est pas une liste,
+# c'est une dette.*
+#
+# Deux exclusions, et chacune a sa raison :
+#   * `etc/systemd/system/` — les unites sont posees plus bas, avec leur
+#     fragment et leur activation ; les recopier ici les poserait deux fois ;
+#   * `etc/calamares/` — c'est le reglage de l'installateur, qui ne sert que
+#     dans l'image vive ; le hook le verifie la, et une machine deja installee
+#     n'en a plus l'usage.
+( cd "$DEDANS" && find etc -type f -name '*.conf' \
+    ! -path 'etc/systemd/system/*' ! -path 'etc/calamares/*' | sort ) \
+  | while read -r relatif; do
+    install -d "$BUILD/$(dirname "$relatif")"
+    install -m 0644 "$DEDANS/$relatif" "$BUILD/$relatif"
+    echo "  reglage : $relatif"
+done
 
 # Ce que grenOS demande a GameMode pendant qu'un jeu tourne. Le paquet livre
 # `renice=0`, donc sans ce fichier GameMode ne change PAS la priorite du jeu —
@@ -132,25 +155,6 @@ install -m 0644 "$DEDANS/etc/gamemode.ini" "$BUILD/etc/"
 mkdir -p "$BUILD/usr/share/mime/packages"
 install -m 0644 "$DEDANS/usr/share/mime/packages/grenos-francais.xml" \
     "$BUILD/usr/share/mime/packages/"
-
-# Le droit, pour le son, de passer devant. Mesure sur l'image : rtkit seul ne
-# l'accordait pas — « aucun fil de pipewire en temps reel sur 3 ».
-mkdir -p "$BUILD/etc/security/limits.d"
-install -m 0644 "$DEDANS/etc/security/limits.d/95-grenos-audio.conf" \
-    "$BUILD/etc/security/limits.d/"
-
-# Et surtout celles-ci : PipeWire est un service `systemd --user`, qui n'herite
-# PAS des limites PAM. C'est `user@.service` qui decide, et il lit ce fichier.
-mkdir -p "$BUILD/etc/systemd/user.conf.d"
-install -m 0644 "$DEDANS/etc/systemd/user.conf.d/10-grenos-audio.conf" \
-    "$BUILD/etc/systemd/user.conf.d/"
-
-# Et le plafond au-dessus : `systemd --user` ne peut pas accorder plus que ce
-# que le gestionnaire systeme lui a donne. Les deux fichiers vont ensemble, et
-# separes ils ne servent a rien.
-mkdir -p "$BUILD/etc/systemd/system.conf.d"
-install -m 0644 "$DEDANS/etc/systemd/system.conf.d/10-grenos-audio.conf" \
-    "$BUILD/etc/systemd/system.conf.d/"
 
 install -m 0644 "$DEDANS/usr/share/themes/grenOS/openbox-3/themerc" \
     "$BUILD/usr/share/themes/grenOS/openbox-3/"
@@ -216,16 +220,11 @@ for unite in plymouth-poweroff plymouth-reboot plymouth-halt plymouth-kexec; do
     install -m 0644         "$DEDANS/etc/systemd/system/${unite}.service.d/10-grenos-tolerant.conf"         "$BUILD/etc/systemd/system/${unite}.service.d/"
 done
 
-# Le silence de systemd et l'absence de lecteur de disquette. Tous deux
-# corrigent ce qu'on voit EN ETEIGNANT, et une machine deja posee doit les
-# recevoir par mise a jour — c'est tout l'objet du chantier « plus jamais
-# d'ISO ». Ces deux chemins-la ne sont a personne d'autre, donc on les livre
-# directement au lieu de passer par les modeles.
-install -d "$BUILD/etc/systemd/system.conf.d" "$BUILD/etc/modprobe.d"
-install -m 0644 "$DEDANS/etc/systemd/system.conf.d/20-grenos-silence.conf" \
-    "$BUILD/etc/systemd/system.conf.d/"
-install -m 0644 "$DEDANS/etc/modprobe.d/grenos-pas-de-disquette.conf" \
-    "$BUILD/etc/modprobe.d/"
+# Le silence de systemd et l'absence de lecteur de disquette partaient ici,
+# nommes un par un ; ils partent maintenant par le glob de /etc plus haut,
+# comme tous les autres reglages. Ce qu'ils corrigent — ce qu'on voit EN
+# ETEIGNANT — n'a pas change, ni la raison de les livrer : une machine deja
+# posee doit les recevoir par mise a jour.
 
 # Les entrées de menu, et le raccourci d'installation.
 install -m 0644 "$DEDANS"/usr/share/applications/*.desktop \

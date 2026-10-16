@@ -89,6 +89,40 @@ jobs:
       - name: Chaque recherche du parcours ne designe qu une application
         run: python3 linux/tools/verif-recherches.py
 
+      # LA RECHERCHE QUE J AI AJOUTEE A TUE LE RENOMMAGE, et il a fallu une
+      # construction de quarante minutes pour l apprendre. Echap effacait le
+      # texte du champ et LAISSAIT le clavier dedans : la barriere « on est en
+      # train d ecrire » avalait ensuite F2, Suppr, Retour arriere et Ctrl+H.
+      # La machine l a dit par l autre bout — les quatre lettres du renommage
+      # sont arrivees dans le champ de recherche.
+      #
+      # Cet essai extrait `au_clavier` DU FICHIER LIVRE par l arbre
+      # syntaxique et l appelle pour de vrai : recopier son corps ferait deux
+      # claviers d une meme fenetre, et c est alors la copie qu on croirait.
+      # Rejoue sur la version qui a casse, il refuse exactement les deux cas
+      # de la panne — un garde qu on n a pas vu refuser n est pas un garde.
+      - name: Le clavier de l explorateur, 28 cas
+        run: python3 linux/tools/essai-clavier-fichiers.py
+
+      # LA TEMPERATURE ET LES VENTILATEURS, sur de faux /sys fabriques : la
+      # machine d integration n a ni sonde ni ventilateur, donc elle ne peut
+      # rien prouver de ce qui se passe chez lui. Un arbre de fichiers ecrit
+      # exprès, lui, peut porter le portable qui n a que des zones ACPI, la
+      # sonde debranchee a -273 et le ventilateur arrete a zero.
+      #
+      # Le troisieme cas a paye l essai au premier passage : sans `hwmon`, la
+      # lecture sortait avant meme de regarder les zones ACPI.
+      - name: La temperature et les ventilateurs, 10 cas
+        run: python3 linux/tools/essai-sante-thermique.py
+
+      # Le verdict du journal persistant est rendu bien plus loin, dans
+      # l etape UEFI — le seul endroit ou la meme machine a deja demarre. Il
+      # est exerce ICI, avant la construction, sur sept journaux ecrits
+      # exprès : le bloc est extrait du workflow lui-meme, donc l essai et la
+      # chose jugee ne peuvent pas diverger.
+      - name: Le verdict du journal persistant, 7 cas
+        run: sh linux/tools/essai-journal-persistant.sh
+
       # Un document livre par un agent, vert en CI, et faux sur quatre gardes
       # sur cinq — avec en derniere ligne « aucun chemin n'est invente dans ce
       # document ». Une CI verte dit que le fichier se lit ; elle ne dit pas
@@ -216,17 +250,34 @@ jobs:
       # machines n'appartient pas a une branche. Le 24 septembre a 19h38, la
       # construction d'une branche d'agent a remplace nos 29 applications par
       # 17 autres, que personne n'avait relues.
-      - name: Le catalogue du magasin
+      # AUCUNE APPLICATION PERDUE — ET CETTE PORTE ETAIT GRANDE OUVERTE.
+      #
+      # Le 15 octobre au soir, une branche d'agent a ramene le catalogue de
+      # **121 fiches a 23** en annoncant « Added 21 verified applications ».
+      # Le controle a parfaitement vu les 97 disparues et les a nommees — et
+      # le `continue-on-error` qui couvrait toute l'etape a rendu son refus
+      # muet. La branche serait partie en fusion automatique au premier run
+      # vert ; seule une regression sans rapport l'en a empechee. Ce n'est pas
+      # un garde, c'est une chance.
+      #
+      # C'est la faute exacte du 15 octobre a l'etage du dessus : un
+      # `continue-on-error` rend la CONCLUSION verte alors que l'issue reste
+      # rouge. La verification ne demande aucune cle (`--verifier` le dit en
+      # toutes lettres), donc elle n'a aucune raison d'etre toleree.
+      - name: Aucune application perdue au catalogue
+        run: python3 linux/tools/publier-catalogue.py --verifier
+
+      # PUBLIER, en revanche, demande le reseau et la cle de service : son
+      # echec peut ne rien devoir a grenOS. Il reste donc tolere, et seulement
+      # depuis `main` — le magasin des vraies machines n'appartient pas a une
+      # branche.
+      - name: Publier le catalogue du magasin
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
-            python3 linux/tools/publier-catalogue.py
-          else
-            python3 linux/tools/publier-catalogue.py --verifier
-          fi
+        run: python3 linux/tools/publier-catalogue.py
 
       # Fabriquer, oui, depuis n'importe quelle branche : l'image en a besoin.
       # **Publier**, non — voir l'etape suivante.
@@ -447,6 +498,28 @@ jobs:
           if ! grep -aq "persistance : un fichier d'un demarrage PRECEDENT est revenu" "$RUNNER_TEMP/serial-uefi.log"; then
             echo "::error::Ce qui a ete ecrit au premier demarrage n'est pas revenu au second : la persistance ne tient pas sa promesse."
             exit 1
+          fi
+          # E1 — LE JOURNAL D'AVANT EST-IL ENCORE LA ? C'est ici, et nulle
+          # part ailleurs, que la question a un sens : c'est le seul endroit
+          # ou la MEME machine a deja demarre une fois. Au premier demarrage
+          # « 1 demarrage connu » ne distingue rien ; au second, deux
+          # demarrages connus veulent dire que le journal a traverse
+          # l'extinction — et c'est ce journal que le detecteur de demarrage
+          # rate interroge pour nommer une cause.
+          #
+          # RAPPORTE, pas bloquant : jamais vu vert. Deux passages avant
+          # d'exiger, regle inchangee depuis le 12 septembre.
+          # On lit LE NOMBRE, pas la presence d'une phrase : « au moins deux »
+          # est la seule forme qui ne puisse pas se confondre avec « un seul,
+          # donc rien de prouve ».
+          JOURNAL=$(grep -a 'journal :' "$RUNNER_TEMP/serial-uefi.log" 2>/dev/null \
+            | tail -1 | sed 's/^.*grenos: //')
+          echo "${JOURNAL:-journal : le second demarrage n'a rien dit}"
+          CONNUS=$(printf '%s' "$JOURNAL" | sed -n 's/^journal : persistant, \([0-9]\{1,\}\) demarrage.*/\1/p')
+          if [ "${CONNUS:-0}" -ge 2 ]; then
+            echo "journal: le journal du demarrage PRECEDENT est encore lisible ($CONNUS connus)"
+          else
+            echo "::warning::Le journal ne survit pas au redemarrage, ou n'en connait qu'un (rapporte, pas bloquant)."
           fi
           if grep -q "screen: PASS" "$RUNNER_TEMP/uefi-juge.log"; then
             echo "uefi: le chargeur a pris la main et le noyau dessine"

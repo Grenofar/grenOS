@@ -484,6 +484,34 @@ else
     dire "persistance : un fichier d'un demarrage PRECEDENT est revenu (${temoin#* })"
 fi
 
+# E1 — LE JOURNAL SURVIT-IL AU REDEMARRAGE ?
+#
+# « Journal persistant » est la premiere case de la section « observer la
+# machine », et c'est celle qui rend les autres possibles : le detecteur de
+# demarrage rate (C15) lit `journalctl -b -1` pour nommer la cause. Sans
+# journal persistant, il interroge un journal qui n'existe plus — il
+# repondrait toujours « rien dans le journal », c'est-a-dire une mesure
+# fausse et stable, la pire espece.
+#
+# ON NE CROIT PAS LE FICHIER DE CONFIGURATION, ON REGARDE CE QUE JOURNALD A
+# FAIT. systemd-journald cree `/var/log/journal` quand, et seulement quand,
+# `Storage=persistent` a ete lu ; en volatile il n'ecrit que dans
+# `/run/log/journal`. Une directive mal orthographiee ne creerait donc rien,
+# et cette mesure le dirait — alors que relire notre propre fichier ne
+# prouverait que ce qu'on y a tape. C'est la lecon de `logo.png` : poser un
+# fichier n'est pas obtenir un effet.
+#
+# Et le nombre de demarrages connus est ce qui transforme « persistant » en
+# preuve : au second demarrage de la meme machine il doit valoir au moins
+# deux, sinon le journal d'avant a disparu quoi qu'en dise le dossier.
+if [ -d /var/log/journal ]; then
+    connus=$(journalctl --list-boots --no-pager 2>/dev/null | grep -c . || true)
+    [ -n "$connus" ] || connus=0
+    dire "journal : persistant, $connus demarrage(s) connu(s)"
+else
+    dire "journal : volatile — ce qui s'ecrit maintenant disparait a l'extinction"
+fi
+
 # CE QUE TOUT CE QUI PRECEDE A COUTE.
 #
 # Mesuré : **1 seconde** (run 36970232858). J'avais écrit plus haut que cela

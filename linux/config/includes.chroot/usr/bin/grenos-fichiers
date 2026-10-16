@@ -648,8 +648,18 @@ class Explorateur(Gtk.Window):
             if self.barre_d_adresse_ouverte():
                 self.fermer_la_barre_d_adresse()
                 return True
-            if self.cherche.get_text():
+            # ÉCHAP REND LE CLAVIER À LA LISTE, et il a fallu une
+            # construction rouge pour l'apprendre. Tant qu'il se contentait
+            # d'effacer le texte, le champ GARDAIT le clavier : la barrière
+            # plus bas avalait ensuite F2, Suppr, Retour arrière et Ctrl+H,
+            # pour toujours, sans qu'un seul pixel ne le dise. La machine
+            # l'a prouvé par l'autre bout — les quatre lettres destinées à
+            # la boîte de renommage sont arrivées dans le champ de
+            # recherche. Un clavier mort est pire qu'un bouton absent :
+            # l'absence se voit.
+            if self.cherche.has_focus() or self.cherche.get_text():
                 self.cherche.set_text("")
+                self.vue.grab_focus()
                 return True
         if controle and majuscule and touche in ("n", "N"):
             self.action_nouveau_dossier()
