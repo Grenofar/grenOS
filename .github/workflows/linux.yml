@@ -123,6 +123,32 @@ jobs:
       - name: Le verdict du journal persistant, 7 cas
         run: sh linux/tools/essai-journal-persistant.sh
 
+      # CE QUE L ASSISTANT FAIT, pas ce qu il dit. I7 est le seul ecran dont
+      # le choix installe quelque chose ; neuf ecrans sur dix rangeaient une
+      # preference dans un fichier et rien n arrivait. Le controle verifie que
+      # chaque profil d usage ne nomme que des fiches QUI EXISTENT au
+      # catalogue — c est la faute du 25 septembre, ou `partition.conf`
+      # offrait btrfs sans `mkfs.btrfs` — et que l installateur sans ecran
+      # s arrete avant la borne de la file plutot que de se faire couper au
+      # milieu d un dpkg.
+      - name: Ce que l assistant installe vraiment, 17 cas
+        run: python3 linux/tools/essai-premier-travaux.py
+
+      # DEUX PAQUETS NE PEUVENT PAS POSSEDER LE MEME CHEMIN, et j'ai paye cette
+      # phrase une seconde fois : un glob sur `etc/**/*.conf` a ramasse
+      # `etc/lightdm/lightdm-gtk-greeter.conf`, dpkg a repondu « trying to
+      # overwrite […] which is also in package lightdm-gtk-greeter », et la
+      # construction est morte. La lecon du 24 septembre, dans le fichier meme
+      # qui la porte.
+      #
+      # L'essai juge le tri a trois issues : un reglage a nous part dans le
+      # paquet, un chemin partage part en modele pose par appliquer-systeme, et
+      # un troisieme cas ARRETE la construction au lieu de laisser une machine
+      # mise a jour sans le reglage que l'image a. Rejoue sur la version qui a
+      # casse, il refuse cinq cas sur huit.
+      - name: Les reglages de /etc, le bon tri, 8 cas
+        run: sh linux/tools/essai-reglages-paquet.sh
+
       # Un document livre par un agent, vert en CI, et faux sur quatre gardes
       # sur cinq — avec en derniere ligne « aucun chemin n'est invente dans ce
       # document ». Une CI verte dit que le fichier se lit ; elle ne dit pas

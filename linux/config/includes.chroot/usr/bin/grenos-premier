@@ -39,6 +39,7 @@ from gi.repository import Gdk, Gtk  # noqa: E402
 
 import clavier  # noqa: E402
 import grenosui  # noqa: E402
+import materiel  # noqa: E402
 import premier  # noqa: E402
 
 IDENTITE = "/etc/grenos/identite"
@@ -219,6 +220,71 @@ def garder_choix(reponses):
         pass
 
 
+FILE_DES_TRAVAUX = "/usr/lib/grenos/grenos-au-prochain-demarrage"
+
+
+def deposer_les_travaux(reponses):
+    """Ce qui a été choisi devient un travail, et non une préférence rangée.
+
+    C'EST LA DIFFÉRENCE ENTRE UN ASSISTANT ET UN FORMULAIRE. Jusqu'ici, tout
+    ce que l'assistant demandait finissait dans un fichier que les Réglages
+    relisaient ; cocher « Développement » ne faisait rien arriver. Une
+    question dont la réponse ne change rien est une question qu'on pose pour
+    faire joli — la forme polie de la promesse à l'écran sans rien derrière.
+
+    LA FILE D'AVANT-BUREAU EST LE SEUL ENDROIT OÙ CELA PEUT SE FAIRE, et elle
+    est prouvée depuis le 27 septembre : elle rend toujours 0, borne chaque
+    travail dans le temps, classe ce qui a échoué au lieu de le rejouer, et
+    une machine a vraiment redémarré dessus. Installer pendant que l'assistant
+    tourne serait la pire des façons : la personne attendrait devant un écran
+    qui ne dit rien, et une coupure au milieu d'un `dpkg` est la manière
+    classique de casser une machine.
+
+    ON NE DÉPOSE RIEN QUAND IL N'Y A RIEN À FAIRE. Un travail vide s'exécuterait
+    au prochain démarrage, écrirait son verdict et ne servirait à rien, tout en
+    faisant croire à la lecture du journal qu'une installation a eu lieu.
+    """
+    travaux = []
+
+    choisies = [c for c in (reponses.get("applications") or "").split(",") if c]
+    for cle in premier.paquets_pour(reponses.get("usage")):
+        if cle not in choisies:
+            choisies.append(cle)
+    if choisies:
+        # PAS GrenPlace : la file s'exécute avant lightdm, donc sans serveur
+        # X, et GrenPlace est une fenêtre. J'avais écrit `grenplace
+        # --installer` — un mode qui n'existe pas, dans un programme qui
+        # n'aurait de toute façon rien pu afficher.
+        travaux.append(("Installer les applications choisies",
+                        ["/usr/lib/grenos/grenos-installer-choix",
+                         ",".join(sorted(choisies))]))
+
+    if reponses.get("optimiser") == "oui":
+        travaux.append(("Régler la machine pour la performance",
+                        ["/usr/lib/grenos/grenos-performances"]))
+
+    if not travaux:
+        dire("premier : aucun travail a deposer — rien n a ete demande")
+        return
+
+    for intitule, commande in travaux:
+        try:
+            fin = subprocess.run([FILE_DES_TRAVAUX, intitule] + commande,
+                                 capture_output=True, text=True, timeout=20,
+                                 check=False)
+        except (OSError, subprocess.SubprocessError) as souci:
+            dire("premier : travail « %s » PAS depose — %s" % (intitule, souci))
+            continue
+        if fin.returncode == 0:
+            dire("premier : travail depose — %s" % intitule)
+        else:
+            # On le dit et on continue : un assistant qui s'arrête parce qu'une
+            # installation n'a pas pu être mise en file laisserait quelqu'un
+            # devant un écran bloqué, pour un travail de confort.
+            dire("premier : travail « %s » refuse par la file — %s"
+                 % (intitule, (fin.stderr or "").strip()[:80]))
+
+
 class Assistant(Gtk.Window):
     def __init__(self):
         super().__init__(title="Bienvenue dans grenOS")
@@ -240,6 +306,9 @@ class Assistant(Gtk.Window):
             "compte": self.ecran_compte,
             "parcours": self.ecran_parcours,
             "apparence": self.ecran_apparence,
+            "usage": self.ecran_usage,
+            "securite": self.ecran_securite,
+            "optimisation": self.ecran_optimisation,
             "confidentialite": self.ecran_confidentialite,
             "majs": self.ecran_majs,
             "applications": self.ecran_applications,
@@ -544,6 +613,108 @@ class Assistant(Gtk.Window):
              "Fond clair, texte sombre."),
         ))
 
+    def ecran_usage(self):
+        """I7 — et le seul écran dont le choix INSTALLE quelque chose.
+
+        Les quatre usages et leurs applications sont décrits dans
+        `premier.USAGES`, par leur nom court de catalogue. Ce qui est coché ici
+        part dans la file de travaux d'avant-bureau à la fin de l'assistant —
+        donc ce n'est pas une préférence rangée dans un fichier, c'est un
+        travail qui s'exécute au prochain démarrage.
+        """
+        self.corps.pack_start(
+            grenosui.titre("À quoi va servir cet ordinateur ?",
+                           "Les applications du profil choisi s'installeront "
+                           "au prochain démarrage. Rien n'est définitif : "
+                           "GrenPlace sait en ajouter et en retirer."),
+            False, False, 0)
+        self.choix_simple("usage", [
+            (cle, intitule, note) for cle, intitule, note, _ in premier.USAGES])
+
+    def ecran_securite(self):
+        """I9 — l'état, et AUCUN interrupteur.
+
+        Son garde-fou, dans ses mots : « il ne faut pas que ça se retourne
+        contre nous ». Un chiffrement proposé ici n'aurait rien à chiffrer —
+        on tourne sur une image vive — et une case cochée sans effet est
+        exactement la faute que ce dépôt attrape depuis des semaines.
+        """
+        etat = premier.secure_boot()
+        self.corps.pack_start(
+            grenosui.titre("Protégeons votre ordinateur",
+                           premier.mot_sur_secure_boot(etat)),
+            False, False, 0)
+        lignes = [
+            ("Secure Boot", etat),
+            ("Mises à jour automatiques",
+             "oui" if self.reponses.get("majs") == "automatiques" else "au choix"),
+            ("Antivirus", "ClamAV, installé"),
+            ("Chiffrement du disque",
+             "se décide à l'installation sur disque, pas ici"),
+        ]
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        for nom, valeur in lignes:
+            ligne = Gtk.Box(spacing=12)
+            gauche = Gtk.Label(label=nom, xalign=0)
+            gauche.get_style_context().add_class("choix-titre")
+            droite = Gtk.Label(label=valeur, xalign=1)
+            droite.get_style_context().add_class("choix-note")
+            droite.set_line_wrap(True)
+            ligne.pack_start(gauche, False, False, 0)
+            ligne.pack_end(droite, False, False, 0)
+            boite.pack_start(ligne, False, False, 0)
+        self.corps.pack_start(grenosui.carte(boite), False, False, 0)
+        dire("premier : securite — secure boot %s" % etat)
+
+    def ecran_optimisation(self):
+        """I13 — « nous avons détecté votre matériel… », puis un bouton.
+
+        Ce qu'il y a derrière le bouton existe déjà et ne date pas d'ici :
+        `grenos-performances` met le gouverneur du processeur en
+        « performance ». On ne l'exécute pas maintenant — un assistant qui
+        touche au système pendant qu'on y répond ne peut plus revenir en
+        arrière. Le travail part dans la file, comme les applications.
+        """
+        # ON LIT LE CONTRAT DE `materiel.py`, ON NE LE DEVINE PAS : `coeurs()`
+        # et `memoire()` rendent chacun un couple, `graphique()` rend (carte,
+        # pilote). J'avais d'abord écrit `carte.get("nom")` de mémoire, c'est-
+        # à-dire un dictionnaire qui n'existe pas — l'écran aurait planté à
+        # l'ouverture, et c'est l'écran sans lequel personne n'entre dans la
+        # machine.
+        nombre, modele = materiel.coeurs()
+        totale, _libre = materiel.memoire()
+        carte, pilote = materiel.graphique()
+        self.corps.pack_start(
+            grenosui.titre("Optimisation automatique",
+                           "Voici ce que grenOS a trouvé sur cette machine."),
+            False, False, 0)
+        lignes = [
+            ("Processeur", "%s cœur(s)%s"
+             % (grenosui.nombre(nombre, 0), " — " + modele if modele else "")),
+            ("Mémoire", "%s Go" % grenosui.nombre(totale, 1)),
+            ("Carte graphique", carte or "inconnue"),
+            ("Pilote", pilote or "générique"),
+        ]
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        for nom, valeur in lignes:
+            ligne = Gtk.Box(spacing=12)
+            gauche = Gtk.Label(label=nom, xalign=0)
+            gauche.get_style_context().add_class("choix-titre")
+            droite = Gtk.Label(label=str(valeur), xalign=1)
+            droite.get_style_context().add_class("choix-note")
+            ligne.pack_start(gauche, False, False, 0)
+            ligne.pack_end(droite, False, False, 0)
+            boite.pack_start(ligne, False, False, 0)
+        self.corps.pack_start(grenosui.carte(boite), False, False, 0)
+        case = Gtk.CheckButton(label="Régler la machine pour la performance "
+                                     "au prochain démarrage")
+        case.set_active(self.reponses.get("optimiser") == "oui")
+        case.connect("toggled", lambda b: self.reponses.__setitem__(
+            "optimiser", "oui" if b.get_active() else "non"))
+        self.corps.pack_start(case, False, False, 0)
+        dire("premier : optimisation — %d coeur(s), %s Go, carte %s"
+             % (nombre, grenosui.nombre(totale, 1), carte or "inconnue"))
+
     def ecran_confidentialite(self):
         """I9 — et « aucune par défaut » est écrit en toutes lettres."""
         self.corps.pack_start(
@@ -656,6 +827,7 @@ class Assistant(Gtk.Window):
                            disposition, variante, fuseau)
         poser_apparence(retenu, self.reponses.get("apparence"))
         garder_choix(self.reponses)
+        deposer_les_travaux(self.reponses)
         dire(f"nom choisi, la machine est a {retenu}@{MACHINE}")
         dire("premier : choix gardes — apparence %s, telemetrie %s, majs %s"
              % (self.reponses.get("apparence", "auto"),

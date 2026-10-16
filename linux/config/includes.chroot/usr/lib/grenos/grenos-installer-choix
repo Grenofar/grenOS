@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Installer des fiches du catalogue, sans écran, par leur nom court.
+
+POURQUOI CE PROGRAMME EXISTE, et pourquoi ce n'est pas GrenPlace.
+
+L'assistant de première configuration dépose dans la file d'avant-bureau ce
+qui a été choisi — un profil d'usage, des applications cochées. Cette file
+s'exécute **avant lightdm** : à ce moment-là, il n'y a aucun serveur X. Y
+lancer GrenPlace, qui est une fenêtre GTK, serait lancer un programme qui ne
+peut pas s'ouvrir. J'ai d'ailleurs commencé par écrire `grenplace --installer`
+dans l'assistant : ce mode n'existe pas, et ce programme-là n'aurait de toute
+façon rien pu afficher. C'est la faute que ce dépôt attrape le plus souvent —
+une promesse à l'écran sans rien derrière — et elle a failli passer.
+
+UNE SEULE SOURCE POUR CE QU'UNE APPLICATION INSTALLE : le catalogue. Il sait
+déjà si une fiche s'installe par apt ou par Flatpak, et son adresse est
+vérifiée à la source à chaque construction. Écrire ici une seconde liste de
+paquets reviendrait à tenir deux listes qui finiraient par diverger, et c'est
+alors celle qui ne sert à rien qu'on croirait.
+
+TROIS RÈGLES, et elles viennent toutes d'une panne déjà payée :
+
+1. **On rend toujours 0.** Ce programme tourne dans la file d'avant-bureau, et
+   la règle de cette file est écrite dans son propre commentaire : « le
+   rejouer à chaque démarrage transforme une erreur en boucle, et une boucle
+   en machine perdue ». Une application qui ne s'installe pas est un ennui ;
+   une machine qui ne démarre plus est une machine perdue.
+2. **Chaque installation est bornée dans le temps.** Un dépôt qui ne répond
+   pas ne doit pas retenir le bureau : c'est le `apt-get update` de vingt-cinq
+   minutes du 7 octobre, qui aurait tenu six heures sans intervention.
+3. **On dit ce qu'on a fait, fiche par fiche.** Un verdict global « ok » ne
+   permettrait pas de savoir laquelle des quatre a manqué.
+
+    grenos-installer-choix vscode,git,steam
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+CATALOGUE = "/usr/share/grenos/catalogue.json"
+
+# LE BUDGET TOTAL, ET POURQUOI IL EST EN DESSOUS DE 600 SECONDES.
+#
+# La file d'avant-bureau borne chaque travail par `timeout 600` — lu dans
+# `grenos-maj-demarrage`, pas suppose. J'avais d'abord ecrit un delai de 900 s
+# par application : c'etait du code mort, puisque la file aurait coupe avant.
+# *Deux mesures d'une meme chose finissent par diverger, et c'est celle qu'on
+# ne regarde pas qui gouverne.*
+#
+# Et se faire couper par `timeout` AU MILIEU D'UN `dpkg` est la façon classique
+# de casser une machine. On s'arrete donc nous-memes, proprement, avant la
+# borne : on ne commence jamais une installation qu'on ne peut pas finir dans
+# le temps qui reste, et on dit ce qu'il reste a faire.
+BUDGET = 480
+DELAI = 240
+
+
+def dire(texte):
+    print("grenos-installer-choix : %s" % texte, flush=True)
+
+
+def fiches(chemin=CATALOGUE):
+    """Le catalogue, ou rien. Un catalogue illisible n'est pas une panne ici."""
+    try:
+        with open(chemin, encoding="utf-8") as fichier:
+            lu = json.load(fichier)
+    except (OSError, ValueError) as souci:
+        dire("catalogue illisible (%s) — rien ne peut etre installe" % souci)
+        return {}
+    liste = lu.get("applications", lu) if isinstance(lu, dict) else lu
+    trouvees = {}
+    for fiche in liste:
+        nom = fiche.get("slug")
+        if nom:
+            trouvees[nom] = fiche
+    return trouvees
+
+
+def commande_pour(fiche):
+    """Ce qu'il faut lancer pour poser cette fiche, ou None si on ne sait pas.
+
+    Une source inconnue ne donne PAS une commande devinée : on la nomme et on
+    passe. Deviner ferait lancer apt sur un identifiant Flatpak, c'est-à-dire
+    une erreur illisible au prochain démarrage de quelqu'un.
+    """
+    identifiant = fiche.get("identifiant")
+    if not identifiant:
+        return None
+    source = fiche.get("source")
+    if source == "apt":
+        return ["apt-get", "install", "-y", "--no-install-recommends",
+                identifiant]
+    if source == "flatpak":
+        return ["flatpak", "install", "-y", "--noninteractive", "flathub",
+                identifiant]
+    return None
+
+
+def installer(noms, catalogue=None, lanceur=None, horloge=None, budget=BUDGET):
+    """Poser chaque fiche nommée. Rend le compte (poses, manquees).
+
+    `horloge` est donnée en paramètre pour une seule raison : sans elle, le
+    cas « le temps est écoulé » ne pourrait s'exercer qu'en attendant huit
+    minutes, donc il ne s'exercerait jamais, donc le budget serait un mot
+    sans garde.
+    """
+    catalogue = fiches() if catalogue is None else catalogue
+    lanceur = lancer if lanceur is None else lanceur
+    horloge = time.monotonic if horloge is None else horloge
+    debut = horloge()
+    poses, manquees = 0, 0
+    for rang, nom in enumerate(noms):
+        reste = budget - (horloge() - debut)
+        if reste <= 0 and rang > 0:
+            # ON NE COMMENCE PAS CE QU'ON NE PEUT PAS FINIR. Les restantes
+            # s'installent depuis GrenPlace, et la ligne le dit au lieu de
+            # laisser croire que tout est passé.
+            attendent = list(noms[rang:])
+            dire("le temps imparti est ecoule : %d application(s) restent a "
+                 "installer depuis GrenPlace (%s)"
+                 % (len(attendent), ", ".join(attendent)))
+            manquees += len(attendent)
+            break
+        fiche = catalogue.get(nom)
+        if fiche is None:
+            dire("« %s » n'est pas au catalogue — rien a installer" % nom)
+            manquees += 1
+            continue
+        commande = commande_pour(fiche)
+        if commande is None:
+            dire("« %s » : source « %s » inconnue, on ne devine pas"
+                 % (nom, fiche.get("source")))
+            manquees += 1
+            continue
+        code, detail = lanceur(commande, max(30, int(min(DELAI, reste))))
+        if code == 0:
+            dire("« %s » installe (%s)" % (nom, fiche.get("source")))
+            poses += 1
+        else:
+            dire("« %s » a echoue (code %s) %s" % (nom, code, detail[:120]))
+            manquees += 1
+    return poses, manquees
+
+
+def lancer(commande, delai=DELAI):
+    environnement = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
+    try:
+        fin = subprocess.run(commande, capture_output=True, text=True,
+                             timeout=delai, check=False, env=environnement)
+    except subprocess.TimeoutExpired:
+        return 124, "le programme n'a pas repondu en %d s" % delai
+    except OSError as souci:
+        return 127, str(souci)
+    return fin.returncode, (fin.stderr or fin.stdout or "").strip()
+
+
+def main(argv):
+    noms = []
+    for morceau in argv[1:]:
+        noms.extend(n.strip() for n in morceau.split(",") if n.strip())
+    if not noms:
+        dire("aucune application nommee — rien a faire")
+        return 0
+    dire("%d application(s) demandee(s) : %s" % (len(noms), ", ".join(noms)))
+    poses, manquees = installer(noms)
+    dire("%d posee(s), %d manquee(s)" % (poses, manquees))
+    # TOUJOURS 0, et c'est la règle de la file : une application manquante ne
+    # doit jamais empecher le bureau de s'ouvrir.
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

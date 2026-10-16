@@ -22,7 +22,13 @@ Le choix du parcours arrive **après la langue, le clavier et le nom** : c'est
 son ordre, et il est juste. Demander « quel parcours ? » à quelqu'un qui n'a
 pas encore choisi sa langue, c'est lui demander de choisir dans une langue
 qu'il ne lit peut-être pas.
+
+ET LA SEULE LECTURE DU SYSTÈME QU'ON S'AUTORISE ICI est celle de l'état de
+Secure Boot, et elle prend sa racine en paramètre — c'est ce qui permet de
+l'exercer sur une variable fabriquée, sur une machine qui n'a pas d'UEFI, au
+lieu de dépendre du matériel de qui lance l'essai.
 """
+import os
 
 RAPIDE = "rapide"
 PERSONNALISE = "personnalise"
@@ -91,6 +97,118 @@ DEFAUTS = {
     "sauvegardes": False,
     "chiffrement": False,
 }
+
+
+# --------------------------------------------------------------------------
+# I7 — « À QUOI VA SERVIR CET ORDINATEUR ? »
+#
+# Sa demande, mot pour mot : « s'il choisit *développement*, un bouton installe
+# VS Code, Git, un terminal amélioré, les outils de compilation et GrenAI ».
+#
+# CE QUI EST TENU, ET CE QUI NE L'EST PAS, parce que la différence est tout :
+#
+# * les applications sont **installées pour de vrai**, par la file de travaux
+#   d'avant-bureau (`grenos-au-prochain-demarrage`), qui est prouvée depuis le
+#   27 septembre : elle rend toujours 0, se désarme, et survit à un dépôt
+#   injoignable. Un choix d'usage n'est donc pas une préférence rangée dans un
+#   fichier, c'est un travail qui s'exécute ;
+# * **GrenAI n'est pas proposée**, parce qu'elle n'existe pas : zéro ligne
+#   écrite sur onze demandes. La nommer ici serait la sixième promesse à
+#   l'écran sans rien derrière, et celle-là se verrait au premier démarrage ;
+# * **Ctrl+Alt+Échap n'est pas annoncé** non plus — le mode jeu qui ne laisse
+#   tourner que la sécurité n'est pas écrit.
+#
+# CHAQUE APPLICATION EST DÉSIGNÉE PAR SON NOM COURT DANS LE CATALOGUE, jamais
+# par un nom de paquet écrit ici. Le catalogue sait déjà si une fiche
+# s'installe par apt ou par Flatpak, et son adresse est vérifiée à la source à
+# chaque construction. Deux listes de paquets finiraient par diverger, et
+# c'est alors celle qui ne sert à rien qu'on croirait.
+USAGES = (
+    ("bureautique", "Bureautique et Internet",
+     "Écrire, naviguer, regarder des vidéos. Rien de plus n'est installé.",
+     ()),
+    ("developpement", "Développement",
+     "Visual Studio Code, Git, Python et Node. GrenAI n'est pas encore "
+     "écrite, donc elle n'est pas proposée.",
+     ("vscode", "git", "python", "nodejs")),
+    ("jeu", "Jeux",
+     "Steam, et Heroic pour les jeux Epic. GameMode est déjà là et donne la "
+     "priorité au jeu qui tourne.",
+     ("steam", "heroic")),
+    ("montage", "Montage photo, vidéo et son",
+     "Kdenlive, GIMP et Audacity.",
+     ("kdenlive", "gimp", "audacity")),
+)
+
+
+def paquets_pour(usage):
+    """Les noms courts de catalogue qu'un usage entraîne, ou rien.
+
+    Un usage inconnu ne rend rien plutôt que le premier de la liste : installer
+    quatre applications parce qu'un nom a été mal écrit serait pire que de
+    n'en installer aucune.
+    """
+    for cle, _titre, _note, paquets in USAGES:
+        if cle == usage:
+            return paquets
+    return ()
+
+
+# --------------------------------------------------------------------------
+# I9 — « PROTÉGEONS VOTRE ORDINATEUR »
+#
+# Et le garde-fou qu'il nomme lui-même : « il ne faut pas que ça se retourne
+# contre nous ». Donc cet écran **n'offre aucun interrupteur** : il dit l'état,
+# et rien de plus.
+#
+# Le chiffrement du disque ne se décide pas ici, et ce n'est pas un oubli :
+# cette machine tourne sur une image vive. Chiffrer un disque se fait au moment
+# où on l'installe, par l'installateur, et nulle part ailleurs. Offrir la case
+# ici reviendrait à promettre un chiffrement qui n'aurait rien à chiffrer.
+def secure_boot(racine="/sys/firmware/efi/efivars"):
+    """« actif », « inactif », ou « pas en UEFI » — lu dans la variable.
+
+    La variable `SecureBoot` fait cinq octets : quatre d'attributs, puis un
+    seul qui vaut 1 quand Secure Boot est actif. On la lit directement plutôt
+    que d'appeler `mokutil`, qui n'est pas dans l'image — un programme absent
+    rendrait « inconnu » à tous les coups, c'est-à-dire une mesure morte.
+    """
+    if not os.path.isdir(racine):
+        return "pas en UEFI"
+    for nom in sorted(os.listdir(racine)):
+        if not nom.startswith("SecureBoot-"):
+            continue
+        try:
+            with open(os.path.join(racine, nom), "rb") as fichier:
+                octets = fichier.read(5)
+        except OSError:
+            return "inconnu"
+        if len(octets) < 5:
+            return "inconnu"
+        return "actif" if octets[4] else "inactif"
+    return "inconnu"
+
+
+def mot_sur_secure_boot(etat):
+    """Ce qu'on en dit à quelqu'un qui installe grenOS pour la première fois.
+
+    AUCUNE DE CES PHRASES NE PROMET SECURE BOOT. grenOS livre
+    `grub-efi-amd64-bin` sans `shim-signed` ni `grub-efi-amd64-signed` : un
+    micrologiciel qui vérifie les signatures refuse donc de démarrer cette
+    image. C'est la case D8 de la liste, et elle est à faire. Le dire en face
+    vaut mieux que le laisser découvrir devant un écran noir.
+    """
+    if etat == "actif":
+        return ("Secure Boot est actif. grenOS n'est pas encore signé : "
+                "il faut le désactiver dans le BIOS pour démarrer cette "
+                "machine sur grenOS.")
+    if etat == "inactif":
+        return ("Secure Boot est désactivé, ce qu'il faut aujourd'hui pour "
+                "démarrer grenOS. Le noyau signé est en chantier.")
+    if etat == "pas en UEFI":
+        return ("Cette machine a démarré sans UEFI, donc Secure Boot ne "
+                "s'applique pas.")
+    return ("L'état de Secure Boot n'a pas pu être lu sur cette machine.")
 
 
 def ecrans(parcours):

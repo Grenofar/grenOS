@@ -136,10 +136,66 @@ install -m 0644 "$DEDANS/usr/share/xsessions/grenos.desktop" "$BUILD/usr/share/x
 ( cd "$DEDANS" && find etc -type f -name '*.conf' \
     ! -path 'etc/systemd/system/*' ! -path 'etc/calamares/*' | sort ) \
   | while read -r relatif; do
-    install -d "$BUILD/$(dirname "$relatif")"
-    install -m 0644 "$DEDANS/$relatif" "$BUILD/$relatif"
-    echo "  reglage : $relatif"
-done
+    nom=$(basename "$relatif")
+    case "$nom" in
+        *grenos*)
+            install -d "$BUILD/$(dirname "$relatif")"
+            install -m 0644 "$DEDANS/$relatif" "$BUILD/$relatif"
+            echo "  reglage : $relatif"
+            ;;
+        *)
+            # CE FICHIER APPARTIENT A UN AUTRE PAQUET, et le livrer a coute
+            # une construction : `find etc -name '*.conf'` a ramasse
+            # `etc/lightdm/lightdm-gtk-greeter.conf`, et dpkg a repondu
+            # « trying to overwrite […] which is also in package
+            # lightdm-gtk-greeter ». C'est la panne du 24 septembre au mot
+            # pres, dans le fichier meme qui porte la lecon.
+            #
+            # Ces fichiers-la partent en MODELES (`usr/share/grenos/modeles`)
+            # et `appliquer-systeme` les pose. Le critere est le nom : chaque
+            # complement que nous avons invente s'appelle `*grenos*`, et aucun
+            # chemin partage ne le fait.
+            #
+            # ET LE TROISIEME CAS EST REFUSE. Un reglage a nous dont le nom ne
+            # nous designe pas n'irait ni dans le paquet ni dans les modeles :
+            # l'image l'aurait, une machine mise a jour non, et personne ne le
+            # saurait. Plutot que de le laisser tomber en silence, on arrete
+            # la construction et on le nomme.
+            # ON DEMANDE AU MECANISME, PAS A UN TEXTE. Ma premiere version
+            # cherchait le chemin dans ce script-ci : le fichier de lightdm y
+            # passait parce qu'un COMMENTAIRE le nommait. Un controle qu'un
+            # commentaire satisfait ne controle rien — c'est le garde du
+            # 7 octobre qui refusait le service que son propre commentaire
+            # documentait, par l'autre bout.
+            #
+            # La seule chose qui compte est : `appliquer-systeme` POSE-T-IL ce
+            # chemin ? La reponse est dans ses lignes `poser`, qui portent la
+            # cible reelle. Etre livre comme modele sans etre pose ne servirait
+            # a rien, et ce controle-la le verrait aussi.
+            poseur="$DEDANS/usr/lib/grenos/appliquer-systeme"
+            if [ ! -r "$poseur" ]; then
+                # SANS LUI, ON NE SAIT RIEN, ET ON NE FAIT PAS SEMBLANT.
+                # L'essai a trouve ce trou : un `grep` sur un fichier absent
+                # rendait une chaine vide, `[ "" -eq 0 ]` sortait en erreur,
+                # et le fichier partait en « modele » comme si tout allait
+                # bien. Le controle disait oui faute de pouvoir dire non.
+                echo "  appliquer-systeme est introuvable : impossible de" >&2
+                echo "  savoir si $relatif est pose. On s'arrete." >&2
+                exit 1
+            fi
+            pose=$(grep -c "^poser .*[[:space:]]/${relatif}\$" "$poseur" || true)
+            if [ "${pose:-0}" -eq 0 ]; then
+                echo "  REGLAGE ORPHELIN : $relatif" >&2
+                echo "  Il n'est ni a nous (son nom ne porte pas « grenos »)" >&2
+                echo "  ni pose par appliquer-systeme. L'image l'aurait, une machine" >&2
+                echo "  mise a jour non. Nomme-le *grenos* ou ajoute-le aux" >&2
+                echo "  modeles avec son « poser » dans appliquer-systeme." >&2
+                exit 1
+            fi
+            echo "  modele  : $relatif (pose par appliquer-systeme)"
+            ;;
+    esac
+done || exit 1
 
 # Ce que grenOS demande a GameMode pendant qu'un jeu tourne. Le paquet livre
 # `renice=0`, donc sans ce fichier GameMode ne change PAS la priorite du jeu —
