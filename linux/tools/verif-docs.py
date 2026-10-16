@@ -75,6 +75,41 @@ def verifier(chemin, racine=RACINE):
         if not os.path.exists(cible):
             fautes.append(cite)
     fautes.extend(outil_fantome(chemin, racine))
+    fautes.extend(fonctions_fantomes(texte, racine))
+    return fautes
+
+
+MODULES = os.path.join("linux", "config", "includes.chroot", "usr", "lib",
+                       "grenos")
+
+APPEL = re.compile(r"`([a-z_][a-z_0-9]*)\.([a-z_][a-z_0-9]*)\(")
+
+
+def fonctions_fantomes(texte, racine=RACINE):
+    """Une fonction citée comme `module.fonction()` doit exister.
+
+    C'est la deuxième chose mécanique qu'on puisse vérifier dans un document,
+    après les chemins — et c'est celle qui compte le plus pour un document
+    d'outil, puisqu'elle est la seule façon de rattacher une phrase à du code.
+    Le document de grenHub livré le 16 octobre en cite dix-huit : les
+    dix-huit existent, et c'est ce qui permet de le croire sur le reste.
+
+    On ne juge QUE les modules qu'on livre. Une citation de `json.load()` ou
+    de `os.path.exists()` n'est pas une affirmation sur notre code, et la
+    refuser remplirait le journal de fautes qu'on ne veut pas corriger.
+    """
+    fautes = []
+    for module, fonction in sorted(set(APPEL.findall(texte))):
+        source = os.path.join(racine, MODULES, module + ".py")
+        if not os.path.exists(source):
+            continue
+        try:
+            code = io.open(source, encoding="utf-8").read()
+        except OSError:
+            continue
+        if ("def %s(" % fonction) not in code:
+            fautes.append("%s.%s() — ce module ne porte pas cette fonction"
+                          % (module, fonction))
     return fautes
 
 
