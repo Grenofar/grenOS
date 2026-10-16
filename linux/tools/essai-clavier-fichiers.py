@@ -84,6 +84,30 @@ class Vue(object):
         self._journal.append("tout-selectionner")
 
 
+class FausseRangee(object):
+    """La VRAIE mécanique des onglets serait un module de plus à charger ;
+    ici on ne juge que ce que le clavier lui demande, et dans quel ordre.
+    `onglets.py` est exercé a part, en 30 cas."""
+
+    def __init__(self, journal, combien=3, actif=0):
+        self._journal = journal
+        self._combien = combien
+        self.actif = actif
+
+    def combien(self):
+        return self._combien
+
+    def suivant(self):
+        self._journal.append("onglet-suivant")
+
+    def precedent(self):
+        self._journal.append("onglet-precedent")
+
+    def aller_a(self, rang):
+        self._journal.append("onglet-%d" % rang)
+        return 0 <= rang < self._combien
+
+
 class Fenetre(object):
     """Un `self` qui note ce qu on lui demande, sans rien faire."""
 
@@ -94,6 +118,7 @@ class Fenetre(object):
         self._adresse = adresse
         self.faits = []
         self.vue = Vue(self.faits)
+        self.rangee = FausseRangee(self.faits)
 
     def _note(self, quoi):
         self.faits.append(quoi)
@@ -144,6 +169,15 @@ class Fenetre(object):
 
     def action_coller(self):
         self._note("coller")
+
+    def action_nouvel_onglet(self):
+        self._note("nouvel-onglet")
+
+    def action_fermer_onglet(self):
+        self._note("fermer-onglet")
+
+    def changer_d_onglet(self):
+        self._note("changer-onglet")
 
 
 class Evenement(object):
@@ -237,6 +271,31 @@ cas("Ctrl+V colle", Fenetre(), "v", CTRL, ["coller"], pris=True)
 cas("Ctrl+A selectionne tout",
     Fenetre(), "a", CTRL, ["tout-selectionner"], pris=True)
 cas("une lettre seule ne declenche rien", Fenetre(), "z", 0, [], pris=False)
+
+# ---- LES ONGLETS, ajoutes le 16 octobre --------------------------------
+cas("Ctrl+T ouvre un onglet",
+    Fenetre(), "t", CTRL, ["nouvel-onglet"], pris=True)
+cas("Ctrl+T marche MEME en ecrivant dans la recherche",
+    Fenetre(cherche_focus=True, cherche_texte="doc"), "t", CTRL,
+    ["nouvel-onglet"], pris=True)
+cas("Ctrl+W ferme l onglet",
+    Fenetre(), "w", CTRL, ["fermer-onglet"], pris=True)
+cas("Ctrl+Tab passe au suivant",
+    Fenetre(), "Tab", CTRL, ["onglet-suivant", "changer-onglet"], pris=True)
+cas("Ctrl+Maj+Tab passe au precedent",
+    Fenetre(), "Tab", CTRL | MAJ, ["onglet-precedent", "changer-onglet"],
+    pris=True)
+cas("Ctrl+Maj+Tab sous sa forme X11 (ISO_Left_Tab) aussi",
+    Fenetre(), "ISO_Left_Tab", CTRL, ["onglet-precedent", "changer-onglet"],
+    pris=True)
+cas("Ctrl+1 va au premier",
+    Fenetre(), "1", CTRL, ["onglet-0", "changer-onglet"], pris=True)
+cas("Ctrl+9 va au DERNIER, pas au neuvieme",
+    Fenetre(), "9", CTRL, ["onglet-2", "changer-onglet"], pris=True)
+cas("Ctrl+5 dans une rangee de trois ne change pas d onglet",
+    Fenetre(), "5", CTRL, ["onglet-4"], pris=True)
+cas("Tab SANS Ctrl ne touche pas aux onglets",
+    Fenetre(), "Tab", 0, [], pris=False)
 
 print("")
 if echecs:

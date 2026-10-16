@@ -101,8 +101,18 @@ jobs:
       # claviers d une meme fenetre, et c est alors la copie qu on croirait.
       # Rejoue sur la version qui a casse, il refuse exactement les deux cas
       # de la panne — un garde qu on n a pas vu refuser n est pas un garde.
-      - name: Le clavier de l explorateur, 28 cas
+      - name: Le clavier de l explorateur, 38 cas
         run: python3 linux/tools/essai-clavier-fichiers.py
+
+      # LES ONGLETS, juges AVANT de toucher a la fenetre. L explorateur est
+      # celui par defaut depuis le 7 octobre, et la semaine a montre ce qu une
+      # modification de sa fenetre coute : la recherche a tue le renommage.
+      # La mecanique vit donc dans `onglets.py`, sans GTK, et 30 cas la
+      # jugent — dont ceux qui font perdre son travail : fermer le dernier
+      # onglet, une histoire partagee entre onglets, un Ctrl+7 dans une rangee
+      # de deux, et la racine qui n a pas de nom court.
+      - name: La mecanique des onglets, 30 cas
+        run: python3 linux/tools/essai-onglets.py
 
       # LA TEMPERATURE ET LES VENTILATEURS, sur de faux /sys fabriques : la
       # machine d integration n a ni sonde ni ventilateur, donc elle ne peut
@@ -540,7 +550,18 @@ jobs:
           # donc rien de prouve ».
           JOURNAL=$(grep -a 'journal :' "$RUNNER_TEMP/serial-uefi.log" 2>/dev/null \
             | tail -1 | sed 's/^.*grenos: //')
-          echo "${JOURNAL:-journal : le second demarrage n'a rien dit}"
+          # PAS D'APOSTROPHE DANS UN `${VAR:-…}`, meme entre guillemets : bash
+          # interprete les quotes A L'INTERIEUR de l'expansion, et une seule
+          # apostrophe ouvre une chaine qui ne se referme qu'a la fin du
+          # script. C'est ce qui a tue l'etape UEFI de la construction
+          # 38872724960 — « line 84: unexpected EOF while looking for matching
+          # `'' » — alors que la ligne fautive etait la 74. `sh -n` (dash) ne
+          # le voit pas ; `bash -n` oui, et c'est bash que GitHub lance.
+          if [ -n "$JOURNAL" ]; then
+            echo "$JOURNAL"
+          else
+            echo "journal : le second demarrage n a rien dit"
+          fi
           CONNUS=$(printf '%s' "$JOURNAL" | sed -n 's/^journal : persistant, \([0-9]\{1,\}\) demarrage.*/\1/p')
           if [ "${CONNUS:-0}" -ge 2 ]; then
             echo "journal: le journal du demarrage PRECEDENT est encore lisible ($CONNUS connus)"

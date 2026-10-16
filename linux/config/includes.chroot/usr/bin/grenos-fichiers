@@ -56,6 +56,7 @@ gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
 import grenosui  # noqa: E402
+import onglets  # noqa: E402
 
 STYLE = """
 #volet-fichiers {
@@ -163,6 +164,38 @@ STYLE = """
     font-size: 12px;
     color: @texte-faible;
 }
+
+/* La rangée d'onglets. L'actif porte le fond de la liste et un trait
+   d'accent en haut : sans un signe franc, deux onglets de même nom — deux
+   dossiers « Documents » — seraient indistinguables, et on ne saurait plus
+   lequel on regarde. */
+#barre-onglets {
+    background-color: @fond-haut;
+    border-bottom: 1px solid @bord;
+    padding: 0 6px;
+}
+
+#barre-onglets button.onglet,
+#barre-onglets button.onglet-actif {
+    padding: 4px 14px;
+    font-size: 12px;
+    border: none;
+    border-radius: 0;
+    background-image: none;
+}
+
+#barre-onglets button.onglet {
+    color: @texte-faible;
+    background-color: transparent;
+}
+
+#barre-onglets button.onglet:hover { color: @texte; }
+
+#barre-onglets button.onglet-actif {
+    color: @texte;
+    background-color: @fond;
+    border-top: 2px solid @accent;
+}
 """
 
 # Les dossiers de « Accès rapide », dans l'ordre de Windows.
@@ -267,8 +300,15 @@ class Explorateur(Gtk.Window):
         self.connect("destroy", Gtk.main_quit)
         grenosui.chronometrer(self, "Explorateur de fichiers")
 
-        self.histoire = []
-        self.rang = -1
+        # LES ONGLETS. Un onglet n'est pas une seconde liste de fichiers :
+        # c'est un dossier mémorisé avec son histoire, et il n'y a toujours
+        # qu'une liste à l'écran. De l'extérieur cela se comporte comme les
+        # onglets de Windows ; de l'intérieur, ni le modèle, ni le filtre, ni
+        # le tri ne bougent — donc rien de ce qui est déjà prouvé ne peut
+        # tomber. C'est délibéré : la recherche ajoutée le 15 octobre a tué le
+        # renommage, et il a fallu une construction de quarante minutes pour
+        # l'apprendre.
+        self.rangee = onglets.Rangee(depart or os.path.expanduser("~"))
         # Le presse-papier est a NOUS, pas celui de X : on colle des fichiers,
         # pas du texte, et deux explorateurs ouverts ne doivent pas se marcher
         # dessus. `couper` dit si le collage deplace ou duplique.
@@ -284,6 +324,13 @@ class Explorateur(Gtk.Window):
         corps = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.add(corps)
         corps.pack_start(self._barre_outils(), False, False, 0)
+        # La rangée d'onglets vit entre la barre d'outils et la liste, comme
+        # dans Windows 11. Elle est CACHÉE tant qu'il n'y a qu'un onglet : une
+        # barre vide prendrait vingt-huit pixels de hauteur pour ne rien dire,
+        # et la fenêtre est jugée en 720p où chaque ligne compte.
+        self.barre_onglets = Gtk.Box(spacing=2)
+        self.barre_onglets.set_name("barre-onglets")
+        corps.pack_start(self.barre_onglets, False, False, 0)
 
         milieu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         corps.pack_start(milieu, True, True, 0)
@@ -562,6 +609,74 @@ class Explorateur(Gtk.Window):
             grenosui.dire("fichiers : recherche « %s » -> %d element(s)"
                           % (cherche, len(self.filtre)))
 
+    # ---- Les onglets --------------------------------------------------------
+    def redessiner_les_onglets(self):
+        """La rangée, et rien d'autre : chaque onglet est un bouton.
+
+        On reconstruit la rangée entière à chaque changement. C'est cent fois
+        moins de code qu'un suivi d'état, et le coût est nul : il y a deux ou
+        trois onglets, pas deux mille lignes.
+        """
+        for enfant in self.barre_onglets.get_children():
+            self.barre_onglets.remove(enfant)
+        combien = self.rangee.combien()
+        self.barre_onglets.set_visible(combien > 1)
+        if combien <= 1:
+            return
+        for rang, intitule in enumerate(self.rangee.intitules()):
+            bouton = Gtk.Button(label=intitule)
+            bouton.set_relief(Gtk.ReliefStyle.NONE)
+            classe = "onglet-actif" if rang == self.rangee.actif else "onglet"
+            bouton.get_style_context().add_class(classe)
+            bouton.connect("clicked", self.au_clic_onglet, rang)
+            self.barre_onglets.pack_start(bouton, False, False, 0)
+        fermer = Gtk.Button(label="×")
+        fermer.set_relief(Gtk.ReliefStyle.NONE)
+        fermer.get_style_context().add_class("onglet")
+        fermer.set_tooltip_text("Fermer cet onglet (Ctrl+W)")
+        fermer.connect("clicked", lambda _b: self.action_fermer_onglet())
+        self.barre_onglets.pack_end(fermer, False, False, 0)
+        self.barre_onglets.show_all()
+
+    def au_clic_onglet(self, _bouton, rang):
+        if self.rangee.aller_a(rang):
+            self.changer_d_onglet()
+
+    def changer_d_onglet(self):
+        """Montrer le dossier de l'onglet actif, sans le remémoriser.
+
+        LA RECHERCHE EST EFFACÉE, et c'est un choix : garder le filtre d'un
+        onglet en passant à un autre montrerait une liste amputée sans qu'on
+        sache pourquoi — « 2 éléments » dans un dossier qui en contient
+        trente. Le champ appartient à la fenêtre, le dossier à l'onglet.
+        """
+        if self.cherche.get_text():
+            self.cherche.set_text("")
+        self.vue.grab_focus()
+        self.aller(self.rangee.courant.dossier, memoriser=False)
+        self.redessiner_les_onglets()
+        grenosui.dire("fichiers : onglets — %d, actif « %s »"
+                      % (self.rangee.combien(),
+                         self.rangee.courant.intitule()))
+
+    def action_nouvel_onglet(self):
+        """Ctrl+T, sur le dossier affiché — comme Windows et les navigateurs."""
+        self.rangee.ouvrir(self.dossier)
+        self.changer_d_onglet()
+
+    def action_fermer_onglet(self):
+        """Ctrl+W. Le dernier onglet ne se ferme pas, et la barre d'état le dit.
+
+        Windows ferme la fenêtre ; nous gardons l'onglet. Ctrl+W frappé deux
+        fois de suite ne doit pas faire disparaître la fenêtre par surprise,
+        et une fenêtre sans liste aurait l'air cassée.
+        """
+        if not self.rangee.fermer():
+            self.etat.set_text("C'est le dernier onglet : Alt+F4 ferme la "
+                               "fenêtre.")
+            return
+        self.changer_d_onglet()
+
     # ---- Naviguer -----------------------------------------------------------
     def aller(self, chemin, memoriser=True):
         chemin = os.path.abspath(chemin)
@@ -569,20 +684,22 @@ class Explorateur(Gtk.Window):
             return
         self.dossier = chemin
         if memoriser:
-            del self.histoire[self.rang + 1:]
-            self.histoire.append(chemin)
-            self.rang = len(self.histoire) - 1
+            # L'HISTOIRE APPARTIENT A L'ONGLET, et non à la fenêtre. Une
+            # histoire partagée ferait que Précédent dans un onglet renvoie au
+            # dossier d'un autre — un bouton qui fait autre chose que ce qu'il
+            # dit. La mécanique est dans `onglets.py`, exercée en 30 cas.
+            self.rangee.courant.aller(chemin)
         self.peupler()
 
     def au_precedent(self, _bouton=None):
-        if self.rang > 0:
-            self.rang -= 1
-            self.aller(self.histoire[self.rang], memoriser=False)
+        ou = self.rangee.courant.precedent()
+        if ou is not None:
+            self.aller(ou, memoriser=False)
 
     def au_suivant(self, _bouton=None):
-        if self.rang + 1 < len(self.histoire):
-            self.rang += 1
-            self.aller(self.histoire[self.rang], memoriser=False)
+        ou = self.rangee.courant.suivant()
+        if ou is not None:
+            self.aller(ou, memoriser=False)
 
     def au_parent(self, _bouton=None):
         parent = os.path.dirname(self.dossier.rstrip("/")) or "/"
@@ -661,6 +778,34 @@ class Explorateur(Gtk.Window):
                 self.cherche.set_text("")
                 self.vue.grab_focus()
                 return True
+        # LES ONGLETS SONT AU-DESSUS DE LA BARRIÈRE « on est en train
+        # d'écrire », pour la même raison que Ctrl+Maj+N : ils ne touchent ni
+        # à la sélection ni à un fichier, et Ctrl+T doit marcher même si le
+        # clavier est dans le champ de recherche. Ctrl+Tab, en revanche, ne
+        # peut pas servir à autre chose — aucun champ ne l'attend.
+        if controle and touche in ("t", "T"):
+            self.action_nouvel_onglet()
+            return True
+        if controle and touche in ("w", "W"):
+            self.action_fermer_onglet()
+            return True
+        if controle and touche in ("Tab", "ISO_Left_Tab"):
+            if majuscule or touche == "ISO_Left_Tab":
+                self.rangee.precedent()
+            else:
+                self.rangee.suivant()
+            self.changer_d_onglet()
+            return True
+        # Ctrl+1 à Ctrl+9, comme dans un navigateur. Le neuvième va au
+        # DERNIER, quel que soit leur nombre : c'est ce que fait Firefox, et
+        # c'est plus utile qu'un neuvième qui ne marche qu'à neuf onglets.
+        if controle and touche in tuple("123456789"):
+            rang = int(touche) - 1
+            if touche == "9":
+                rang = self.rangee.combien() - 1
+            if self.rangee.aller_a(rang):
+                self.changer_d_onglet()
+            return True
         if controle and majuscule and touche in ("n", "N"):
             self.action_nouveau_dossier()
             return True
@@ -750,8 +895,10 @@ class Explorateur(Gtk.Window):
         self.caches = caches
         self.refaire_le_fil()
         self.dire_le_compte()
-        self.bouton_precedent.set_sensitive(self.rang > 0)
-        self.bouton_suivant.set_sensitive(self.rang + 1 < len(self.histoire))
+        onglet = self.rangee.courant
+        self.bouton_precedent.set_sensitive(onglet.rang > 0)
+        self.bouton_suivant.set_sensitive(
+            onglet.rang + 1 < len(onglet.histoire))
         self.bouton_parent.set_sensitive(self.dossier != "/")
         self.set_title("%s — Explorateur de fichiers"
                        % (os.path.basename(self.dossier) or "Système de fichiers"))

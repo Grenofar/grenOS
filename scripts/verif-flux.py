@@ -18,6 +18,10 @@ deux fois en essayant de l'écrire là-bas.
 Sort en 0 si le fichier est sain, en 1 sinon, en nommant chaque ligne.
 """
 import io
+import os
+import shutil
+import subprocess
+import tempfile
 import re
 import sys
 
@@ -110,8 +114,60 @@ def verifier(chemin):
         else:
             fautes += fautes_de_github(arbre, texte)
             fautes += fautes_de_portes(arbre)
+            fautes += fautes_de_shell(arbre)
 
     return fautes
+
+
+def fautes_de_shell(arbre):
+    """Chaque bloc `run:` doit se lire par BASH, et pas par un autre shell.
+
+    CE QUE CELA A COUTE : la construction 38872724960 a perdu son etape UEFI
+    sur « line 84: unexpected EOF while looking for matching `'' ». La faute
+    etait a la ligne 74 :
+
+        echo "${JOURNAL:-journal : le second demarrage n'a rien dit}"
+
+    Dans bash, les quotes sont interpretees A L'INTERIEUR de `${VAR:-mot}`,
+    meme quand toute l'expansion est entre guillemets. L'apostrophe de
+    « n'a » ouvre donc une chaine qui ne se referme qu'a la fin du script, et
+    tout ce qui suit disparait.
+
+    ET C'EST BASH, PAS `sh`. Rejoue avec `sh -n` (dash sur cette machine), le
+    meme script passe sans un mot : dash n'interprete pas les quotes dans une
+    expansion. GitHub lance `bash -e {0}` par defaut — donc juger avec un
+    autre shell, c'est juger un script que personne n'executera.
+
+    Un garde qui ne peut pas s'executer le DIT, au lieu de rendre vert : sans
+    bash, l'absence de faute ne voudrait rien dire.
+    """
+    verdicts = []
+    if shutil.which("bash") is None:
+        print("bash absent : la syntaxe des blocs run n'est pas verifiee")
+        return verdicts
+    for nom_emploi, emploi in (arbre.get("jobs") or {}).items():
+        for rang, etape in enumerate(emploi.get("steps") or [], 1):
+            if not isinstance(etape, dict):
+                continue
+            script = etape.get("run")
+            if not script:
+                continue
+            fichier = tempfile.NamedTemporaryFile(
+                "w", suffix=".sh", delete=False, encoding="utf-8", newline="\n")
+            fichier.write(script)
+            fichier.close()
+            try:
+                fin = subprocess.run(["bash", "-n", fichier.name],
+                                     capture_output=True, text=True)
+            finally:
+                os.unlink(fichier.name)
+            if fin.returncode != 0:
+                nom_etape = etape.get("name") or f"etape {rang}"
+                raison = (fin.stderr or "").strip().split("\n")[-1]
+                raison = raison.replace(fichier.name, "<run>")
+                verdicts.append((0, f"{nom_emploi} : « {nom_etape} » ne se lit "
+                                    f"pas par bash — {raison}"))
+    return verdicts
 
 
 def fautes_de_portes(arbre):

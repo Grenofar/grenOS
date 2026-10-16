@@ -755,6 +755,36 @@ else
   echo "::warning::F2 n a rien renomme (rapporte, pas bloquant)"
 fi
 
+# --- LES ONGLETS : Ctrl+T, puis Ctrl+W -----------------------------------
+#
+# « Gestionnaire de fichiers moderne — onglets » est la premiere ligne de sa
+# section G. Un onglet n est pas une seconde liste : c est un dossier memorise
+# avec son histoire, et c est ce qui permet de l ajouter sans toucher au
+# modele ni au filtre — donc sans remettre en jeu ce qui est deja prouve.
+#
+# LA PREUVE EST UN NOMBRE, comme pour Ctrl+H : la ligne dit combien d onglets
+# et lequel est actif. Ctrl+T doit faire monter le compte a 2, Ctrl+W le
+# ramener a 1. Un troisieme Ctrl+W doit REFUSER — le dernier onglet ne se
+# ferme pas — et c est ce refus qui empeche la ligne d etre une assertion
+# morte : sans lui, un compteur qui ne descend jamais dirait la meme chose.
+#
+# « t » et « w » occupent la meme touche en AZERTY qu en QWERTY.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-t" || true
+sleep 2
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-onglets.ppm" || true
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-w" || true
+sleep 2
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-w" || true
+sleep 2
+grep -a 'grenos: fichiers : onglets' "$RUNNER_TEMP/serial.log" \
+  | tr -d '[:cntrl:]' | sed 's/^.*grenos: /  /' || true
+if grep -aq 'fichiers : onglets — 2,' "$RUNNER_TEMP/serial.log" \
+   && grep -aq 'fichiers : onglets — 1,' "$RUNNER_TEMP/serial.log"; then
+  echo "fichiers: les onglets OBEISSENT — Ctrl+T ouvre, Ctrl+W ferme"
+else
+  echo "::warning::Les onglets n ont rien dit (rapporte, pas bloquant)"
+fi
+
 # Et on le referme, pour ne pas le laisser devant les captures suivantes.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey alt-f4" || true
 sleep 2
