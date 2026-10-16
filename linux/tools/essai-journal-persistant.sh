@@ -9,8 +9,13 @@ ici=$(cd "$(dirname "$0")" && pwd)
 echecs=0
 
 # Les lignes du workflow, desindentees de dix espaces.
-sed -n '/^          JOURNAL=\$(grep -a/,/^          fi$/p' "$flux" \
-  | sed 's/^          //' > "$ici/frag-journal.sh"
+# ENTRE DEUX MARQUEURS, et non « jusqu au premier fi ». Cet intervalle-la s
+# est casse le jour meme ou le workflow a gagne un `if` au milieu du bloc :
+# l essai a juge un fragment tronque et a refuse la construction pour une
+# raison qui n avait rien a voir avec ce qu il teste. Un essai qui se trompe
+# coute une construction et fait douter de tous les autres.
+sed -n '/# >>> verdict-journal/,/# <<< verdict-journal/p' "$flux" \
+  | sed '1d;$d' | sed 's/^          //' | grep -v '^#' > "$ici/frag-journal.sh"
 if [ ! -s "$ici/frag-journal.sh" ]; then
   echo "le bloc n a pas ete trouve dans le workflow — l essai ne juge rien"
   exit 1
@@ -45,7 +50,7 @@ verifier "journal volatile : AVERTIT" \
 verifier "aucune ligne : AVERTIT" \
   "grenos: session de bureau ouverte" "::warning::"
 verifier "aucune ligne : le dit au lieu de se taire" \
-  "grenos: session de bureau ouverte" "n'a rien dit"
+  "grenos: session de bureau ouverte" "n a rien dit"
 
 rm -f "$ici/frag-journal.sh" "$ici/serial-uefi.log"
 echo

@@ -548,6 +548,12 @@ jobs:
           # On lit LE NOMBRE, pas la presence d'une phrase : « au moins deux »
           # est la seule forme qui ne puisse pas se confondre avec « un seul,
           # donc rien de prouve ».
+          # >>> verdict-journal : l essai `essai-journal-persistant.sh`
+          # extrait exactement ce qui suit, jusqu au marqueur de fin. Les
+          # marqueurs sont la parce qu un intervalle `sed` sur « jusqu au
+          # premier fi » s est casse des que j ai ajoute un `if` au milieu :
+          # l essai a juge un fragment tronque et a refuse la construction,
+          # pour une raison qui n avait rien a voir avec ce qu il teste.
           JOURNAL=$(grep -a 'journal :' "$RUNNER_TEMP/serial-uefi.log" 2>/dev/null \
             | tail -1 | sed 's/^.*grenos: //')
           # PAS D'APOSTROPHE DANS UN `${VAR:-…}`, meme entre guillemets : bash
@@ -568,6 +574,7 @@ jobs:
           else
             echo "::warning::Le journal ne survit pas au redemarrage, ou n'en connait qu'un (rapporte, pas bloquant)."
           fi
+          # <<< verdict-journal
           if grep -q "screen: PASS" "$RUNNER_TEMP/uefi-juge.log"; then
             echo "uefi: le chargeur a pris la main et le noyau dessine"
           else
