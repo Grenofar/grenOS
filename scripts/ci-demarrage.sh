@@ -243,6 +243,17 @@ elif grep -aq 'grenos: compte : mot de passe defini' "$RUNNER_TEMP/serial.log" 2
 else
   echo "::warning::I5 non prouve — aucune ligne 'compte :' dans le journal."
 fi
+# todo.md I14 : Wi-Fi, Bluetooth et le genre de disque, ajoutes a l ecran
+# d optimisation le 22 octobre. QEMU ne donne ni Wi-Fi ni Bluetooth a cette
+# machine, donc "non" est la reponse honnete ici — ce que ce controle exige
+# est que la ligne existe et le dise, pas qu elle dise "oui".
+LIGNE_OPTI=$(grep -a 'grenos: premier : optimisation' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]')
+echo "$LIGNE_OPTI" | sed 's/^.*grenos: //' || true
+if echo "$LIGNE_OPTI" | grep -q 'wifi \(oui\|non\), bluetooth \(oui\|non\)'; then
+  echo "prouve: I14 — l ecran d optimisation nomme le Wi-Fi, le Bluetooth et le disque"
+else
+  echo "::warning::I14 non prouve — ligne d optimisation absente ou incomplete."
+fi
 # Le bureau met du temps à venir : on regarde à intervalles, et on
 # garde chaque capture pour pouvoir les lire ensuite.
 for minute in 1 2 3 4 5; do

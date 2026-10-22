@@ -181,6 +181,22 @@ def genre_du_disque(disque_vu):
     return f"{sorte} de {disque_vu['taille']:.0f} Go"
 
 
+def bluetooth_present():
+    """Une puce Bluetooth existe-t-elle, sans jamais lancer `bluetoothctl` ?
+
+    `bluetoothctl` interroge un service, qui peut mettre cent secondes à
+    répondre quand il n'y a rien à trouver — `grenos-connexions` l'a appris à
+    ses dépens, figée deux minutes par cinq appels de ce genre pendant sa
+    construction. Le noyau, lui, annonce chaque adaptateur Bluetooth sous
+    `/sys/class/bluetooth` dès qu'il en trouve un : une simple lecture de
+    répertoire, qui répond toujours tout de suite, sans lancer personne.
+    """
+    try:
+        return bool(os.listdir("/sys/class/bluetooth"))
+    except OSError:
+        return False
+
+
 def machine_virtuelle():
     """Le nom de l'hyperviseur si l'on tourne dans une machine virtuelle."""
     try:

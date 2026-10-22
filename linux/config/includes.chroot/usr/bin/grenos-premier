@@ -43,6 +43,7 @@ import grenosui  # noqa: E402
 import materiel  # noqa: E402
 import premier  # noqa: E402
 import reseau  # noqa: E402
+import sante  # noqa: E402
 
 IDENTITE = "/etc/grenos/identite"
 REGLAGES = "/etc/grenos/premier-choix"
@@ -904,6 +905,17 @@ class Assistant(Gtk.Window):
         nombre, modele = materiel.coeurs()
         totale, _libre = materiel.memoire()
         carte, pilote = materiel.graphique()
+        # Il manquait le Wi-Fi, le Bluetooth et le genre de disque — todo.md
+        # I14 le disait en toutes lettres. Les trois se lisent sans lancer
+        # personne : `sante.cartes_reseau()` et `materiel.disques()` lisent
+        # /sys comme le reste de cet écran, et `materiel.bluetooth_present()`
+        # existe exactement pour ne jamais appeler `bluetoothctl` ici — c'est
+        # l'appel qui a déjà figé `grenos-connexions` deux minutes en se
+        # lançant pendant qu'une fenêtre se dessinait.
+        wifi = any(c["genre"] == "sans-fil" for c in sante.cartes_reseau())
+        bluetooth = materiel.bluetooth_present()
+        disques = materiel.disques()
+        genre_disque = materiel.genre_du_disque(disques[0]) if disques else "aucun disque vu"
         self.corps.pack_start(
             grenosui.titre("Optimisation automatique",
                            "Voici ce que grenOS a trouvé sur cette machine."),
@@ -914,6 +926,9 @@ class Assistant(Gtk.Window):
             ("Mémoire", "%s Go" % grenosui.nombre(totale, 1)),
             ("Carte graphique", carte or "inconnue"),
             ("Pilote", pilote or "générique"),
+            ("Disque principal", genre_disque),
+            ("Wi-Fi", "détecté" if wifi else "aucune carte vue"),
+            ("Bluetooth", "détecté" if bluetooth else "aucune puce vue"),
         ]
         boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         for nom, valeur in lignes:
@@ -932,8 +947,10 @@ class Assistant(Gtk.Window):
         case.connect("toggled", lambda b: self.reponses.__setitem__(
             "optimiser", "oui" if b.get_active() else "non"))
         self.corps.pack_start(case, False, False, 0)
-        dire("premier : optimisation — %d coeur(s), %s Go, carte %s"
-             % (nombre, grenosui.nombre(totale, 1), carte or "inconnue"))
+        dire("premier : optimisation — %d coeur(s), %s Go, carte %s, disque %s, "
+             "wifi %s, bluetooth %s"
+             % (nombre, grenosui.nombre(totale, 1), carte or "inconnue",
+                genre_disque, "oui" if wifi else "non", "oui" if bluetooth else "non"))
 
     def ecran_confidentialite(self):
         """I9 — et « aucune par défaut » est écrit en toutes lettres."""
