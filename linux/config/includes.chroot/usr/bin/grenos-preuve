@@ -217,6 +217,25 @@ else
     dire "son : alsactl absent, une sortie coupee le restera"
 fi
 
+# ---- Un peripherique audio USB serait-il seulement vu ? --------------------
+#
+# todo.md A2 : « Pilotes USB au-dela du clavier et de la souris : manette,
+# webcam, casque ». Rien n'etait a ecrire pour un casque USB — le noyau porte
+# deja snd-usb-audio, le pilote generique de toute carte audio de classe USB
+# — mais personne n'en branchait jamais pour voir si la machine le disait.
+# La ligne '[0-9]+ \[' par carte dans /proc/asound/cards est la MEME lecture
+# que materiel.son_et_video() fait pour sa propre carte, juste comptee au lieu
+# d'etre arretee a la premiere ; deux comptages differents pour un seul
+# fichier, c'est exactement la faute que la mesure des profils ALSA ci-dessus
+# a deja payee une fois.
+cartes_son=$(grep -c '^[[:space:]]*[0-9]\+[[:space:]]*\[' /proc/asound/cards 2>/dev/null)
+dire "cartes son : ${cartes_son:-0}"
+if grep -qi 'usb-audio' /proc/asound/cards 2>/dev/null; then
+    dire "son usb : vu — snd-usb-audio reconnait un casque de classe USB"
+else
+    dire "son usb : aucun peripherique audio USB vu par cette machine"
+fi
+
 # ---- La video se decodera-t-elle, et par quoi ? -----------------------------
 #
 # « les videos buggent » avec 200 Mbit dans les deux sens : le reseau n'y etait

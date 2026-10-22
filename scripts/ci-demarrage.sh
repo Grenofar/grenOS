@@ -96,6 +96,14 @@ sudo mkfs.ext4 -q -L NVME "${BOUCLE}p1"
 sudo losetup -d "$BOUCLE"
 sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/nvme.raw"
 echo "troisieme disque : 4 Go sur un controleur NVMe, une partition ext4 etiquetee NVME"
+# Un second peripherique audio, purement USB cette fois — todo.md A2 :
+# « Pilotes USB au-dela du clavier et de la souris : manette, webcam,
+# casque ». Le noyau porte deja snd-usb-audio, le pilote generique de toute
+# carte de classe USB Audio ; personne n'en avait jamais branche une pour le
+# verifier. Son audiodev est a "none" (l'audio est jete, pas enregistre) :
+# le son.wav plus bas, que l'essai relit pour juger si un son est sorti,
+# appartient au seul intel-hda et doit le rester — y mixer une seconde
+# source rendrait ce fichier illisible pour cette mesure-la.
 qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -cdrom "$ISO" -boot d \
   -drive file="$RUNNER_TEMP/persistence.vdi",format=vdi,if=none,id=garde \
@@ -105,6 +113,7 @@ qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -device ide-hd,drive=garde,bus=sata.0 \
   -device ide-hd,drive=dur,bus=sata.1 \
   -device nvme,drive=nvm,serial=grenosnvme01 \
+  -audiodev none,id=casque -device usb-audio,audiodev=casque \
   -display none -vga std \
   -global VGA.xres=1280 -global VGA.yres=720 \
   -usb -device usb-tablet \
@@ -1297,6 +1306,20 @@ if grep -aq 'grenos: son : AUCUN profil ALSA' "$RUNNER_TEMP/serial.log"; then
   echo "::warning::Aucun profil ALSA : muet sur toute carte recente."
 elif grep -aq 'grenos: son : [0-9]* profils ALSA' "$RUNNER_TEMP/serial.log"; then
   echo "son: les profils ALSA sont la"
+fi
+
+echo "--- un casque USB serait-il vu (todo.md A2) ---"
+# QEMU lui donne desormais deux cartes son : l'intel-hda qu'elle avait deja,
+# et un peripherique audio de classe USB. Rien n'a ete ecrit pour le
+# reconnaitre : le noyau porte snd-usb-audio depuis toujours, et grenos-preuve
+# lit /proc/asound/cards comme materiel.son_et_video() le fait deja pour
+# l'unique carte qu'il rapporte — juste compte au lieu d'etre arrete a la
+# premiere. Rapporte, pas bloquant : preuve neuve, vue verte zero fois.
+grep -a 'grenos: cartes son :\|grenos: son usb :' "$RUNNER_TEMP/serial.log" | tail -2 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
+if grep -aq 'grenos: son usb : vu' "$RUNNER_TEMP/serial.log"; then
+  echo "prouve: A2 (casque) — snd-usb-audio reconnait le peripherique audio USB"
+else
+  echo "::warning::A2 (casque) non prouve — aucun peripherique audio USB vu."
 fi
 
 echo "--- combien de disques la machine voit-elle, et le NVMe en est-il un ---"
