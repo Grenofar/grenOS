@@ -27,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 
@@ -35,12 +36,13 @@ sys.path.insert(0, "/usr/lib/grenos")
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 import clavier  # noqa: E402
 import grenosui  # noqa: E402
 import materiel  # noqa: E402
 import premier  # noqa: E402
+import reseau  # noqa: E402
 
 IDENTITE = "/etc/grenos/identite"
 REGLAGES = "/etc/grenos/premier-choix"
@@ -305,6 +307,7 @@ class Assistant(Gtk.Window):
             "clavier": self.ecran_clavier,
             "compte": self.ecran_compte,
             "parcours": self.ecran_parcours,
+            "reseau": self.ecran_reseau,
             "apparence": self.ecran_apparence,
             "usage": self.ecran_usage,
             "securite": self.ecran_securite,
@@ -625,6 +628,136 @@ class Assistant(Gtk.Window):
     def cocher(self, bouton, cle, valeur):
         if bouton.get_active():
             self.reponses[cle] = valeur
+
+    # ----------------------------------------------------------------- I4
+    def ecran_reseau(self):
+        """I4 — une liste des réseaux, le mot de passe au clic, ou rien.
+
+        Tout passe par `reseau.py`, le même module que les Réglages : rien
+        n'est réinventé ici, et une connexion établie maintenant est la MÊME
+        connexion que la session retrouvera après le premier démarrage.
+
+        La recherche part dans un fil, JAMAIS pendant que cet écran se
+        construit — `grenos-connexions` a appris cette leçon à ses dépens :
+        un `nmcli` lancé pendant la construction d'une fenêtre l'a déjà
+        figée deux minutes.
+        """
+        self.corps.pack_start(
+            grenosui.titre(
+                "Connexion à Internet",
+                "Choisis un réseau Wi-Fi, ou continue sans te connecter — "
+                "tout se règle plus tard dans les Réglages."),
+            False, False, 0)
+
+        self.etat_reseau = Gtk.Label(label="Recherche des réseaux…", xalign=0)
+        self.etat_reseau.get_style_context().add_class("sous")
+        self.corps.pack_start(self.etat_reseau, False, False, 0)
+
+        defilement = Gtk.ScrolledWindow()
+        defilement.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        defilement.set_size_request(-1, 230)
+        self.liste_reseaux = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                                     spacing=8)
+        defilement.add(self.liste_reseaux)
+        self.corps.pack_start(defilement, True, True, 0)
+
+        self.corps.pack_start(
+            grenosui.bouton("Continuer sans connexion",
+                            lambda *_: self.avancer(), "discret"),
+            False, False, 0)
+
+        threading.Thread(target=self._chercher_reseaux, daemon=True).start()
+
+    def _chercher_reseaux(self):
+        trouves = reseau.reseaux()
+        GLib.idle_add(self._poser_reseaux, trouves)
+
+    def _poser_reseaux(self, trouves):
+        # L'écran a pu changer pendant les vingt-cinq secondes qu'une
+        # recherche peut prendre : les widgets de celui-ci ont alors été
+        # détruits, et il ne faut plus y toucher.
+        if self.cle != "reseau":
+            return False
+        for enfant in self.liste_reseaux.get_children():
+            self.liste_reseaux.remove(enfant)
+        for vu in trouves:
+            self.liste_reseaux.pack_start(self._ligne_reseau(vu), False, False, 0)
+        self.liste_reseaux.show_all()
+        if trouves:
+            self.etat_reseau.set_text(
+                "%d réseau%s trouvé%s." % (len(trouves),
+                                           "x" if len(trouves) > 1 else "",
+                                           "s" if len(trouves) > 1 else ""))
+        else:
+            self.etat_reseau.set_text(
+                "Aucun réseau trouvé. Vérifie qu'une carte Wi-Fi existe, "
+                "ou continue sans connexion.")
+        return False
+
+    def _ligne_reseau(self, vu):
+        ligne = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        texte = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        nom = Gtk.Label(label=vu["nom"], xalign=0)
+        nom.get_style_context().add_class("entree-titre")
+        details = Gtk.Label(
+            label=("connecté" if vu["connecte"]
+                   else ("protégé par mot de passe" if vu["protege"] else "ouvert")),
+            xalign=0)
+        details.get_style_context().add_class("sous")
+        texte.pack_start(nom, False, False, 0)
+        texte.pack_start(details, False, False, 0)
+        ligne.pack_start(texte, True, True, 0)
+        if not vu["connecte"]:
+            ligne.pack_end(grenosui.bouton(
+                "Se connecter", lambda v=vu: self._connecter_reseau(v),
+                "principal"), False, False, 0)
+        return grenosui.carte(ligne)
+
+    def _connecter_reseau(self, vu):
+        mot = ""
+        if vu["protege"] and not reseau.connu(vu["nom"]):
+            mot = self._demander_mot_reseau(vu["nom"])
+            if mot is None:
+                return
+        self.etat_reseau.set_text("Connexion à %s…" % vu["nom"])
+        threading.Thread(target=self._connecter_reseau_fil, args=(vu, mot),
+                         daemon=True).start()
+
+    def _connecter_reseau_fil(self, vu, mot):
+        souci = reseau.connecter(vu["nom"], mot)
+        GLib.idle_add(self._apres_connexion_reseau, vu, souci)
+
+    def _apres_connexion_reseau(self, vu, souci):
+        if self.cle != "reseau":
+            return False
+        self.etat_reseau.set_text(souci or "Connecté à %s." % vu["nom"])
+        threading.Thread(target=self._chercher_reseaux, daemon=True).start()
+        return False
+
+    def _demander_mot_reseau(self, nom):
+        """Le mot de passe, demandé au moment où il est demandé."""
+        boite = Gtk.Dialog(title="Mot de passe de %s" % nom,
+                           transient_for=self, modal=True)
+        boite.add_buttons("Annuler", Gtk.ResponseType.CANCEL, "Se connecter",
+                          Gtk.ResponseType.OK)
+        boite.set_default_response(Gtk.ResponseType.OK)
+        champ = Gtk.Entry(visibility=False)
+        champ.set_activates_default(True)
+        champ.set_placeholder_text("Mot de passe du réseau")
+        montrer = Gtk.CheckButton(label="Afficher le mot de passe")
+        montrer.connect("toggled", lambda b: champ.set_visibility(b.get_active()))
+        contenu = boite.get_content_area()
+        contenu.set_border_width(16)
+        contenu.set_spacing(10)
+        contenu.pack_start(Gtk.Label(label="Réseau : %s" % nom, xalign=0),
+                           False, False, 0)
+        contenu.pack_start(champ, False, False, 0)
+        contenu.pack_start(montrer, False, False, 0)
+        boite.show_all()
+        reponse = boite.run()
+        mot = champ.get_text()
+        boite.destroy()
+        return mot if reponse == Gtk.ResponseType.OK else None
 
     def ecran_apparence(self):
         """I6 — sombre, clair ou automatique.
