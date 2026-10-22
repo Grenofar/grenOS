@@ -373,6 +373,29 @@ else
     dire "disques vus par les Reglages : la lecture a echoue"
 fi
 
+# ---- Une carte reseau filaire est-elle vue ? --------------------------------
+#
+# todo.md A10 : des pilotes Ethernet, « tres cible, une machine peut ne pas
+# avoir de reseau ». Rien n'etait a ecrire ici non plus : sante.cartes_reseau()
+# lit deja generiquement /sys/class/net pour la page Reseau de grenHub, et
+# range chaque carte en filaire, sans-fil ou virtuelle selon ce que le noyau
+# en dit — jamais selon son nom. Seule la machine d'essai ne portait jamais de
+# carte filaire reelle pour qu'on la voie passer par ce chemin plutot que par
+# la carte virtuelle que QEMU donne par defaut.
+cartes_reseau=$(python3 -c "
+import sys
+sys.path.insert(0, '/usr/lib/grenos')
+import sante
+c = sante.cartes_reseau()
+print('%d|%s' % (len(c), ', '.join(
+    '%s %s' % (x['nom'], x['genre']) for x in c)))
+" 2>/dev/null)
+if [ -n "$cartes_reseau" ]; then
+    dire "cartes reseau : ${cartes_reseau%%|*} — ${cartes_reseau#*|}"
+else
+    dire "cartes reseau : la lecture a echoue"
+fi
+
 # ---- Ce que la personne ecrit est-il garde ? --------------------------------
 #
 # C'est la promesse de la machine VirtualBox, ecrite sur la page de

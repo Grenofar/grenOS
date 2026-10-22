@@ -1350,6 +1350,19 @@ else
   echo "::warning::A1/A8 non prouves — aucun disque nvme dans « $LIGNE_DISQUES »."
 fi
 
+echo "--- une carte reseau filaire est-elle vue (todo.md A10) ---"
+# QEMU donne une carte reseau par defaut, jamais declaree dans ce script — et
+# c'est elle que chaque verification du depot (Flathub, apt) traverse deja
+# depuis le debut. Ce qui manquait n'etait pas le reseau, c'etait la ligne
+# qui nomme la carte et dit si elle est vue comme filaire.
+LIGNE_RESEAU=$(grep -a 'grenos: cartes reseau : ' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]')
+echo "$LIGNE_RESEAU" | sed 's/^.*grenos: //' || true
+if echo "$LIGNE_RESEAU" | grep -qi 'filaire'; then
+  echo "prouve: A10 — une carte reseau filaire est vue ($LIGNE_RESEAU)"
+else
+  echo "::warning::A10 non prouve — aucune carte filaire dans « $LIGNE_RESEAU »."
+fi
+
 echo "--- le magasin peut-il vraiment installer ---"
 # La CI ouvrait GrenPlace et comptait ses applications. Elle n'a jamais appuye
 # sur « Installer » — et c'est exactement par la que le defaut du 25 septembre
