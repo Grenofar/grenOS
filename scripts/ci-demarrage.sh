@@ -102,9 +102,16 @@ echo "troisieme disque : 4 Go sur un controleur NVMe, une partition ext4 etiquet
 # passe — amovible oui, interne oui ») : udisks2 dit oui sans mot de passe a
 # TOUT peripherique amovible, par defaut du paquet, pas par une regle qu'on
 # aurait ecrite. Ce qui manquait est la meme chose qu'A1 et A10 : une cle USB
-# ne respondait jamais present. `usb-storage` fait porter le disque par le
-# bus USB plutot que SATA, et le noyau l'annonce alors "removable" de
-# lui-meme — materiel.disques() le lit deja generiquement.
+# ne respondait jamais present.
+#
+# PREMIER ESSAI FAUX, CORRIGE LE MEME JOUR : `usb-storage` porte le disque
+# par le bus USB, mais ne le rapporte PAS removable par defaut — la run
+# 39786811388 a vu passer "sdc disque dur de 1 Go" au lieu d'"amovible".
+# `removable=on` sur le device est necessaire ; sans lui QEMU repond "off"
+# en silence, et personne ne le lit nulle part dans sa propre documentation
+# en ligne de commande. materiel.disques() lisait deja /sys/block
+# generiquement ; c'etait la machine d'essai qui mentait sur ce qu'elle
+# donnait a lire.
 qemu-img create -f raw "$RUNNER_TEMP/cle-usb.raw" 1G >/dev/null
 sudo sgdisk --new=1:2048:0 --typecode=1:8300 --change-name=1:CLEUSB \
   "$RUNNER_TEMP/cle-usb.raw" >/dev/null
@@ -131,7 +138,7 @@ qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -device ide-hd,drive=garde,bus=sata.0 \
   -device ide-hd,drive=dur,bus=sata.1 \
   -device nvme,drive=nvm,serial=grenosnvme01 \
-  -device usb-storage,drive=cle,serial=grenosusbcle01 \
+  -device usb-storage,drive=cle,serial=grenosusbcle01,removable=on \
   -audiodev none,id=casque -device usb-audio,audiodev=casque \
   -display none -vga std \
   -global VGA.xres=1280 -global VGA.yres=720 \
