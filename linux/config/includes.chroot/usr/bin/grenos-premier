@@ -205,6 +205,27 @@ def poser_apparence(login, choix):
         pass
 
 
+def poser_mot_de_passe(login, mot):
+    """I5 — le mot de passe facultatif, par le MÊME chemin que les Réglages.
+
+    `grenos-compte definir` noue ensemble le mot de passe, la fin de
+    l'ouverture automatique et sudo : les écrire séparément ici referait, un
+    jour, exactement la panne que ce script existe pour éviter — un mot de
+    passe posé qui laisserait la session s'ouvrir seule quand même.
+
+    Le mot de passe arrive par l'entrée standard, jamais par un argument : un
+    argument de ligne de commande se lit dans `/proc/<pid>/cmdline`, par
+    n'importe qui a accès à cette machine au même instant.
+    """
+    try:
+        resultat = subprocess.run(
+            ["/usr/lib/grenos/grenos-compte", "definir", login],
+            input=mot + "\n", text=True, capture_output=True, timeout=15)
+        return resultat.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def garder_choix(reponses):
     """Ce qui a été répondu, pour que les Réglages puissent le relire.
 
@@ -546,6 +567,33 @@ class Assistant(Gtk.Window):
         self.corps.pack_start(self.apercu, False, False, 0)
         self.champ.grab_focus()
 
+        # I5 — « un mot de passe au login s'il le souhaite ». Optionnel, et
+        # c'est le mot qui compte : laisser le champ vide garde la machine
+        # exactement comme avant, l'ouverture automatique que `appliquer()`
+        # met en place. Un mot de passe tape ici passe par `grenos-compte`,
+        # le MEME chemin que les Reglages, qui noue ensemble le mot de passe,
+        # la fin de l'ouverture automatique et sudo — les separer serait
+        # promettre une protection qui n'en est pas une.
+        mot_titre = Gtk.Label(label="MOT DE PASSE (FACULTATIF)", xalign=0)
+        mot_titre.get_style_context().add_class("section")
+        self.corps.pack_start(mot_titre, False, False, 10)
+        self.mot_compte = Gtk.Entry(visibility=False)
+        self.mot_compte.set_placeholder_text("Laisse vide pour ouvrir sans mot de passe")
+        self.mot_compte.connect("changed", self.changer_mot_de_passe)
+        self.mot_compte.connect("activate", lambda _: self.avancer())
+        self.corps.pack_start(self.mot_compte, False, False, 0)
+        montrer = Gtk.CheckButton(label="Afficher le mot de passe")
+        montrer.connect(
+            "toggled", lambda b: self.mot_compte.set_visibility(b.get_active()))
+        self.corps.pack_start(montrer, False, False, 0)
+        note_mot = Gtk.Label(
+            label="Sans mot de passe, ta session s'ouvre seule au démarrage — "
+                  "tu pourras en définir un plus tard dans les Réglages.",
+            xalign=0)
+        note_mot.get_style_context().add_class("sous")
+        note_mot.set_line_wrap(True)
+        self.corps.pack_start(note_mot, False, False, 0)
+
     def relire_compte(self):
         tape = self.champ.get_text()
         login = en_login(tape)
@@ -555,6 +603,9 @@ class Assistant(Gtk.Window):
         self.reponses["nom_affiche"] = tape.strip()
         self.note.set_text(souci if (souci and tape.strip()) else "")
         self.suite.set_sensitive(souci is None)
+
+    def changer_mot_de_passe(self, champ):
+        self.reponses["mot_de_passe"] = champ.get_text()
 
     def ecran_parcours(self):
         """Les trois parcours, choisis après la langue, le clavier et le nom.
@@ -994,6 +1045,18 @@ class Assistant(Gtk.Window):
         _, disposition, variante, fuseau = clavier.PAYS[index]
         retenu = appliquer(login, self.reponses.get("nom_affiche") or login,
                            disposition, variante, fuseau)
+        # APRES `appliquer()`, jamais avant : il efface le mot de passe sans
+        # condition à chaque passage (la machine reste ouverte tant que
+        # personne n'en a demandé un), et un mot de passe posé plus tôt
+        # serait donc effacé à son tour.
+        mot = self.reponses.get("mot_de_passe", "")
+        if mot:
+            if poser_mot_de_passe(retenu, mot):
+                dire("compte : mot de passe defini, l ouverture automatique est coupee")
+            else:
+                dire("compte : LE MOT DE PASSE N A PAS PU ETRE DEFINI")
+        else:
+            dire("compte : aucun mot de passe, ouverture automatique")
         poser_apparence(retenu, self.reponses.get("apparence"))
         garder_choix(self.reponses)
         deposer_les_travaux(self.reponses)

@@ -231,6 +231,18 @@ else
   kill $QEMU 2>/dev/null || true
   exit 1
 fi
+# todo.md I5 : le mot de passe facultatif du compte. La CI ne tape rien dans
+# ce champ — c'est le parcours que personne n'a encore essaye de scenariser
+# ici, taper a l'aveugle dans un second champ serait une mise en scene, pas
+# une preuve — donc la SEULE chose a exiger est que le defaut (rien tape)
+# dise bien ce qu'il fait : l'ouverture automatique, sans mot de passe.
+if grep -aq 'grenos: compte : aucun mot de passe' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+  echo "prouve: I5 — sans mot de passe tape, l'ouverture reste automatique"
+elif grep -aq 'grenos: compte : mot de passe defini' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+  echo "::warning::I5 inattendu — un mot de passe a ete defini alors qu'aucun n'a ete tape."
+else
+  echo "::warning::I5 non prouve — aucune ligne 'compte :' dans le journal."
+fi
 # Le bureau met du temps à venir : on regarde à intervalles, et on
 # garde chaque capture pour pouvoir les lire ensuite.
 for minute in 1 2 3 4 5; do
