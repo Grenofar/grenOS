@@ -96,6 +96,23 @@ sudo mkfs.ext4 -q -L NVME "${BOUCLE}p1"
 sudo losetup -d "$BOUCLE"
 sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/nvme.raw"
 echo "troisieme disque : 4 Go sur un controleur NVMe, une partition ext4 etiquetee NVME"
+# Un quatrieme disque, une cle USB cette fois — todo.md A8 (« voir tous les
+# stockages USB... depuis l'explorateur ») et G5 (« montage de cle USB »).
+# La preuve polkit existe deja depuis le 15 octobre (« montage : sans mot de
+# passe — amovible oui, interne oui ») : udisks2 dit oui sans mot de passe a
+# TOUT peripherique amovible, par defaut du paquet, pas par une regle qu'on
+# aurait ecrite. Ce qui manquait est la meme chose qu'A1 et A10 : une cle USB
+# ne respondait jamais present. `usb-storage` fait porter le disque par le
+# bus USB plutot que SATA, et le noyau l'annonce alors "removable" de
+# lui-meme — materiel.disques() le lit deja generiquement.
+qemu-img create -f raw "$RUNNER_TEMP/cle-usb.raw" 1G >/dev/null
+sudo sgdisk --new=1:2048:0 --typecode=1:8300 --change-name=1:CLEUSB \
+  "$RUNNER_TEMP/cle-usb.raw" >/dev/null
+BOUCLE=$(sudo losetup --find --show --partscan "$RUNNER_TEMP/cle-usb.raw")
+sudo mkfs.ext4 -q -L CLEUSB "${BOUCLE}p1"
+sudo losetup -d "$BOUCLE"
+sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/cle-usb.raw"
+echo "quatrieme disque : 1 Go sur USB, une partition ext4 etiquetee CLEUSB"
 # Un second peripherique audio, purement USB cette fois — todo.md A2 :
 # « Pilotes USB au-dela du clavier et de la souris : manette, webcam,
 # casque ». Le noyau porte deja snd-usb-audio, le pilote generique de toute
@@ -109,10 +126,12 @@ qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -drive file="$RUNNER_TEMP/persistence.vdi",format=vdi,if=none,id=garde \
   -drive file="$RUNNER_TEMP/disque.raw",format=raw,if=none,id=dur \
   -drive file="$RUNNER_TEMP/nvme.raw",format=raw,if=none,id=nvm \
+  -drive file="$RUNNER_TEMP/cle-usb.raw",format=raw,if=none,id=cle \
   -device ahci,id=sata \
   -device ide-hd,drive=garde,bus=sata.0 \
   -device ide-hd,drive=dur,bus=sata.1 \
   -device nvme,drive=nvm,serial=grenosnvme01 \
+  -device usb-storage,drive=cle,serial=grenosusbcle01 \
   -audiodev none,id=casque -device usb-audio,audiodev=casque \
   -display none -vga std \
   -global VGA.xres=1280 -global VGA.yres=720 \
@@ -1345,32 +1364,38 @@ else
   echo "::warning::A2 (casque) non prouve — aucun peripherique audio USB vu."
 fi
 
-echo "--- combien de disques la machine voit-elle, et le NVMe en est-il un ---"
-# QEMU lui en donne trois : la persistance de 8 Go et le disque vierge de
-# 20 Go, tous deux SATA, et depuis aujourd'hui un troisieme de 4 Go sur un
-# controleur NVMe (todo.md A1 et A8 : « rien ne le verifie, la machine
-# d'essai n'a que du SATA »). `lsblk` compterait un disque de plus — il
-# ajoute le lecteur de disquette que QEMU invente —, donc il ne prouverait
-# pas ce que la personne lit. Les Reglages repondent par la fonction qu'ils
-# emploient eux-memes, et cette fonction nomme chaque disque : un compte qui
-# serait juste par accident (un disque SATA en plus, un NVMe absent) ne
-# ferait pas la difference, donc on exige le NOM, pas seulement le nombre.
+echo "--- combien de disques la machine voit-elle, le NVMe et la cle USB en sont-ils ---"
+# QEMU lui en donne quatre : la persistance de 8 Go et le disque vierge de
+# 20 Go, tous deux SATA ; un troisieme de 4 Go sur un controleur NVMe ; et
+# depuis aujourd'hui un quatrieme de 1 Go sur USB (todo.md A1, A8 et G5 :
+# « rien ne le verifie, la machine d'essai n'a que du SATA »). `lsblk`
+# compterait un disque de plus — il ajoute le lecteur de disquette que QEMU
+# invente —, donc il ne prouverait pas ce que la personne lit. Les Reglages
+# repondent par la fonction qu'ils emploient eux-memes, et cette fonction
+# nomme chaque disque : un compte qui serait juste par accident (un disque
+# SATA en plus, un NVMe ou une cle absents) ne ferait pas la difference,
+# donc on exige le NOM, pas seulement le nombre.
 #
-# Rapporte, pas bloquant pour le NVMe : c'est une preuve neuve, vue verte
-# zero fois, et DEVELOPPEUR.md veut deux passages verts avant qu'un controle
-# neuf ne bloque une construction.
+# Rapporte, pas bloquant : preuves neuves, vues vertes zero fois, et
+# DEVELOPPEUR.md veut deux passages verts avant qu'un controle neuf ne
+# bloque une construction.
 grep -a 'grenos: disques vus par les Reglages' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
 LIGNE_DISQUES=$(grep -a 'grenos: disques vus par les Reglages : ' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]')
 VUS=$(echo "$LIGNE_DISQUES" | sed 's/.*Reglages : //' | cut -d' ' -f1)
 if [ "${VUS:-0}" -ge 2 ] 2>/dev/null; then
   echo "disques: la machine en voit ${VUS}, comme QEMU lui en donne au moins deux"
 else
-  echo "::warning::Les Reglages ne voient que ${VUS:-0} disque(s) alors que la machine en a trois."
+  echo "::warning::Les Reglages ne voient que ${VUS:-0} disque(s) alors que la machine en a quatre."
 fi
 if echo "$LIGNE_DISQUES" | grep -qi 'nvme'; then
   echo "prouve: A1/A8 — le disque NVMe est vu par les Reglages ($LIGNE_DISQUES)"
 else
   echo "::warning::A1/A8 non prouves — aucun disque nvme dans « $LIGNE_DISQUES »."
+fi
+if echo "$LIGNE_DISQUES" | grep -qi 'amovible'; then
+  echo "prouve: A8/G5 — la cle USB est vue amovible par les Reglages ($LIGNE_DISQUES)"
+else
+  echo "::warning::A8/G5 non prouves — aucun disque amovible dans « $LIGNE_DISQUES »."
 fi
 
 echo "--- une carte reseau filaire est-elle vue (todo.md A10) ---"
