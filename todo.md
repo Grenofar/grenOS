@@ -188,6 +188,13 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | G34 | **Minuteur** | [à faire] |
 | G35 | **Bloc-notes** | [à faire] |
 
+### G.4 — Animations et transitions, demandées le 22 octobre
+
+| # | Demande | État |
+|---|---|---|
+| G36 | **L'OOBE glisse d'un écran à l'autre** au lieu de sauter | **[écrit]** — `grenos-premier` enveloppe désormais les treize écrans dans un `Gtk.Stack` plutôt que de vider et remplir la même boîte : on avance, l'écran glisse à gauche ; on recule, à droite ; le premier écran et un saut sur la même marche se fondent. La hauteur s'anime aussi (`interpolate_size`) plutôt que de sauter quand un écran est plus court que le précédent. `premier.py` n'a pas changé — l'enchaînement des écrans reste sans une ligne de GTK, comme l'exige l'en-tête du fichier. **Vu vert zéro fois** : aucun essai n'exerce le rendu de cette fenêtre, seule la construction de l'image (CI) peut encore la faire s'ouvrir et le prouver |
+| G37 | **Le dessus de chaque application** (le bloc titre + sous-titre que onze fenêtres partagent) **se montre par un fondu**, et les cartes réagissent au survol au lieu de changer d'un coup | **[écrit]** — les deux touchent `grenosui.py`, donc les onze applications qui appellent `titre()` et toutes celles qui utilisent `.carte` en profitent sans un seul fichier modifié ailleurs. Le fondu ne change que l'opacité, jamais la taille : rien ne bouge sous le titre pendant qu'il apparaît, à la différence d'un `Gtk.Revealer` qui aurait fait grandir le bloc depuis une hauteur nulle. Délibérément **non touché** : la barre de titre que dessine openbox (`themerc`), dont le survol instantané est un choix écrit en toutes lettres — « aucune ombre calculée… c'est ce qui garde le pointeur fluide », même sans accélération 3D. **Vu vert zéro fois** |
+
 ## H. GrenAI
 
 | # | Demande | État |

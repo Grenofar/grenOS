@@ -329,8 +329,20 @@ class Assistant(Gtk.Window):
         self.rang.get_style_context().add_class("pas")
         self.colonne.pack_start(self.rang, False, False, 0)
 
-        self.corps = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        self.colonne.pack_start(self.corps, False, False, 0)
+        # Chaque écran vivait dans LA MÊME boîte, vidée puis remplie à chaque
+        # pas : un changement d'écran ne se voyait pas, il se remplaçait.
+        # `Gtk.Stack` fait le travail inverse — glisser l'ancien hors de vue
+        # pendant que le nouveau entre — sans toucher à `premier.py` : la
+        # mécanique du parcours (quel écran suit lequel) reste sans une ligne
+        # de GTK, comme l'exige l'en-tête de ce fichier. Homogène à faux et
+        # la taille interpolée : un écran plus court que le précédent rétrécit
+        # la fenêtre au lieu de laisser un vide dessous.
+        self.pile = Gtk.Stack()
+        self.pile.set_transition_duration(220)
+        self.pile.set_homogeneous(False)
+        self.pile.set_interpolate_size(True)
+        self.colonne.pack_start(self.pile, False, False, 0)
+        self.corps = None
 
         self.note = Gtk.Label(label="", xalign=0)
         self.note.get_style_context().add_class("erreur")
@@ -373,17 +385,41 @@ class Assistant(Gtk.Window):
         return [c for c in premier.ecrans(parcours) if c in self.constructeurs]
 
     def aller(self, cle):
-        self.cle = cle
-        for enfant in self.corps.get_children():
-            self.corps.remove(enfant)
-        self.note.set_text("")
+        # Le sens AVANT de glisser : si on avance dans la liste, le nouvel
+        # écran entre par la droite comme une page qui tourne ; en arrière,
+        # par la gauche. Le tout premier écran n'a rien à comparer : pas de
+        # glissade, un simple fondu suffit à ne pas surprendre.
         liste = self.liste()
+        ancien_rang = liste.index(self.cle) + 1 if self.cle in liste else None
         rang = liste.index(cle) + 1 if cle in liste else 1
+        if ancien_rang is None:
+            sens = Gtk.StackTransitionType.CROSSFADE
+        elif rang > ancien_rang:
+            sens = Gtk.StackTransitionType.SLIDE_LEFT
+        elif rang < ancien_rang:
+            sens = Gtk.StackTransitionType.SLIDE_RIGHT
+        else:
+            sens = Gtk.StackTransitionType.CROSSFADE
+
+        self.cle = cle
+        # Un écran déjà visité garde son nom dans la pile ; on le refait à
+        # neuf plutôt que de réafficher l'ancien, pour ne rien changer au
+        # comportement d'avant (chaque écran relit `self.reponses` à chaque
+        # passage — nécessaire pour revenir avec un choix déjà pris).
+        ancien = self.pile.get_child_by_name(cle)
+        if ancien is not None:
+            self.pile.remove(ancien)
+            ancien.destroy()
+        self.corps = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        self.pile.add_named(self.corps, cle)
+
+        self.note.set_text("")
         self.rang.set_text("ÉTAPE %d SUR %d" % (rang, len(liste)))
         self.retour.set_sensitive(rang > 1)
         self.suite.set_label("Démarrer" if cle == "final" else "Continuer")
         self.constructeurs[cle]()
         self.corps.show_all()
+        self.pile.set_visible_child_full(cle, sens)
         self.relire()
         dire("premier : ecran %s (%d/%d)" % (cle, rang, len(liste)))
         if cle == "compte":

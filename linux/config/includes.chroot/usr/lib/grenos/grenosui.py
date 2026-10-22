@@ -98,8 +98,19 @@ window, .fenetre { background-color: @fond; color: @texte; }
     border: 1px solid @bord;
     border-radius: 16px;
     padding: 18px;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
 }
-.carte:hover { border-color: @bord-clair; }
+.carte:hover {
+    border-color: @bord-clair;
+    box-shadow: 0 2px 10px alpha(#000000, 0.18);
+}
+
+/* Le bloc de tête d'une fenêtre (grenosui.titre()) : il se montre par un
+   fondu plutot que d'apparaitre d'un coup — sans toucher a sa taille, donc
+   sans deplacer ce qui est dessous. `.cache` est retiree au premier affichage
+   de la fenetre ; voir titre() plus bas. */
+.titre-bloc { opacity: 1; transition: opacity 260ms ease; }
+.titre-bloc.cache { opacity: 0; }
 
 .carte-accent {
     background-image: linear-gradient(135deg, alpha(@accent, 0.18), alpha(@second, 0.14));
@@ -604,8 +615,20 @@ def icone(nom, taille=24):
 
 
 def titre(texte, sous_texte=""):
-    """Le bloc de tête d'une fenêtre : un titre, et une phrase qui explique."""
+    """Le bloc de tête d'une fenêtre : un titre, et une phrase qui explique.
+
+    Il se montre par un fondu, pas d'un coup — onze applications partagent ce
+    bloc, c'est donc le seul endroit a toucher pour que « le dessus » de
+    chacune en profite. Le fondu ne change qu'une opacite : l'espace qu'il
+    occupe est le meme avant et apres, donc rien ne bouge sous lui pendant
+    qu'il apparait. C'est la difference avec un Gtk.Revealer, qui aurait
+    fait grandir le bloc depuis une hauteur nulle — exactement le genre de
+    mouvement non demande que ce depot evite sur une fenetre qui se construit.
+    """
     boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+    contexte = boite.get_style_context()
+    contexte.add_class("titre-bloc")
+    contexte.add_class("cache")
     etiquette = Gtk.Label(label=texte, xalign=0)
     etiquette.get_style_context().add_class("titre")
     boite.pack_start(etiquette, False, False, 0)
@@ -614,6 +637,7 @@ def titre(texte, sous_texte=""):
         sous.get_style_context().add_class("sous")
         sous.set_line_wrap(True)
         boite.pack_start(sous, False, False, 0)
+    boite.connect("map", lambda w: w.get_style_context().remove_class("cache"))
     return boite
 
 
