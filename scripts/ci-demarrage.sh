@@ -36,8 +36,13 @@ if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
 else
   echo "sans KVM : l'emulation est lente, le bureau met plusieurs minutes"
 fi
-# Deux disques, sur un controleur SATA comme en a un PC et comme en
-# donne VirtualBox.
+# Trois disques : deux sur un controleur SATA comme en a un PC et comme en
+# donne VirtualBox, et un troisieme sur un controleur NVMe — todo.md A1
+# (« voir et utiliser un disque NVMe ») et A8 (NVMe depuis l'explorateur)
+# disaient tous les deux « rien ne le verifie, la machine d'essai n'a que du
+# SATA ». Le code n'avait pourtant rien a ecrire : `materiel.disques()` lit
+# generiquement /sys/block, donc un disque NVMe y apparaitrait deja comme
+# `nvme0n1p1` sans une seule ligne neuve — seule la preuve manquait.
 #
 # Le premier est **celui qu'on livre** : une partition ext4 etiquetee
 # « persistence », avec le fichier que live-boot y cherche. C'est ce
@@ -79,13 +84,27 @@ sudo mkfs.ext4 -q -L DONNEES "${BOUCLE}p1"
 sudo losetup -d "$BOUCLE"
 sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/disque.raw"
 echo "second disque : 20 Go, une partition ext4 etiquetee DONNEES"
+# Le troisieme disque, sur un controleur NVMe plutot que SATA : meme
+# construction que le second (GPT + ext4), une taille differente (4 Go) pour
+# qu'on puisse le distinguer des deux autres sans ambiguite dans la ligne que
+# les Reglages rapportent.
+qemu-img create -f raw "$RUNNER_TEMP/nvme.raw" 4G >/dev/null
+sudo sgdisk --new=1:2048:0 --typecode=1:8300 --change-name=1:NVME \
+  "$RUNNER_TEMP/nvme.raw" >/dev/null
+BOUCLE=$(sudo losetup --find --show --partscan "$RUNNER_TEMP/nvme.raw")
+sudo mkfs.ext4 -q -L NVME "${BOUCLE}p1"
+sudo losetup -d "$BOUCLE"
+sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/nvme.raw"
+echo "troisieme disque : 4 Go sur un controleur NVMe, une partition ext4 etiquetee NVME"
 qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -cdrom "$ISO" -boot d \
   -drive file="$RUNNER_TEMP/persistence.vdi",format=vdi,if=none,id=garde \
   -drive file="$RUNNER_TEMP/disque.raw",format=raw,if=none,id=dur \
+  -drive file="$RUNNER_TEMP/nvme.raw",format=raw,if=none,id=nvm \
   -device ahci,id=sata \
   -device ide-hd,drive=garde,bus=sata.0 \
   -device ide-hd,drive=dur,bus=sata.1 \
+  -device nvme,drive=nvm,serial=grenosnvme01 \
   -display none -vga std \
   -global VGA.xres=1280 -global VGA.yres=720 \
   -usb -device usb-tablet \
@@ -1280,17 +1299,32 @@ elif grep -aq 'grenos: son : [0-9]* profils ALSA' "$RUNNER_TEMP/serial.log"; the
   echo "son: les profils ALSA sont la"
 fi
 
-echo "--- combien de disques la machine voit-elle ---"
-# QEMU lui en donne deux : la persistance de 8 Go et le disque vierge de 20 Go.
-# `lsblk` en comptait trois — il ajoute le lecteur de disquette que QEMU
-# invente —, donc il ne prouvait pas ce que la personne lit. Les Reglages
-# repondent par la fonction qu'ils emploient eux-memes.
+echo "--- combien de disques la machine voit-elle, et le NVMe en est-il un ---"
+# QEMU lui en donne trois : la persistance de 8 Go et le disque vierge de
+# 20 Go, tous deux SATA, et depuis aujourd'hui un troisieme de 4 Go sur un
+# controleur NVMe (todo.md A1 et A8 : « rien ne le verifie, la machine
+# d'essai n'a que du SATA »). `lsblk` compterait un disque de plus — il
+# ajoute le lecteur de disquette que QEMU invente —, donc il ne prouverait
+# pas ce que la personne lit. Les Reglages repondent par la fonction qu'ils
+# emploient eux-memes, et cette fonction nomme chaque disque : un compte qui
+# serait juste par accident (un disque SATA en plus, un NVMe absent) ne
+# ferait pas la difference, donc on exige le NOM, pas seulement le nombre.
+#
+# Rapporte, pas bloquant pour le NVMe : c'est une preuve neuve, vue verte
+# zero fois, et DEVELOPPEUR.md veut deux passages verts avant qu'un controle
+# neuf ne bloque une construction.
 grep -a 'grenos: disques vus par les Reglages' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //' || true
-VUS=$(grep -a 'grenos: disques vus par les Reglages : ' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/.*Reglages : //' | cut -d' ' -f1)
+LIGNE_DISQUES=$(grep -a 'grenos: disques vus par les Reglages : ' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]')
+VUS=$(echo "$LIGNE_DISQUES" | sed 's/.*Reglages : //' | cut -d' ' -f1)
 if [ "${VUS:-0}" -ge 2 ] 2>/dev/null; then
-  echo "disques: la machine en voit ${VUS}, comme QEMU lui en donne"
+  echo "disques: la machine en voit ${VUS}, comme QEMU lui en donne au moins deux"
 else
-  echo "::warning::Les Reglages ne voient que ${VUS:-0} disque(s) alors que la machine en a deux."
+  echo "::warning::Les Reglages ne voient que ${VUS:-0} disque(s) alors que la machine en a trois."
+fi
+if echo "$LIGNE_DISQUES" | grep -qi 'nvme'; then
+  echo "prouve: A1/A8 — le disque NVMe est vu par les Reglages ($LIGNE_DISQUES)"
+else
+  echo "::warning::A1/A8 non prouves — aucun disque nvme dans « $LIGNE_DISQUES »."
 fi
 
 echo "--- le magasin peut-il vraiment installer ---"
