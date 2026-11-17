@@ -1,0 +1,1707 @@
+{
+ "_lisez_moi": "Le catalogue de GrenLaunch. etat : natif (tourne sous Linux tel quel), proton (jeu Windows, via Proton dans Steam ou Heroic), nuage (en streaming, rien ne tourne ici), indisponible (l'éditeur bloque Linux — aucun réglage n'y change rien). source : flatpak (installé depuis Flathub), steam (appid, installé par Steam), heroic (Epic/GOG par Heroic), nuage (une adresse), aucune. Les états anti-triche suivent areweanticheatyet.com ; un éditeur peut changer d'avis, et ce fichier doit alors changer avec lui.",
+ "plateformes": [
+  {
+   "cle": "steam",
+   "nom": "Steam",
+   "note": "La plus grande bibliothèque de jeux, et Proton pour faire tourner les jeux Windows.",
+   "identifiant": "com.valvesoftware.Steam",
+   "couleurs": [
+    "#1b2838",
+    "#2a475e"
+   ]
+  },
+  {
+   "cle": "heroic",
+   "nom": "Heroic",
+   "note": "Tes jeux Epic Games et GOG — dont les jeux gratuits de la semaine.",
+   "identifiant": "com.heroicgameslauncher.hgl",
+   "couleurs": [
+    "#0b1220",
+    "#7c3aed"
+   ]
+  },
+  {
+   "cle": "lutris",
+   "nom": "Lutris",
+   "note": "Battle.net, EA, Ubisoft et les jeux hors boutique, réglés pour Linux.",
+   "identifiant": "net.lutris.Lutris",
+   "couleurs": [
+    "#3d1d0a",
+    "#f59e0b"
+   ]
+  },
+  {
+   "cle": "bottles",
+   "nom": "Bottles",
+   "note": "Des programmes Windows dans des bouteilles séparées, sans rien salir.",
+   "identifiant": "com.usebottles.bottles",
+   "couleurs": [
+    "#0e3a4a",
+    "#22d3ee"
+   ]
+  },
+  {
+   "cle": "itch",
+   "nom": "itch.io",
+   "note": "Des milliers de jeux indépendants, beaucoup gratuits et natifs.",
+   "identifiant": "io.itch.itch",
+   "couleurs": [
+    "#3b0d0d",
+    "#fa5c5c"
+   ]
+  },
+  {
+   "cle": "protonup",
+   "nom": "ProtonUp-Qt",
+   "note": "Installe Proton-GE, qui fait tourner ce que Proton officiel ne fait pas encore.",
+   "identifiant": "net.davidotek.pupgui2",
+   "couleurs": [
+    "#111827",
+    "#ef4444"
+   ]
+  }
+ ],
+ "jeux": [
+  {
+   "cle": "rocket-league",
+   "nom": "Rocket League",
+   "genre": "Sport · Gratuit",
+   "etat": "proton",
+   "source": "heroic",
+   "identifiant": "Sugar",
+   "adresse": "https://store.epicgames.com/p/rocket-league",
+   "steam": 252950,
+   "couleurs": [
+    "#0a2a6b",
+    "#f97316"
+   ],
+   "note": "Gratuit sur Epic, donc par Heroic. Easy Anti-Cheat est activé pour Linux : les parties classées marchent. Plus vendu sur Steam depuis 2020 — si tu l'y as déjà, il apparaît dans ta bibliothèque."
+  },
+  {
+   "cle": "fortnite",
+   "nom": "Fortnite",
+   "genre": "Battle royale · Gratuit",
+   "etat": "nuage",
+   "source": "nuage",
+   "adresse": "https://www.xbox.com/play/games/fortnite/BT5P2X999VH2",
+   "couleurs": [
+    "#1e1b4b",
+    "#a855f7"
+   ],
+   "note": "Epic refuse d'activer son anti-triche sous Linux : aucune installation ne peut marcher. Il se joue en nuage, gratuit, avec Xbox Cloud Gaming et un compte Microsoft — de préférence dans Chromium."
+  },
+  {
+   "cle": "roblox",
+   "nom": "Roblox",
+   "genre": "Bac à sable · Gratuit",
+   "etat": "natif",
+   "source": "flatpak",
+   "identifiant": "org.vinegarhq.Sober",
+   "couleurs": [
+    "#111827",
+    "#e11d48"
+   ],
+   "note": "Par Sober, de VinegarHQ : Roblox porté sur Linux, ni émulateur ni machine virtuelle. Pas édité par Roblox, et il veut une carte Vulkan."
+  },
+  {
+   "cle": "minecraft",
+   "nom": "Minecraft",
+   "genre": "Bac à sable",
+   "etat": "natif",
+   "source": "flatpak",
+   "identifiant": "org.prismlauncher.PrismLauncher",
+   "couleurs": [
+    "#14532d",
+    "#84cc16"
+   ],
+   "note": "L'édition Java tourne nativement, par Prism Launcher : versions, mods et comptes Microsoft. Il faut posséder le jeu."
+  },
+  {
+   "cle": "supertuxkart",
+   "nom": "SuperTuxKart",
+   "genre": "Course · Libre",
+   "etat": "natif",
+   "source": "flatpak",
+   "identifiant": "net.supertuxkart.SuperTuxKart",
+   "couleurs": [
+    "#1e3a8a",
+    "#22d3ee"
+   ],
+   "note": "Libre et gratuit, en ligne compris."
+  },
+  {
+   "cle": "0ad",
+   "nom": "0 A.D.",
+   "genre": "Stratégie · Libre",
+   "etat": "natif",
+   "source": "flatpak",
+   "identifiant": "com.play0ad.zeroad",
+   "couleurs": [
+    "#422006",
+    "#d97706"
+   ],
+   "note": "Stratégie historique en temps réel, libre et gratuite."
+  },
+  {
+   "cle": "luanti",
+   "nom": "Luanti",
+   "genre": "Bac à sable · Libre",
+   "etat": "natif",
+   "source": "flatpak",
+   "identifiant": "org.luanti.luanti",
+   "couleurs": [
+    "#14532d",
+    "#4ade80"
+   ],
+   "note": "Un monde de blocs libre (anciennement Minetest), et des milliers de jeux dedans."
+  },
+  {
+   "cle": "xonotic",
+   "nom": "Xonotic",
+   "genre": "Tir arène · Libre",
+   "etat": "natif",
+   "source": "flatpak",
+   "identifiant": "org.xonotic.Xonotic",
+   "couleurs": [
+    "#082f49",
+    "#0ea5e9"
+   ],
+   "note": "Tir rapide en arène, libre et gratuit."
+  },
+  {
+   "cle": "osu",
+   "nom": "osu!",
+   "genre": "Rythme · Gratuit",
+   "etat": "natif",
+   "source": "flatpak",
+   "identifiant": "sh.ppy.osu",
+   "couleurs": [
+    "#500724",
+    "#ec4899"
+   ],
+   "note": "osu!lazer, natif Linux."
+  },
+  {
+   "cle": "retroarch",
+   "nom": "RetroArch",
+   "genre": "Émulation",
+   "etat": "natif",
+   "source": "flatpak",
+   "identifiant": "org.libretro.RetroArch",
+   "couleurs": [
+    "#111827",
+    "#a3a3a3"
+   ],
+   "note": "Les consoles d'hier dans une seule application. Les jeux, tu les apportes."
+  },
+  {
+   "cle": "valorant",
+   "logo": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news/cbf4460132cdfeb2a97fad5f9dd25ba0bc058f76-128x128.png",
+   "nom": "Valorant",
+   "genre": "Tir tactique",
+   "etat": "indisponible",
+   "source": "aucune",
+   "couleurs": [
+    "#3f0d12",
+    "#ff4655"
+   ],
+   "note": "Son anti-triche, Vanguard, s'installe dans le noyau Windows : il ne peut pas exister sous Linux."
+  },
+  {
+   "cle": "lol",
+   "logo": "https://cmsassets.rgpub.io/sanity/images/dsfx7636/news_live/d3b7bd9decb1e1672dcb80be4f8bc1aa05490dc1-110x70.svg",
+   "nom": "League of Legends",
+   "genre": "MOBA",
+   "etat": "indisponible",
+   "source": "aucune",
+   "couleurs": [
+    "#0a1428",
+    "#c89b3c"
+   ],
+   "note": "Riot y impose Vanguard depuis 2024 : impossible sous Linux."
+  },
+  {
+   "cle": "steam-730",
+   "nom": "Counter-Strike 2",
+   "genre": "Action · Gratuit",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 730,
+   "couleurs": [
+    "#121530",
+    "#9828e0"
+   ],
+   "note": "Version Linux native. Anti-triche (VAC) activé pour Linux."
+  },
+  {
+   "cle": "steam-570",
+   "nom": "Dota 2",
+   "genre": "Action · Gratuit",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 570,
+   "couleurs": [
+    "#302d12",
+    "#69e028"
+   ],
+   "note": "Version Linux native. Anti-triche (VAC) activé pour Linux."
+  },
+  {
+   "cle": "steam-440",
+   "nom": "Team Fortress 2",
+   "genre": "Action · Gratuit",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 440,
+   "couleurs": [
+    "#123021",
+    "#28b6e0"
+   ],
+   "note": "Version Linux native. Anti-triche (VAC) activé pour Linux."
+  },
+  {
+   "cle": "steam-230410",
+   "nom": "Warframe",
+   "genre": "Action · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 230410,
+   "couleurs": [
+    "#301212",
+    "#e0af28"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Unknown (Custom)) activé pour Linux."
+  },
+  {
+   "cle": "steam-2357570",
+   "nom": "Overwatch",
+   "genre": "Action · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2357570,
+   "couleurs": [
+    "#30122b",
+    "#e0283f"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Warden) activé pour Linux."
+  },
+  {
+   "cle": "steam-2767030",
+   "nom": "Marvel Rivals",
+   "genre": "Action · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2767030,
+   "couleurs": [
+    "#122e30",
+    "#2851e0"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (NetEase Game Security) activé pour Linux."
+  },
+  {
+   "cle": "steam-553850",
+   "nom": "HELLDIVERS 2",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 553850,
+   "couleurs": [
+    "#171230",
+    "#cc28e0"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (nProtect GameGuard) activé pour Linux."
+  },
+  {
+   "cle": "steam-1172470",
+   "nom": "Apex Legends",
+   "genre": "Action · Gratuit",
+   "etat": "indisponible",
+   "source": "aucune",
+   "steam": 1172470,
+   "couleurs": [
+    "#301227",
+    "#e02b28"
+   ],
+   "note": "L'éditeur n'a pas activé Easy Anti-Cheat, Hyperion sous Linux : le jeu en ligne refuse de démarrer. Aucun réglage n'y change rien."
+  },
+  {
+   "cle": "steam-578080",
+   "nom": "PUBG: BATTLEGROUNDS",
+   "genre": "Action · Gratuit",
+   "etat": "indisponible",
+   "source": "aucune",
+   "steam": 578080,
+   "couleurs": [
+    "#131230",
+    "#b628e0"
+   ],
+   "note": "L'éditeur n'a pas activé Zakynthos, BattlEye, UNCHEATER sous Linux : le jeu en ligne refuse de démarrer. Aucun réglage n'y change rien."
+  },
+  {
+   "cle": "steam-1085660",
+   "nom": "Destiny 2",
+   "genre": "Action · Gratuit",
+   "etat": "indisponible",
+   "source": "aucune",
+   "steam": 1085660,
+   "couleurs": [
+    "#12302b",
+    "#2875e0"
+   ],
+   "note": "L'éditeur n'a pas activé BattlEye sous Linux : le jeu en ligne refuse de démarrer. Aucun réglage n'y change rien."
+  },
+  {
+   "cle": "steam-1938090",
+   "nom": "Call of Duty",
+   "genre": "Action",
+   "etat": "indisponible",
+   "source": "aucune",
+   "steam": 1938090,
+   "couleurs": [
+    "#2e1230",
+    "#e02865"
+   ],
+   "note": "L'éditeur n'a pas activé RICOCHET sous Linux : le jeu en ligne refuse de démarrer. Aucun réglage n'y change rien."
+  },
+  {
+   "cle": "steam-359550",
+   "nom": "Tom Clancy's Rainbow Six Siege",
+   "genre": "Action · Gratuit",
+   "etat": "indisponible",
+   "source": "aucune",
+   "steam": 359550,
+   "couleurs": [
+    "#123024",
+    "#28a2e0"
+   ],
+   "note": "L'éditeur n'a pas activé FairFight, BattlEye, R6 ShieldGuard sous Linux : le jeu en ligne refuse de démarrer. Aucun réglage n'y change rien."
+  },
+  {
+   "cle": "steam-2073850",
+   "nom": "THE FINALS",
+   "genre": "Action · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2073850,
+   "couleurs": [
+    "#122530",
+    "#3628e0"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Easy Anti-Cheat, Denuvo Anti-Cheat, AnyBrain) activé pour Linux."
+  },
+  {
+   "cle": "steam-236390",
+   "nom": "War Thunder",
+   "genre": "Action · Gratuit",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 236390,
+   "couleurs": [
+    "#30122c",
+    "#e02848"
+   ],
+   "note": "Version Linux native. Anti-triche (BattlEye) activé pour Linux."
+  },
+  {
+   "cle": "steam-1203220",
+   "nom": "NARAKA: BLADEPOINT",
+   "genre": "Action · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1203220,
+   "couleurs": [
+    "#301e12",
+    "#c8e028"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (NEAC Protect) activé pour Linux."
+  },
+  {
+   "cle": "steam-1599340",
+   "nom": "Lost Ark",
+   "genre": "Action · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1599340,
+   "couleurs": [
+    "#243012",
+    "#28e03f"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Easy Anti-Cheat, AnyBrain) activé pour Linux."
+  },
+  {
+   "cle": "steam-238960",
+   "nom": "Path of Exile",
+   "genre": "Action · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 238960,
+   "couleurs": [
+    "#302312",
+    "#aae028"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-2694490",
+   "nom": "Path of Exile 2",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2694490,
+   "couleurs": [
+    "#30122e",
+    "#e02853"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1665460",
+   "nom": "eFootball",
+   "genre": "Simulation · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1665460,
+   "couleurs": [
+    "#1c1230",
+    "#e028d7"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1097150",
+   "nom": "Fall Guys",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1097150,
+   "couleurs": [
+    "#301612",
+    "#e0c928"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Easy Anti-Cheat) activé pour Linux."
+  },
+  {
+   "cle": "steam-1172620",
+   "nom": "Sea of Thieves: 2026 Edition",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1172620,
+   "couleurs": [
+    "#12301a",
+    "#28e0e0"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Easy Anti-Cheat) activé pour Linux."
+  },
+  {
+   "cle": "steam-381210",
+   "nom": "Dead by Daylight",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 381210,
+   "couleurs": [
+    "#1f3012",
+    "#28e05b"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Easy Anti-Cheat) activé pour Linux."
+  },
+  {
+   "cle": "steam-945360",
+   "nom": "Among Us",
+   "genre": "Occasionnel",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 945360,
+   "couleurs": [
+    "#301a12",
+    "#e0dd28"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1966720",
+   "nom": "Lethal Company",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1966720,
+   "couleurs": [
+    "#302712",
+    "#91e028"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-739630",
+   "nom": "Phasmophobia",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 739630,
+   "couleurs": [
+    "#301225",
+    "#e03328"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (GuardingPearSoftware's Anti Cheat Pro) activé pour Linux."
+  },
+  {
+   "cle": "steam-548430",
+   "nom": "Deep Rock Galactic",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 548430,
+   "couleurs": [
+    "#122f30",
+    "#2857e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-252490",
+   "nom": "Rust",
+   "genre": "Action",
+   "etat": "indisponible",
+   "source": "aucune",
+   "steam": 252490,
+   "couleurs": [
+    "#301226",
+    "#e02e28"
+   ],
+   "note": "L'éditeur n'a pas activé Easy Anti-Cheat, VAC sous Linux : le jeu en ligne refuse de démarrer. Aucun réglage n'y change rien."
+  },
+  {
+   "cle": "steam-892970",
+   "nom": "Valheim",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 892970,
+   "couleurs": [
+    "#12302c",
+    "#286fe0"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-1623730",
+   "nom": "Palworld",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1623730,
+   "couleurs": [
+    "#233012",
+    "#28e040"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-322330",
+   "nom": "Don't Starve Together",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 322330,
+   "couleurs": [
+    "#1c1230",
+    "#e028d5"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-108600",
+   "nom": "Project Zomboid",
+   "genre": "Indépendant",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 108600,
+   "couleurs": [
+    "#122230",
+    "#4a28e0"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-294100",
+   "nom": "RimWorld",
+   "genre": "Indépendant",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 294100,
+   "couleurs": [
+    "#161230",
+    "#c528e0"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-427520",
+   "nom": "Factorio",
+   "genre": "Occasionnel",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 427520,
+   "couleurs": [
+    "#163012",
+    "#28e094"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-526870",
+   "nom": "Satisfactory",
+   "genre": "Aventure",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 526870,
+   "couleurs": [
+    "#123018",
+    "#28e0d1"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-255710",
+   "nom": "Cities: Skylines",
+   "genre": "Simulation",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 255710,
+   "couleurs": [
+    "#123016",
+    "#28e0c4"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-949230",
+   "nom": "Cities: Skylines II",
+   "genre": "Simulation",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 949230,
+   "couleurs": [
+    "#30121f",
+    "#e05d28"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-289070",
+   "nom": "Sid Meier’s Civilization VI",
+   "genre": "Stratégie",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 289070,
+   "couleurs": [
+    "#301227",
+    "#e02a28"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-1158310",
+   "nom": "Crusader Kings III",
+   "genre": "RPG",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 1158310,
+   "couleurs": [
+    "#123023",
+    "#28abe0"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-394360",
+   "nom": "Hearts of Iron IV",
+   "genre": "Simulation",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 394360,
+   "couleurs": [
+    "#2a3012",
+    "#3ae028"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-281990",
+   "nom": "Stellaris",
+   "genre": "Simulation",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 281990,
+   "couleurs": [
+    "#1c1230",
+    "#e028d2"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-813780",
+   "nom": "Age of Empires II: Definitive Edition",
+   "genre": "Stratégie",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 813780,
+   "couleurs": [
+    "#151230",
+    "#be28e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1466860",
+   "nom": "Age of Empires IV: Anniversary Edition",
+   "genre": "Stratégie",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1466860,
+   "couleurs": [
+    "#301218",
+    "#e08928"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1142710",
+   "nom": "Total War: WARHAMMER III",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 1142710,
+   "couleurs": [
+    "#301712",
+    "#e0cd28"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-457140",
+   "nom": "Oxygen Not Included",
+   "genre": "Indépendant",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 457140,
+   "couleurs": [
+    "#301213",
+    "#e0a328"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-1062090",
+   "nom": "Timberborn",
+   "genre": "Indépendant",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1062090,
+   "couleurs": [
+    "#12302b",
+    "#2877e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-264710",
+   "nom": "Subnautica",
+   "genre": "Aventure",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 264710,
+   "couleurs": [
+    "#121530",
+    "#9728e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-848450",
+   "nom": "Subnautica: Below Zero",
+   "genre": "Aventure",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 848450,
+   "couleurs": [
+    "#121830",
+    "#8828e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-242760",
+   "nom": "The Forest",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 242760,
+   "couleurs": [
+    "#293012",
+    "#34e028"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1326470",
+   "nom": "Sons Of The Forest",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1326470,
+   "couleurs": [
+    "#30121e",
+    "#e06028"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-251570",
+   "nom": "7 Days to Die",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 251570,
+   "couleurs": [
+    "#122330",
+    "#4428e0"
+   ],
+   "note": "Version Linux native. Anti-triche (Easy Anti-Cheat) activé pour Linux."
+  },
+  {
+   "cle": "steam-346110",
+   "nom": "ARK: Survival Evolved",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 346110,
+   "couleurs": [
+    "#30122f",
+    "#e02856"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (BattlEye, VAC) activé pour Linux."
+  },
+  {
+   "cle": "steam-1245620",
+   "nom": "ELDEN RING",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1245620,
+   "couleurs": [
+    "#221230",
+    "#e028ac"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Easy Anti-Cheat) activé pour Linux."
+  },
+  {
+   "cle": "steam-1086940",
+   "nom": "Baldur's Gate 3",
+   "genre": "Aventure",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1086940,
+   "couleurs": [
+    "#121c30",
+    "#6d28e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1091500",
+   "nom": "Cyberpunk 2077",
+   "genre": "RPG",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1091500,
+   "couleurs": [
+    "#12302e",
+    "#2866e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-271590",
+   "nom": "Grand Theft Auto V Version originale",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 271590,
+   "couleurs": [
+    "#12301f",
+    "#28c3e0"
+   ],
+   "note": "Le mode histoire marche par Proton. GTA Online, non : Rockstar a bloqué Linux en 2024."
+  },
+  {
+   "cle": "steam-1174180",
+   "nom": "Red Dead Redemption 2",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1174180,
+   "couleurs": [
+    "#122330",
+    "#4528e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-292030",
+   "nom": "The Witcher 3: Wild Hunt — Remastered",
+   "genre": "RPG",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 292030,
+   "couleurs": [
+    "#122430",
+    "#3c28e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-489830",
+   "nom": "The Elder Scrolls V: Skyrim Special Edition",
+   "genre": "RPG",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 489830,
+   "couleurs": [
+    "#243012",
+    "#28e03e"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-377160",
+   "nom": "Fallout 4",
+   "genre": "RPG",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 377160,
+   "couleurs": [
+    "#301c12",
+    "#d7e028"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1716740",
+   "nom": "Starfield",
+   "genre": "RPG",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1716740,
+   "couleurs": [
+    "#123017",
+    "#28e0cb"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-990080",
+   "nom": "Hogwarts Legacy : L'Héritage de Poudlard",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 990080,
+   "couleurs": [
+    "#123019",
+    "#28e0da"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1593500",
+   "nom": "God of War",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1593500,
+   "couleurs": [
+    "#122030",
+    "#5728e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-2322010",
+   "nom": "God of War Ragnarök",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2322010,
+   "couleurs": [
+    "#122630",
+    "#2f28e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1817070",
+   "nom": "Marvel’s Spider-Man Remastered",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1817070,
+   "couleurs": [
+    "#123014",
+    "#28e0bd"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1888930",
+   "nom": "The Last of Us Part I",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1888930,
+   "couleurs": [
+    "#1b1230",
+    "#e028dd"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-2050650",
+   "nom": "Resident Evil 4",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2050650,
+   "couleurs": [
+    "#143012",
+    "#28e0a1"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-883710",
+   "nom": "Resident Evil 2",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 883710,
+   "couleurs": [
+    "#30122e",
+    "#e02854"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1196590",
+   "nom": "Resident Evil Village",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1196590,
+   "couleurs": [
+    "#123028",
+    "#288be0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-374320",
+   "nom": "DARK SOULS III",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 374320,
+   "couleurs": [
+    "#121430",
+    "#9e28e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-814380",
+   "nom": "Sekiro: Shadows Die Twice - GOTY Edition",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 814380,
+   "couleurs": [
+    "#121e30",
+    "#6228e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-2246340",
+   "nom": "Monster Hunter Wilds",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2246340,
+   "couleurs": [
+    "#2a1230",
+    "#e0287d"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-582010",
+   "nom": "Monster Hunter: World",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 582010,
+   "couleurs": [
+    "#123016",
+    "#28e0c9"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1446780",
+   "nom": "MONSTER HUNTER RISE",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1446780,
+   "couleurs": [
+    "#123024",
+    "#28a2e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1151640",
+   "nom": "Horizon Zero Dawn Complete Edition",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1151640,
+   "couleurs": [
+    "#122530",
+    "#3428e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-2420110",
+   "nom": "Horizon Forbidden West Complete Edition",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2420110,
+   "couleurs": [
+    "#121730",
+    "#8d28e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1771300",
+   "nom": "Kingdom Come: Deliverance II",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1771300,
+   "couleurs": [
+    "#301e12",
+    "#c5e028"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-379430",
+   "nom": "Kingdom Come: Deliverance",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 379430,
+   "couleurs": [
+    "#211230",
+    "#e028b8"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-2183900",
+   "nom": "Warhammer 40,000: Space Marine 2",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2183900,
+   "couleurs": [
+    "#123012",
+    "#28e0ab"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1361210",
+   "nom": "Warhammer 40,000: Darktide",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1361210,
+   "couleurs": [
+    "#121630",
+    "#9128e0"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Easy Anti-Cheat) activé pour Linux."
+  },
+  {
+   "cle": "steam-552500",
+   "nom": "Warhammer: Vermintide 2",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 552500,
+   "couleurs": [
+    "#302012",
+    "#bbe028"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Easy Anti-Cheat) activé pour Linux."
+  },
+  {
+   "cle": "steam-413150",
+   "nom": "Stardew Valley",
+   "genre": "Indépendant",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 413150,
+   "couleurs": [
+    "#123014",
+    "#28e0b7"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-105600",
+   "nom": "Terraria",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 105600,
+   "couleurs": [
+    "#301e12",
+    "#c5e028"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-367520",
+   "nom": "Hollow Knight",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 367520,
+   "couleurs": [
+    "#2f3012",
+    "#5be028"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-1145360",
+   "nom": "Hades",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1145360,
+   "couleurs": [
+    "#193012",
+    "#28e07d"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1145350",
+   "nom": "Hades II",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1145350,
+   "couleurs": [
+    "#1c3012",
+    "#28e06d"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-646570",
+   "nom": "Slay the Spire",
+   "genre": "Indépendant",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 646570,
+   "couleurs": [
+    "#123026",
+    "#2897e0"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-2379780",
+   "nom": "Balatro",
+   "genre": "Occasionnel",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2379780,
+   "couleurs": [
+    "#121330",
+    "#a728e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1794680",
+   "nom": "Vampire Survivors",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1794680,
+   "couleurs": [
+    "#122030",
+    "#5628e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1868140",
+   "nom": "DAVE THE DIVER",
+   "genre": "Aventure",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1868140,
+   "couleurs": [
+    "#121730",
+    "#8e28e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-268910",
+   "nom": "Cuphead",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 268910,
+   "couleurs": [
+    "#122930",
+    "#2831e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-504230",
+   "nom": "Celeste",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 504230,
+   "couleurs": [
+    "#302c12",
+    "#6fe028"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-391540",
+   "nom": "Undertale",
+   "genre": "Indépendant",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 391540,
+   "couleurs": [
+    "#30122a",
+    "#e02838"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-1150690",
+   "nom": "OMORI",
+   "genre": "Aventure",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1150690,
+   "couleurs": [
+    "#301912",
+    "#e0da28"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1332010",
+   "nom": "Stray",
+   "genre": "Aventure",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1332010,
+   "couleurs": [
+    "#2a3012",
+    "#3ae028"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-620",
+   "nom": "Portal 2",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 620,
+   "couleurs": [
+    "#233012",
+    "#28e03f"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-400",
+   "nom": "Portal",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 400,
+   "couleurs": [
+    "#191230",
+    "#da28e0"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-220",
+   "nom": "Half-Life 2",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 220,
+   "couleurs": [
+    "#12302a",
+    "#287de0"
+   ],
+   "note": "Version Linux native, par Steam."
+  },
+  {
+   "cle": "steam-4000",
+   "nom": "Garry's Mod",
+   "genre": "Occasionnel",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 4000,
+   "couleurs": [
+    "#122230",
+    "#4a28e0"
+   ],
+   "note": "Version Linux native. Anti-triche (VAC) activé pour Linux."
+  },
+  {
+   "cle": "steam-550",
+   "nom": "Left 4 Dead 2",
+   "genre": "Action",
+   "etat": "natif",
+   "source": "steam",
+   "steam": 550,
+   "couleurs": [
+    "#302f12",
+    "#5fe028"
+   ],
+   "note": "Version Linux native. Anti-triche (VAC) activé pour Linux."
+  },
+  {
+   "cle": "steam-218620",
+   "nom": "PAYDAY 2",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 218620,
+   "couleurs": [
+    "#123022",
+    "#28ace0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1426210",
+   "nom": "It Takes Two",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1426210,
+   "couleurs": [
+    "#30121d",
+    "#e06828"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1551360",
+   "nom": "Forza Horizon 5",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1551360,
+   "couleurs": [
+    "#30121c",
+    "#e07028"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1293830",
+   "nom": "Forza Horizon 4",
+   "genre": "Course automobile",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1293830,
+   "couleurs": [
+    "#1e3012",
+    "#28e061"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-244210",
+   "nom": "Assetto Corsa",
+   "genre": "Indépendant",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 244210,
+   "couleurs": [
+    "#122e30",
+    "#2854e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-805550",
+   "nom": "Assetto Corsa Competizione",
+   "genre": "Course automobile",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 805550,
+   "couleurs": [
+    "#193012",
+    "#28e07f"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1250410",
+   "nom": "Microsoft Flight Simulator (2020) 40th Anniversary Edition",
+   "genre": "Simulation",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1250410,
+   "couleurs": [
+    "#302812",
+    "#89e028"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-39210",
+   "nom": "FINAL FANTASY XIV Online",
+   "genre": "Massivement multijoueur",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 39210,
+   "couleurs": [
+    "#301226",
+    "#e03228"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-1063730",
+   "nom": "New World: Aeternum",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1063730,
+   "couleurs": [
+    "#121730",
+    "#8c28e0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-2139460",
+   "nom": "Once Human",
+   "genre": "Action · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 2139460,
+   "couleurs": [
+    "#121a30",
+    "#7b28e0"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (NEAC Protect) activé pour Linux."
+  },
+  {
+   "cle": "steam-1449850",
+   "nom": "Yu-Gi-Oh! Master Duel",
+   "genre": "Simulation · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1449850,
+   "couleurs": [
+    "#122d30",
+    "#284ce0"
+   ],
+   "note": "Jeu Windows : il passe par Proton dans Steam. ProtonDB dit jeu par jeu ce qui marche."
+  },
+  {
+   "cle": "steam-976730",
+   "nom": "Halo: The Master Chief Collection",
+   "genre": "Action",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 976730,
+   "couleurs": [
+    "#121830",
+    "#8828e0"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Easy Anti-Cheat) activé pour Linux."
+  },
+  {
+   "cle": "steam-1240440",
+   "nom": "Halo Infinite",
+   "genre": "Action · Gratuit",
+   "etat": "proton",
+   "source": "steam",
+   "steam": 1240440,
+   "couleurs": [
+    "#30121c",
+    "#e06d28"
+   ],
+   "note": "Par Proton dans Steam. Anti-triche (Arbiter, Easy Anti-Cheat) activé pour Linux."
+  },
+  {
+   "cle": "steam-1517290",
+   "nom": "Battlefield 2042",
+   "genre": "Action",
+   "etat": "indisponible",
+   "source": "aucune",
+   "steam": 1517290,
+   "couleurs": [
+    "#283012",
+    "#2de028"
+   ],
+   "note": "L'éditeur n'a pas activé EA anticheat sous Linux : le jeu en ligne refuse de démarrer. Aucun réglage n'y change rien."
+  },
+  {
+   "cle": "steam-1238810",
+   "nom": "Battlefield V",
+   "genre": "Action",
+   "etat": "indisponible",
+   "source": "aucune",
+   "steam": 1238810,
+   "couleurs": [
+    "#291230",
+    "#e02884"
+   ],
+   "note": "L'éditeur n'a pas activé FairFight, EA anticheat sous Linux : le jeu en ligne refuse de démarrer. Aucun réglage n'y change rien."
+  }
+ ]
+}

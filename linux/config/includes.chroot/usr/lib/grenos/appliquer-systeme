@@ -158,7 +158,7 @@ done
 # application nouvelle — et c'était tout l'objet. Les bureaux déjà existants ne
 # sont pas touchés : ce que quelqu'un a rangé chez lui lui appartient.
 mkdir -p /etc/skel/Bureau
-for raccourci in grenos-bienvenue grenplace; do
+for raccourci in grenos-bienvenue grenplace grenlaunch; do
     if [ -f "/usr/share/applications/${raccourci}.desktop" ]; then
         install -m 0755 "/usr/share/applications/${raccourci}.desktop" \
             /etc/skel/Bureau/ || true

@@ -220,6 +220,12 @@ python3 "$HERE/tools/wallpaper.py" "$BUILD/usr/share/grenos" 2560 1440
 
 # Le catalogue de secours de GrenPlace : celui du réseau l'emporte toujours.
 install -m 0644 "$HERE/data/catalogue.json" "$BUILD/usr/share/grenos/catalogue.json"
+# Les écrans, les profils d'usage et les claviers de l'assistant : la source
+# unique que lisent grenos-ui ET le secours Python (premier.py, clavier.py).
+# Sans elle, clavier.py ne s'importerait plus — et les Réglages avec.
+install -m 0644 "$DEDANS/usr/share/grenos/premier.json" "$BUILD/usr/share/grenos/premier.json"
+# Le catalogue de GrenLaunch, avec ce que chaque jeu permet vraiment sous Linux.
+install -m 0644 "$DEDANS/usr/share/grenos/jeux.json" "$BUILD/usr/share/grenos/jeux.json"
 # Le son d'essai : c'est lui qui bipe a l'ouverture de session et sur lequel la
 # machine d'integration compte les trous. Sans cette ligne il n'arriverait que
 # par une ISO.
@@ -366,7 +372,7 @@ Section: x11
 Priority: optional
 Architecture: all
 Maintainer: grenOS <grenos@grenos-dev.vercel.app>
-Depends: grenos-systeme (= $VERSION), python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, xcvt, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils, dbus-user-session, pipewire-audio, wireplumber, xdg-user-dirs
+Depends: grenos-systeme (= $VERSION), libwebkit2gtk-4.1-0, libxdo3, python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, xcvt, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils, dbus-user-session, pipewire-audio, wireplumber, xdg-user-dirs
 Recommends: flatpak, lightdm, pcmanfm, xfce4-terminal, xfce4-taskmanager, papirus-icon-theme
 Installed-Size: $SIZE
 Homepage: https://grenos-dev.vercel.app

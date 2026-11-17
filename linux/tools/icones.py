@@ -676,6 +676,28 @@ def perf(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def grenlaunch(chemin, taille):
+    """GrenLaunch : une tuile de jeu, et le triangle « jouer » dedans.
+
+    Le triangle est l'intersection de trois demi-plans, chacun adouci sur un
+    pixel et demi : la meme lecon que la jauge de grenPerf — un bord coupe
+    net crenele, un bord adouci reste lisse a seize pixels.
+    """
+    image, u, v = toile(taille)
+    poser(image, rectangle(u, v, 0.10, 0.14, 0.90, 0.86, rayon=0.20), ACCENT, 1.0)
+    sommets = [(0.40, 0.31), (0.40, 0.69), (0.72, 0.50)]
+    cx = sum(x for x, _ in sommets) / 3
+    cy = sum(y for _, y in sommets) / 3
+    masque = np.ones_like(u)
+    for (x0, y0), (x1, y1) in zip(sommets, sommets[1:] + sommets[:1]):
+        longueur = np.hypot(x1 - x0, y1 - y0)
+        signe = np.sign((x1 - x0) * (cy - y0) - (y1 - y0) * (cx - x0))
+        distance = signe * ((x1 - x0) * (v - y0) - (y1 - y0) * (u - x0)) / longueur
+        masque = np.minimum(masque, np.clip(distance / 0.012, 0, 1))
+    poser(image, masque, CLAIR, 1.0)
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def secours(chemin, taille):
     """Mode sans echec : une bouee de sauvetage.
 
@@ -742,6 +764,7 @@ def main():
     hub(os.path.join(dossier, 'grenos-hub.png'), taille)
     perf(os.path.join(dossier, 'grenos-perf.png'), taille)
     secours(os.path.join(dossier, 'grenos-secours.png'), taille)
+    grenlaunch(os.path.join(dossier, 'grenlaunch.png'), taille)
 
 
 if __name__ == '__main__':

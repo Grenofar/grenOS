@@ -6,3 +6,10 @@
 linux/** text eol=lf
 *.sh text eol=lf
 kernel/scripts/* text eol=lf
+
+# Les images restent binaires, meme sous linux/ : la regle « text eol=lf »
+# ci-dessus convertirait leurs octets 0x0D 0x0A et casserait le fichier.
+linux/**/*.png binary
+linux/**/*.ico binary
+linux/**/*.jpg binary
+linux/**/*.wav binary

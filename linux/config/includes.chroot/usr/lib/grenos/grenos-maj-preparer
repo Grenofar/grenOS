@@ -1,0 +1,97 @@
+#!/bin/sh
+# Préparer les mises à jour : tout le travail privilégié de la fenêtre
+# « Mises à jour » de grenos-ui, en UN seul programme lancé une seule fois.
+#
+# Lancé en root (sudo -n ou pkexec), jamais directement. Il ne POSE aucun
+# paquet du système : il lit les dépôts, télécharge, met à jour les
+# applications Flatpak — qui se remplacent sans rien casser pendant qu'elles
+# tournent — et arme l'installation au prochain démarrage, avant le bureau.
+# C'est la leçon du 1er octobre : remplacer le bureau pendant qu'il tourne,
+# c'est un écran noir au milieu d'une session.
+#
+# Il parle à la fenêtre par lignes :
+#   @etape <pour cent> <texte>      où l'on en est
+#   @fin ok|echec <texte>           le verdict, une seule fois
+# Toute autre ligne est du détail, affiché derrière « Voir le détail ».
+#
+# Il rend toujours 0 : le verdict est dans la ligne @fin, pas dans le code de
+# sortie, pour qu'un refus d'autorisation (pkexec rend 126) reste distinct.
+
+set -u
+export DEBIAN_FRONTEND=noninteractive
+DOSSIER=/run/grenos
+mkdir -p "$DOSSIER" 2>/dev/null || true
+
+etape() { printf '@etape %s %s\n' "$1" "$2"; }
+fin() { printf '@fin %s %s\n' "$1" "$2"; exit 0; }
+
+etape 3 "Lecture des dépôts…"
+if ! apt-get update 2>&1; then
+    fin echec "Les dépôts n'ont pas pu être lus. Vérifie le réseau."
+fi
+
+etape 18 "Ce qui va changer…"
+# `grep -c` écrit « 0 » et sort en 1 : pas de « || echo 0 », qui donnerait
+# « 0\n0 » — le piège payé trois fois en septembre. Le `case` suffit.
+TOTAL=$(apt-get -s full-upgrade 2>/dev/null | grep -c '^Inst ')
+case "$TOTAL" in ''|*[!0-9]*) TOTAL=0 ;; esac
+apt-get -s full-upgrade 2>/dev/null | sed -n 's/^Inst \([^ ]*\).*/\1/p' > "$DOSSIER/maj-liste" 2>/dev/null || true
+chmod 0644 "$DOSSIER/maj-liste" 2>/dev/null || true
+printf '%s\n' "$TOTAL" > "$DOSSIER/maj"
+date -u '+%Y-%m-%d %H:%M' > "$DOSSIER/maj-date"
+chmod 0644 "$DOSSIER/maj" "$DOSSIER/maj-date" 2>/dev/null || true
+
+if [ "$TOTAL" -gt 0 ]; then
+    etape 22 "$TOTAL paquet(s) à télécharger…"
+    # Le code d'apt survit au tube par un fichier : `a | b` rend celui de b.
+    STATUT="$DOSSIER/maj-preparer-statut"
+    { apt-get -d -y full-upgrade 2>&1; echo $? > "$STATUT"; } | {
+        FAITS=0
+        while IFS= read -r LIGNE; do
+            printf '%s\n' "$LIGNE"
+            case "$LIGNE" in
+                Get:*|Réception\ de*|Téléchargement*|Err:*)
+                    FAITS=$((FAITS + 1))
+                    [ "$FAITS" -le "$TOTAL" ] || FAITS=$TOTAL
+                    etape $((22 + 58 * FAITS / TOTAL)) "Téléchargement : $FAITS sur $TOTAL"
+                    ;;
+            esac
+        done
+    }
+    CODE=$(cat "$STATUT" 2>/dev/null || echo 1)
+    rm -f "$STATUT"
+    if [ "$CODE" != 0 ]; then
+        fin echec "Le téléchargement s'est arrêté. Le détail est ci-dessous."
+    fi
+    printf 'oui\n' > "$DOSSIER/maj-telechargee"
+    chmod 0644 "$DOSSIER/maj-telechargee" 2>/dev/null || true
+fi
+
+# K1 — LES APPLICATIONS, PAS SEULEMENT LE SYSTÈME. GrenPlace installe ses
+# Flatpak à l'échelle du système (sans --user) : c'est donc ici, en root,
+# qu'ils se mettent à jour. Borné à quinze minutes ; un échec ne bloque pas le
+# reste — une application en retard vaut mieux qu'un système qui ne s'arme pas.
+FLATPAK=""
+if command -v flatpak >/dev/null 2>&1 && flatpak remotes --system 2>/dev/null | grep -q .; then
+    etape 84 "Mise à jour des applications…"
+    if timeout 900 flatpak update -y --noninteractive --system 2>&1; then
+        FLATPAK=" Les applications sont à jour."
+        printf '0\n' > "$DOSSIER/maj-flatpak"
+        chmod 0644 "$DOSSIER/maj-flatpak" 2>/dev/null || true
+    else
+        FLATPAK=" Les applications n'ont pas toutes pu être mises à jour."
+    fi
+fi
+
+if [ "$TOTAL" -eq 0 ]; then
+    fin ok "Le système est à jour.$FLATPAK"
+fi
+
+# Exactement le geste du menu d'arrêt : deux chemins vers le même service,
+# jamais deux mécanismes.
+etape 95 "Préparation du redémarrage…"
+if ! systemctl enable grenos-maj-demarrage.service 2>&1; then
+    fin echec "Les paquets sont là, mais le redémarrage n'a pas pu être armé."
+fi
+etape 100 "Prêt"
+fin ok "$TOTAL paquet(s) prêt(s). Redémarre pour les installer.$FLATPAK"

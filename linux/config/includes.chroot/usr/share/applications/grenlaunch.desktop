@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=GrenLaunch
+GenericName=Lanceur de jeux
+Comment=Tous tes jeux au même endroit : Steam, Epic, GOG et Flathub
+Exec=grenlaunch
+Icon=grenlaunch
+Terminal=false
+Categories=Game;
+Keywords=jeux;steam;epic;heroic;roblox;rocket league;fortnite;minecraft;

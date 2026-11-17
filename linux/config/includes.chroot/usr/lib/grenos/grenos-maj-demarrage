@@ -277,6 +277,22 @@ else
 fi
 chmod 0644 "$DOSSIER/maj-resultat" "$DOSSIER/maj-journal" 2>/dev/null || true
 
+# ---- K1 : les applications, pas seulement le système -----------------------
+#
+# Les Flatpak de GrenPlace sont installés à l'échelle du système. Ce démarrage
+# a déjà attendu le réseau pour apt : c'est le bon moment pour eux aussi.
+# Borné à quinze minutes, et un échec n'arrête rien — le bureau s'ouvre.
+if [ "$RESULTAT" = ok ] && command -v flatpak >/dev/null 2>&1 \
+        && flatpak remotes --system 2>/dev/null | grep -q .; then
+    etape "Mise à jour des applications" 90
+    if timeout 900 flatpak update -y --noninteractive --system >> "$DOSSIER/maj-journal" 2>&1; then
+        dire "applications flatpak a jour"
+        printf '0\n' > "$DOSSIER/maj-flatpak" 2>/dev/null || true
+    else
+        dire "flatpak : echec ou delai, le bureau s ouvre quand meme"
+    fi
+fi
+
 # Le compte affiché par la barre n'a plus de sens : il sera refait.
 rm -f "$DOSSIER/maj" 2>/dev/null || true
 

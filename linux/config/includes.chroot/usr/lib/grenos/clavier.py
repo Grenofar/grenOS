@@ -10,25 +10,19 @@ variante, et le fuseau horaire qui va avec. Le fuseau n'est qu'une proposition
 de départ ; les Réglages permettent d'en changer.
 """
 
-# nom affiché, disposition, variante, fuseau proposé
-PAYS = [
-    ("France (AZERTY)", "fr", "", "Europe/Paris"),
-    ("France (AZERTY, clavier récent)", "fr", "oss", "Europe/Paris"),
-    ("Belgique (AZERTY)", "be", "", "Europe/Brussels"),
-    ("Suisse romande (QWERTZ)", "ch", "fr", "Europe/Zurich"),
-    ("Luxembourg", "fr", "", "Europe/Luxembourg"),
-    ("Canada — Québec", "ca", "", "America/Montreal"),
-    ("Canada — anglais", "ca", "eng", "America/Toronto"),
-    ("Maroc", "ma", "french", "Africa/Casablanca"),
-    ("Sénégal", "fr", "", "Africa/Dakar"),
-    ("La Réunion", "fr", "", "Indian/Reunion"),
-    ("États-Unis (QWERTY)", "us", "", "America/New_York"),
-    ("Royaume-Uni (QWERTY)", "gb", "", "Europe/London"),
-    ("Allemagne (QWERTZ)", "de", "", "Europe/Berlin"),
-    ("Espagne", "es", "", "Europe/Madrid"),
-    ("Italie", "it", "", "Europe/Rome"),
-    ("Portugal", "pt", "", "Europe/Lisbon"),
-]
+# nom affiché, disposition, variante, fuseau proposé — lus dans le fichier
+# partagé avec grenos-ui, pour que les deux assistants proposent la même liste.
+def _pays():
+    import json
+    import os
+    chemin = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "..", "..", "share", "grenos", "premier.json")
+    with open(chemin, encoding="utf-8") as fichier:
+        return [(c["nom"], c["disposition"], c["variante"], c["fuseau"])
+                for c in json.load(fichier)["claviers"]]
+
+
+PAYS = _pays()
 
 DEFAUT = 0
 

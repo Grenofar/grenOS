@@ -21,7 +21,14 @@ volontaire : « 3,1 Go sur 4 utilisés » fait peur et ne veut rien dire, parce
 que le cache compte dedans et se rend à la première demande. La ligne qui
 renseigne est celle que le noyau appelle disponible.
 """
+import os
 import sys
+
+# La fenêtre vit désormais dans grenos-ui (Rust/Tauri) : processus regroupés,
+# mémoire, démarrage et mode jeu. Celle-ci reste le repli, pour une machine
+# dont le paquet n'a pas encore apporté grenos-ui.
+if os.access("/usr/bin/grenos-ui", os.X_OK) and "--python" not in sys.argv:
+    os.execv("/usr/bin/grenos-ui", ["grenos-ui", "perf"])
 
 sys.path.insert(0, "/usr/lib/grenos")
 

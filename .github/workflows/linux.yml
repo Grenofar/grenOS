@@ -230,6 +230,35 @@ jobs:
           sudo chmod 0666 /dev/kvm 2>/dev/null || true
           ls -l /dev/kvm || echo "pas de KVM : QEMU emulera, c'est plus lent"
 
+      # GRENOS-UI : L'INTERFACE EN RUST ET TAURI (l'assistant de premiere
+      # configuration, les Mises a jour). Compilee dans Debian trixie, la meme
+      # que l'image : un binaire lie a la WebKitGTK d'une autre distribution
+      # refuserait de demarrer chez lui. Ses essais Rust tournent ici.
+      #
+      # AVANT le paquet et l'image : `make-deb.sh` prend tout `usr/bin/*`, et
+      # live-build copie `includes.chroot` tel quel. Si cette etape echoue, rien
+      # n'est publie — et sur une machine, le lanceur du premier ecran
+      # rebasculerait de toute facon sur l'assistant Python.
+      - name: L interface Rust (grenos-ui)
+        timeout-minutes: 40
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work/linux/ui \
+            -e CARGO_TERM_COLOR=never \
+            rust:1-trixie sh -ec '
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends \
+                libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev \
+                build-essential pkg-config >/dev/null
+              cargo test --release
+              cargo build --release
+            '
+          sudo install -m 0755 linux/ui/target/release/grenos-ui \
+            linux/config/includes.chroot/usr/bin/grenos-ui
+          ls -l linux/config/includes.chroot/usr/bin/grenos-ui
+          # La place compte : l'image en demande beaucoup plus loin.
+          sudo rm -rf linux/ui/target
+          docker image rm rust:1-trixie >/dev/null 2>&1 || true
+
       # La clé du dépôt APT de grenOS. Elle est fabriquée une seule fois, par
       # la CI, et gardée dans le bucket privé `signing` : personne ne la voit
       # passer, et l'image n'embarque que sa partie publique.

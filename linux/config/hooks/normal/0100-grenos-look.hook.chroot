@@ -1167,7 +1167,10 @@ for chemin in sorted(glob.glob("/usr/bin/grenos-*") + ["/usr/bin/grenplace"]):
                 continue
             fichier.seek(0)
             arbre = ast.parse(fichier.read(), chemin)
-    except (OSError, SyntaxError):
+    # ValueError couvre UnicodeDecodeError : `grenos-ui` est un BINAIRE (Rust),
+    # et le lire comme du texte levait une exception que rien n'attrapait —
+    # la construction entiere serait morte sur un fichier qui n'a rien a voir.
+    except (OSError, SyntaxError, ValueError):
         continue
     for noeud in ast.walk(arbre):
         if not isinstance(noeud, ast.Call):

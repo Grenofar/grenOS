@@ -61,7 +61,10 @@ chmod 0644 "$DOSSIER/maj-liste" 2>/dev/null || true
 # téléchargement interrompu est repris au suivant, et un paquet déjà présent
 # n'est pas retéléchargé. Le pire qui puisse arriver est d'occuper quelques
 # centaines de mégaoctets dans /var/cache/apt.
-if [ "$NOMBRE" -gt 0 ] 2>/dev/null; then
+# Le mode « Manuelles » compte et s'arrête là : télécharger des centaines de
+# mégaoctets que personne n'a demandés serait déjà décider à sa place.
+MODE=$(cat /etc/grenos/maj-mode 2>/dev/null || echo demander)
+if [ "$NOMBRE" -gt 0 ] 2>/dev/null && [ "$MODE" != manuelles ]; then
     if apt-get -d -y full-upgrade >/dev/null 2>&1; then
         echo "grenos: maj : $NOMBRE paquets telecharges, prets a poser" > /dev/ttyS0 2>/dev/null || true
         printf 'oui\n' > "$DOSSIER/maj-telechargee"
@@ -69,6 +72,16 @@ if [ "$NOMBRE" -gt 0 ] 2>/dev/null; then
         printf 'non\n' > "$DOSSIER/maj-telechargee"
     fi
     chmod 0644 "$DOSSIER/maj-telechargee" 2>/dev/null || true
+fi
+
+# Et les applications : combien de Flatpak attendent. Borné, parce que
+# `remote-ls` interroge Flathub et qu'un réseau lent ne doit pas retenir le
+# minuteur. Sans réponse, on n'écrit rien : « rien » n'est pas « zéro ».
+if command -v flatpak >/dev/null 2>&1; then
+    if APPS=$(timeout 90 flatpak remote-ls --updates --system --app --columns=application 2>/dev/null); then
+        printf '%s\n' "$APPS" | grep -c . > "$DOSSIER/maj-flatpak" || true
+        chmod 0644 "$DOSSIER/maj-flatpak" 2>/dev/null || true
+    fi
 fi
 
 echo "grenos: ${NOMBRE} mises a jour disponibles" > /dev/ttyS0 2>/dev/null || true
