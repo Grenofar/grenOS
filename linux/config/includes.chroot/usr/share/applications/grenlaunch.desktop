@@ -2,7 +2,7 @@
 Type=Application
 Name=GrenLaunch
 GenericName=Lanceur de jeux
-Comment=Tous tes jeux au même endroit : Steam, Epic, GOG et Flathub
+Comment=Ta ludothèque : Steam, Epic, GOG, Roblox et Minecraft au même endroit
 Exec=grenlaunch
 Icon=grenlaunch
 Terminal=false
