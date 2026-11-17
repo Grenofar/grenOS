@@ -51,25 +51,27 @@
    ça ») : nuit = noir bleuté, indigo discret en haut à gauche, violet en bas
    à droite, feuille géante en filigrane ; jour = lavande pâle, feuille tracée
    en violet. NE PLUS LE CHANGER sans qu'il le demande.
-3. **Barres de titre des fenêtres** (déplacer, fermer) : arrondies et propres. [à faire]
-   PLAN PRÉCIS : (a) un petit démon Rust `grenos-coins` (crate x11rb, sans
-   WebKit) lancé par `grenos-session`, qui écoute la création/redimension des
-   fenêtres CADRE d'openbox (enfants de la racine, `_NET_CLIENT_LIST`) et leur
-   applique un masque XShape aux coins arrondis de 10 px — même algorithme que
-   `grenosui.region_arrondie` ; ignorer les fenêtres maximisées/plein écran
-   (`_NET_WM_STATE`) ; (b) `themerc` : barre plus haute (padding.height 9),
-   bordure 0, couleur `#131b2e` (= --surface-pleine), boutons en ronds pleins
-   (XBM disque 10x10 via `boutons-fenetre.py`) façon feux : fermer rouge
-   `#ef4d5e`, agrandir vert `#2bc48a`, réduire ambre `#fbbf24` (openbox 3.6
-   accepte `window.active.button.close.unpressed.image.color`, etc.) ;
-   (c) vérifier sur capture QEMU AVANT de pousser.
-   Thème openbox `linux/config/includes.chroot/usr/share/themes/grenOS/openbox-3/themerc`
-   + boutons `linux/tools/boutons-fenetre.py`. Sans compositeur : l'arrondi se
-   fait par masque de forme (voir `grenosui.region_arrondie`) ou openbox
-   `window.*.border` ; à vérifier sur capture QEMU.
-4. **Animations** : ouverture/fermeture de fenêtres et menus, sans coût CPU
-   (pas de compositeur : fondus courts côté GTK/WebKit, respect du réglage
-   « effets »).
+3. **Barres de titre des fenêtres** — [écrit], commit local `cff5b47` (nuit
+   du 17 au 18) : démon Rust `linux/coins` (`grenos-coins`, x11rb, sans
+   WebKit, 4 essais `cargo test`) lancé par `grenos-session` sous
+   `grenos-veilleur` ; masque SHAPE de 10 px sur chaque cadre d'openbox,
+   reposé quand openbox le remet à zéro (ShapeNotify « sans forme ») ; ignore
+   agrandies / plein écran / DOCK / DESKTOP / fenêtres déjà formées. Compilé
+   par la CI dans la même étape que grenos-ui (`.github/workflows/linux.yml`),
+   binaire ignoré par git. `themerc` : bordure 0, padding 10/9, barre
+   `#131b2e`, ronds 12 px façon feux (fermer `#ef4d5e`, réduire `#fbbf24`,
+   agrandir `#2bc48a`), glyphe creusé au survol (`boutons-fenetre.py`,
+   `--apercu` pour les relire en texte). RESTE : le voir sur capture QEMU
+   (la CI de la branche le montrera) ; si openbox ignorait les couleurs par
+   bouton (`window.active.button.close.unpressed.image.color`), les ronds
+   seraient tous gris clair.
+4. **Animations** — [écrit], commit local `0cf0e1e` : les fenêtres de
+   grenos-ui naissent du fond (180 ms) et s'y effacent (140 ms) ; Rust retient
+   la fermeture d'openbox, ajoute `.fermeture`, détruit après le fondu ; rien
+   en « performance » ; un essai vérifie que Rust et `style.css` disent la
+   même durée. Openbox anime déjà la réduction (`animateIconify`). RESTE : les
+   menus et fenêtres GTK (Python) — sans compositeur, seule piste : animer le
+   contenu, pas la fenêtre ; à faire quand barre/bureau passeront en gtk-rs.
 5. Ne pas émettre de son pendant les essais (demande explicite).
 
 ## 2. Ensuite — plus aucun processus Python au quotidien
