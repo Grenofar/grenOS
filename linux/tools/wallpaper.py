@@ -19,6 +19,7 @@ import numpy as np
 ACCENT = (0x2F, 0x7D, 0xF6)
 VIOLET = (0x7C, 0x4D, 0xF0)
 TEAL = (0x2B, 0xC4, 0xB0)
+INDIGO = (0x3B, 0x4F, 0xC8)
 
 
 def png(path, pixels):
@@ -45,7 +46,9 @@ def make(path, width, height, night):
     tracée en très grand et très discrète, comme un filigrane : on la devine,
     on ne la lit pas. Le coin bas gauche, où se posent les icônes, reste calme.
     """
-    fond = np.array((0x07, 0x0B, 0x14) if night else (0xEE, 0xF2, 0xF9), dtype=float)
+    # Le jour n'est pas un blanc : un lavande pâle, sinon le filigrane et les
+    # masses de couleur disparaissent (« on voit rien », 17 novembre).
+    fond = np.array((0x07, 0x0B, 0x14) if night else (0xE4, 0xE6, 0xF4), dtype=float)
     ys, xs = np.mgrid[0:height, 0:width].astype(float)
     ratio = width / height
     u = xs / max(width - 1, 1)
@@ -57,10 +60,15 @@ def make(path, width, height, night):
         lueur = np.clip(1.0 - d, 0.0, 1.0) ** 2.2
         image[...] += (np.array(couleur, dtype=float) - image) * (lueur * force)[..., None]
 
-    intensite = 1.0 if night else 0.55
-    tache(0.10, 0.05, 1.05, ACCENT, 0.62 * intensite)
-    tache(0.95, 0.98, 1.10, VIOLET, 0.55 * intensite)
-    tache(0.58, 0.46, 0.55, TEAL, 0.06 * intensite)
+    # Le bleu du coin haut gauche « gâchait tout » : plus petit, plus doux,
+    # et tiré vers l'indigo pour répondre au violet au lieu de le combattre.
+    if night:
+        tache(0.06, 0.02, 0.62, INDIGO, 0.34)
+        tache(0.95, 0.98, 1.10, VIOLET, 0.55)
+    else:
+        tache(0.04, 0.00, 0.80, (0x9A, 0xB4, 0xF8), 0.55)
+        tache(0.96, 1.00, 1.15, (0xA5, 0x8C, 0xF5), 0.70)
+        tache(0.70, 0.30, 0.60, (0xF0, 0xC8, 0xF4), 0.35)
 
     # Le filigrane : une feuille de la pousse, très grande, en haut à droite.
     angle = np.radians(-118)
@@ -72,8 +80,10 @@ def make(path, width, height, night):
     bord = largeur * np.sin(np.pi * np.clip(x / longueur, 0, 1))
     feuille = np.where((x > 0) & (x < longueur), np.clip((bord - np.abs(y)) / 0.004, 0, 1), 0.0)
     contour = feuille * (1 - np.clip((bord - np.abs(y) - 0.006) / 0.004, 0, 1))
-    blanc = np.array((255, 255, 255), dtype=float)
-    image += (blanc - image) * (feuille * (0.035 if night else 0.10) + contour * (0.10 if night else 0.22))[..., None]
+    # La nuit, un trait clair ; le jour, un trait violet : du blanc sur du
+    # blanc ne se voit pas.
+    trait = np.array((255, 255, 255) if night else (0x6D, 0x4B, 0xD8), dtype=float)
+    image += (trait - image) * (feuille * (0.035 if night else 0.07) + contour * (0.10 if night else 0.38))[..., None]
 
     # Un grain très fin : sans lui, un dégradé calculé montre des bandes.
     image += np.random.default_rng(7).normal(0.0, 1.3, size=(height, width))[..., None]
