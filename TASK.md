@@ -31,8 +31,10 @@
    (deux feuilles + un point de lumière) dans `icones.py` (`marque`, `feuille`),
    les icônes de grenos-ui, le SVG `marque` de `web/commun.js` (logos de
    l'OOBE) et `marque-pastille` du site. Reste : vérifier sur capture QEMU.
-2. **Fond d'écran** — [écrit], même commit : l'aurore de grenos-ui (bleu en
-   haut à gauche, violet en bas à droite) + une feuille géante en filigrane.
+2. **Fond d'écran** — VALIDÉ PAR GRENOFAR (commit local `4824a10`, « garde
+   ça ») : nuit = noir bleuté, indigo discret en haut à gauche, violet en bas
+   à droite, feuille géante en filigrane ; jour = lavande pâle, feuille tracée
+   en violet. NE PLUS LE CHANGER sans qu'il le demande.
 3. **Barres de titre des fenêtres** (déplacer, fermer) : arrondies et propres. [à faire]
    PLAN PRÉCIS : (a) un petit démon Rust `grenos-coins` (crate x11rb, sans
    WebKit) lancé par `grenos-session`, qui écoute la création/redimension des
