@@ -89,6 +89,36 @@ fn fermer(fenetre: tauri::WebviewWindow) {
     let _ = fenetre.close();
 }
 
+/// Combien de temps le contenu s'efface avant que la fenêtre disparaisse.
+/// Le même chiffre que `@keyframes fermeture` dans `style.css`.
+const DUREE_FERMETURE_MS: u64 = 140;
+
+/// Le délai de fermeture selon le réglage « effets » : aucun en performance.
+fn delai_fermeture(effets: &str) -> Option<u64> {
+    (effets != "performance").then_some(DUREE_FERMETURE_MS)
+}
+
+/// Fermer une fenêtre, en douceur (17 novembre).
+///
+/// Openbox détruirait la fenêtre d'un coup. On retient la fermeture, on dit
+/// à la page de s'effacer, et on détruit la fenêtre une fois le fondu joué.
+/// `destroy()` ne repasse pas par `CloseRequested` : pas de boucle. L'assistant
+/// du premier démarrage n'a pas de bouton fermer, il n'est pas concerné.
+fn fermeture_animee(fenetre: &tauri::Window, evenement: &tauri::WindowEvent) {
+    let tauri::WindowEvent::CloseRequested { api, .. } = evenement else { return };
+    if fenetre.label() == "premier" {
+        return;
+    }
+    let Some(delai) = delai_fermeture(&systeme::apparence().effets) else { return };
+    let Some(vue) = fenetre.app_handle().get_webview_window(fenetre.label()) else { return };
+    api.prevent_close();
+    let _ = vue.eval("document.documentElement.classList.add('fermeture')");
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(delai));
+        let _ = vue.destroy();
+    });
+}
+
 fn main() {
     let page = std::env::args().nth(1).unwrap_or_else(|| "maj".into());
     systeme::preparer_webkit();
@@ -136,6 +166,7 @@ fn main() {
             lance::lance_ouvrir,
             lance::lance_installer,
         ])
+        .on_window_event(fermeture_animee)
         .setup(move |app| {
             if !seul {
                 systeme::instance::ecouter(app.handle().clone());
@@ -145,4 +176,23 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("grenos-ui n'a pas pu démarrer");
+}
+
+#[cfg(test)]
+mod essais {
+    use super::*;
+
+    #[test]
+    fn la_fermeture_suit_le_reglage_effets() {
+        assert_eq!(delai_fermeture("complets"), Some(DUREE_FERMETURE_MS));
+        assert_eq!(delai_fermeture("equilibres"), Some(DUREE_FERMETURE_MS));
+        assert_eq!(delai_fermeture("performance"), None);
+    }
+
+    #[test]
+    fn la_duree_est_celle_de_la_feuille_de_style() {
+        let css = include_str!("../web/style.css");
+        let attendu = format!("fermeture {DUREE_FERMETURE_MS}ms");
+        assert!(css.contains(&attendu), "style.css ne joue plus « {attendu} »");
+    }
 }
