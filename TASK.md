@@ -11,8 +11,11 @@
 - CI `linux` : passes déjà vertes → compilation Rust, clé du dépôt, paquet,
   essai de mise à jour. Trois pannes corrigées en route (garde des recherches,
   verif-commandes qui lisait le binaire, hook qui exigeait l'install à chaud).
-- **Quand la CI est verte sur la branche** : fusionner dans `main`
-  (`git checkout main && git merge --no-ff claude/grenos-ui && git push`).
+- **Quand la CI est verte sur la branche** (run 44156326449, commit `efa6efa`) :
+  fusionner dans `main` CE commit vérifié, pas la pointe de branche :
+  `git checkout main && git merge --no-ff efa6efa && git push`. Le commit
+  `64904e0` (logo + fond, local, non poussé) part ensuite sur la branche pour
+  sa propre CI, puis une version suivante.
   La CI de `main` publie la Release (ISO + zip VirtualBox) et le dépôt APT.
 - **Puis le site** : dépôt `grenos-web-download`, branche locale
   `claude/theme-grenos-ui` (thème grenos-ui + section « Dans cette version »),
