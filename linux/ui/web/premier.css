@@ -162,3 +162,6 @@
   .logo.geant { width: 84px; height: 84px; font-size: 50px; }
   .embleme { width: 120px; height: 120px; }
 }
+
+/* La marque en vecteur : elle remplit le carré sans le toucher. */
+.logo svg { width: 64%; height: 64%; }

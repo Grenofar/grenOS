@@ -21,6 +21,8 @@ const api = {
 // Des icônes dessinées en traits : quelques centaines d'octets, aucune police
 // d'icônes ni thème à charger (Papirus coûtait ~610 ms à chaque lancement).
 const TRACES = {
+  // La marque de grenOS : une pousse — deux feuilles et un point de lumière.
+  marque: '<path d="M12 19.2C6.2 17.6 4.4 12.6 4.9 7.4c4.8 1 7.6 5.3 7.1 11.8z" fill="currentColor" stroke="none"/><path d="M12 19.2c5-1.2 7.2-5.3 6.6-9.6-4 .9-6.6 4.6-6.6 9.6z" fill="currentColor" stroke="none" opacity=".62"/><circle cx="16.3" cy="5.4" r="1.6" fill="currentColor" stroke="none"/>',
   fleche: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   retour: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
   coche: '<path d="M5 12.5l4.5 4.5L19 7"/>',

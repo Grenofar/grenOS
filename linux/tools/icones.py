@@ -276,18 +276,33 @@ def manette(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
-def marque(chemin, taille):
-    """La marque de grenOS : un G clair sur un ecusson bleu-violet.
+def feuille(u, v, x0, y0, angle, longueur, largeur, flou=0.012):
+    """Une feuille : un fuseau qui part de (x0, y0) dans la direction `angle`.
 
-    Toutes nos fenetres demandent l'icone nommee `grenos` — et personne ne la
-    dessinait, alors la barre des taches montrait ce que le fichier .desktop
-    declarait a la place. Un anneau ouvert a droite et une barre : c'est ce
-    qui reste lisible a seize pixels, une fois que les details ont disparu.
+    Dans son propre repère, le bord suit largeur * sin(pi * x / longueur) :
+    pointu aux deux bouts, plein au milieu. La distance au bord est approchée
+    verticalement, ce qui suffit à un antialiasing propre à toutes les tailles.
+    """
+    c, s = np.cos(angle), np.sin(angle)
+    x = (u - x0) * c + (v - y0) * s
+    y = -(u - x0) * s + (v - y0) * c
+    dedans = (x > 0) & (x < longueur)
+    bord = largeur * np.sin(np.pi * np.clip(x / longueur, 0, 1))
+    return np.where(dedans, np.clip((bord - np.abs(y)) / flou, 0.0, 1.0), 0.0)
+
+
+def marque(chemin, taille):
+    """La marque de grenOS : une pousse, et pas une lettre.
+
+    Demandé le 17 novembre : « pas de lettre, des formes ». Deux feuilles qui
+    sortent d'une même graine, et un point de lumière au-dessus — le grain
+    (gren) qui pousse. C'est aussi ce qui tient à seize pixels : deux masses
+    nettes et un point, là où une lettre devient une tache.
     """
     image, u, v = toile(taille)
 
-    # L'ecusson, au degrade du sac de GrenPlace : la famille doit se voir.
-    fond = rectangle(u, v, 0.06, 0.06, 0.94, 0.94, rayon=0.22)
+    # L'écusson, au dégradé bleu-violet de toute la famille d'icônes.
+    fond = rectangle(u, v, 0.06, 0.06, 0.94, 0.94, rayon=0.24)
     melange = np.clip((u + v - 0.12) / 1.64, 0.0, 1.0)
     couleur = (np.array(ACCENT, dtype=float)[None, None, :] * (1 - melange[..., None])
                + np.array(SECOND, dtype=float)[None, None, :] * melange[..., None])
@@ -295,15 +310,15 @@ def marque(chemin, taille):
     image[..., :3] = image[..., :3] * (1 - alpha) + couleur * alpha
     image[..., 3:] = image[..., 3:] * (1 - alpha) + 255.0 * alpha
 
-    # Le G : un anneau epais, ouvert vers la droite.
-    rayon = np.hypot(u - 0.5, v - 0.5)
-    anneau = np.clip((0.085 - np.abs(rayon - 0.255)) / 0.02, 0.0, 1.0)
-    ouverture = (u > 0.52) & (v < 0.52) & (v > 0.30)
-    poser(image, anneau * (~ouverture), CLAIR, 1.0)
-
-    # La barre du G, qui rentre vers le centre : sans elle, c'est un C.
-    barre = rectangle(u, v, 0.50, 0.46, 0.80, 0.585, rayon=0.03)
-    poser(image, barre, CLAIR, 1.0)
+    # La graine, en bas au centre : les deux feuilles en partent.
+    gx, gy = 0.50, 0.78
+    # Feuille gauche, plus grande, claire ; feuille droite, translucide : leur
+    # recouvrement dessine une troisième nuance, sans trait de plus.
+    poser(image, feuille(u, v, gx, gy, np.radians(-128), 0.56, 0.16), CLAIR, 1.0)
+    poser(image, feuille(u, v, gx, gy, np.radians(-58), 0.46, 0.13), CLAIR, 0.62)
+    # Le point de lumière : il donne la direction, vers le haut.
+    point = np.clip((0.062 - np.hypot(u - 0.67, v - 0.24)) / 0.012, 0.0, 1.0)
+    poser(image, point, CLAIR, 1.0)
 
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 

@@ -60,7 +60,7 @@
     document.body.append(
       el("div.oobe",
         el("aside.rail.verre",
-          el("div.marque", el("div.logo", "g"), el("div", el("b", "grenOS"), el("small", "Première configuration"))),
+          el("div.marque", el("div.logo", svg("marque")), el("div", el("b", "grenOS"), el("small", "Première configuration"))),
           D.rail,
           el("div.note", "Tout se change plus tard dans les Réglages.")),
         el("main.scene",
@@ -211,7 +211,7 @@
       salut.textContent = SALUTS[i];
     }, 1800);
     return el("div.accueil",
-      el("div.embleme", el("div.anneau"), el("div.anneau.a2"), el("div.logo.geant", "g")),
+      el("div.embleme", el("div.anneau"), el("div.anneau.a2"), el("div.logo.geant", svg("marque"))),
       el("h1.titre.enorme", salut),
       el("p.sous.centre", "to ", el("b", "grenOS"), " — let's set up your computer in a few steps."),
       el("div.puces-accueil",
@@ -473,7 +473,7 @@
     const items = gestes.map((g) => el("li", el("span.puce", svg("coche")), g));
     const voile = el("div.voile",
       el("div.fin",
-        el("div.embleme", el("div.anneau.tourne"), el("div.logo.geant", "g")),
+        el("div.embleme", el("div.anneau.tourne"), el("div.logo.geant", svg("marque"))),
         el("h1.titre", "Mise en place…"),
         el("ol.gestes", ...items)));
     document.body.append(voile);
