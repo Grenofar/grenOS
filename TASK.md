@@ -25,6 +25,22 @@
   en pause après ~7 jours sans activité : « Restore » dans le tableau de bord,
   données conservées. Plafond de dépense activé : jamais facturé.
 
+## 0bis. Résultat du run 44156326449 (fin vers 21:09) — À TRAITER EN PREMIER
+
+- VERT : construction, démarrage BIOS (grenos-ui OOBE affiché en 1 s, 11 Entrée,
+  « nom choisi, la machine est a ci@grenos », apparence obéie), mise à jour au
+  démarrage, VirtualBox. grenos-ui marche sur la machine d'essai.
+- ROUGE « sans matériel » : l'essai attendait l'écran du nom sans appuyer sur
+  Entrée (le nom n'est plus le 1er écran). CORRIGÉ dans
+  `scripts/ci-sans-materiel.sh` (commit local, non poussé).
+- ROUGE « UEFI » : écran tout noir, rien sur la persistance. À diagnostiquer :
+  `gh run download 44156326449 -n grenos-linux-captures`, lire
+  `serial-uefi.log` et `uefi-juge.log`. Soupçon : grenos-ui (WebKit) sur le
+  framebuffer UEFI de QEMU ; le lanceur rebascule sur Python après 120 s — voir
+  si la ligne « premier : grenos-ui ne s est pas affiche » est présente.
+- Ensuite : pousser la branche (fix sans-matériel + logo + fond), attendre la CI,
+  puis fusionner et publier comme ci-dessous.
+
 ## 1. Demandé le 17 novembre au soir — le visuel
 
 1. **Logo grenOS sans lettre** — [écrit], commit local `visuel` : une pousse

@@ -134,16 +134,31 @@ python3 scripts/ci-screen.py send "$PRISE" "sendkey ret" || true
 
 # Le premier ecran demande un nom, et la session ne s ouvre pas tant qu il n
 # en a pas. On tape « ci », exactement comme le parcours ordinaire.
+#
+# LE NOM N EST PLUS LE PREMIER ECRAN depuis le 15 octobre : bienvenue, langue
+# et clavier passent avant. Cet essai attendait la page du nom sans jamais
+# appuyer sur Entree pour l atteindre — il restait donc sur « Welcome » et
+# concluait faute de preuve. Meme mecanique que ci-demarrage.sh : Entree tant
+# que l assistant est la sans etre sur le nom, puis le nom, puis Entree
+# jusqu a ce que le nom soit pris.
 for essai in $(seq 1 48); do
     if grep -aq 'premier ecran affiche' "$SERIE" 2>/dev/null; then
-        echo "sans materiel : premier ecran vu apres $((essai * 5))s"
+        echo "sans materiel : ecran du nom vu apres $((essai * 5))s"
         for touche in c i ret; do
             python3 scripts/ci-screen.py send "$PRISE" "sendkey $touche" || true
             sleep 1
         done
         break
     fi
+    if grep -aq 'premier : ecran' "$SERIE" 2>/dev/null; then
+        python3 scripts/ci-screen.py send "$PRISE" "sendkey ret" || true
+    fi
     sleep 5
+done
+for essai in $(seq 1 24); do
+    grep -aq 'nom choisi' "$SERIE" 2>/dev/null && break
+    python3 scripts/ci-screen.py send "$PRISE" "sendkey ret" || true
+    sleep 3
 done
 
 # Puis on attend le bureau. Six minutes : sans reseau, la sonde met plus de
