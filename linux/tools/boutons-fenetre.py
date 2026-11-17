@@ -30,7 +30,7 @@ trait de deux pixels reste net quand il est calculé pour deux pixels.
 import os
 import sys
 
-TAILLE = 10
+TAILLE = 12
 
 
 def xbm(nom, points):
@@ -119,15 +119,68 @@ def ombre():
     return points
 
 
-# Chaque bouton, et tous ses états. Openbox lit un fichier par état ; livrer
-# les variantes évite de dépendre de son comportement de repli, que personne
-# ici n'a vérifié à la source — et une supposition non vérifiée est exactement
-# ce qui a produit le bouton d'aujourd'hui.
+def disque():
+    """Le rond plein des trois boutons « feux » (17 novembre).
+
+    Grenofar voulait des barres de titre « arrondies et propres ». Trois
+    ronds de couleur se lisent d'un coup d'œil, de loin, sans avoir à
+    déchiffrer un glyphe de 12 pixels : rouge pour fermer, ambre pour
+    réduire, vert pour agrandir. Le glyphe n'apparaît qu'au survol, creusé
+    dans le rond — le geste se confirme au moment où on va le faire.
+    """
+    points = set()
+    centre = (TAILLE - 1) / 2
+    rayon2 = (TAILLE / 2) ** 2 - 0.5
+    for y in range(TAILLE):
+        for x in range(TAILLE):
+            if (x - centre) ** 2 + (y - centre) ** 2 <= rayon2:
+                points.add((x, y))
+    return points
+
+
+def petite_croix():
+    """La croix creusée dans le rond rouge : deux diagonales de 6 px."""
+    points = set()
+    for i in range(3, TAILLE - 3):
+        points.add((i, i))
+        points.add((TAILLE - 1 - i, i))
+    return points
+
+
+def petit_trait():
+    """Le trait creusé dans le rond ambre."""
+    milieu = TAILLE // 2
+    return {(x, y) for x in range(3, TAILLE - 3) for y in (milieu - 1, milieu)}
+
+
+def petit_plus():
+    """Le plus creusé dans le rond vert : agrandir, ou rendre sa taille."""
+    milieu = TAILLE // 2
+    points = {(x, y) for x in range(3, TAILLE - 3) for y in (milieu - 1, milieu)}
+    points |= {(x, y) for y in range(3, TAILLE - 3) for x in (milieu - 1, milieu)}
+    return points
+
+
+def petit_moins_plus():
+    """Agrandie : le rond vert porte deux pointes qui rentrent (restaurer)."""
+    milieu = TAILLE // 2
+    return {(x, y) for x in range(3, TAILLE - 3) for y in (milieu - 1, milieu)} | {
+        (milieu - 1, 3), (milieu, 3), (milieu - 1, TAILLE - 4), (milieu, TAILLE - 4)}
+
+
+# Les feux : au repos un rond plein, au survol et à l'appui le même rond
+# avec son glyphe creusé. La couleur vient du themerc (une par bouton).
+FEUX = {
+    "close": petite_croix,
+    "max": petit_plus,
+    "max_toggled": petit_moins_plus,
+    "iconify": petit_trait,
+}
+
+# Les autres boutons gardent leur glyphe, dans tous leurs états. Openbox lit
+# un fichier par état ; livrer les variantes évite de dépendre de son
+# comportement de repli, que personne ici n'a vérifié à la source.
 BASES = {
-    "close": croix,
-    "max": carre,
-    "max_toggled": deux_carres,
-    "iconify": trait,
     "desk": point,
     "desk_toggled": point,
     "shade": ombre,
@@ -137,18 +190,44 @@ BASES = {
 ETATS = ("", "_hover", "_pressed", "_disabled")
 
 
+def dessins():
+    """Chaque fichier à écrire, avec ses points : {nom: points}."""
+    sortie = {}
+    rond = disque()
+    for base, glyphe in FEUX.items():
+        creuse = rond - glyphe()
+        sortie[base] = rond
+        sortie[base + "_disabled"] = rond
+        sortie[base + "_hover"] = creuse
+        sortie[base + "_pressed"] = creuse
+    for base, dessin in BASES.items():
+        for etat in ETATS:
+            sortie[base + etat] = dessin()
+    # Les anciens glyphes restent appelables (croix, carre…) : l'aperçu les
+    # montre encore, et un retour en arrière ne coûte qu'une ligne.
+    return sortie
+
+
+def apercu(points):
+    """Le dessin en caractères, pour le relire sans serveur X."""
+    return "\n".join("".join("#" if (x, y) in points else "."
+                             for x in range(TAILLE)) for y in range(TAILLE))
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--apercu":
+        for nom, points in dessins().items():
+            if not nom.endswith(("_pressed", "_disabled")):
+                print(nom + "\n" + apercu(points) + "\n")
+        return 0
     dossier = sys.argv[1] if len(sys.argv) > 1 else "."
     os.makedirs(dossier, exist_ok=True)
     ecrits = 0
-    for base, dessin in BASES.items():
-        points = dessin()
-        for etat in ETATS:
-            nom = base + etat
-            chemin = os.path.join(dossier, nom + ".xbm")
-            with open(chemin, "w", encoding="ascii") as fichier:
-                fichier.write(xbm(nom, points))
-            ecrits += 1
+    for nom, points in dessins().items():
+        chemin = os.path.join(dossier, nom + ".xbm")
+        with open(chemin, "w", encoding="ascii") as fichier:
+            fichier.write(xbm(nom, points))
+        ecrits += 1
     print("boutons de fenetre : %d fichiers XBM en %dx%d dans %s"
           % (ecrits, TAILLE, TAILLE, dossier))
     return 0
