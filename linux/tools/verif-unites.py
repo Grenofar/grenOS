@@ -23,6 +23,7 @@ parcourt l'arborescence ci-dessus. Tout le texte affiché est en français avec
 ses accents. Seule la bibliothèque standard est utilisée.
 """
 import os
+import re
 import sys
 
 CHROOT_BASE = os.path.join(
@@ -128,6 +129,34 @@ def _check_file(path):
                             errors.append(
                                 f"ExecStart pointe vers un fichier absent dans le chroot — {exec_path}"
                             )
+
+    # Un oneshot « voulu » par une cible RETARDE cette cible jusqu'à sa fin :
+    # systemd ajoute de lui-même After= entre la cible et ce qu'elle veut.
+    # Appris le 18 novembre : la sonde de session (oneshot, `sleep 150`,
+    # WantedBy=graphical.target) a reculé graphical.target de 150 s, donc
+    # grenos-preuve (After=graphical.target) parlait trop tard et l'essai UEFI
+    # n'a plus vu la persistance. Une attente longue va dans un Type=simple.
+    if path.endswith(".service"):
+        type_service = [v for k, v in seen_keys.get("Service", []) if k == "Type"]
+        cibles = " ".join(v for k, v in seen_keys.get("Install", []) if k == "WantedBy")
+        if type_service[-1:] == ["oneshot"] and (
+                "graphical.target" in cibles or "multi-user.target" in cibles):
+            for k, v in seen_keys.get("Service", []):
+                if k != "ExecStart":
+                    continue
+                script = _map_usr_path(_parse_exec(v))
+                if not script or not os.path.isfile(script):
+                    continue
+                try:
+                    with open(script, encoding="utf-8", errors="replace") as f:
+                        texte = f.read()
+                except OSError:
+                    continue
+                for n in re.findall(r"^\s*sleep\s+(\d+)\s*$", texte, re.M):
+                    if int(n) >= 30:
+                        errors.append(
+                            f"Type=oneshot voulu par « {cibles} » mais son script dort "
+                            f"{n} s : la cible attendrait d'autant (mettre Type=simple)")
 
     # Special warning for .service without [Install] and without WantedBy.
     if path.endswith(".service"):

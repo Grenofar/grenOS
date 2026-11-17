@@ -6,9 +6,13 @@ Description=grenOS : dire pourquoi la session ne s ouvre pas
 After=lightdm.service display-manager.service
 
 [Service]
-Type=oneshot
+# Type=simple, PAS oneshot (18 novembre) : une cible attend la fin des
+# oneshot qu'elle veut. En oneshot, ce `sleep 150` reculait graphical.target
+# de 150 s, et grenos-preuve (After=graphical.target) parlait trop tard :
+# l'essai UEFI (90 s) n'a plus vu la ligne de persistance. Garde :
+# linux/tools/verif-unites.py.
+Type=simple
 ExecStart=/usr/lib/grenos/grenos-sonde-session
-TimeoutStartSec=240
 
 [Install]
 WantedBy=graphical.target

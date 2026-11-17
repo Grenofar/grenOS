@@ -25,6 +25,19 @@
   en pause après ~7 jours sans activité : « Restore » dans le tableau de bord,
   données conservées. Plafond de dépense activé : jamais facturé.
 
+## 0ter. 18 novembre — la publication
+
+- Run 44191198865 : 4 preuves sur 5 vertes ; l'UEFI échouait parce que son
+  essai coupait la machine à 90 s fixes, avant l'ouverture de la session.
+  Corrigé (`8206a6b`) : il attend la preuve (240 s max) et écrit le temps mis.
+- Branche `claude/grenos-ui-release` = la version vérifiée (`1d89c52`) + ce
+  seul correctif : C'EST ELLE QU'ON FUSIONNE DANS `main` quand sa CI est
+  verte (`git checkout main && git merge --no-ff claude/grenos-ui-release &&
+  git push`), puis le site (`grenos-web-download`, branche
+  `claude/theme-grenos-ui` → main).
+- `claude/grenos-ui` porte en plus coins arrondis + fondus : sa CI tourne en
+  parallèle ; elle fera la version suivante.
+
 ## 0bis. Résultat du run 44156326449 (fin vers 21:09) — À TRAITER EN PREMIER
 
 - VERT : construction, démarrage BIOS (grenos-ui OOBE affiché en 1 s, 11 Entrée,
