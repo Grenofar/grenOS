@@ -542,7 +542,18 @@ jobs:
             echo "::error::QEMU n'a pas demarre en UEFI : sa ligne de commande est fautive."
             exit 1
           fi
-          sleep 90
+          # PLUS UNE ATTENTE FIXE DE 90 SECONDES. Le 17 novembre, le second
+          # demarrage arrivait au gestionnaire de connexion pile a la fin des 90 s
+          # et la machine etait coupee avant d'ouvrir sa session : un ecran noir,
+          # et une « persistance qui ne tient pas » qui n'etait qu'un chronometre
+          # trop court. On attend la PREUVE, quatre minutes au plus, et on DIT
+          # le temps mis — un demarrage qui ralentit doit se voir, pas se cacher.
+          for attente in $(seq 1 48); do
+            grep -aq 'persistance :' "$RUNNER_TEMP/serial-uefi.log" 2>/dev/null && break
+            sleep 5
+          done
+          echo "uefi : session et persistance vues apres $((attente * 5)) s (plafond 240 s)"
+          sleep 5
           python3 scripts/ci-screen.py grab "$RUNNER_TEMP/uefi.sock" "$RUNNER_TEMP/ecran-uefi.ppm" || true
           kill $QEMU 2>/dev/null || true
           # Le verdict se lit dans la sortie, pas dans le code de retour d'un
