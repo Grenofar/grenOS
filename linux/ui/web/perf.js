@@ -186,6 +186,7 @@
   (async function () {
     habiller(await api.appeler("apparence"));
     cadre();
+    window.grenos.pret();
     await api.appeler("perf_instantane"); // premier relevé : la base des pourcentages
     setTimeout(boucle, 600);
   })();

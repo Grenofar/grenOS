@@ -5,14 +5,7 @@
 // et qui refuse un geste qu'il n'a pas proposé.
 "use strict";
 (function () {
-  const { api, el, svg, habiller, aurore } = window.grenos;
-
-  function toast(texte) {
-    document.querySelector(".toast")?.remove();
-    const t = el("div.toast", texte);
-    document.body.append(t);
-    setTimeout(() => t.remove(), 4000);
-  }
+  const { api, el, svg, habiller, aurore, toast } = window.grenos;
 
   async function faire(geste, bouton) {
     for (const b of document.querySelectorAll(".geste")) b.disabled = true;
@@ -48,6 +41,7 @@
     // Le focus sur le premier geste NON dangereux : Entrée par réflexe ne
     // doit jamais éteindre la machine.
     liste.querySelector(".geste:not(.danger)")?.focus();
+    window.grenos.pret();
   })();
 
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") fermer(); });

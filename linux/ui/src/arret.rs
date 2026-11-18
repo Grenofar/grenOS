@@ -14,7 +14,6 @@
 
 use crate::systeme::{dire, lire};
 use serde::Serialize;
-use std::process::{Command, Stdio};
 
 const ETATS_VEILLE: &str = "/sys/power/state";
 const ATTENTE: &str = "/run/grenos/maj";
@@ -103,23 +102,12 @@ pub struct Vue {
     adresse: String,
 }
 
-/// Le nom de la personne et de la machine, comme `grenosui.adresse()`.
-fn adresse() -> String {
-    let compte = std::env::var("USER").unwrap_or_default();
-    let machine = lire("/etc/hostname").trim().to_string();
-    match (compte.is_empty(), machine.is_empty()) {
-        (false, false) => format!("{compte}@{machine}"),
-        (false, true) => compte,
-        _ => "grenOS".into(),
-    }
-}
-
 #[tauri::command]
 pub fn arret_vue() -> Vue {
     let etat = veille();
     let gestes = composer(etat, combien_attendent(), combien_de_travaux());
     dire(&format!("arret : {} geste(s), veille {}", gestes.len(), etat.unwrap_or("impossible ici")));
-    Vue { gestes, adresse: adresse() }
+    Vue { gestes, adresse: crate::systeme::adresse() }
 }
 
 fn commande(cle: &str) -> Option<(&'static str, &'static [&'static str])> {
@@ -143,14 +131,7 @@ pub fn arret_faire(fenetre: tauri::WebviewWindow, cle: String) -> Result<(), Str
         return Err("geste non proposé ici".into());
     }
     let (programme, arguments) = commande(&cle).ok_or("geste inconnu")?;
-    let mut c = Command::new(programme);
-    c.args(arguments).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        c.process_group(0);
-    }
-    c.spawn().map_err(|e| format!("{programme} : {e}"))?;
+    crate::systeme::detacher(programme, arguments)?;
     dire(&format!("arret : {cle}"));
     let _ = fenetre.close();
     Ok(())

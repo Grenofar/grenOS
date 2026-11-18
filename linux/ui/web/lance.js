@@ -276,6 +276,7 @@
   (async function () {
     habiller(await api.appeler("apparence"));
     cadre();
+    window.grenos.pret();
     boucle();
   })();
 })();

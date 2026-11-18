@@ -256,3 +256,6 @@ html { background: var(--fond); }
 ::-webkit-scrollbar { width: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--bord-fort); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Le petit message en bas, commun à toutes les pages (grenos.toast). */
+.toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 20; padding: 12px 20px; border-radius: 99px; background: var(--surface-pleine); border: 1px solid var(--bord-fort); box-shadow: var(--ombre); font-weight: 600; animation: monte 300ms var(--courbe); }

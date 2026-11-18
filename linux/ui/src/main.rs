@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arret;
+mod bienvenue;
 mod lance;
 mod maj;
 mod materiel;
@@ -20,7 +21,78 @@ mod steam_compte;
 mod premier;
 mod systeme;
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::Instant;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+
+/// La hauteur de notre barre et d'une barre de titre d'Openbox : les mêmes
+/// nombres que `grenosui.py` (BARRE, TITRE), pour juger le 720p pareil.
+const BARRE: f64 = 52.0;
+const TITRE: f64 = 30.0;
+
+/// Quand chaque fenêtre a été demandée : pour dire « ouverture : X en N ms ».
+/// La première du processus compte depuis la naissance du processus, comme
+/// le faisait Python ; les suivantes depuis la demande reçue par la prise.
+static DEMANDES: Mutex<Option<HashMap<String, Instant>>> = Mutex::new(None);
+static NAISSANCE: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+fn noter_demande(page: &str) {
+    let mut d = DEMANDES.lock().unwrap();
+    let carte = d.get_or_insert_with(HashMap::new);
+    let debut = if carte.is_empty() { *NAISSANCE.get_or_init(Instant::now) } else { Instant::now() };
+    carte.insert(page.to_string(), debut);
+}
+
+/// La taille voulue, ramenée à ce que l'écran peut montrer sous la barre
+/// (Grenofar en 1280×720 : « on voit pas tout »). On ne rétrécit que ce qui
+/// déborde. Renvoie aussi la zone utile, pour la juger après l'affichage.
+fn taille_tenable(largeur: f64, hauteur: f64, ecran: Option<(f64, f64)>) -> (f64, f64) {
+    let Some((l, h)) = ecran else { return (largeur, hauteur) };
+    let utile_h = (h - BARRE).max(240.0);
+    (largeur.min(l - 16.0).max(320.0), hauteur.min(utile_h - TITRE).max(240.0))
+}
+
+fn ecran_logique(app: &AppHandle) -> Option<(f64, f64)> {
+    let ecran = app.primary_monitor().ok()??;
+    let t = ecran.size().to_logical::<f64>(ecran.scale_factor());
+    Some((t.width, t.height))
+}
+
+/// Appelée par chaque page une fois dessinée (`grenos.pret()`, commun.js) :
+/// remonter la fenêtre si son bas passe sous la barre, puis DIRE sa taille
+/// réelle et son temps d'ouverture — les mêmes lignes que les fenêtres
+/// Python, que la CI lit (« fenetre … : tient », « ouverture : … »).
+#[tauri::command]
+fn fenetre_prete(fenetre: tauri::WebviewWindow) {
+    let page = fenetre.label().to_string();
+    let titre = fenetre.title().unwrap_or_else(|_| page.clone());
+    if let Some(debut) = DEMANDES.lock().unwrap().as_mut().and_then(|c| c.remove(&page)) {
+        systeme::dire(&format!("ouverture : {titre} en {} ms (grenos-ui)", debut.elapsed().as_millis()));
+    } else {
+        return; // déjà dite : une page qui se redessine ne se rechronomètre pas
+    }
+    if page == "premier" {
+        return;
+    }
+    let echelle = fenetre.scale_factor().unwrap_or(1.0);
+    let (Ok(taille), Ok(pos)) = (fenetre.inner_size(), fenetre.inner_position()) else { return };
+    let taille = taille.to_logical::<f64>(echelle);
+    let pos = pos.to_logical::<f64>(echelle);
+    let (el, eh) = ecran_logique(fenetre.app_handle()).unwrap_or((taille.width, taille.height + BARRE));
+    let utile_h = (eh - BARRE).max(240.0);
+    let mut y = pos.y;
+    if y + taille.height > utile_h {
+        y = TITRE.max(utile_h - taille.height);
+        let _ = fenetre.set_position(tauri::LogicalPosition::new(pos.x, y));
+    }
+    let tient = taille.width <= el && y + taille.height <= utile_h;
+    systeme::dire(&format!(
+        "fenetre {titre} {}x{} en {},{} dans {}x{} : {}",
+        taille.width as i64, taille.height as i64, pos.x as i64, y as i64,
+        el as i64, utile_h as i64, if tient { "tient" } else { "DEBORDE" }
+    ));
+}
 
 const PAGES: &[(&str, &str, f64, f64)] = &[
     // page, titre, largeur, hauteur
@@ -29,6 +101,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("bienvenue", "Bienvenue dans grenOS", 940.0, 700.0),
 ];
 
 pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
@@ -48,6 +121,8 @@ pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
         let _ = fenetre.set_focus();
         return Ok(());
     }
+    noter_demande(page);
+    let (largeur, hauteur) = if page == "premier" { (largeur, hauteur) } else { taille_tenable(largeur, hauteur, ecran_logique(app)) };
     let mut constructeur = WebviewWindowBuilder::new(app, page, WebviewUrl::App("index.html".into()))
         .title(titre)
         .initialization_script(&format!(
@@ -141,6 +216,7 @@ fn fermeture_animee(fenetre: &tauri::Window, evenement: &tauri::WindowEvent) {
 }
 
 fn main() {
+    NAISSANCE.get_or_init(Instant::now);
     let page = std::env::args().nth(1).unwrap_or_else(|| "maj".into());
     systeme::preparer_webkit();
 
@@ -159,6 +235,8 @@ fn main() {
             apparence,
             regler_apparence,
             fermer,
+            fenetre_prete,
+            systeme::ouvrir_programme,
             premier::premier_infos,
             premier::premier_dire,
             premier::premier_pret,
@@ -188,6 +266,7 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            bienvenue::bienvenue_vue,
         ])
         .on_window_event(fermeture_animee)
         .setup(move |app| {
@@ -204,6 +283,15 @@ fn main() {
 #[cfg(test)]
 mod essais {
     use super::*;
+
+    #[test]
+    fn la_taille_tient_en_720p() {
+        // 1280×720 : 668 sous la barre, 638 sans la barre de titre.
+        assert_eq!(taille_tenable(1220.0, 800.0, Some((1280.0, 720.0))), (1220.0, 638.0));
+        assert_eq!(taille_tenable(1400.0, 600.0, Some((1280.0, 720.0))), (1264.0, 600.0));
+        assert_eq!(taille_tenable(760.0, 620.0, Some((1920.0, 1080.0))), (760.0, 620.0));
+        assert_eq!(taille_tenable(760.0, 620.0, None), (760.0, 620.0));
+    }
 
     #[test]
     fn la_fermeture_suit_le_reglage_effets() {

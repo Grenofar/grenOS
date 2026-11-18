@@ -9,7 +9,14 @@ L'installation sur le disque n'apparaît que sur une vraie machine. Dans une
 machine virtuelle, elle n'a pas de sens : le disque de la machine garde déjà
 tout, et proposer d'installer par-dessus ne ferait qu'inquiéter.
 """
+import os
 import sys
+
+# La fenêtre vit désormais dans grenos-ui (bienvenue.rs, bienvenue.js), le processus
+# partagé par les autres fenêtres (18 novembre). Celle-ci reste le repli,
+# et `--python` la force.
+if os.access("/usr/bin/grenos-ui", os.X_OK) and "--python" not in sys.argv:
+    os.execv("/usr/bin/grenos-ui", ["grenos-ui", "bienvenue"])
 
 sys.path.insert(0, "/usr/lib/grenos")
 

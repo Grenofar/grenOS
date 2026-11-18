@@ -12,12 +12,54 @@ use std::process::{Command, Output, Stdio};
 /// d'intégration attend « premier : ecran … », « nom choisi », etc. En changer
 /// une seule lettre ferait échouer l'essai pour une raison qui n'a rien à voir
 /// avec grenOS.
+///
+/// En root (l'assistant, avant le bureau), on écrit sur le port. Dans la
+/// session, le compte n'a PAS le droit d'y écrire (pas dans `dialout`) : on
+/// dépose un billet dans /tmp/grenos-billets, que `grenos-preuve` (root)
+/// relaie — exactement ce que fait `grenos-dire`. Jusqu'au 18 novembre, les
+/// fenêtres grenos-ui ouvertes dans la session ne disaient donc RIEN à la CI.
 pub fn dire(texte: &str) {
+    eprintln!("grenos-ui: {texte}");
     if let Ok(mut port) = fs::OpenOptions::new().write(true).open("/dev/ttyS0") {
         let _ = writeln!(port, "grenos: {texte}");
+        return;
     }
-    eprintln!("grenos-ui: {texte}");
+    deposer_billet(texte);
 }
+
+#[cfg(unix)]
+fn deposer_billet(texte: &str) {
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+    // Sans port série, personne ne relèvera le billet : on n'en dépose pas.
+    match fs::metadata("/dev/ttyS0") {
+        Ok(m) if m.file_type().is_char_device() => {}
+        _ => return,
+    }
+    let boite = std::path::Path::new("/tmp/grenos-billets");
+    if fs::create_dir_all(boite).is_err() {
+        return;
+    }
+    let _ = fs::set_permissions(boite, fs::Permissions::from_mode(0o1777));
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NUMERO: AtomicU32 = AtomicU32::new(0);
+    let secondes = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Numéro sur six chiffres : le relais lit les billets dans l'ordre
+    // alphabétique, et « 10 » passerait avant « 2 ». Écrit sous un nom caché
+    // puis renommé : le relais (qui ignore les noms en « . ») ne lit jamais
+    // un billet à moitié écrit.
+    let nom = format!("{secondes}-{}-{:06}", std::process::id(), NUMERO.fetch_add(1, Ordering::SeqCst));
+    let cache = boite.join(format!(".{nom}"));
+    if fs::write(&cache, format!("{texte}
+")).is_ok() {
+        let _ = fs::rename(&cache, boite.join(nom));
+    }
+}
+
+#[cfg(not(unix))]
+fn deposer_billet(_texte: &str) {}
 
 pub fn lancer(programme: &str, arguments: &[&str]) -> Option<Output> {
     Command::new(programme)
@@ -160,4 +202,59 @@ pub mod instance {
 pub mod instance {
     pub fn transmettre(_page: &str) -> bool { false }
     pub fn ecouter(_app: tauri::AppHandle) {}
+}
+
+/// Lance un programme détaché : s'il meurt, la fenêtre survit, et s'il dure,
+/// il ne garde pas grenos-ui comme parent attentif (`start_new_session` de
+/// `grenosui.lancer`).
+pub fn detacher(programme: &str, arguments: &[&str]) -> Result<(), String> {
+    let mut c = Command::new(programme);
+    c.args(arguments).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        c.process_group(0);
+    }
+    c.spawn().map(|_| ()).map_err(|e| format!("{programme} : {e}"))
+}
+
+/// Ce qu'une page a le droit d'ouvrir par `ouvrir_programme` : des
+/// applications, jamais une commande libre. Une page compromise ne peut rien
+/// lancer de plus qu'un clic dans le menu.
+pub const PROGRAMMES: &[&str] = &[
+    "grenplace", "grenlaunch", "grenos-jeux", "grenos-connexions", "grenos-parametres",
+    "grenos-maj", "grenos-fichiers", "grenos-taches", "grenos-son", "grenos-hub",
+    "grenos-perf", "grenos-secours", "grenos-bienvenue", "grenos-arret",
+    "firefox-esr", "x-terminal-emulator", "installer",
+];
+
+#[tauri::command]
+pub fn ouvrir_programme(nom: String) -> Result<(), String> {
+    if !PROGRAMMES.contains(&nom.as_str()) {
+        return Err(format!("« {nom} » n'est pas une application de grenOS"));
+    }
+    if nom == "installer" {
+        return detacher("pkexec", &["calamares"]);
+    }
+    detacher(&nom, &[])
+}
+
+/// Le nom choisi au premier démarrage, comme `grenosui.identite()`.
+pub fn identite() -> std::collections::HashMap<String, String> {
+    let mut v = std::collections::HashMap::new();
+    v.insert("login".to_string(), std::env::var("USER").unwrap_or_else(|_| "grenos".into()));
+    v.insert("nom".to_string(), String::new());
+    v.insert("machine".to_string(), "grenos".to_string());
+    for ligne in lire("/etc/grenos/identite").lines() {
+        if let Some((cle, valeur)) = ligne.trim().split_once('=') {
+            v.insert(cle.trim().to_string(), valeur.trim().to_string());
+        }
+    }
+    v
+}
+
+/// « login@machine », comme `grenosui.adresse()`.
+pub fn adresse() -> String {
+    let i = identite();
+    format!("{}@{}", i["login"], i["machine"])
 }
