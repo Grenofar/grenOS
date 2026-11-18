@@ -643,3 +643,8 @@ tesseract-ocr
 tesseract-ocr-fra
 tesseract-ocr-eng
 ocrmypdf
+## GrenAI parle aux fournisseurs par curl (la clé passe par un fichier
+## d'en-têtes 0600, jamais en argument), et lit les PDF à résumer avec
+## pdftotext.
+curl
+poppler-utils

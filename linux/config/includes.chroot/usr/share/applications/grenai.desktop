@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GrenAI
+Comment=Ton assistant, sur ta machine ou avec le modèle de ton choix
+Keywords=ia;assistant;chat;gpt;gemini;grok;ollama;résumé;
+Exec=grenai
+Icon=grenos-grenai
+Terminal=false
+Categories=Utility;

@@ -1,0 +1,4 @@
+#!/bin/sh
+# GrenAI (todo H — 18 novembre) : une page de grenos-ui. Rien ne tourne en
+# arrière-plan : GrenAI n'existe que pendant que sa fenêtre est ouverte (H11).
+exec grenos-ui grenai "$@"

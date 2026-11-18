@@ -203,17 +203,17 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 | # | Demande | État |
 |---|---|---|
-| H1 | **Lancer des IA locales** téléchargées depuis Hugging Face | [à faire] |
+| H1 | **Lancer des IA locales** téléchargées depuis Hugging Face | **[écrit], par Ollama** (18 nov.) — GrenAI parle à un modèle qui tourne sur la machine (Ollama, 127.0.0.1:11434) ; Debian trixie n'a ni llama.cpp ni Ollama : on l'installe par GrenPlace (Alpaca l'embarque, avec les modèles d'Ollama et de Hugging Face) |
 | H2 | Ou **une alternative** si ce n'est pas possible | [prouvé à la source] — **Ollama n'existe ni dans Debian trixie ni sur Flathub** (vérifié le 1er octobre : l'API de Flathub ne rend que des *clients*). L'équivalent livrable est Alpaca (`com.jeffser.Alpaca`, 2,26 Go), qui embarque son moteur |
-| H3 | **Clés API** avec le choix entre GPT, Grok et Gemini | [à faire] |
+| H3 | **Clés API** avec le choix entre GPT, Grok et Gemini | **[écrit]** (18 nov.) — GrenAI : OpenAI (GPT), Google (Gemini), xAI (Grok), avec la clé de la personne, gardée dans un fichier 0600 et passée à curl par un fichier d'en-têtes effacé aussitôt — jamais en argument ni dans l'adresse (essai). La page dit à chaque instant où partent les mots |
 | H4 | **Assistant de terminal** capable de corriger des commandes | [à faire] |
 | H5 | **Automatisation de tâches** | [à faire] |
 | H6 | **OCR** intégré à la capture d'écran et aux PDF | **[écrit] pour les fichiers** (18 nov.) — explorateur › clic droit › « Extraire le texte (OCR) » : Tesseract (français, anglais) écrit un .txt à côté d'une image, ocrmypdf rend un PDF scanné cherchable. Tout en local. Pas encore dans la capture d'écran |
 | H7 | **Traduction hors ligne** | [à faire] |
 | H8 | **Dictée vocale locale** | [à faire] |
-| H9 | **Résumé automatique de documents** | [à faire] |
+| H9 | **Résumé automatique de documents** | **[écrit]** (18 nov.) — GrenAI › « Résumer un document » : un texte ou un PDF (pdftotext), coupé à 12 000 caractères et la page le dit, envoyé au modèle choisi |
 | H10 | **Recherche sémantique dans les fichiers** | [à faire] |
-| H11 | **Jamais en arrière-plan** sauf s'il le choisit | [à faire] — et c'est la ligne qui doit être tenue en premier |
+| H11 | **Jamais en arrière-plan** sauf s'il le choisit | **[écrit]** (18 nov.) — par construction : GrenAI n'a aucun service, aucun minuteur ; il n'existe que pendant que sa fenêtre est ouverte, et chaque requête part d'un clic |
 
 ## I. L'assistant de première configuration (OOBE)
 

@@ -784,6 +784,19 @@ def agenda(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def grenai(chemin, taille):
+    """GrenAI (18 novembre) : une étincelle à quatre branches et une petite à
+    côté — le signe qu'on lit partout pour « assistant », sans visage ni robot."""
+    image, u, v = toile(taille)
+    poser(image, rectangle(u, v, 0.08, 0.08, 0.92, 0.92, rayon=0.24), ACCENT, 1.0)
+    for cx, cy, r in ((0.46, 0.54, 0.30), (0.72, 0.28, 0.12)):
+        du, dv = np.abs(u - cx), np.abs(v - cy)
+        # Une astroïde : |x|^0.5 + |y|^0.5 <= r^0.5, des branches fines.
+        forme = np.sqrt(du) + np.sqrt(dv)
+        poser(image, np.clip((np.sqrt(r) - forme) / 0.02, 0, 1), CLAIR, 1.0)
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
@@ -815,6 +828,7 @@ def main():
     grenlaunch(os.path.join(dossier, 'grenlaunch.png'), taille)
     horloge(os.path.join(dossier, 'grenos-horloge.png'), taille)
     agenda(os.path.join(dossier, 'grenos-agenda.png'), taille)
+    grenai(os.path.join(dossier, 'grenos-grenai.png'), taille)
 
 
 if __name__ == '__main__':

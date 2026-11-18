@@ -195,6 +195,8 @@
       case "agenda_lire": return [{ id: "1", date: new Date().toISOString().slice(0, 10), heure: "14:30", titre: "Dentiste", note: "Apporter la carte" }, { id: "2", date: new Date().toISOString().slice(0, 10), heure: "", titre: "Anniversaire de Léa", note: "" }];
       case "agenda_poser": return [...(await window.APERCU("agenda_lire")), a.evenement];
       case "agenda_retirer": return (await window.APERCU("agenda_lire")).filter((e) => e.id !== a.id);
+      case "grenai_reglages": return { fournisseur: "ollama", fournisseurs: [{ cle: "ollama", nom: "Ollama (sur cette machine)", modele: "llama3.2", a_une_cle: false, local: true }, { cle: "openai", nom: "OpenAI (GPT)", modele: "gpt-4o-mini", a_une_cle: true, local: false }] };
+      case "grenai_demander": await attendre(700); return "Voici une réponse d'exemple, écrite par l'aperçu : aucun modèle n'a été appelé.";
       case "fichiers_dire": console.log("série :", a.texte); return null;
       default: return null;
     }

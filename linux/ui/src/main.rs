@@ -13,6 +13,7 @@
 
 mod aleatoire;
 mod arret;
+mod grenai;
 mod agenda;
 mod horloge;
 mod fichiers;
@@ -129,6 +130,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("grenai", "GrenAI", 860.0, 680.0),
     ("agenda", "Agenda", 1000.0, 680.0),
     ("horloge", "Horloge", 760.0, 640.0),
     ("fichiers", "Explorateur de fichiers", 1000.0, 640.0),
@@ -322,6 +324,10 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            grenai::grenai_reglages,
+            grenai::grenai_regler,
+            grenai::grenai_demander,
+            grenai::grenai_lire_document,
             agenda::agenda_lire,
             agenda::agenda_poser,
             agenda::agenda_retirer,
