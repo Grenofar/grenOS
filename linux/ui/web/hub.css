@@ -1,0 +1,20 @@
+/* grenHub. */
+body[data-page="hub"] { overflow: auto; }
+.page-hub { position: relative; z-index: 1; max-width: 980px; margin: 0 auto; padding: 24px 24px 32px; display: flex; flex-direction: column; gap: 14px; }
+.page-hub .tete h1 { font-size: 24px; }
+.hb-paves { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+.hb-pave dl { margin: 10px 0 0; display: grid; grid-template-columns: minmax(110px, 38%) 1fr; gap: 6px 12px; font-size: 13px; }
+.hb-pave dt { color: var(--texte-3); }
+.hb-pave dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.hb-diag { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.hb-verdict { margin: 0; color: var(--texte-2); font-size: 14px; }
+.hb-verdict.ok { color: var(--reussi); font-weight: 700; }
+.hb-verdict.alerte { color: var(--alerte); font-weight: 700; }
+.hb-verdict.danger { color: var(--danger); font-weight: 700; }
+.hb-liste { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.hb-essai { display: grid; grid-template-columns: 150px 110px 1fr; gap: 12px; align-items: baseline; font-size: 13px; }
+.hb-nom { color: var(--texte-2); }
+.hb-detail { color: var(--texte-3); font-size: 12.5px; user-select: text; -webkit-user-select: text; }
+.badge.ok { background: color-mix(in srgb, var(--reussi) 16%, transparent); color: var(--reussi); }
+.badge.alerte { background: color-mix(in srgb, var(--alerte) 16%, transparent); color: var(--alerte); }
+@media (max-width: 640px) { .hb-essai { grid-template-columns: 1fr; gap: 3px; } }

@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arret;
+mod hub;
 mod taches;
 mod connexions;
 mod secours;
@@ -20,6 +21,7 @@ mod lance;
 mod maj;
 mod materiel;
 mod perf;
+mod pont;
 mod steam_compte;
 mod premier;
 mod systeme;
@@ -104,6 +106,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("hub", "grenHub", 900.0, 660.0),
     ("taches", "Gestionnaire de tâches", 900.0, 640.0),
     ("connexions", "Connexions", 560.0, 640.0),
     ("secours", "Mode sans échec de grenOS", 720.0, 560.0),
@@ -273,6 +276,8 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            hub::hub_etat,
+            hub::hub_diagnostic,
             taches::taches_mesure,
             taches::taches_arreter,
             connexions::connexions_etat,
