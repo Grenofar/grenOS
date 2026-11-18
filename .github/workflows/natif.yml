@@ -12,6 +12,7 @@ on:
     branches: ["natif/**", "claude/**", main]
     paths:
       - "linux/natif/**"
+      - "linux/ui/**"
       - "linux/config/includes.chroot/usr/lib/grenos/grenosui.py"
       - ".github/workflows/natif.yml"
   workflow_dispatch:
@@ -37,4 +38,22 @@ jobs:
               cargo test --release
               cargo build --release
               ls -l target/release/grenos-shell-natif target/release/grenos-bureau-natif
+            '
+
+  # grenos-ui (Tauri) : la même raison, depuis le 18 novembre. Ses pages
+  # utilisent GIO et GTK sous Linux seulement (l'explorateur, le sélecteur
+  # de fond) : `cargo test` sous Windows ne les compile pas, et attendre
+  # trente minutes dans la construction complète pour lire une faute de
+  # frappe coûterait la construction entière.
+  interface:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compiler et tester grenos-ui dans Debian trixie
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work/linux/ui             -e CARGO_TERM_COLOR=never             rust:1-trixie sh -ec '
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends                 libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev                 build-essential pkg-config >/dev/null
+              cargo test
             '

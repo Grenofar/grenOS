@@ -328,6 +328,7 @@ fn main() {
             reglages::reglages_theme,
             reglages::reglages_fonds,
             reglages::reglages_fond,
+            reglages::reglages_parcourir_fond,
             jeux::jeux_vue,
             jeux::jeux_paquet_nvidia,
             jeux::jeux_preparer_rocket,

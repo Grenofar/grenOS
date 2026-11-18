@@ -205,19 +205,57 @@ pub async fn reglages_fonds() -> Vec<Value> {
     trouvees.into_iter().take(60).map(|(_, nom, chemin)| json!({ "nom": nom, "actuel": chemin == actuel, "chemin": chemin })).collect()
 }
 
+/// Le vrai sélecteur de fichiers de GTK (celui de l'ancienne fenêtre), ouvert
+/// sur le dossier Images, filtré sur les images. Rend le chemin choisi, déjà
+/// posé en fond, ou None si la personne a annulé. Commande synchrone : elle
+/// tourne sur le fil principal, celui de GTK.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn reglages_parcourir_fond(fenetre: tauri::WebviewWindow) -> Result<Option<String>, String> {
+    use gtk::prelude::*;
+    let parent = fenetre.gtk_window().ok();
+    let boite = gtk::FileChooserNative::new(Some("Choisir un fond d'écran"), parent.as_ref(), gtk::FileChooserAction::Open, Some("Choisir"), Some("Annuler"));
+    let filtre = gtk::FileFilter::new();
+    filtre.set_name(Some("Images"));
+    for e in IMAGES {
+        filtre.add_pattern(&format!("*.{e}"));
+        filtre.add_pattern(&format!("*.{}", e.to_uppercase()));
+    }
+    boite.add_filter(&filtre);
+    let maison = std::env::var("HOME").unwrap_or_default();
+    let images = std::path::Path::new(&maison).join("Images");
+    let _ = boite.set_current_folder(if images.is_dir() { images } else { std::path::PathBuf::from(&maison) });
+    let reponse = boite.run();
+    let choisi = boite.filename();
+    boite.destroy();
+    if reponse != gtk::ResponseType::Accept {
+        return Ok(None);
+    }
+    let Some(chemin) = choisi.map(|p| p.to_string_lossy().into_owned()) else { return Ok(None) };
+    reglages_fond(chemin.clone())?;
+    Ok(Some(chemin))
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn reglages_parcourir_fond(_fenetre: tauri::WebviewWindow) -> Result<Option<String>, String> {
+    Err("Le sélecteur de fichiers n'existe que sous Linux.".into())
+}
+
 #[tauri::command]
 pub fn reglages_fond(chemin: String) -> Result<(), String> {
-    let maison = std::env::var("HOME").unwrap_or_default();
-    // Seulement une image d'un de ses dossiers, comme la liste les propose —
-    // ou "" pour revenir au fond de grenOS.
+    // Une image qui existe, n'importe où (le sélecteur peut montrer
+    // /usr/share/backgrounds) — ou "" pour revenir au fond de grenOS.
+    let p = std::path::Path::new(&chemin);
     let permis = chemin.is_empty()
-        || (chemin.starts_with(&format!("{maison}/"))
+        || (p.is_absolute()
             && !chemin.contains("/../")
-            && std::path::Path::new(&chemin).extension().and_then(|x| x.to_str()).map(|x| IMAGES.contains(&x.to_lowercase().as_str())).unwrap_or(false)
-            && std::path::Path::new(&chemin).is_file());
+            && p.extension().and_then(|x| x.to_str()).map(|x| IMAGES.contains(&x.to_lowercase().as_str())).unwrap_or(false)
+            && p.is_file());
     if !permis {
         return Err("Cette image n'est pas utilisable.".into());
     }
+    let maison = std::env::var("HOME").unwrap_or_default();
     let reglages = format!("{maison}/.config/grenos");
     std::fs::create_dir_all(&reglages).map_err(|e| e.to_string())?;
     let fichier = format!("{reglages}/fond");

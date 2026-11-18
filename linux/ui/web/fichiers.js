@@ -56,7 +56,13 @@
   }
   function ouvrirOnglet() { S.onglets.splice(S.actif + 1, 0, nouvelOnglet(onglet().dossier)); S.actif++; changerDOnglet(); }
   function fermerOnglet() {
-    if (S.onglets.length <= 1) { etat("C'est le dernier onglet : Alt+F4 ferme la fenêtre."); return; }
+    if (S.onglets.length <= 1) {
+      etat("C'est le dernier onglet : Alt+F4 ferme la fenêtre.");
+      // Le refus aussi se dit : un compteur qui ne descendrait jamais
+      // dirait sinon la même chose qu'un dernier onglet bien gardé.
+      dire(`fichiers : onglets — 1, Ctrl+W refuse sur le dernier`);
+      return;
+    }
     S.onglets.splice(S.actif, 1);
     S.actif = Math.max(0, S.actif - 1);
     changerDOnglet();

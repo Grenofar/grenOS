@@ -768,13 +768,18 @@ fi
 # ferme pas — et c est ce refus qui empeche la ligne d etre une assertion
 # morte : sans lui, un compteur qui ne descend jamais dirait la meme chose.
 #
-# « t » et « w » occupent la meme touche en AZERTY qu en QWERTY.
+# « t » occupe la meme touche en AZERTY qu en QWERTY. « w » NON — et ce
+# commentaire disait le contraire jusqu au 18 novembre. `sendkey` nomme la
+# POSITION QWERTY : en AZERTY, la touche « w » de QWERTY ecrit un Z, et celle
+# du « z » ecrit le W. On envoyait donc Ctrl+Z, l explorateur ne fermait
+# rien, et la ligne « onglets — 1 » ne venait jamais (avertissement seul).
+# Pour taper Ctrl+W sur la machine d essai AZERTY, on envoie `ctrl-z`.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-t" || true
 sleep 2
 python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-onglets.ppm" || true
-python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-w" || true
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-z" || true
 sleep 2
-python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-w" || true
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-z" || true
 sleep 2
 grep -a 'grenos: fichiers : onglets' "$RUNNER_TEMP/serial.log" \
   | tr -d '[:cntrl:]' | sed 's/^.*grenos: /  /' || true
@@ -884,7 +889,8 @@ echo "--- la fenetre Fin de session s ouvre-t-elle ---"
 # fenetre ouverte avant l extinction pour la meme raison.
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
 sleep 4
-POINT_ARRET=$(grep -a 'bouton eteindre en' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '' | sed 's/.*en //')
+POINT_ARRET=$(grep -a 'bouton eteindre en' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '
+' | sed 's/.*en //')
 if [ -n "$POINT_ARRET" ]; then
   python3 scripts/ci-screen.py clic "$RUNNER_TEMP/qmp.sock" "${POINT_ARRET%,*}" "${POINT_ARRET#*,}" "$LARGEUR" "$HAUTEUR" || true
   sleep 8

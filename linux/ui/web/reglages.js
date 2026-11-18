@@ -47,7 +47,11 @@
           ...liste.map((f) => el(`button.rg-fond${f.actuel ? ".actif" : ""}`, {
             onclick: async () => { try { await api.appeler("reglages_fond", { chemin: f.chemin }); poserFonds(); } catch (e) { toast(String(e)); } },
           }, el("strong", f.nom.split("/").pop()), el("small", f.nom.split("/")[0]))));
-        if (!liste.length) fonds.append(el("p.note", "Pose une image dans ton dossier Images pour la choisir ici."));
+        if (!liste.length) fonds.append(el("p.note", "Aucune image dans tes dossiers Images, Bureau et Téléchargements : « Parcourir… » va la chercher ailleurs."));
+      };
+      // Le vrai sélecteur de fichiers, pour une image rangée n'importe où.
+      const parcourir = async () => {
+        try { if (await api.appeler("reglages_parcourir_fond")) poserFonds(); } catch (e) { toast(String(e)); }
       };
       poserFonds();
       return [titre("Apparence", "Le même bureau, deux lumières."),
@@ -56,8 +60,8 @@
           ligne("Effets", reglage("effets", [["complets", "Complets"], ["equilibres", "Équilibrés"], ["performance", "Performance"]])),
           dire,
           note("Meta+T fait la bascule sans ouvrir cette fenêtre. Le fond d'écran, la barre, les menus et les applications suivent ensemble.")),
-        carte(el("div.etiquette", "Fond d'écran"), fonds,
-          note("Une image à toi, posée sur le bureau : celles de tes dossiers Images, Bureau et Téléchargements. Sans choix, grenOS garde le sien."))];
+        carte(ligne("Fond d'écran", bouton("Parcourir…", "principal", parcourir)), fonds,
+          note("Une image à toi, posée sur le bureau : choisis-la ci-dessous parmi tes images récentes, ou va la chercher avec « Parcourir… ». Sans choix, grenOS garde le sien."))];
     },
 
     async ecran() {
@@ -142,12 +146,62 @@
           note("Format : année-mois-jour heures:minutes:secondes."))];
     },
 
+    // La page complète, comme l'ancienne fenêtre : l'installation automatique,
+    // « Vérifier maintenant », et la préparation avec sa barre et son détail.
+    // Mêmes commandes que la fenêtre Mises à jour (maj.rs) : une seule façon
+    // de mettre à jour la machine. Et rien ne s'installe pendant la session :
+    // la préparation télécharge, l'installation se fait au redémarrage.
     async maj() {
       const v = await R("reglages_maj");
+      let e = await api.appeler("maj_etat");
+      const resume = note(v.resume);
+      const direAuto = el("p.note");
+      const phrase = el("p.rg-diag", "Prêt.");
+      const barre = el("i", { style: "width:0%" });
+      const journal = el("pre.journal.rg-journal");
+      const details = el("details", el("summary", "Voir le détail"), journal);
+      const principal = el("button.bouton.petit.principal");
+      const relire = async () => {
+        e = await api.appeler("maj_etat");
+        const n = e.disponibles;
+        resume.textContent = n == null ? "Aucune vérification depuis le démarrage, ou pas de réseau."
+          : n === 0 ? `Rien à installer. Dernière vérification : ${e.date} UTC.`
+          : `${n} paquet${n > 1 ? "s" : ""} à installer. Vérifié le ${e.date} UTC.`;
+        principal.textContent = e.arme ? "Redémarrer maintenant" : e.en_cours ? "En cours…" : "Vérifier et préparer";
+        principal.disabled = e.en_cours;
+        return n;
+      };
+      principal.addEventListener("click", async () => {
+        if (e.arme) { api.appeler("maj_redemarrer").catch((x) => { phrase.textContent = String(x); }); return; }
+        principal.disabled = true; principal.textContent = "En cours…"; journal.textContent = "";
+        try { await api.appeler("maj_preparer"); } catch (x) { phrase.textContent = String(x); relire(); }
+      });
+      api.ecouter("maj-avance", (a) => { barre.style.width = `${Math.max(2, Math.min(100, a.part))}%`; phrase.textContent = a.texte; });
+      api.ecouter("maj-ligne", (l) => { journal.textContent += `${l}\n`; journal.scrollTop = journal.scrollHeight; });
+      api.ecouter("maj-fin", async (f) => { barre.style.width = "100%"; phrase.textContent = f.texte; if (!f.bien) details.open = true; await relire(); });
+      const auto = interrupteur(e.mode === "automatiques", async (actif) => {
+        try {
+          await api.appeler("maj_mode", { mode: actif ? "automatiques" : "demander" });
+          direAuto.textContent = actif ? "Les mises à jour s'installeront toutes seules, chaque jour — au redémarrage, avant le bureau." : "Les mises à jour ne s'installeront plus toutes seules.";
+        } catch (x) { direAuto.textContent = String(x); auto.checked = !actif; }
+      });
+      const verifier = async () => {
+        direAuto.textContent = "Vérification en cours…";
+        try {
+          await api.appeler("maj_verifier");
+          const n = await relire();
+          direAuto.textContent = n ? `${n} paquet${n > 1 ? "s" : ""} à installer.` : "Rien à installer : tout est à jour.";
+        } catch (x) { direAuto.textContent = String(x); }
+      };
+      await relire();
       return [titre("Mises à jour", v.version),
-        carte(note(v.resume),
-          ligne("Vérifier, préparer, choisir le mode", bouton("Ouvrir Mises à jour", "principal", () => ouvrirProgramme("grenos-maj"))),
-          note("La vérification quotidienne ne fait que regarder : rien ne s'installe sans que tu le demandes, sauf si tu choisis les mises à jour automatiques. Et rien ne s'installe pendant la session : tout se pose au redémarrage, avant le bureau.")),
+        carte(resume,
+          ligne("Installer automatiquement, chaque jour", auto),
+          bouton("Vérifier maintenant", "discret", verifier),
+          direAuto,
+          note("La vérification quotidienne ne fait que regarder : rien ne s'installe sans que tu le demandes, sauf si tu actives l'installation automatique ci-dessus. Et rien ne s'installe pendant la session : tout se pose au redémarrage, avant le bureau.")),
+        carte(phrase, el("div.progression", barre), principal, details,
+          note("Les nouveautés de grenOS et les correctifs de sécurité de Debian arrivent ensemble, sans jamais retélécharger l'image. Les applications Flatpak se mettent à jour tout de suite, le système au prochain redémarrage.")),
         carte(ligne("Applications", bouton("Ouvrir GrenPlace", "", () => ouvrirProgramme("grenplace"))),
           note("Les applications installées depuis GrenPlace se mettent à jour avec le reste du système."))];
     },
