@@ -17,6 +17,13 @@ import sys
 
 sys.path.insert(0, "/usr/lib/grenos")
 
+# La version Rust native (grenos-son-natif, 18 novembre), si elle est là et
+# qu'elle tient : mêmes lignes série, même attrape, sans charger Python.
+if __name__ == "__main__":
+    import natif  # noqa: E402
+
+    natif.passer_la_main("grenos-son", permanent=False)
+
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")

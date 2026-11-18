@@ -259,6 +259,13 @@ pub struct Attrape {
 
 impl Attrape {
     pub fn prendre(cadre: &gtk::Window) -> Rc<Attrape> {
+        Self::prendre_puis(cadre, |_| {})
+    }
+
+    /// Comme `prendre`, et dit ensuite si le pointeur a été pris (`true`) ou
+    /// refusé au bout des quarante essais (`false`). Le panneau du son le
+    /// répète sur le port série : c'est ce qui manquait le 24 septembre.
+    pub fn prendre_puis(cadre: &gtk::Window, rappel: impl Fn(bool) + 'static) -> Rc<Attrape> {
         let attrape = Rc::new(Attrape { siege: RefCell::new(None), fini: Cell::new(false) });
         let restants = Cell::new(40);
         let a = attrape.clone();
@@ -277,9 +284,15 @@ impl Attrape {
             let pris = siege.grab(&fenetre, gdk::SeatCapabilities::ALL_POINTING, true, None, None, None);
             if pris == gdk::GrabStatus::Success {
                 *a.siege.borrow_mut() = Some(siege);
+                rappel(true);
                 return glib::ControlFlow::Break;
             }
-            if restants.get() > 0 { glib::ControlFlow::Continue } else { glib::ControlFlow::Break }
+            if restants.get() > 0 {
+                glib::ControlFlow::Continue
+            } else {
+                rappel(false);
+                glib::ControlFlow::Break
+            }
         });
         attrape
     }

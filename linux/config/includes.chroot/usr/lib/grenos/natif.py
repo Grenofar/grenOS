@@ -28,7 +28,7 @@ def _dire(texte):
         pass
 
 
-def passer_la_main(nom):
+def passer_la_main(nom, permanent=True):
     """Remplace ce processus par `/usr/lib/grenos/<nom>-natif`, si possible.
 
     Ne revient que si l'on doit rester en Python : `--python` demandé,
@@ -39,6 +39,14 @@ def passer_la_main(nom):
         return
     binaire = f"/usr/lib/grenos/{nom}-natif"
     if not os.access(binaire, os.X_OK):
+        return
+    if not permanent:
+        # Un panneau qu'on ouvre et ferme (le son) repart à chaque clic : ses
+        # départs ne sont pas des chutes, on ne les compte pas (18 novembre).
+        try:
+            os.execv(binaire, [binaire] + sys.argv[1:])
+        except OSError as souci:
+            _dire(f"{nom} : version native impossible a lancer ({souci}), Python garde la main")
         return
 
     dossier = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"

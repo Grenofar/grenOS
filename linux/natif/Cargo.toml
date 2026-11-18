@@ -18,6 +18,13 @@ path = "src/bin/barre.rs"
 name = "grenos-bureau-natif"
 path = "src/bin/bureau.rs"
 
+# Le panneau du son (18 novembre) : il s'ouvre au-dessus de la barre et doit
+# attraper le pointeur, ce qu'une fenêtre WebKit ferait moins bien et plus
+# lourdement. `/usr/bin/grenos-son` (Python) lui passe la main.
+[[bin]]
+name = "grenos-son-natif"
+path = "src/bin/son.rs"
+
 [lib]
 name = "natif"
 path = "src/lib.rs"

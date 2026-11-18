@@ -133,7 +133,10 @@ fn temps() -> u32 {
 /// bascule). `pgrep -f` lit la ligne de commande : nos panneaux Python
 /// s'appellent tous « python3 » pour le noyau.
 fn basculer(programme: &str) {
-    let chemin = format!("/usr/bin/{programme}");
+    // La version Python (/usr/bin/…) ou native (/usr/lib/grenos/…-natif) :
+    // le panneau du son passe la main à la seconde dès sa première ligne, et
+    // un second clic doit la trouver pour la refermer (18 novembre).
+    let chemin = format!("(/usr/bin/{programme}|/usr/lib/grenos/{programme}-natif)( |$)");
     let moi = unsafe_uid();
     let deja = std::process::Command::new("pgrep").args(["-f", "-u", &moi, &chemin]).output();
     if let Ok(sortie) = deja {
