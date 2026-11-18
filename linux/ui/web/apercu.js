@@ -174,7 +174,7 @@
       case "reglages_fonds": return [{ nom: "Images/montagne.jpg", chemin: "/home/lea/Images/montagne.jpg", actuel: true }, { nom: "Bureau/plage.png", chemin: "/home/lea/Bureau/plage.png", actuel: false }];
       case "fichiers_maison": return "/home/lea";
       case "fichiers_rapides": return [["Bureau", "bureau"], ["Téléchargements", "telechargement"], ["Documents", "texte"], ["Images", "image"], ["Musique", "audio"], ["Vidéos", "video"]].map(([nom, icone]) => ({ nom, icone, chemin: "/home/lea/" + nom }));
-      case "fichiers_ce_pc": return [{ nom: "Léa", chemin: "/home/lea", icone: "compte" }, { nom: "Système de fichiers", chemin: "/", icone: "disque" }, { nom: "Clé USB 32 Go", chemin: null, peripherique: "/dev/sdb1", icone: "disque" }];
+      case "fichiers_ce_pc": return [{ nom: "Léa", chemin: "/home/lea", icone: "compte" }, { nom: "Système de fichiers", chemin: "/", icone: "disque" }, { nom: "Clé USB 32 Go", chemin: null, peripherique: "/dev/sdb1", icone: "disque", fs: "vfat", conseil: "FAT32 : un fichier de plus de 4 Go n'y entre pas, et une coupure peut l'abîmer. Pour une clé partagée avec Windows et Mac, exFAT ; pour grenOS seul, ext4 — Disques › Formater (cela efface la clé)." }];
       case "fichiers_lister": {
         const E = (nom, dossier, famille, genre, octets) => ({ nom, chemin: a.dossier.replace(/\/$/, "") + "/" + nom, dossier, famille, genre, octets, modifie: 1795000000 - octets % 100000 });
         window.APERCU_FICHIERS = window.APERCU_FICHIERS || [E("Bureau", true, "dossier", "Dossier de fichiers", 0), E("Documents", true, "dossier", "Dossier de fichiers", 0), E("Images", true, "dossier", "Dossier de fichiers", 0),

@@ -127,7 +127,7 @@
       choix.append(t);
     }
     return [
-      el("p.sous", "Pour une partie : ce qui est coché se ferme, tout le reste de tes applications passe en arrière-plan (priorité basse). Steam, Proton et le jeu gardent la priorité. Couper le mode jeu rend à chacun sa priorité — rien n'est définitif."),
+      el("p.sous", "Pour une partie : ce qui est coché se ferme, GrenAI et son modèle local aussi, tout le reste de tes applications passe en arrière-plan (priorité basse). Steam, Proton et le jeu gardent la priorité. Couper le mode jeu rend à chacun sa priorité — rien n'est définitif."),
       candidats.length ? el("div.etiquette", "À fermer pendant la partie") : el("p.note", "Rien de lourd ni d'inutile ne tourne en ce moment."),
       choix,
       el("button.bouton.principal.grand", { onclick: () => basculerJeu() }, svg("manette"), s.mode_jeu ? "Couper le mode jeu" : "Activer le mode jeu")];

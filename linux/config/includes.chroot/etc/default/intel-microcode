@@ -1,0 +1,9 @@
+# grenOS — le microcode Intel TOUJOURS dans l'initrd, pour TOUS les
+# processeurs Intel (K3 et A12, 18 novembre).
+#
+# Debian livre « auto » et, avec SCANCPUS=yes, ne garde que le microcode du
+# processeur de la machine qui CONSTRUIT : la cle ne sert pas a ce serveur,
+# elle sert au PC de la personne. Meme panne que amd64-microcode, a cote.
+IUCODE_TOOL_INITRAMFS=early
+IUCODE_TOOL_SCANCPUS=no
+IUCODE_TOOL_EXTRA_OPTIONS=""

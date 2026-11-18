@@ -558,6 +558,9 @@
       el("div.embleme.pret", el("div.anneau"), el("div.logo.geant", svg("coche"))),
       el("h1.titre.enorme", el("span.degrade", "grenOS est prêt")),
       el("p.sous.centre", `Bienvenue chez toi, ${prenom}. `, el("span.mono", adresse)));
+    // I15 : la ligne vient de la PAGE, une fois l'écran dessiné — la preuve
+    // qu'on l'a vu, pas seulement que Rust a fini d'écrire.
+    requestAnimationFrame(() => api.appeler("premier_dire", { texte: "premier : ecran grenOS est pret affiche" }).catch(() => {}));
     if (document.documentElement.dataset.effets !== "performance") confettis(voile);
     setTimeout(() => api.appeler("premier_quitter"), 2600);
   }

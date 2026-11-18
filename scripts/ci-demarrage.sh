@@ -211,6 +211,14 @@ if ! grep -q 'nom choisi' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
   echo "le nom n'a pas encore ete pris en compte, on continue d'observer"
 fi
 sleep 15
+# I15 : « grenOS est pret » est-il vraiment AFFICHE ? « nom choisi » ne dit
+# que ce que Rust a ecrit ; c'est la page qui dit cette ligne, une fois
+# l'ecran de fin dessine. Rapporte, pas bloquant : preuve neuve (18 nov.).
+if grep -aq 'premier : ecran grenOS est pret' "$RUNNER_TEMP/serial.log" 2>/dev/null; then
+  echo "premier : l ecran de fin « grenOS est pret » s est affiche (I15)"
+else
+  echo "::warning::L'ecran de fin « grenOS est pret » n'a pas ete vu (I15)."
+fi
 # Le premier ecran doit accepter ce qu'on tape. S'il ne l'accepte pas,
 # la personne reste devant une fenetre qui ignore son clavier — et le
 # bureau finit par s'ouvrir tout seul, ce qui masque la panne. C'est

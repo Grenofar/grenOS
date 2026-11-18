@@ -177,9 +177,33 @@ pub fn fichiers_ce_pc() -> Vec<Value> {
         use gio::prelude::*;
         let chemin = v.get_mount().and_then(|m| m.root().path()).map(|p| p.to_string_lossy().into_owned());
         let peripherique = v.identifier("unix-device").map(|s| s.to_string());
-        liste.push(json!({ "nom": v.name().to_string(), "chemin": chemin, "peripherique": peripherique, "icone": "disque" }));
+        let fs = peripherique.as_deref().map(type_de_fs).unwrap_or_default();
+        liste.push(json!({ "nom": v.name().to_string(), "chemin": chemin, "peripherique": peripherique, "icone": "disque",
+                           "fs": fs, "conseil": conseil_fs(&fs) }));
     }
     liste
+}
+
+/// Le système de fichiers d'un disque, lu par lsblk dans la base d'udev :
+/// sans root, et sans monter le disque.
+#[cfg(target_os = "linux")]
+fn type_de_fs(peripherique: &str) -> String {
+    std::process::Command::new("lsblk").args(["-no", "FSTYPE", peripherique]).output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().next().unwrap_or("").trim().to_string())
+        .unwrap_or_default()
+}
+
+/// A9 (18 novembre) : « FAT32 est privilégié et ne convient pas ». Les clés
+/// arrivent du magasin en FAT32, et rien ne le disait — jusqu'au fichier de
+/// 5 Go qui refuse d'y entrer sans raison donnée. On ne reformate RIEN
+/// (une clé porte des fichiers) : on le dit, et on dit quoi choisir.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn conseil_fs(fs: &str) -> Option<&'static str> {
+    match fs {
+        "vfat" | "msdos" | "fat" => Some("FAT32 : un fichier de plus de 4 Go n'y entre pas, et une coupure peut l'abîmer.             Pour une clé partagée avec Windows et Mac, exFAT ; pour grenOS seul, ext4 — Disques › Formater (cela efface la clé)."),
+        "ntfs" | "ntfs3" => Some("NTFS : le format de Windows. grenOS le lit et l'écrit, mais une copie interrompue s'y répare mieux sous Windows."),
+        _ => None,
+    }
 }
 
 /// Monter un disque, puis dire où il est. `udisksctl` passe par polkit, et
@@ -697,6 +721,15 @@ pub async fn fichiers_apercu(chemin: String) -> Value {
 
 #[cfg(test)]
 mod essais {
+    #[test]
+    fn fat32_est_signale_et_ext4_non() {
+        assert!(super::conseil_fs("vfat").unwrap().contains("4 Go"));
+        assert!(super::conseil_fs("ntfs").is_some());
+        assert!(super::conseil_fs("ext4").is_none());
+        assert!(super::conseil_fs("exfat").is_none());
+        assert!(super::conseil_fs("").is_none());
+    }
+
     use super::*;
 
     #[test]

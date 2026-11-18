@@ -458,7 +458,7 @@ pub struct Bilan { fermes: Vec<String>, ralentis: usize, message: String }
 /// personne en priorité basse — sauf ce qui est protégé et ce qu'elle a
 /// désigné comme le jeu. On note ce qu'on a ralenti pour pouvoir le rendre.
 #[tauri::command]
-pub async fn perf_mode_jeu(actif: bool, fermer: Vec<String>, garder: Vec<String>) -> Result<Bilan, String> {
+pub async fn perf_mode_jeu(app: tauri::AppHandle, actif: bool, fermer: Vec<String>, garder: Vec<String>) -> Result<Bilan, String> {
     let chemin = chemin_mode_jeu();
     if !actif {
         let notes = fs::read_to_string(&chemin).unwrap_or_default();
@@ -475,6 +475,20 @@ pub async fn perf_mode_jeu(actif: bool, fermer: Vec<String>, garder: Vec<String>
             signaler("TERM", &pids);
             fermes.push(nom.clone());
         }
+    }
+    // GRENAI SE COUPE (I8, 18 novembre) : ce que la demande disait, et que la
+    // page excusait par « GrenAI n'existe pas encore ». Sa fenêtre vit dans
+    // CE processus — on ne la tue pas, on la ferme. Ce qui pèse vraiment, c'est
+    // Ollama : il garde le modèle en mémoire (plusieurs Go, parfois la carte
+    // graphique) des minutes après la dernière question. Seulement le NÔTRE :
+    // un service Ollama installé pour tout le système n'est pas à nous.
+    if let Some(f) = tauri::Manager::get_webview_window(&app, "grenai") {
+        let _ = f.close();
+        fermes.push("GrenAI".into());
+    }
+    if let Ok(pids) = pids_permis("ollama") {
+        signaler("TERM", &pids);
+        fermes.push("ollama (le modèle de GrenAI)".into());
     }
     let moi = mon_uid();
     let a_ralentir: Vec<u32> = processus().into_iter()

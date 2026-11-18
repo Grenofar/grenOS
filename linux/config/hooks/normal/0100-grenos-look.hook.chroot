@@ -150,6 +150,15 @@ if lsinitramfs /boot/initrd.img-* 2>/dev/null | grep -q 'console-setup/tmpkbd\.'
         echo "grenos: initrd, clavier sous un nom fixe (tmpkbd.grenos)"
     fi
 fi
+# Les deux microcodes, quel que soit le processeur qui construit (voir
+# /etc/default/amd64-microcode).
+for fabricant in AuthenticAMD GenuineIntel; do
+    if lsinitramfs /boot/initrd.img-* 2>/dev/null | grep -q "microcode/$fabricant.bin"; then
+        echo "grenos: initrd, microcode $fabricant present"
+    else
+        echo "grenos: initrd, microcode $fabricant ABSENT"
+    fi
+done
 
 echo "--- grenOS : le magasin ---"
 

@@ -236,13 +236,18 @@
       el("div.etiquette", "Accès rapide"),
       ...rapides.map((r) => ligne(r.nom, r.icone === "telechargement" ? "fleche" : (ICONES[r.icone] || r.icone), () => aller(r.chemin))),
       el("div.etiquette", "Ce PC"),
-      ...S.cePc.map((d) => ligne(d.nom, d.icone, async () => {
-        if (d.chemin) { aller(d.chemin); return; }
-        if (!d.peripherique) { etat("Ce disque ne peut pas être ouvert d'ici."); return; }
-        etat("Ouverture du disque…");
-        try { const ou = await api.appeler("fichiers_monter", { peripherique: d.peripherique }); await aller(ou); dessinerVolet(); }
-        catch (e) { etat(String(e)); }
-      })));
+      ...S.cePc.map((d) => {
+        const b = ligne(d.nom, d.icone, async () => {
+          if (d.chemin) { await aller(d.chemin); if (d.conseil) etat(d.conseil); return; }
+          if (!d.peripherique) { etat("Ce disque ne peut pas être ouvert d'ici."); return; }
+          etat("Ouverture du disque…");
+          try { const ou = await api.appeler("fichiers_monter", { peripherique: d.peripherique }); await aller(ou); dessinerVolet(); if (d.conseil) etat(d.conseil); }
+          catch (e) { etat(String(e)); }
+        });
+        // A9 : le format se voit AVANT d'ouvrir, et le conseil au survol.
+        if (d.conseil) { b.append(el("small.fx-fs", d.fs === "vfat" ? "FAT32" : d.fs.toUpperCase())); b.title = d.conseil; }
+        return b;
+      }));
   }
 
   // ---- Boîtes ----------------------------------------------------------------------

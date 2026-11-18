@@ -1,0 +1,8 @@
+# grenOS — le microcode AMD TOUJOURS dans l'initrd (K3 et A12, 18 novembre).
+#
+# Debian livre « auto » : le crochet n'ajoute le microcode que si la machine
+# qui CONSTRUIT est un AMD. Deux constructions du meme commit, l'une sur un
+# serveur AMD, l'autre sur un Intel : un initrd avec AuthenticAMD.bin, un
+# sans (reproductible.yml, run 44374598459). Et surtout, une cle construite
+# sur un Intel demarrait les PC AMD sans leur microcode. « early » : toujours.
+AMD64UCODE_INITRAMFS=early

@@ -400,6 +400,9 @@ mangohud
 ## que sur le processeur qui lui correspond, et l'autre dort. Sans lui, une
 ## machine recente peut se figer sur des defauts que le fabricant a pourtant
 ## corriges — et cela ne se repare pas apres coup.
+## « Embarques » dans l'initrd aussi : /etc/default/{amd64,intel}-microcode
+## passent leurs crochets en « early » (Debian n'y met sinon que le microcode
+## du processeur qui CONSTRUIT l'image — vu le 18 novembre, K3).
 intel-microcode
 amd64-microcode
 
@@ -590,6 +593,12 @@ ristretto
 ## au-dessus de mpv, qui profite du décodage matériel déjà réglé (G16). VLC
 ## reste dans GrenPlace pour qui le veut.
 celluloid
+## G28 un gestionnaire de téléchargement : uGet (GTK 3, 2.2.3 dans trixie)
+## met en pause, reprend après une coupure, planifie, et aria2 lui donne
+## plusieurs connexions par fichier. Il ne tourne que si on l'ouvre — pas de
+## démon au démarrage.
+uget
+aria2
 ## B4 / G6 / G29 les disques : partitions, formatage d'une clé USB, état
 ## SMART, images disque. Ses actions udisks sont ouvertes à la session active
 ## par notre règle polkit (49-grenos-administration.rules), sinon ses boutons
