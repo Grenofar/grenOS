@@ -497,9 +497,110 @@ pub fn fichiers_maison() -> String {
     maison().to_string_lossy().into_owned()
 }
 
+// ---- G3 : l'aperçu (Alt+P, comme Windows) --------------------------------------
+
+const APERCU_IMAGE_MAX: u64 = 8 * 1024 * 1024;
+const APERCU_TEXTE_MAX: usize = 16 * 1024;
+
+/// Base64 standard, sans dépendance de plus pour une seule fonction.
+fn base64(octets: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut s = String::with_capacity(octets.len().div_ceil(3) * 4);
+    for bloc in octets.chunks(3) {
+        let n = (bloc[0] as u32) << 16 | (*bloc.get(1).unwrap_or(&0) as u32) << 8 | *bloc.get(2).unwrap_or(&0) as u32;
+        for (i, decalage) in [18, 12, 6, 0].iter().enumerate() {
+            if i <= bloc.len() {
+                s.push(T[(n >> decalage & 63) as usize] as char);
+            } else {
+                s.push('=');
+            }
+        }
+    }
+    s
+}
+
+fn mime_image(nom: &str) -> Option<&'static str> {
+    let bas = nom.to_lowercase();
+    let ext = bas.rsplit('.').next()?;
+    Some(match ext {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "svg" => "image/svg+xml",
+        _ => return None,
+    })
+}
+
+/// Un texte lisible : de l'UTF-8 sans octet nul dans le début du fichier.
+fn texte_lisible(debut: &[u8]) -> Option<String> {
+    if debut.contains(&0) {
+        return None;
+    }
+    // Coupé au milieu d'un caractère : on recule jusqu'à une limite valide.
+    let mut fin = debut.len();
+    while fin > 0 && std::str::from_utf8(&debut[..fin]).is_err() {
+        fin -= 1;
+        if debut.len() - fin > 4 {
+            return None;
+        }
+    }
+    std::str::from_utf8(&debut[..fin]).ok().map(String::from)
+}
+
+/// L'aperçu d'un fichier : une image (en data: URI, la page n'a pas accès au
+/// disque), le début d'un texte, ou rien. Bornés : 8 Mo pour une image,
+/// 16 Ko de texte — un aperçu ne doit jamais faire attendre la fenêtre.
+#[tauri::command]
+pub async fn fichiers_apercu(chemin: String) -> Value {
+    let p = Path::new(&chemin);
+    let Ok(meta) = fs::metadata(p) else { return json!({ "genre": "rien" }) };
+    if meta.is_dir() {
+        let n = fs::read_dir(p).map(|d| d.count()).unwrap_or(0);
+        return json!({ "genre": "dossier", "elements": n });
+    }
+    let nom = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if let Some(mime) = mime_image(&nom) {
+        if meta.len() <= APERCU_IMAGE_MAX {
+            if let Ok(octets) = fs::read(p) {
+                return json!({ "genre": "image", "donnees": format!("data:{mime};base64,{}", base64(&octets)) });
+            }
+        }
+        return json!({ "genre": "trop", "octets": meta.len() });
+    }
+    let mut debut = vec![0u8; APERCU_TEXTE_MAX];
+    let lu = fs::File::open(p).and_then(|mut f| std::io::Read::read(&mut f, &mut debut)).unwrap_or(0);
+    debut.truncate(lu);
+    match texte_lisible(&debut) {
+        Some(t) => json!({ "genre": "texte", "texte": t, "coupe": meta.len() as usize > lu }),
+        None => json!({ "genre": "rien" }),
+    }
+}
+
 #[cfg(test)]
 mod essais {
     use super::*;
+
+    #[test]
+    fn base64_comme_la_norme() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn texte_ou_pas() {
+        assert_eq!(texte_lisible("Bonjour à tous".as_bytes()).as_deref(), Some("Bonjour à tous"));
+        assert_eq!(texte_lisible(b"\x89PNG\x00\x00"), None);
+        // « é » coupé en deux par la limite de lecture : on garde ce qui précède.
+        let coupe = &"café".as_bytes()[..4];
+        assert_eq!(texte_lisible(coupe).as_deref(), Some("caf"));
+        assert_eq!(mime_image("Photo.JPG"), Some("image/jpeg"));
+        assert_eq!(mime_image("notes.txt"), None);
+    }
 
     #[test]
     fn archives() {

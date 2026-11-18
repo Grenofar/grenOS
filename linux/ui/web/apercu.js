@@ -191,6 +191,7 @@
       case "fichiers_viser": return { genre: "dossier", chemin: a.texte };
       case "fichiers_coller": return { faits: a.sources.length, soucis: [] };
       case "fichiers_corbeille": return { faits: a.chemins.length, refus: [] };
+      case "fichiers_apercu": return /\.(jpg|png)$/.test(a.chemin) ? { genre: "image", donnees: "data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22260%22><rect width=%22400%22 height=%22260%22 fill=%22%233b82f6%22/></svg>" } : /\.txt$/.test(a.chemin) ? { genre: "texte", texte: "Courses :\n- pain\n- lait", coupe: false } : { genre: "rien" };
       case "fichiers_dire": console.log("série :", a.texte); return null;
       default: return null;
     }

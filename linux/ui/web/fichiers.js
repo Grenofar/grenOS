@@ -12,7 +12,7 @@
   const D = {};
   const S = {
     onglets: [], actif: 0, elements: [], caches: 0, montrerCaches: false,
-    choisis: new Set(), ancre: -1, tri: { cle: "nom", sens: 1 },
+    choisis: new Set(), ancre: -1, tri: { cle: "nom", sens: 1 }, apercu: false,
     pressePapier: [], couper: false, maison: "/", cePc: [],
   };
   const nombre = (v, d = 1) => v.toFixed(d).replace(".", ",");
@@ -127,7 +127,38 @@
     if (!v.length) D.corps.append(el("tr.fx-vide", el("td", { colspan: 4 }, D.cherche.value ? "Rien ne correspond." : "Ce dossier est vide.")));
     for (const th of D.entetes) th.classList.toggle("trie", th.dataset.cle === S.tri.cle);
     compte(v.length);
+    apercu();
   }
+
+  // ---- G3 : le volet d'aperçu (Alt+P) ---------------------------------------------
+  let apercuDemande = "";
+  async function apercu() {
+    D.apercu.hidden = !S.apercu;
+    D.milieu.classList.toggle("avec-apercu", S.apercu);
+    if (!S.apercu) return;
+    const c = choisis();
+    if (c.length !== 1) {
+      apercuDemande = "";
+      D.apercu.replaceChildren(el("p.note.fx-apercu-vide", c.length ? `${c.length} éléments sélectionnés` : "Choisis un fichier pour le voir ici."));
+      return;
+    }
+    const e = c[0];
+    if (apercuDemande === e.chemin) return;
+    apercuDemande = e.chemin;
+    D.apercu.replaceChildren(el("p.note.fx-apercu-vide", "…"));
+    const r = await api.appeler("fichiers_apercu", { chemin: e.chemin });
+    if (apercuDemande !== e.chemin || !r) return; // une autre sélection est passée devant
+    const tete = el("div.fx-apercu-tete", el(`span.fx-icone.${e.famille}`, svg(ICONES[e.famille] || "fichier")),
+      el("div", el("strong", e.nom), el("small.note", [e.genre, e.dossier ? "" : taille(e.octets), date(e.modifie)].filter(Boolean).join(" · "))));
+    let corps;
+    if (r.genre === "image") corps = el("img.fx-apercu-image", { src: r.donnees, alt: e.nom });
+    else if (r.genre === "texte") corps = el("pre.fx-apercu-texte", r.texte + (r.coupe ? "\n…" : ""));
+    else if (r.genre === "dossier") corps = el("p.note", `${r.elements} élément(s) dedans.`);
+    else if (r.genre === "trop") corps = el("p.note", "Image trop lourde pour l'aperçu : ouvre-la.");
+    else corps = el("p.note", "Pas d'aperçu pour ce type de fichier.");
+    D.apercu.replaceChildren(tete, corps);
+  }
+  function basculerApercu() { S.apercu = !S.apercu; apercuDemande = ""; apercu(); }
 
   function compte(total) {
     let t = `${total} ${total <= 1 ? "élément" : "éléments"}`;
@@ -345,6 +376,7 @@
     if (a && k === "ArrowLeft") return fait(), precedent();
     if (a && k === "ArrowRight") return fait(), suivant();
     if (a && k === "ArrowUp") return fait(), auParent();
+    if (a && k === "p") return fait(), basculerApercu();
     if (k === "F5") return fait(), rafraichir();
     if (c && k === "f") return fait(), D.cherche.focus();
     if (k === "F4" || (c && k === "l")) return fait(), ouvrirAdresse();
@@ -412,10 +444,13 @@
     D.liste.addEventListener("contextmenu", (ev) => { if (ev.target.closest("tr[data-i]")) return; ev.preventDefault(); S.choisis.clear(); dessiner(); menu(ev); });
     D.liste.addEventListener("mousedown", (ev) => { if (!ev.target.closest("tr[data-i]") && !ev.target.closest("th") && ev.button === 0) { S.choisis.clear(); dessiner(); } });
     D.etat = el("footer.fx-etat");
+    D.apercu = el("aside.fx-apercu", { hidden: true });
+    D.milieu = el("div.fx-milieu", D.volet, D.liste, D.apercu);
+    const boutonApercu = el("button.fx-outil", { title: "Volet d'aperçu (Alt+P)", onclick: basculerApercu }, svg("oeil"));
     document.body.append(el("div.page-fichiers",
-      el("header.fx-barre", D.precedent, D.suivant, D.parent, el("div.fx-adresse-cadre", D.fil, D.adresse), D.cherche),
+      el("header.fx-barre", D.precedent, D.suivant, D.parent, el("div.fx-adresse-cadre", D.fil, D.adresse), D.cherche, boutonApercu),
       D.onglets,
-      el("div.fx-milieu", D.volet, D.liste),
+      D.milieu,
       D.etat));
     document.addEventListener("keydown", clavier, true);
     await dessinerVolet();

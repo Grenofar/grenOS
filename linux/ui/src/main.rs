@@ -321,6 +321,7 @@ fn main() {
             fichiers::fichiers_titre,
             fichiers::fichiers_nouvelle_fenetre,
             fichiers::fichiers_maison,
+            fichiers::fichiers_apercu,
             reglages::reglages_ouvert,
             reglages::reglages,
             reglages::reglages_signatures,

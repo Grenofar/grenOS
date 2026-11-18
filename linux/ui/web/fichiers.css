@@ -61,3 +61,12 @@ body[data-page="fichiers"] { overflow: hidden; }
 .fx-proprietes dt { color: var(--texte-3); }
 .fx-proprietes dd { margin: 0; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 @media (max-width: 720px) { .fx-milieu { grid-template-columns: 1fr; } .fx-volet { display: none; } .fx-cherche { width: 120px; } }
+.fx-milieu.avec-apercu { grid-template-columns: 210px 1fr 300px; }
+.fx-apercu { border-left: 1px solid var(--bord); padding: 14px; overflow: auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fx-apercu[hidden] { display: none; }
+.fx-apercu-vide { margin: 30px 0; text-align: center; }
+.fx-apercu-tete { display: flex; gap: 10px; align-items: flex-start; }
+.fx-apercu-tete strong { display: block; overflow-wrap: anywhere; }
+.fx-apercu-image { max-width: 100%; max-height: 60vh; object-fit: contain; border-radius: var(--rayon-petit); background: var(--surface); align-self: center; }
+.fx-apercu-texte { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--texte-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+@media (max-width: 900px) { .fx-milieu.avec-apercu { grid-template-columns: 1fr 260px; } .fx-milieu.avec-apercu .fx-volet { display: none; } }
