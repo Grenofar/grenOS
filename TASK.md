@@ -65,10 +65,8 @@ MIGRATION DES FENÊTRES PYTHON → grenos-ui (18 novembre, après 1129) — les 
   son, « fenetre … : tient » pour les nouvelles pages.
 
 RESTE, et pourquoi ce n'est pas fait :
-- Fenêtres Python → pages grenos-ui (Fichiers, Réglages, GrenPlace, Tâches,
-  Son, Connexions, grenHub, Jeux, Bienvenue, Secours, Arrêt) : onze fenêtres,
-  chacune vérifiée par la CI ligne à ligne (« son ouvert », « taches
-  ouvert »…). À faire une par une, chacune avec sa propre CI.
+- (FAIT, voir plus haut) les onze fenêtres Python : écrites, en attente de la
+  preuve en machine (construction du 18 novembre, 38a8426).
 - Connexion Google sur /grenget : il faut un identifiant OAuth Google créé
   par Grenofar (console Google Cloud, gratuit) — je ne crée pas de compte.
 - K3 constructions reproductibles : un chantier de recherche (horodatages,
