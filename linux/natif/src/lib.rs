@@ -4,6 +4,7 @@
 
 pub mod applications;
 pub mod batterie;
+pub mod historique;
 pub mod fenetres;
 pub mod theme;
 

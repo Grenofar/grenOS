@@ -44,7 +44,7 @@ sudo install -m 0755 linux/coins/target/release/grenos-coins \
     linux/config/includes.chroot/usr/bin/grenos-coins
 # Dans /usr/lib/grenos, pas sur le PATH : le point d'entrée reste le programme
 # Python, qui passe la main (natif.py).
-for prog in grenos-shell-natif grenos-bureau-natif grenos-son-natif; do
+for prog in grenos-shell-natif grenos-bureau-natif grenos-son-natif grenos-presse-natif; do
     sudo install -m 0755 "linux/natif/target/release/$prog" \
         "linux/config/includes.chroot/usr/lib/grenos/$prog"
 done

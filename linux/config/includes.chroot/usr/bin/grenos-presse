@@ -1,0 +1,15 @@
+#!/bin/sh
+# Win+V : l'historique du presse-papier (todo G31 — 18 novembre).
+#
+# Le programme tourne toute la session (grenos-session le lance) ; ce lanceur
+# ne fait que lui demander de se montrer. S'il ne tourne pas — une session
+# ouverte avant la mise à jour qui l'apporte —, on le démarre : l'historique
+# commence alors à cette copie-ci.
+MOI=$(id -u)
+PROG=/usr/lib/grenos/grenos-presse-natif
+[ -x "$PROG" ] || exit 0
+if ! pkill -USR1 -u "$MOI" -f "^$PROG" 2>/dev/null; then
+    setsid -f grenos-veilleur "$PROG" >/dev/null 2>&1
+    sleep 1
+    pkill -USR1 -u "$MOI" -f "^$PROG" 2>/dev/null || true
+fi

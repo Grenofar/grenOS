@@ -214,6 +214,11 @@
       <action name="Unmaximize"/>
     </keybind>
 
+    <!-- G31 — Win+V : l'historique du presse-papier (18 novembre). -->
+    <keybind key="W-v">
+      <action name="Execute"><command>grenos-presse</command></action>
+    </keybind>
+
     <!-- G11 — les bureaux virtuels, avec les raccourcis de Windows (18
          novembre). Deux bureaux existaient depuis septembre, mais AUCUN
          raccourci n'y menait : ils étaient inatteignables.

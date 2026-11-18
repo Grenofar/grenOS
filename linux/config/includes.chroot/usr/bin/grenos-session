@@ -211,6 +211,13 @@ echo "$(date -u +%H:%M:%S) $USER" > /tmp/grenos-session 2>/dev/null || true
 # perdu, et une session qui se ferme ferait perdre le travail en cours.
 grenos-veilleur grenos-shell &
 
+# L'historique du presse-papier (Win+V, todo G31) : il doit écouter dès le
+# début de la session, sinon les premières copies manqueraient. En mémoire
+# seulement — rien de ce qui est copié n'est écrit sur le disque.
+if [ -x /usr/lib/grenos/grenos-presse-natif ]; then
+    grenos-veilleur /usr/lib/grenos/grenos-presse-natif &
+fi
+
 # Les coins arrondis des fenetres (barre de titre comprise). Sans compositeur,
 # un coin ne s'arrondit qu'en retirant ses pixels a la fenetre : grenos-coins
 # pose ce masque sur chaque cadre d'openbox. Lance avant openbox, il attend

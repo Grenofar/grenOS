@@ -25,6 +25,12 @@ path = "src/bin/bureau.rs"
 name = "grenos-son-natif"
 path = "src/bin/son.rs"
 
+# L'historique du presse-papier, Win+V (18 novembre) : tourne toute la
+# session, donc natif et léger. En mémoire seulement.
+[[bin]]
+name = "grenos-presse-natif"
+path = "src/bin/presse.rs"
+
 [lib]
 name = "natif"
 path = "src/lib.rs"

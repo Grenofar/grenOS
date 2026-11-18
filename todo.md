@@ -193,7 +193,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | # | Demande | État |
 |---|---|---|
 | G30 | **Terminal avec un shell grenOS** | **[écrit]** (18 nov.) — grensh : invite, verbes Verbe-Nom en français, `gren` et `grenget` |
-| G31 | **Presse-papier avec historique** (Windows+V) | [à faire] |
+| G31 | **Presse-papier avec historique** (Windows+V) | **[écrit]** (18 nov.) — `grenos-presse-natif` (Rust natif, toute la session) garde les 25 derniers textes copiés, EN MÉMOIRE seulement ; Win+V les montre, Entrée en recopie un, Suppr en retire un. Il ne colle pas tout seul comme Windows (il faudrait simuler Ctrl+V) : la fenêtre le dit. Quatre essais |
 | G32 | **Calendrier** | [à faire] |
 | G33 | **Horloge** | **[écrit]** (18 nov.) — l'application Horloge (grenos-ui) : l'heure ici et dans huit villes |
 | G34 | **Minuteur** | **[écrit]** (18 nov.) — Horloge › Minuteur, qui prévient par une notification ; et un chronomètre avec les tours |
