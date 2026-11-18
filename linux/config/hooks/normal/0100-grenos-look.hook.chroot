@@ -132,6 +132,14 @@ if [ -d /usr/share/plymouth/themes/spinner ]; then
     plymouth-set-default-theme spinner >/dev/null 2>&1 || true
 fi
 
+# K3 : l'initrd est une archive cpio ; sans SOURCE_DATE_EPOCH, chaque fichier
+# y porte l'heure de la construction, et deux constructions donnaient deux
+# initrd (vu par reproductible.yml le 18 novembre). build.sh pose la date
+# du commit dans ce fichier, que l'image garde (il ne contient qu'un nombre).
+if [ -s /etc/grenos/date-construction ]; then
+    SOURCE_DATE_EPOCH=$(cat /etc/grenos/date-construction)
+    export SOURCE_DATE_EPOCH
+fi
 update-initramfs -u >/dev/null 2>&1 || true
 
 echo "--- grenOS : le magasin ---"

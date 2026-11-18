@@ -108,6 +108,10 @@ echo "--- reproductibilite (K3) ---"
 # la lisent (SOURCE_DATE_EPOCH) au lieu de l'heure de la construction.
 if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
     export SOURCE_DATE_EPOCH
+    # Les hooks tournent DANS le chroot, où l'environnement de la construction
+    # n'arrive pas forcément : on leur donne la date par un fichier.
+    mkdir -p config/includes.chroot/etc/grenos
+    printf '%s\n' "$SOURCE_DATE_EPOCH" > config/includes.chroot/etc/grenos/date-construction
     echo "grenos: date de construction figee a $SOURCE_DATE_EPOCH"
 fi
 if [ "${REPRODUCTIBLE:-0}" = 1 ]; then

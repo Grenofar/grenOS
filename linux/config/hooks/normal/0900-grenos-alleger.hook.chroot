@@ -27,6 +27,10 @@ find /usr/share/help /usr/share/doc-base -mindepth 1 -maxdepth 1 \
 # `apt update` de l'utilisateur.
 apt-get clean
 rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
+# K3 : deux caches que la construction laisse et qui changent d'une
+# construction à l'autre (vus par reproductible.yml le 18 novembre) — le
+# cache binaire d'apt (régénéré au premier apt) et le carnet HSTS de wget.
+rm -f /var/cache/apt/pkgcache.bin /var/cache/apt/srcpkgcache.bin /root/.wget-hsts
 
 apres=$(du -sm /usr 2>/dev/null | cut -f1)
 echo "grenos: /usr passe de ${avant} Mio a ${apres} Mio"
