@@ -113,6 +113,81 @@
         { cle: "redemarrer", titre: "Redémarrer", note: "Éteindre puis rallumer la machine.", genre: "", icone: "redemarrer" },
         { cle: "eteindre", titre: "Éteindre", note: "Arrêter complètement la machine.", genre: "danger", icone: "eteindre" }] };
       case "arret_faire": await attendre(200); return null;
+      case "bienvenue_vue": return { salut: "Bonjour Léa", adresse: "lea@grenos", astuces: ["Clic droit sur le bureau : créer un dossier, un fichier, changer le fond.", "Alt+Tab passe d'une fenêtre à l'autre, Alt+F4 ferme celle du dessus.", "Ctrl+Maj+Échap ouvre le gestionnaire de tâches, Ctrl+Alt+Échap le mode jeu."],
+        gestes: [["GrenPlace", "Ajouter des applications en un clic — Steam, un traitement de texte, un éditeur de code.", "grenplace", "paquet"], ["Jeux", "Ce que cette machine sait faire tourner, et ce qu'il lui manque.", "grenos-jeux", "manette"], ["Connexions", "Le Wi-Fi et le Bluetooth, dans une fenêtre.", "grenos-connexions", "wifi"], ["Réglages", "Le thème jour et nuit, l'écran, le son, l'heure.", "grenos-parametres", "reglages"], ["Tes fichiers", "Ouvrir, renommer, copier, supprimer.", "grenos-fichiers", "dossier"], ["Terminal", "Pour qui veut taper des commandes.", "x-terminal-emulator", "terminal"]].map(([nom, note, programme, icone]) => ({ nom, note, programme, icone })) };
+      case "secours_vue": return { echecs: 2, cause: "iwlwifi 0000:00:14.3: probe with driver iwlwifi failed with error -110", propositions: [
+        { cle: "analyser", intitule: "Analyser la machine", possible: true, pourquoi: "" }, { cle: "journal", intitule: "Voir ce que le dernier démarrage a dit", possible: true, pourquoi: "" },
+        { cle: "instantane", intitule: "Restaurer un instantané", possible: false, pourquoi: "aucun disque d'instantanés n'est encore choisi" }, { cle: "pilote", intitule: "Désactiver « iwlwifi »", possible: true, pourquoi: "" }] };
+      case "connexions_etat": await attendre(400); return { lien: { connecte: true, par: "Wi-Fi", nom: "Livebox-4F2A" }, wifi_la: true, wifi_on: true, bt_la: true, bt_on: true };
+      case "connexions_wifi_liste": await attendre(500); return [{ nom: "Livebox-4F2A", force: 82, protege: true, connecte: true }, { nom: "Freebox-Salon", force: 55, protege: true, connecte: false }, { nom: "Café du coin", force: 20, protege: false, connecte: false }];
+      case "connexions_bt_liste": return [{ adresse: "AA:BB:CC:DD:EE:FF", nom: "Casque Sony WH-1000XM5", connecte: true }, { adresse: "11:22:33:44:55:66", nom: "Manette Xbox", connecte: false }];
+      case "taches_mesure": return { total: 214, coeurs: 8, cpu: 12 + Math.random() * 10, memoire_utilisee_go: 6.2, memoire_totale_go: 15.6, lignes: [
+        { pid: 1834, nom: "firefox-esr", cpu: 6.2, memoire_mo: 1240 }, { pid: 2210, nom: "grenos-ui", cpu: 1.1, memoire_mo: 96 }, { pid: 980, nom: "Xorg", cpu: 2.4, memoire_mo: 140 },
+        { pid: 1203, nom: "grenos-shell-natif", cpu: 0.3, memoire_mo: 38 }, { pid: 1404, nom: "pipewire", cpu: 0.4, memoire_mo: 22 }, { pid: 3001, nom: "steam", cpu: 0.8, memoire_mo: 610 }] };
+      case "hub_etat": return { sondes: 2, ventilateurs: 1, paves: [
+        { titre: "La machine", lignes: [["Nom", "grenos"], ["Version", "grenOS 20261118-1129"], ["Noyau Linux", "6.12.48"], ["Allumée depuis", "2 h 14 min"], ["Genre", "machine réelle"]] },
+        { titre: "Processeur et mémoire", lignes: [["Processeur", "AMD Ryzen 7 5800X"], ["Cœurs", "16"], ["Mémoire vive", "15,6 Go, dont 9,1 Go libres"]] },
+        { titre: "Disques", lignes: [["nvme0n1", "SSD NVMe de 1000 Go, Samsung 980"]] },
+        { titre: "Services", lignes: [["Tout va bien", "aucun service en échec"]] }] };
+      case "hub_diagnostic": {
+        const e = window.APERCU_ECOUTE || {};
+        (async () => {
+          for (const [nom, etat, detail] of [["Processeur", "bon", "16 cœurs ont calculé sans erreur"], ["Mémoire", "bon", "64 Mo écrits et relus à l'identique"], ["Stockage", "a surveiller", "écriture lente : 38 Mo/s"], ["Réseau", "bon", "deb.debian.org répond"]]) {
+            await attendre(500); e["hub-ligne"] && e["hub-ligne"]({ nom, etat, detail });
+          }
+          e["hub-fin"] && e["hub-fin"]({ fin: true, etat: "a surveiller", phrase: "Un point à surveiller : le stockage.", points: 4 });
+        })();
+        return null;
+      }
+      case "grenplace_catalogue": await attendre(300); return { origine: "en ligne", applications: [
+        { slug: "steam", nom: "Steam", rayon: "Jeux", editeur: "Valve", description: "Des milliers de jeux, dont beaucoup de jeux Windows qui tournent ici.", logo: "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.valvesoftware.Steam.png", source: "flatpak", identifiant: "com.valvesoftware.Steam", installe: true },
+        { slug: "gimp", nom: "GIMP", rayon: "Création", editeur: "GIMP", description: "Retoucher des photos, dessiner.", logo: "", source: "flatpak", identifiant: "org.gimp.GIMP", installe: false },
+        { slug: "libreoffice", nom: "LibreOffice", rayon: "Bureautique", editeur: "The Document Foundation", description: "Textes, tableurs, présentations.", logo: "", source: "apt", identifiant: "libreoffice", installe: false }] };
+      case "grenplace_retards": await attendre(900); return ["steam"];
+      case "installer": {
+        const e = window.APERCU_ECOUTE || {};
+        (async () => { for (const p of [10, 35, 70, 100]) { await attendre(400); e.installation && e.installation({ cle: a.cle, part: p, ligne: `Téléchargement ${p} %`, texte: null, fin: false, bien: false }); }
+          e.installation && e.installation({ cle: a.cle, part: 100, ligne: null, texte: `${a.nom} est installé. Il est dans le menu.`, fin: true, bien: true }); })();
+        return null;
+      }
+      case "jeux_vue": await attendre(500); return { coeurs: 16, memoire: 15.6, carte: "NVIDIA GeForce RTX 3060", pilote: "nouveau", virtuelle: false, vulkan: true, vulkan_detail: "NVIDIA GeForce RTX 3060 (NVK)",
+        pilote_paquet: "nvidia-driver", pilote_conseil: "Cette carte est une NVIDIA, et le pilote libre en cours ne sait pas jouer. Le pilote de NVIDIA le sait. Il faut redémarrer après.",
+        gamemode_pose: true, gamemode_arme: false, option_steam: "gamemoderun %command%", heroic: "com.heroicgameslauncher.hgl", heroic_pose: false, rocket_prete: false, roblox_pose: true, fortnite_pose: false,
+        outils: [{ nom: "Steam", note: "La boutique et la couche Proton.", source: "flatpak", identifiant: "com.valvesoftware.Steam", installe: true }, { nom: "MangoHud", note: "Les images par seconde par-dessus le jeu.", source: "apt", identifiant: "mangohud", installe: false }],
+        jeux: [{ nom: "Rocket League", etat: "marche", note: "Fonctionne sur Linux depuis avril 2026.", action: "steam", adresse: "steam://store/252950" }, { nom: "Fortnite", etat: "en nuage", note: "Epic refuse d'activer l'anti-triche Linux.", action: "nuage" }, { nom: "Roblox", etat: "marche", note: "Par Sober, de VinegarHQ.", action: "flatpak", identifiant: "org.vinegarhq.Sober" }] };
+      case "reglages": switch (a.fonction) {
+        case "reglages_ecran": return { ecran: { nom: "HDMI-1", actuelle: "1920x1080", taux: "60.00" }, modes: [{ taille: "2560x1440", taux: [{ arrondi: 60, brut: "60.00", annoncee: true }] }, { taille: "1920x1080", taux: [{ arrondi: 144, brut: "144.00", annoncee: true }, { arrondi: 60, brut: "60.00", annoncee: true }, { arrondi: 75, brut: "75", annoncee: false }] }] };
+        case "reglages_son": return { sorties: [["a", "Stéréo analogique"], ["b", "Stéréo numérique (HDMI)"]], courante: "a", volume: 62, muet: false, diagnostic: "La sortie par défaut est branchée et ouverte.\nLe mélangeur de la carte est ouvert (Master 80 %).\nPipeWire tourne en temps réel : le son tiendra quand la machine peine.\nCarte son : HDA Intel PCH, pilotée par snd_hda_intel." };
+        case "reglages_heure": return { fuseau: "Europe/Paris", automatique: true, fuseaux: ["Europe/Brussels", "Europe/Paris", "America/Montreal"] };
+        case "reglages_maj": return { version: "grenOS 20261118-1129", resume: "3 paquets à installer. Vérifié le 2026-11-18 08:12 UTC." };
+        case "reglages_composants": await attendre(800); return { present: true, composants: [] };
+        case "reglages_securite": return { resume: "ClamAV est installé. Signatures absentes : rien n'est encore analysable.", present: true, signatures: false };
+        case "reglages_materiel": return { lignes: [["Processeur", "16 cœurs"], ["Mémoire vive", "15,6 Go (9,1 Go libres)"], ["Carte graphique", "NVIDIA GeForce RTX 3060"]], explication: "grenOS utilise d'office tout ce que la machine lui donne." };
+        default: return {};
+      }
+      case "reglages_reseau": return "connecté";
+      case "reglages_compte": return { protege: false, adresse: "lea@grenos", nom: "Léa" };
+      case "reglages_fonds": return [{ nom: "Images/montagne.jpg", chemin: "/home/lea/Images/montagne.jpg", actuel: true }, { nom: "Bureau/plage.png", chemin: "/home/lea/Bureau/plage.png", actuel: false }];
+      case "fichiers_maison": return "/home/lea";
+      case "fichiers_rapides": return [["Bureau", "bureau"], ["Téléchargements", "telechargement"], ["Documents", "texte"], ["Images", "image"], ["Musique", "audio"], ["Vidéos", "video"]].map(([nom, icone]) => ({ nom, icone, chemin: "/home/lea/" + nom }));
+      case "fichiers_ce_pc": return [{ nom: "Léa", chemin: "/home/lea", icone: "compte" }, { nom: "Système de fichiers", chemin: "/", icone: "disque" }, { nom: "Clé USB 32 Go", chemin: null, peripherique: "/dev/sdb1", icone: "disque" }];
+      case "fichiers_lister": {
+        const E = (nom, dossier, famille, genre, octets) => ({ nom, chemin: a.dossier.replace(/\/$/, "") + "/" + nom, dossier, famille, genre, octets, modifie: 1795000000 - octets % 100000 });
+        window.APERCU_FICHIERS = window.APERCU_FICHIERS || [E("Bureau", true, "dossier", "Dossier de fichiers", 0), E("Documents", true, "dossier", "Dossier de fichiers", 0), E("Images", true, "dossier", "Dossier de fichiers", 0),
+          E("rapport-final.pdf", false, "pdf", "Document PDF", 2480000), E("vacances.jpg", false, "image", "Image JPEG", 4210000), E("projet.zip", false, "archive", "Archive Zip", 15800000), E("notes.txt", false, "texte", "Document texte brut", 1200)];
+        return { dossier: a.dossier, caches: 3, elements: window.APERCU_FICHIERS.map((x) => ({ ...x, chemin: a.dossier.replace(/\/$/, "") + "/" + x.nom })) };
+      }
+      case "fichiers_nouveau_dossier": {
+        if ((window.APERCU_FICHIERS || []).some((x) => x.nom === a.nom)) throw `« ${a.nom} » existe déjà ici.`;
+        window.APERCU_FICHIERS.push({ nom: a.nom, dossier: true, famille: "dossier", genre: "Dossier de fichiers", octets: 0, modifie: 1795000000 });
+        return a.dossier + "/" + a.nom;
+      }
+      case "fichiers_renommer": { const x = window.APERCU_FICHIERS.find((f) => a.ancien.endsWith("/" + f.nom)); if (x) x.nom = a.nom; return a.ancien.replace(/[^/]+$/, a.nom); }
+      case "fichiers_proprietes": return [["Nom", "rapport-final.pdf"], ["Type", "Document PDF"], ["Emplacement", "/home/lea"], ["Taille", "2480000"], ["Modifié le", "1795000000"]];
+      case "fichiers_viser": return { genre: "dossier", chemin: a.texte };
+      case "fichiers_coller": return { faits: a.sources.length, soucis: [] };
+      case "fichiers_corbeille": return { faits: a.chemins.length, refus: [] };
+      case "fichiers_dire": console.log("série :", a.texte); return null;
       default: return null;
     }
   };

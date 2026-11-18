@@ -20,6 +20,14 @@ tauri = { version = "2", features = ["custom-protocol"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# GIO (déjà tiré par WebKitGTK, même version) : le type des fichiers en
+# français, la corbeille, les volumes de « Ce PC » — l'explorateur (18
+# novembre). Linux seulement : `cargo test` doit continuer de tourner sous
+# Windows, où il n'y a pas de GLib.
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = "0.18"
+glib = "0.18"
+
 [profile.release]
 # La taille et la mémoire comptent plus que quelques pour cent de vitesse :
 # ce binaire est chargé à chaque fenêtre ouverte sur des machines modestes.

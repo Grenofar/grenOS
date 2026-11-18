@@ -46,6 +46,21 @@ import subprocess
 import sys
 import time
 
+# La fenêtre vit désormais dans grenos-ui (fichiers.rs, fichiers.js), le
+# processus partagé par les autres fenêtres (18 novembre) : chaque appel ouvre
+# une fenêtre de plus, sur le dossier demandé. `--python` force l'ancienne.
+if os.access("/usr/bin/grenos-ui", os.X_OK) and "--python" not in sys.argv:
+    _depart = sys.argv[1] if len(sys.argv) > 1 else ""
+    if _depart.startswith("file://"):
+        from urllib.parse import unquote, urlparse
+        _depart = unquote(urlparse(_depart).path)
+    if _depart and not os.path.isdir(_depart):
+        _depart = os.path.dirname(os.path.abspath(_depart))
+    _depart = os.path.abspath(_depart) if _depart else ""
+    os.execv("/usr/bin/grenos-ui", ["grenos-ui", "fichiers:" + _depart if _depart else "fichiers"])
+if "--python" in sys.argv:
+    sys.argv.remove("--python")
+
 sys.path.insert(0, "/usr/lib/grenos")
 
 import gi  # noqa: E402

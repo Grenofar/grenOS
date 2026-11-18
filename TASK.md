@@ -36,16 +36,33 @@ Cinq preuves vertes (run 44285528012), site à jour.
 - I8 Ctrl+Alt+Échap → mode jeu ; I13 sauvegardes (grenos-sauvegarde) ;
   I17 écrans Dev (zram/swappiness, ufw, journaux) ; D1 ufw. Voir todo.md.
 
-MIGRATION DES FENÊTRES PYTHON → grenos-ui (commencée le 18 novembre, après 1129) :
-- [écrit] 1/11 Arrêt (« Fin de session ») : `ui/src/arret.rs`, `web/arret.{js,css}`.
-  Mêmes règles que le Python (veille seulement si /sys/power/state la permet,
-  « Mettre à jour et redémarrer » seulement si quelque chose attend), la page
-  n'envoie qu'une clé, Rust refuse un geste non proposé. `grenos-arret` fait
-  `exec grenos-ui arret` (`--python` garde l'ancienne). Preuve CI ajoutée
-  (non bloquante au début) : la barre dit « bouton eteindre en x,y », la CI
-  clique, attend « arret : N geste(s), veille … », puis Échap.
-- [à faire] Bienvenue, Secours, Connexions, Son, Tâches, grenHub, Jeux,
-  GrenPlace, Réglages, Fichiers — dans cet ordre (du plus petit au plus gros).
+MIGRATION DES FENÊTRES PYTHON → grenos-ui (18 novembre, après 1129) — les 11
+[écrites], branche `claude/ui-arret`, preuve en machine À VENIR (CI complète) :
+- Arrêt, Bienvenue, Secours, Connexions, Tâches, grenHub, Jeux, GrenPlace,
+  Réglages, Fichiers → pages grenos-ui (`ui/src/<page>.rs`, `web/<page>.js`).
+  Chaque `/usr/bin/<programme>` Python fait `exec grenos-ui <page>` ;
+  `--python` garde l'ancienne fenêtre en repli.
+- Son → `grenos-son-natif` (gtk-rs, `linux/natif`) : un panneau qui attrape
+  le pointeur se fait mieux en natif qu'en WebKit. `natif.passer_la_main(…,
+  permanent=False)` : ses départs ne comptent pas comme des chutes.
+- Les BIBLIOTHÈQUES Python restent (sante, jeux, magasin, ecran, heure,
+  composants, securite, son, materiel, maj) : elles sont éprouvées par nos
+  essais. `usr/lib/grenos/pont.py` les appelle en JSON pour grenos-ui, avec
+  une liste blanche de fonctions.
+- Socle grenos-ui ajouté : billets série dans la session (avant, les pages
+  grenos-ui de la session ne disaient RIEN à la CI : pas de droit sur ttyS0),
+  « ouverture : … » et « fenetre … : tient » pour chaque page (le contrôle
+  720p), tailles ramenées à l'écran, `page:onglet` (`reglages:son`,
+  `fichiers:/chemin`), plusieurs fenêtres pour l'explorateur, installateur
+  commun (Flathub/Debian), liste blanche `ouvrir_programme`.
+- Toutes les lignes série exigées sont reprises au mot près (« son ouvert »,
+  « taches ouvert », « reglages ouvert », « reglages securite : », « reglages
+  composants : », « reglages son : melangeur », « jeux ouvert », « grenplace
+  ouvert », « fichiers : Ctrl+H … », F2, Ctrl+Maj+N, onglets…).
+- Vérifié ici : 43 essais Rust, chaque page dans l'aperçu, la séquence
+  clavier de la CI rejouée sur l'explorateur. PAS vérifié : sur une image.
+  À lire dans le journal de la CI : les lignes ci-dessus, « (natif) » pour le
+  son, « fenetre … : tient » pour les nouvelles pages.
 
 RESTE, et pourquoi ce n'est pas fait :
 - Fenêtres Python → pages grenos-ui (Fichiers, Réglages, GrenPlace, Tâches,

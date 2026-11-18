@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arret;
+mod fichiers;
 mod reglages;
 mod jeux;
 mod grenplace;
@@ -110,6 +111,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("fichiers", "Explorateur de fichiers", 1000.0, 640.0),
     ("reglages", "Réglages de grenOS", 960.0, 660.0),
     ("jeux", "Jeux", 900.0, 720.0),
     ("grenplace", "GrenPlace", 980.0, 720.0),
@@ -130,25 +132,36 @@ pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
         Some((p, o)) if !o.is_empty() => (p, Some(o)),
         _ => (page, None),
     };
-    if let (Some(o), Some(fenetre)) = (onglet, app.get_webview_window(page)) {
-        let _ = fenetre.eval(&format!("window.grenosOnglet && window.grenosOnglet({o:?})"));
+    // L'explorateur ouvre AUTANT de fenêtres qu'on lui demande (Ctrl+N, un
+    // dossier depuis le bureau) : une étiquette neuve à chaque fois. Les
+    // autres pages n'en ont qu'une, qu'on ramène devant.
+    let plusieurs = page == "fichiers";
+    if let (false, Some(o), Some(fenetre)) = (plusieurs, onglet, app.get_webview_window(page)) {
+        let o = serde_json::to_string(o).unwrap_or_default();
+        let _ = fenetre.eval(&format!("window.grenosOnglet && window.grenosOnglet({o})"));
     }
     let Some(&(page, titre, largeur, hauteur)) = PAGES.iter().find(|p| p.0 == page) else {
         systeme::dire(&format!("grenos-ui : page inconnue « {page} »"));
         return Ok(());
     };
-    if let Some(fenetre) = app.get_webview_window(page) {
+    if let (false, Some(fenetre)) = (plusieurs, app.get_webview_window(page)) {
         let _ = fenetre.unminimize();
         let _ = fenetre.set_focus();
         return Ok(());
     }
-    noter_demande(page);
+    let etiquette = if plusieurs {
+        (1..).map(|n| format!("{page}-{n}")).find(|e| app.get_webview_window(e).is_none()).unwrap_or_default()
+    } else {
+        page.to_string()
+    };
+    noter_demande(&etiquette);
     let (largeur, hauteur) = if page == "premier" { (largeur, hauteur) } else { taille_tenable(largeur, hauteur, ecran_logique(app)) };
-    let mut constructeur = WebviewWindowBuilder::new(app, page, WebviewUrl::App("index.html".into()))
+    let mut constructeur = WebviewWindowBuilder::new(app, &etiquette, WebviewUrl::App("index.html".into()))
         .title(titre)
         .initialization_script(&format!(
-            "window.GRENOS_PAGE = {page:?}; window.GRENOS_ONGLET = {:?};",
-            onglet.unwrap_or("")
+            "window.GRENOS_PAGE = {}; window.GRENOS_ONGLET = {};",
+            serde_json::to_string(page).unwrap_or_default(),
+            serde_json::to_string(onglet.unwrap_or("")).unwrap_or_default()
         ));
 
     if page == "premier" {
@@ -289,6 +302,22 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            fichiers::fichiers_lister,
+            fichiers::fichiers_rapides,
+            fichiers::fichiers_ce_pc,
+            fichiers::fichiers_monter,
+            fichiers::fichiers_ouvrir,
+            fichiers::fichiers_viser,
+            fichiers::fichiers_nouveau_dossier,
+            fichiers::fichiers_renommer,
+            fichiers::fichiers_coller,
+            fichiers::fichiers_corbeille,
+            fichiers::fichiers_archive,
+            fichiers::fichiers_proprietes,
+            fichiers::fichiers_dire,
+            fichiers::fichiers_titre,
+            fichiers::fichiers_nouvelle_fenetre,
+            fichiers::fichiers_maison,
             reglages::reglages_ouvert,
             reglages::reglages,
             reglages::reglages_signatures,

@@ -54,6 +54,9 @@ const TRACES = {
   eteindre: '<path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1011.4 0"/>',
   redemarrer: '<path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8M3 3v5h5"/>',
   dossier: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+  fichier: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/>',
+  texte: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5.5-5.5L5 20"/>',
   terminal: '<rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M7 9l3 3-3 3M13 15h4"/>',
   nuit: '<path d="M20 14.5A8 8 0 019.5 4 8 8 0 1020 14.5z"/>',
   jour: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
@@ -176,8 +179,7 @@ function installer({ nom, source, identifiant, miseAJour = false }) {
     INSTALLATIONS[cle] = (a) => {
       if (a.part != null) barre.style.width = `${Math.max(2, a.part)}%`;
       if (a.texte) phrase.textContent = a.texte;
-      if (a.ligne) { journal.textContent += a.ligne + "
-"; journal.scrollTop = journal.scrollHeight; }
+      if (a.ligne) { journal.textContent += `${a.ligne}\n`; journal.scrollTop = journal.scrollHeight; }
       if (a.fin) {
         bien = a.bien;
         fermer.disabled = false;

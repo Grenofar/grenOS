@@ -123,13 +123,13 @@
     try { v = await api.appeler("jeux_vue"); } catch (e) { D.corps.replaceChildren(el("p.note", `La machine n'a pas pu être lue : ${e}`)); return; }
     if (!v) return;
     D.sous.textContent = `${v.coeurs} cœurs, ${nombre(v.memoire)} Go de mémoire.`;
-    D.corps.replaceChildren(
+    D.corps.replaceChildren(...[
       v.virtuelle ? el("section.jx-avertissement", el("div.etiquette", "À lire avant de commencer"),
         el("p", "Cette machine est virtuelle : elle n'a pas de vraie carte graphique, et aucun jeu récent n'y tournera. Pour jouer, installe grenOS sur le disque de ton ordinateur — c'est la seule façon d'avoir la 3D.")) : null,
       section("Carte graphique"), carteGraphique(),
       section("La priorité donnée au jeu"), carteGamemode(),
       section("Pour jouer"), ...v.outils.map(outil),
-      section("Les jeux que tu as demandés"), ...v.jeux.map(carteJeu));
+      section("Les jeux que tu as demandés"), ...v.jeux.map(carteJeu)].filter(Boolean));
   }
 
   (async function () {

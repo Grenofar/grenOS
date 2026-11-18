@@ -10,7 +10,7 @@
   function pave(p) {
     return el("section.carte.verre.hb-pave",
       el("div.etiquette", p.titre),
-      el("dl", p.lignes.map(([n, v]) => [el("dt", n), el("dd", v)])));
+      el("dl", p.lignes.flatMap(([n, v]) => [el("dt", n), el("dd", v)])));
   }
 
   function lancer() {
