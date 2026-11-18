@@ -77,6 +77,15 @@ grenos-dire "dossiers du compte : $(ls -1 "$HOME" 2>/dev/null | tr '\n' ' ')"
 # question qu'on ne lui avait pas posée. `boot_id` la rend indiscutable : le
 # noyau en tire un neuf à chaque démarrage, donc un témoin qui en porte un
 # autre vient forcément d'avant.
+# ET ON GARDE LE TÉMOIN PRÉCÉDENT avant de l'écraser. Le 18 novembre, le
+# démarrage UEFI, devenu plus lent, a ouvert sa session AVANT que
+# `grenos-preuve` ne lise le témoin : elle avait déjà remplacé celui du
+# démarrage d'avant, et la persistance — qui marchait, le journal le prouvait
+# — a été déclarée en panne. La copie ne coûte qu'un fichier.
+if [ -f "$CONFIG/temoin-persistance" ] \
+        && ! grep -q "$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)" "$CONFIG/temoin-persistance" 2>/dev/null; then
+    cp -f "$CONFIG/temoin-persistance" "$CONFIG/temoin-persistance.precedent" 2>/dev/null || true
+fi
 printf '%s %s\n' "$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)" \
     "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
     > "$CONFIG/temoin-persistance" 2>/dev/null || true

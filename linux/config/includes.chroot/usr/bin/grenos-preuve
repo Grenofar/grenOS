@@ -30,6 +30,12 @@ MARQUE=/tmp/grenos-session
 # systeme, bien avant lightdm ; lire a la premiere ligne, c'est lire ce que le
 # disque contenait AVANT que quiconque y touche.
 TEMOIN_AU_DEMARRAGE=$(cat /home/*/.config/grenos/temoin-persistance 2>/dev/null | head -1)
+# Si la session est passée AVANT nous (démarrage lent), le témoin lu est celui
+# de CE démarrage ; celui d'avant a été mis de côté par `grenos-session`.
+if [ "${TEMOIN_AU_DEMARRAGE%% *}" = "$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)" ]; then
+    PRECEDENT=$(cat /home/*/.config/grenos/temoin-persistance.precedent 2>/dev/null | head -1)
+    [ -n "$PRECEDENT" ] && TEMOIN_AU_DEMARRAGE="$PRECEDENT"
+fi
 mkdir -p "$BOITE" 2>/dev/null || true
 chmod 1777 "$BOITE" 2>/dev/null || true
 
