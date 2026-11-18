@@ -251,12 +251,20 @@ jobs:
                 build-essential pkg-config >/dev/null
               cargo test --release
               cargo build --release
+              # grenos-coins : le demon qui arrondit les fenetres d openbox.
+              # Pur Rust (x11rb), sans WebKit : quelques secondes de plus ici.
+              cd /work/linux/coins
+              cargo test --release
+              cargo build --release
             '
           sudo install -m 0755 linux/ui/target/release/grenos-ui \
             linux/config/includes.chroot/usr/bin/grenos-ui
-          ls -l linux/config/includes.chroot/usr/bin/grenos-ui
+          sudo install -m 0755 linux/coins/target/release/grenos-coins \
+            linux/config/includes.chroot/usr/bin/grenos-coins
+          ls -l linux/config/includes.chroot/usr/bin/grenos-ui \
+            linux/config/includes.chroot/usr/bin/grenos-coins
           # La place compte : l'image en demande beaucoup plus loin.
-          sudo rm -rf linux/ui/target
+          sudo rm -rf linux/ui/target linux/coins/target
           docker image rm rust:1-trixie >/dev/null 2>&1 || true
 
       # La clé du dépôt APT de grenOS. Elle est fabriquée une seule fois, par

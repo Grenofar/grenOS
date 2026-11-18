@@ -189,6 +189,14 @@ echo "$(date -u +%H:%M:%S) $USER" > /tmp/grenos-session 2>/dev/null || true
 # perdu, et une session qui se ferme ferait perdre le travail en cours.
 grenos-veilleur grenos-shell &
 
+# Les coins arrondis des fenetres (barre de titre comprise). Sans compositeur,
+# un coin ne s'arrondit qu'en retirant ses pixels a la fenetre : grenos-coins
+# pose ce masque sur chaque cadre d'openbox. Lance avant openbox, il attend
+# la liste des fenetres. S'il manque (CI sans Rust), les coins restent carres.
+if command -v grenos-coins >/dev/null 2>&1; then
+    grenos-veilleur grenos-coins &
+fi
+
 # Le son, une fois PipeWire debout : combien de sorties, et laquelle. Sans
 # cette ligne, « aucune sortie détectée » dans les Réglages ne permet pas de
 # distinguer une panne d'un ordinateur sans carte son.

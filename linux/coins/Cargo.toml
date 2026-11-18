@@ -1,0 +1,22 @@
+[package]
+name = "grenos-coins"
+version = "0.1.0"
+edition = "2021"
+description = "Arrondit les coins des fenêtres d'openbox, sans compositeur"
+license = "MIT"
+
+[[bin]]
+name = "grenos-coins"
+path = "src/main.rs"
+
+[dependencies]
+# x11rb parle X11 en pur Rust : ni libxcb, ni GTK, ni WebKit. Ce démon tourne
+# toute la session, il doit peser quelques centaines de kilo-octets, pas plus.
+x11rb = { version = "0.13", default-features = false, features = ["shape"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

@@ -6,7 +6,8 @@
 # aucune ligne pour dire pourquoi. `grenos-surveiller-demarrage` ne raconte que
 # le démarrage PRÉCÉDENT : trop tard pour un essai.
 #
-# Deux minutes et demie après lightdm, si aucune barre ne tourne, on écrit sur
+# 45 s après lightdm (150 s avant le 18 novembre : plus long que les 90 s de
+# l'essai UEFI, la sonde n'y aurait jamais parlé), si aucune barre ne tourne, on écrit sur
 # le port série (et dans le journal) la fin du journal de lightdm, les erreurs
 # du serveur X et celles de la session. Ne fait rien quand tout va bien. Rend
 # toujours 0 : une sonde ne doit jamais faire échouer un démarrage.
@@ -14,11 +15,11 @@
 set -u
 dire() { echo "grenos: session : $1" > /dev/ttyS0 2>/dev/null || true; echo "grenos: session : $1"; }
 
-sleep 150
+sleep 45
 if pgrep -f grenos-shell >/dev/null 2>&1; then
     exit 0
 fi
-dire "AUCUNE session apres 150 s — lightdm $(systemctl is-active lightdm 2>/dev/null)"
+dire "AUCUNE session apres 45 s — lightdm $(systemctl is-active lightdm 2>/dev/null)"
 for f in /var/log/lightdm/lightdm.log /var/log/lightdm/x-0.log /var/log/Xorg.0.log; do
     [ -r "$f" ] || continue
     grep -aE "\(EE\)|rror|fail|Fail|denied|Session pid|Autologin|exited" "$f" 2>/dev/null \
