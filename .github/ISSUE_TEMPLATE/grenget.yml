@@ -1,0 +1,68 @@
+# Proposer une application au catalogue grenOS (GrenPlace et grenget).
+#
+# Le site https://grenos.vercel.app/grenget remplit ce formulaire pour toi :
+# chaque champ porte un `id`, que l'adresse du site pré-remplit.
+# Une fois envoyée, la proposition passe « en attente » ; le workflow
+# grenget.yml la vérifie tout seul (l'application existe-t-elle vraiment, à la
+# source ?), puis une personne la relit avant qu'elle n'entre au catalogue.
+name: Proposer une application (grenget)
+description: Ajouter une application à GrenPlace et à grenget.
+title: "[grenget] "
+labels: ["grenget", "en-attente"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci ! La proposition est **en attente** : une vérification automatique passe dans la minute,
+        puis une relecture. Tu peux suivre l'état ici ou sur https://grenos.vercel.app/grenget
+  - type: input
+    id: nom
+    attributes:
+      label: Nom de l'application
+      placeholder: "OBS Studio"
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Source
+      description: D'où grenOS l'installe.
+      options:
+        - flatpak
+        - apt
+    validations:
+      required: true
+  - type: input
+    id: identifiant
+    attributes:
+      label: Identifiant
+      description: "Flatpak : l'identifiant Flathub (com.obsproject.Studio). Debian : le nom du paquet."
+      placeholder: "com.obsproject.Studio"
+    validations:
+      required: true
+  - type: dropdown
+    id: rayon
+    attributes:
+      label: Rayon
+      options:
+        - Bureautique
+        - Création
+        - Développement
+        - Intelligence artificielle
+        - Internet
+        - Jeux
+        - Système
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description (en français, une phrase)
+      placeholder: "Filmer et diffuser son écran, ses jeux et sa caméra."
+    validations:
+      required: true
+  - type: input
+    id: site
+    attributes:
+      label: Site officiel
+      placeholder: "https://obsproject.com"

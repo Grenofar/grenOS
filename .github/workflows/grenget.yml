@@ -1,0 +1,112 @@
+# grenget : les propositions d'applications, de « en attente » à « au catalogue ».
+#
+#   1. Quelqu'un propose une application sur https://grenos.vercel.app/grenget
+#      (le site pré-remplit le formulaire .github/ISSUE_TEMPLATE/grenget.yml).
+#      L'issue naît avec les labels « grenget » et « en-attente ».
+#   2. CE WORKFLOW la vérifie tout seul : champs, forme de l'identifiant, pas de
+#      doublon, et surtout l'application EXISTE à la source (Flathub avec son
+#      icône, ou Debian trixie). Il le dit en commentaire et pose « verifiee »
+#      ou « a-corriger ». Une modification de l'issue relance la vérification.
+#   3. Une personne relit et pose « acceptee » : le workflow écrit la fiche dans
+#      linux/data/catalogue.json sur une branche et ouvre la demande de fusion.
+#      Rien n'entre au catalogue sans cette relecture.
+#
+# Le site lit ces labels pour afficher la file d'attente.
+name: grenget
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: grenget-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  verifier:
+    if: >-
+      contains(github.event.issue.labels.*.name, 'grenget') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'acceptee')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NUMERO: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Les labels existent
+        run: |
+          gh label create grenget --color 7c4df0 --description "Proposition d'application" --force
+          gh label create en-attente --color f5b84a --description "En attente de vérification" --force
+          gh label create verifiee --color 2bc48a --description "Vérifiée automatiquement, attend la relecture" --force
+          gh label create a-corriger --color ef4d5e --description "La vérification a trouvé un problème" --force
+          gh label create acceptee --color 3b82f6 --description "Relue et acceptée" --force
+          gh label create ajoutee --color 0e7490 --description "Au catalogue" --force
+
+      - name: Vérifier la proposition
+        id: verif
+        env:
+          CORPS: ${{ github.event.issue.body }}
+        run: |
+          printf '%s' "$CORPS" > corps.md
+          set +e
+          python3 scripts/grenget-verifier.py verifier corps.md > rapport.md
+          code=$?
+          set -e
+          cat rapport.md
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Dire le résultat
+        if: github.event.action != 'labeled'
+        run: |
+          gh issue comment "$NUMERO" --body-file rapport.md
+          if [ "${{ steps.verif.outputs.code }}" = 0 ]; then
+            gh issue edit "$NUMERO" --add-label verifiee --remove-label a-corriger
+          else
+            gh issue edit "$NUMERO" --add-label a-corriger --remove-label verifiee
+          fi
+
+      - name: Acceptée — écrire la fiche et proposer la fusion
+        if: github.event.action == 'labeled' && github.event.label.name == 'acceptee'
+        run: |
+          if [ "${{ steps.verif.outputs.code }}" != 0 ]; then
+            gh issue comment "$NUMERO" --body "La relecture l'accepte, mais la vérification automatique ne passe plus : rien n'est ajouté. Voir le dernier rapport."
+            exit 0
+          fi
+          python3 scripts/grenget-verifier.py fiche corps.md > fiche.json
+          python3 - <<'PY'
+          import json
+          chemin = "linux/data/catalogue.json"
+          cat = json.load(open(chemin, encoding="utf-8"))
+          fiche = json.load(open("fiche.json", encoding="utf-8"))
+          slugs = {a["slug"] for a in cat["applications"]}
+          base, n = fiche["slug"], 2
+          while fiche["slug"] in slugs:
+              fiche["slug"] = f"{base}-{n}"; n += 1
+          cat["applications"].append(fiche)
+          with open(chemin, "w", encoding="utf-8", newline="\n") as f:
+              json.dump(cat, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          PY
+          python3 linux/tools/verif-catalogue.py
+          git config user.name "grenget"
+          git config user.email "grenget@users.noreply.github.com"
+          branche="grenget/$NUMERO"
+          git checkout -b "$branche"
+          git add linux/data/catalogue.json
+          git commit -m "catalogue : ajouter $(python3 -c "import json;print(json.load(open('fiche.json'))['nom'])") (grenget #$NUMERO)"
+          git push -f origin "$branche"
+          if gh pr create --base main --head "$branche" \
+               --title "grenget : $(python3 -c "import json;print(json.load(open('fiche.json'))['nom'])")" \
+               --body "Proposition #$NUMERO, vérifiée et acceptée. Fusionner l'ajoute au catalogue à la prochaine publication." ; then
+            gh issue comment "$NUMERO" --body "Acceptée 🎉 La fiche est prête à entrer au catalogue (demande de fusion ouverte)."
+          else
+            gh issue comment "$NUMERO" --body "Acceptée 🎉 La fiche est sur la branche \`$branche\`, prête à fusionner."
+          fi
+          gh issue edit "$NUMERO" --remove-label en-attente
