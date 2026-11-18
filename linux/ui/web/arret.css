@@ -24,3 +24,5 @@ body[data-page="arret"] { overflow: hidden; }
 .geste.danger strong { color: var(--danger); }
 .geste.danger:hover { border-color: var(--danger); }
 .annuler { align-self: center; margin-top: auto; }
+.geste .touche { margin-left: auto; flex: none; min-width: 22px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--bord-fort); color: var(--texte-3); font: 600 12px var(--mono); text-align: center; }
+.geste:hover .touche { color: var(--texte); border-color: var(--accent); }

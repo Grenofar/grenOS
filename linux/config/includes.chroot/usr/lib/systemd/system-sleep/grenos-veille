@@ -1,0 +1,14 @@
+#!/bin/sh
+# Dire l'entrée en veille et le réveil sur le port série (todo J9 — 18
+# novembre). systemd appelle ce fichier deux fois : « pre suspend » juste
+# avant, « post suspend » au retour. C'est la preuve que la machine est
+# vraiment partie et revenue — un « systemctl suspend » qui n'a rien fait ne
+# dirait que la première ligne, ou aucune.
+#
+# grenos-dire ne fait rien sans port série : sur la machine de quelqu'un, ce
+# fichier ne laisse aucune trace.
+case "${1:-}" in
+    pre) grenos-dire "veille : entree (${2:-?})" 2>/dev/null ;;
+    post) grenos-dire "veille : reveil (${2:-?})" 2>/dev/null ;;
+esac
+exit 0

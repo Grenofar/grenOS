@@ -264,7 +264,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | J6 | Brancher une clé USB | **[écrit]** (18 nov.) — une clé FAT32 branchée PENDANT la session (moniteur QEMU, USB 3) ; udev la dit avec son étiquette et son système de fichiers, et l'explorateur la monte d'un clic |
 | J7 | Naviguer | [prouvé] |
 | J8 | Lire une vidéo | **[écrit]** (18 nov.) — Celluloid est livré ; le décodage était déjà prouvé |
-| J9 | **Mettre en veille** | [à faire] |
+| J9 | **Mettre en veille** | **[écrit]** (18 nov.) — la machine d'essai ouvre Fin de session, appuie sur V (touche d'accès, comme le menu de Windows), puis QEMU la réveille ; un crochet systemd-sleep dit « veille : entree » et « veille : reveil ». Rapporté jusqu'à deux passages verts |
 | J10 | Redémarrer | [prouvé] |
 | J11 | **Récupérer d'une erreur** | **[écrit]** le mode sans échec dit la cause et propose ; grenRecovery répare de l'extérieur. (18 nov.) — grenRecovery (grenos-ui, depuis la clé grenOS) trouve les installations grenOS sur les disques ; tout le travail root passe par `grenos-recuperation`, qui vérifie chaque partition et démonte toujours. Pas encore exercé sur une vraie installation cassée |
 

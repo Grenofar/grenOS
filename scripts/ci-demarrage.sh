@@ -978,7 +978,30 @@ if [ -n "$POINT_ARRET" ]; then
   python3 scripts/ci-screen.py clic "$RUNNER_TEMP/qmp.sock" "${POINT_ARRET%,*}" "${POINT_ARRET#*,}" "$LARGEUR" "$HAUTEUR" || true
   sleep 8
   python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-arret.ppm" || true
-  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+  # J9 — LA VEILLE, POUR DE VRAI (18 novembre). Seulement si la fenêtre a dit
+  # que la machine sait dormir (« veille mem » ou « veille freeze ») : sinon
+  # la touche V ne correspond à aucun geste, et on ferme par Échap.
+  if grep -aq 'grenos: arret : [0-9]* geste(s), veille \(mem\|freeze\)' "$RUNNER_TEMP/serial.log"; then
+    # « v » est à la même place en AZERTY qu'en QWERTY.
+    python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey v" || true
+    sleep 8
+    # Le bouton d'alimentation virtuel : QEMU réveille la machine.
+    python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "system_wakeup" || true
+    sleep 15
+    if grep -aq 'grenos: veille : entree' "$RUNNER_TEMP/serial.log"; then
+      echo "veille: la machine est partie en veille"
+    else
+      echo "::warning::La machine n est pas partie en veille (rapporte, pas bloquant)"
+    fi
+    if grep -aq 'grenos: veille : reveil' "$RUNNER_TEMP/serial.log"; then
+      echo "veille: et elle s est reveillee (J9)"
+    else
+      echo "::warning::Pas de reveil annonce apres la veille (rapporte, pas bloquant)"
+    fi
+  else
+    python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+    echo "veille: cette machine ne sait pas dormir, la touche V n est pas essayee"
+  fi
   sleep 2
 else
   echo "arret: la barre n a pas dit ou est Eteindre"
