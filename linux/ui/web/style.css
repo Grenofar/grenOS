@@ -270,3 +270,7 @@ html { background: var(--fond); }
 .cx-dialogue { width: min(420px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 12px; background: var(--surface-pleine); box-shadow: var(--ombre); }
 .cx-dialogue h2 { font-size: 18px; }
 .cx-boutons { display: flex; justify-content: flex-end; gap: 8px; }
+.installation { width: min(560px, calc(100vw - 32px)); }
+.installation .phrase { font-weight: 650; }
+.installation .journal { margin: 8px 0 0; max-height: 180px; overflow: auto; font-family: var(--mono); font-size: 12px; color: var(--texte-2); white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
+.installation summary { cursor: pointer; color: var(--texte-2); font-weight: 650; }

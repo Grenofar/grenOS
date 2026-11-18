@@ -146,4 +146,50 @@ function toast(texte) {
   setTimeout(() => t.remove(), 4000);
 }
 
-window.grenos = { api, icone, el, svg, habiller, aurore, mesurerFluidite, themeReel, pret, ouvrirProgramme, toast, EN_APERCU };
+// La fenêtre « Installation de … » de GrenPlace et de Jeux, en une seule :
+// une barre, une phrase, le détail pour qui veut le lire (installer.rs).
+// Rend une promesse tenue à la fin : vrai si c'est installé.
+const INSTALLATIONS = {};
+let ecouteInstallation = false;
+function installer({ nom, source, identifiant, miseAJour = false }) {
+  if (!ecouteInstallation) {
+    ecouteInstallation = true;
+    api.ecouter("installation", (a) => INSTALLATIONS[a.cle] && INSTALLATIONS[a.cle](a));
+  }
+  const cle = `${identifiant}-${Date.now()}`;
+  const barre = el("i", { style: "width:2%" });
+  const phrase = el("div.phrase", "Préparation…");
+  const journal = el("pre.journal");
+  const details = el("details", el("summary", "Voir le détail"), journal);
+  const fermer = el("button.bouton", { disabled: true }, "Fermer");
+  const fond = el("div.cx-fond");
+  const depuis = source === "flatpak" ? "Flathub" : "les dépôts Debian";
+  fond.append(el("div.cx-dialogue.carte.installation",
+    el("h2", `${miseAJour ? "Mise à jour" : "Installation"} de ${nom}`),
+    el("p.note", `Téléchargement depuis ${depuis}.`),
+    phrase, el("div.progression", barre), details,
+    el("div.cx-boutons", fermer)));
+  document.body.append(fond);
+  return new Promise((ok) => {
+    let bien = false;
+    fermer.addEventListener("click", () => { fond.remove(); delete INSTALLATIONS[cle]; ok(bien); });
+    INSTALLATIONS[cle] = (a) => {
+      if (a.part != null) barre.style.width = `${Math.max(2, a.part)}%`;
+      if (a.texte) phrase.textContent = a.texte;
+      if (a.ligne) { journal.textContent += a.ligne + "
+"; journal.scrollTop = journal.scrollHeight; }
+      if (a.fin) {
+        bien = a.bien;
+        fermer.disabled = false;
+        fermer.focus();
+        if (!a.bien) details.open = true;
+      }
+    };
+    api.appeler("installer", { cle, nom, source, identifiant, miseAJour }).catch((e) => {
+      phrase.textContent = String(e);
+      fermer.disabled = false;
+    });
+  });
+}
+
+window.grenos = { api, icone, el, svg, habiller, aurore, mesurerFluidite, themeReel, pret, ouvrirProgramme, toast, installer, EN_APERCU };

@@ -109,7 +109,129 @@ def hub_diagnostic():
     ecrire({"fin": True, "etat": mot[etat], "phrase": phrase, "points": len(resultats)})
 
 
+# ---- GrenPlace -----------------------------------------------------------------
+#
+# Les mêmes trois sources que l'ancienne fenêtre, dans le même ordre, pour que
+# le magasin s'ouvre toujours : en ligne, la copie gardée, celle de l'image.
+
+CATALOGUE_EN_LIGNE = (
+    "https://tpqzhzuoyqpfairatdrw.supabase.co/storage/v1/object/public/catalogue/magasin.json"
+)
+CATALOGUE_LIVRE = "/usr/share/grenos/catalogue.json"
+
+
+def _fiche_valable(application):
+    import re
+    if application.get("source") not in ("flatpak", "apt"):
+        return False
+    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$", application.get("identifiant", "")):
+        return False
+    return bool(application.get("slug") and application.get("nom"))
+
+
+def magasin_catalogue():
+    import os
+    import urllib.error
+    import urllib.request
+    cache = os.path.expanduser("~/.cache/grenos")
+    garde = os.path.join(cache, "catalogue.json")
+    try:
+        requete = urllib.request.Request(CATALOGUE_EN_LIGNE, headers={"User-Agent": "GrenPlace"})
+        with urllib.request.urlopen(requete, timeout=8) as reponse:
+            donnees = json.loads(reponse.read().decode("utf-8"))
+        applications = [a for a in donnees.get("applications", []) if _fiche_valable(a)]
+        if applications:
+            os.makedirs(cache, exist_ok=True)
+            with open(garde, "w", encoding="utf-8") as fichier:
+                json.dump(donnees, fichier, ensure_ascii=False)
+            return {"applications": applications, "origine": "en ligne"}
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        pass
+    for chemin, origine in ((garde, "dernier connu"), (CATALOGUE_LIVRE, "livré avec l'image")):
+        try:
+            with open(chemin, encoding="utf-8") as fichier:
+                donnees = json.load(fichier)
+        except (OSError, ValueError):
+            continue
+        applications = [a for a in donnees.get("applications", []) if _fiche_valable(a)]
+        if applications:
+            return {"applications": applications, "origine": origine}
+    return {"applications": [], "origine": "introuvable"}
+
+
+def magasin_retards(applications):
+    """Parmi ces fiches, celles qui ont une mise à jour (magasin.py)."""
+    import magasin
+    return {"retards": [a.get("slug") for a in magasin.a_mettre_a_jour(applications)]}
+
+
+# ---- Jeux ------------------------------------------------------------------------
+
+def jeux_vue():
+    """Tout ce que la page Jeux affiche, lu en une fois (jeux.py, materiel.py).
+
+    `vulkaninfo` peut prendre six secondes : la page s'affiche AVANT, et ceci
+    arrive ensuite — la règle payée par l'écran vide de vingt-cinq secondes.
+    """
+    import jeux
+    import materiel
+    infos = materiel.resume()
+    marche, detail = jeux.vulkan()
+    paquet, conseil = jeux.pilote_propose()
+    pose = jeux.gamemode_pose()
+    return {
+        "coeurs": infos["coeurs"],
+        "memoire": infos["memoire"],
+        "carte": (infos["carte"] or "")[:56],
+        "pilote": (infos["pilote"] or "")[:56],
+        "virtuelle": bool(jeux.machine_virtuelle()),
+        "vulkan": marche,
+        "vulkan_detail": detail,
+        "pilote_paquet": paquet,
+        "pilote_conseil": conseil,
+        "gamemode_pose": pose,
+        "gamemode_arme": jeux.gamemode_arme(),
+        "option_steam": jeux.OPTION_STEAM,
+        "outils": [dict(o, installe=jeux.installe(o["source"], o["identifiant"])) for o in jeux.OUTILS],
+        "jeux": jeux.JEUX,
+        "heroic": jeux.HEROIC,
+        "epic_rocket": jeux.EPIC_ROCKET,
+        "heroic_pose": jeux.heroic_pose(),
+        "rocket_prete": jeux.rocket_league_prete(),
+        "roblox_pose": jeux.roblox_pose(),
+        "fortnite_pose": jeux.fortnite_pose(),
+    }
+
+
+def jeux_paquet_nvidia():
+    """Le paquet exact que Debian conseille pour cette carte (nvidia-detect)."""
+    import re
+    import subprocess
+    try:
+        sortie = subprocess.run(["nvidia-detect"], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {"paquet": "nvidia-driver"}
+    trouve = re.search(r"(nvidia-\S*driver\S*)", sortie)
+    return {"paquet": trouve.group(1) if trouve else "nvidia-driver"}
+
+
+def jeux_preparer_rocket():
+    import jeux
+    return {"manque": jeux.preparer_rocket_league() or ""}
+
+
+def jeux_poser_fortnite():
+    import jeux
+    return {"manque": jeux.poser_fortnite() or ""}
+
+
 FONCTIONS = {
+    "jeux_vue": jeux_vue,
+    "jeux_paquet_nvidia": jeux_paquet_nvidia,
+    "jeux_preparer_rocket": jeux_preparer_rocket,
+    "jeux_poser_fortnite": jeux_poser_fortnite,
+    "magasin_catalogue": magasin_catalogue,
+    "magasin_retards": magasin_retards,
     "hub_etat": hub_etat,
     "hub_diagnostic": hub_diagnostic,
 }

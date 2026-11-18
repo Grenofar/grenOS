@@ -12,6 +12,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arret;
+mod jeux;
+mod grenplace;
 mod hub;
 mod taches;
 mod connexions;
@@ -20,6 +22,7 @@ mod bienvenue;
 mod lance;
 mod maj;
 mod materiel;
+mod installer;
 mod perf;
 mod pont;
 mod steam_compte;
@@ -106,6 +109,8 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("jeux", "Jeux", 900.0, 720.0),
+    ("grenplace", "GrenPlace", 980.0, 720.0),
     ("hub", "grenHub", 900.0, 660.0),
     ("taches", "Gestionnaire de tâches", 900.0, 640.0),
     ("connexions", "Connexions", 560.0, 640.0),
@@ -247,6 +252,7 @@ fn main() {
             fermer,
             fenetre_prete,
             systeme::ouvrir_programme,
+            installer::installer,
             premier::premier_infos,
             premier::premier_dire,
             premier::premier_pret,
@@ -276,6 +282,14 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            jeux::jeux_vue,
+            jeux::jeux_paquet_nvidia,
+            jeux::jeux_preparer_rocket,
+            jeux::jeux_poser_fortnite,
+            jeux::jeux_ouvrir,
+            grenplace::grenplace_catalogue,
+            grenplace::grenplace_retards,
+            grenplace::grenplace_installe,
             hub::hub_etat,
             hub::hub_diagnostic,
             taches::taches_mesure,
