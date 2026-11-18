@@ -620,3 +620,7 @@ libnotify-bin
 seahorse
 ## F6 plusieurs écrans : disposer, aligner, choisir le principal.
 arandr
+## B5 le chiffrement du disque : l'installateur l'offrait, mais SANS ce
+## paquet l'initrd d'un système chiffré ne sait pas demander la phrase, et la
+## machine ne redémarre pas. cryptsetup lui-même était déjà là (dépendance).
+cryptsetup-initramfs

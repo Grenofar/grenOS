@@ -56,7 +56,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | B2 | **Chaîne d'approvisionnement sûre** : paquets signés, dépôt authentifié, dépendances vérifiées | [prouvé] pour notre dépôt (clé OpenPGP, signature acceptée, vu à chaque démarrage) ; les dépendances vérifiées : [à faire] |
 | B3 | **Retour arrière impossible à casser, même sur coupure de courant** | [à faire] — étude en cours |
 | B4 | **Gestion de disques** : partitions, formatage, montage, SMART | **[écrit]** (18 nov.) — Disques (gnome-disk-utility) : partitions, formatage, SMART, images ; ses actions udisks ouvertes à la session locale active (règle polkit 49). Pas vu sur une image |
-| B5 | **Chiffrement du disque**, idéalement complet, avec gestion correcte des clés | [à faire] — et il a écrit lui-même « faut pas que ça se retourne contre nous » |
+| B5 | **Chiffrement du disque**, idéalement complet, avec gestion correcte des clés | **[écrit]** (18 nov.) — la case « Chiffrer le système » de l'installateur existait, mais `cryptsetup-initramfs` manquait : un système chiffré n'aurait pas redémarré. Ajouté, et LUKS1 pour que GRUB ouvre /boot. Aucune installation chiffrée n'a encore été menée au bout |
 | B6 | **Chiffrement de fichiers** | [à faire] |
 
 ## C. Sûreté : instantanés, retour arrière, grenRecovery, sauvegardes
