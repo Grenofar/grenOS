@@ -25,7 +25,16 @@
   en pause après ~7 jours sans activité : « Restore » dans le tableau de bord,
   données conservées. Plafond de dépense activé : jamais facturé.
 
-## 0ter. 18 novembre — la publication
+## FAIT le 18 novembre vers 03:00 — version `linux-20261118-0233` PUBLIÉE
+
+- Release GitHub (ISO 1,6 Go + zip VirtualBox), dépôt APT et catalogue publiés
+  par la CI de `main` (run 44218497249, cinq preuves vertes).
+- Site https://grenos.vercel.app en ligne avec le thème grenos-ui, la marque
+  sans lettre et « Dans cette version ».
+- PROCHAINE VERSION : la branche `claude/grenos-ui` (coins arrondis, ronds de
+  couleur, fondus) — pousser, CI verte, fusionner dans `main`.
+
+## (historique) 18 novembre — la publication
 
 - Run 44191198865 : 4 preuves sur 5 vertes ; l'UEFI échouait parce que son
   essai coupait la machine à 90 s fixes, avant l'ouverture de la session.
