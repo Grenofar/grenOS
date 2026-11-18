@@ -509,7 +509,7 @@ pub async fn reseau_etat() -> EtatReseau {
 }
 
 /// `nmcli -t` sépare par « : » et échappe les « : » des valeurs en « \: ».
-fn decouper(ligne: &str) -> Vec<String> {
+pub fn decouper(ligne: &str) -> Vec<String> {
     let mut champs = vec![String::new()];
     let mut echappe = false;
     for c in ligne.chars() {

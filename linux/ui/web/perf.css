@@ -18,8 +18,6 @@ body[data-page="perf"], body[data-page="lance"] { overflow: auto; }
 .jauge { height: 6px; border-radius: 99px; background: var(--surface-haute); overflow: hidden; }
 .jauge i { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width 600ms var(--courbe); }
 .tuile-chiffre.chaud .jauge i { background: var(--alerte); }
-.bouton.petit { padding: 7px 14px; font-size: 13px; }
-.bouton.petit svg { width: 15px; height: 15px; }
 .bouton.danger:not(:disabled):hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 .bouton.danger[data-confirme] { background: var(--danger); border-color: var(--danger); color: #fff; }
 

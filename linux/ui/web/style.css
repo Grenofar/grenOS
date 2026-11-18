@@ -144,6 +144,8 @@ h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
 .bouton.discret:hover { color: var(--texte); background: var(--surface-haute); }
 .bouton.grand { padding: 15px 34px; font-size: 16.5px; }
 .bouton svg { width: 18px; height: 18px; }
+.bouton.petit { padding: 7px 14px; font-size: 13px; }
+.bouton.petit svg { width: 15px; height: 15px; }
 :focus-visible { outline: 2px solid var(--accent-clair); outline-offset: 3px; }
 
 /* ---- Champs ------------------------------------------------------------- */

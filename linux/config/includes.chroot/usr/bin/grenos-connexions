@@ -9,8 +9,15 @@ d'avance dont on ne sait pas s'il sert.
 Les recherches et les connexions tournent dans un fil séparé : une fenêtre
 figée pendant qu'une carte Wi-Fi cherche passe pour un plantage.
 """
+import os
 import sys
 import threading
+
+# La fenêtre vit désormais dans grenos-ui (connexions.rs, connexions.js), le processus
+# partagé par les autres fenêtres (18 novembre). Celle-ci reste le repli,
+# et `--python` la force.
+if os.access("/usr/bin/grenos-ui", os.X_OK) and "--python" not in sys.argv:
+    os.execv("/usr/bin/grenos-ui", ["grenos-ui", "connexions"])
 
 sys.path.insert(0, "/usr/lib/grenos")
 

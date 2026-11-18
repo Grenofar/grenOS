@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arret;
+mod connexions;
 mod secours;
 mod bienvenue;
 mod lance;
@@ -102,6 +103,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("connexions", "Connexions", 560.0, 640.0),
     ("secours", "Mode sans échec de grenOS", 720.0, 560.0),
     ("bienvenue", "Bienvenue dans grenOS", 940.0, 700.0),
 ];
@@ -268,6 +270,17 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            connexions::connexions_etat,
+            connexions::connexions_wifi_liste,
+            connexions::connexions_wifi_radio,
+            connexions::connexions_wifi_connu,
+            connexions::connexions_wifi_connecter,
+            connexions::connexions_wifi_deconnecter,
+            connexions::connexions_bt_liste,
+            connexions::connexions_bt_radio,
+            connexions::connexions_bt_chercher,
+            connexions::connexions_bt_lier,
+            connexions::connexions_bt_delier,
             secours::secours_vue,
             secours::secours_faire,
             bienvenue::bienvenue_vue,
