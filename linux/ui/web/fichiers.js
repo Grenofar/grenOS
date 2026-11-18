@@ -338,6 +338,20 @@
   }
   const estArchive = (c) => /\.(zip|7z|rar|tar|gz|bz2|xz|tgz)$/i.test(c);
   const estChiffre = (c) => /\.(gpg|pgp)$/i.test(c);
+  const lisibleOcr = (c) => /\.(png|jpe?g|tiff?|bmp|webp|pdf)$/i.test(c);
+
+  // H6 : l'OCR, sur la machine. Un .txt à côté de l'image, ou un PDF cherchable.
+  async function ocr() {
+    const c = choisis();
+    if (c.length !== 1 || !lisibleOcr(c[0].chemin)) return;
+    etat("Lecture du texte… (une page scannée prend quelques secondes)");
+    try {
+      const nom = await api.appeler("fichiers_ocr", { chemin: c[0].chemin });
+      await rafraichir();
+      choisirChemin(`${onglet().dossier.replace(/\/$/, "")}/${nom}`);
+      etat(`« ${nom} » est prêt. Le texte a été lu sur cette machine : rien n'est parti sur Internet.`);
+    } catch (e) { etat(String(e)); }
+  }
 
   // B6 : une copie chiffrée, l'original gardé. La phrase est demandée deux
   // fois : une faute de frappe ici, et le fichier ne se rouvrirait jamais.
@@ -381,7 +395,8 @@
       entree("Couper", () => copier(true), true, "Ctrl+X"),
       entree("Coller", coller, S.pressePapier.length > 0, "Ctrl+V"), trait(),
       c.every((e) => estArchive(e.chemin)) ? entree("Extraire ici", () => archive("extraire")) : entree("Compresser en .zip", () => archive("compresser")),
-      c.length === 1 && estChiffre(c[0].chemin) ? entree("Déchiffrer…", dechiffrer) : entree("Chiffrer…", chiffrer, c.length === 1 && !c[0].dossier), trait(),
+      c.length === 1 && estChiffre(c[0].chemin) ? entree("Déchiffrer…", dechiffrer) : entree("Chiffrer…", chiffrer, c.length === 1 && !c[0].dossier),
+      c.length === 1 && lisibleOcr(c[0].chemin) ? entree("Extraire le texte (OCR)", ocr) : null, trait(),
       entree("Mettre à la corbeille", corbeille, true, "Suppr"), trait(),
       entree("Propriétés", proprietes, c.length === 1),
     ] : [

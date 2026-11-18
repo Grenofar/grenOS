@@ -345,6 +345,7 @@ fn main() {
             fichiers::fichiers_apercu,
             fichiers::fichiers_chiffrer,
             fichiers::fichiers_dechiffrer,
+            fichiers::fichiers_ocr,
             reglages::reglages_ouvert,
             reglages::reglages,
             reglages::reglages_signatures,

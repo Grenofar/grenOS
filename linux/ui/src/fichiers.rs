@@ -563,6 +563,57 @@ pub async fn fichiers_dechiffrer(chemin: String, phrase: String) -> Result<Strin
     Ok(cible.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
 }
 
+// ---- H6 : l'OCR, en local --------------------------------------------------------
+
+/// Le texte d'une image (Tesseract, français et anglais) dans un .txt à côté ;
+/// un PDF scanné devient une copie cherchable (ocrmypdf). Rien ne quitte la
+/// machine. Cinq minutes au plus : un PDF de cent pages scannées est long.
+#[tauri::command]
+pub async fn fichiers_ocr(chemin: String) -> Result<String, String> {
+    let p = Path::new(&chemin);
+    if !p.is_file() {
+        return Err("Choisis une image ou un PDF.".into());
+    }
+    let dossier = p.parent().unwrap_or(Path::new("/"));
+    let nom = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let base = match nom.rfind('.') { Some(i) if i > 0 => nom[..i].to_string(), _ => nom.clone() };
+    let pdf = nom.to_lowercase().ends_with(".pdf");
+    let cible = if pdf {
+        nom_libre(dossier, &format!("{base} (texte).pdf"))
+    } else {
+        nom_libre(dossier, &format!("{base}.txt"))
+    }
+    .ok_or("Trop de copies ici.")?;
+    let c = cible.to_string_lossy().into_owned();
+    let sortie = if pdf {
+        std::process::Command::new("timeout")
+            .args(["300", "ocrmypdf", "--skip-text", "-l", "fra+eng", "--output-type", "pdf", &chemin, &c])
+            .output()
+    } else {
+        // tesseract ajoute lui-même « .txt » au nom donné.
+        let sans = c.strip_suffix(".txt").unwrap_or(&c).to_string();
+        std::process::Command::new("timeout").args(["300", "tesseract", &chemin, &sans, "-l", "fra+eng"]).output()
+    }
+    .map_err(|_| "L'OCR n'est pas installé.".to_string())?;
+    if !sortie.status.success() {
+        let _ = fs::remove_file(&cible);
+        return Err(match sortie.status.code() {
+            Some(124) => "Trop long : arrêté après cinq minutes.".into(),
+            Some(127) => "L'OCR n'est pas installé.".into(),
+            _ => format!("L'OCR a échoué : {}", String::from_utf8_lossy(&sortie.stderr).lines().last().unwrap_or("raison inconnue")),
+        });
+    }
+    if !pdf {
+        let lu = fs::read_to_string(&cible).unwrap_or_default();
+        if lu.trim().is_empty() {
+            let _ = fs::remove_file(&cible);
+            return Err("Aucun texte trouvé dans cette image.".into());
+        }
+    }
+    dire(&format!("fichiers : ocr -> {}", if pdf { "pdf cherchable" } else { "texte extrait" }));
+    Ok(cible.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
+}
+
 // ---- G3 : l'aperçu (Alt+P, comme Windows) --------------------------------------
 
 const APERCU_IMAGE_MAX: u64 = 8 * 1024 * 1024;

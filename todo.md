@@ -208,7 +208,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | H3 | **Clés API** avec le choix entre GPT, Grok et Gemini | [à faire] |
 | H4 | **Assistant de terminal** capable de corriger des commandes | [à faire] |
 | H5 | **Automatisation de tâches** | [à faire] |
-| H6 | **OCR** intégré à la capture d'écran et aux PDF | [à faire] |
+| H6 | **OCR** intégré à la capture d'écran et aux PDF | **[écrit] pour les fichiers** (18 nov.) — explorateur › clic droit › « Extraire le texte (OCR) » : Tesseract (français, anglais) écrit un .txt à côté d'une image, ocrmypdf rend un PDF scanné cherchable. Tout en local. Pas encore dans la capture d'écran |
 | H7 | **Traduction hors ligne** | [à faire] |
 | H8 | **Dictée vocale locale** | [à faire] |
 | H9 | **Résumé automatique de documents** | [à faire] |
