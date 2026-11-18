@@ -176,8 +176,7 @@ fn fichier_positions() -> PathBuf {
 
 impl Bureau {
     fn nouveau() -> Rc<Bureau> {
-        let ecran = gdk::Screen::default().expect("pas d'écran X");
-        let (largeur, hauteur) = (ecran.width(), ecran.height());
+        let (largeur, hauteur) = natif::taille_ecran();
         let fenetre = gtk::Window::new(gtk::WindowType::Toplevel);
         fenetre.set_widget_name("bureau");
         fenetre.set_type_hint(gdk::WindowTypeHint::Desktop);
@@ -277,7 +276,8 @@ impl Bureau {
     // ---- Les icônes ----------------------------------------------------------
     fn ecrire_positions(&self) {
         let _ = std::fs::create_dir_all(natif::reglages());
-        let carte: BTreeMap<&String, [i32; 2]> = self.positions.borrow().iter().map(|(k, &(x, y))| (k, [x, y])).collect();
+        let positions = self.positions.borrow();
+        let carte: BTreeMap<&String, [i32; 2]> = positions.iter().map(|(k, &(x, y))| (k, [x, y])).collect();
         if let Ok(t) = serde_json::to_string_pretty(&carte) {
             let _ = std::fs::write(fichier_positions(), t);
         }

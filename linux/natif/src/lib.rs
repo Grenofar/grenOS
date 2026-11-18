@@ -127,6 +127,16 @@ impl Style {
     }
 }
 
+/// La taille de tout l'écran, lue sur la fenêtre racine. (`Screen::width`
+/// est retiré de gtk-rs 0.18 ; la racine couvre tous les moniteurs, comme
+/// l'ancienne valeur que lisait la version Python.)
+pub fn taille_ecran() -> (i32, i32) {
+    gdk::Screen::default()
+        .and_then(|e| e.root_window())
+        .map(|r| (r.width(), r.height()))
+        .unwrap_or((1280, 720))
+}
+
 /// Nomme le programme : la classe de ses fenêtres et son icône par défaut.
 pub fn nommer(nom: &str) {
     glib::set_prgname(Some(nom));

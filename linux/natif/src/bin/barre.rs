@@ -119,13 +119,8 @@ struct Barre {
 }
 
 fn taille_menu() -> (i32, i32) {
-    match gdk::Screen::default() {
-        Some(e) => (
-            (e.width() - 24).min(MENU_LARGEUR).max(420),
-            (e.height() - HAUTEUR - 24).min(MENU_HAUTEUR).max(360),
-        ),
-        None => (MENU_LARGEUR, MENU_HAUTEUR),
-    }
+    let (l, h) = natif::taille_ecran();
+    ((l - 24).min(MENU_LARGEUR).max(420), (h - HAUTEUR - 24).min(MENU_HAUTEUR).max(360))
 }
 
 fn temps() -> u32 {
@@ -189,8 +184,7 @@ fn menu_de(gestes: Vec<(&'static str, Box<dyn Fn()>)>, ev: &gdk::EventButton) ->
 
 impl Barre {
     fn nouvelle() -> Rc<Barre> {
-        let ecran_gdk = gdk::Screen::default().expect("pas d'écran X");
-        let (largeur, hauteur_ecran) = (ecran_gdk.width(), ecran_gdk.height());
+        let (largeur, hauteur_ecran) = natif::taille_ecran();
 
         let panneau = gtk::Window::new(gtk::WindowType::Toplevel);
         panneau.set_widget_name("panneau");
