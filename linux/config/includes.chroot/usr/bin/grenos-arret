@@ -8,6 +8,13 @@ import os
 import subprocess
 import sys
 
+# La fenêtre vit désormais dans grenos-ui (arret.rs, arret.js), le processus
+# partagé par les autres fenêtres : plus d'interpréteur Python à charger pour
+# un clic sur « Éteindre » (18 novembre). Celle-ci reste le repli, et
+# `--python` la force.
+if os.access("/usr/bin/grenos-ui", os.X_OK) and "--python" not in sys.argv:
+    os.execv("/usr/bin/grenos-ui", ["grenos-ui", "arret"])
+
 sys.path.insert(0, "/usr/lib/grenos")
 
 import gi  # noqa: E402

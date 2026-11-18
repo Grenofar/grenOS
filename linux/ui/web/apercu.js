@@ -106,6 +106,13 @@
           e["lance-fin"] && e["lance-fin"]({ identifiant: a.identifiant, bien: true, texte: "Installé." }); })();
         return null;
       }
+      case "arret_vue": return { adresse: "grenofar@grenos", gestes: [
+        { cle: "maj", titre: "Mettre à jour et redémarrer", note: "Poser 12 mises à jour avant d'ouvrir le bureau, puis redémarrer.", genre: "accent", icone: "maj" },
+        { cle: "session", titre: "Fermer la session", note: "Revenir à l'écran de connexion.", genre: "", icone: "compte" },
+        { cle: "veille", titre: "Mettre en veille", note: "La machine s'éteint presque entièrement, et retrouve tout au réveil.", genre: "", icone: "nuit" },
+        { cle: "redemarrer", titre: "Redémarrer", note: "Éteindre puis rallumer la machine.", genre: "", icone: "redemarrer" },
+        { cle: "eteindre", titre: "Éteindre", note: "Arrêter complètement la machine.", genre: "danger", icone: "eteindre" }] };
+      case "arret_faire": await attendre(200); return null;
       default: return null;
     }
   };

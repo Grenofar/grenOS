@@ -1,0 +1,26 @@
+/* Fin de session. */
+body[data-page="arret"] { overflow: hidden; }
+.page-arret { position: relative; z-index: 1; padding: 24px 22px 18px; display: flex; flex-direction: column; gap: 16px; height: 100vh; box-sizing: border-box; }
+.page-arret .tete .note { color: var(--texte-3); }
+.gestes { display: flex; flex-direction: column; gap: 8px; }
+.geste {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  padding: 12px 14px; border-radius: var(--rayon-petit);
+  border: 1px solid var(--bord); background: var(--surface); color: var(--texte); cursor: pointer;
+  transition: transform 140ms var(--courbe), border-color 140ms, background 140ms;
+}
+.geste:hover { border-color: var(--accent); background: var(--surface-haute); }
+.geste:active { transform: scale(.985); }
+.geste:disabled { cursor: default; opacity: .5; }
+.geste.choisi { opacity: 1; border-color: var(--accent); }
+.geste .pastille { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-haute); color: var(--texte-2); }
+.geste .pastille svg { width: 20px; height: 20px; }
+.geste .texte { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.geste strong { font-size: 15px; }
+.geste small { color: var(--texte-2); font-size: 12.5px; line-height: 1.35; }
+.geste.accent .pastille { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.geste.accent { border-color: color-mix(in srgb, var(--accent) 45%, var(--bord)); }
+.geste.danger .pastille { color: #fff; background: var(--danger); }
+.geste.danger strong { color: var(--danger); }
+.geste.danger:hover { border-color: var(--danger); }
+.annuler { align-self: center; margin-top: auto; }

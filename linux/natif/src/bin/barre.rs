@@ -116,6 +116,8 @@ struct Barre {
     contenu: gtk::Box,
     attrape: RefCell<Option<Rc<natif::Attrape>>>,
     menu_contextuel: RefCell<Option<gtk::Menu>>,
+    /// Le bouton « Éteindre » du pied du menu : la CI le vise (18 novembre).
+    bouton_eteindre: RefCell<Option<gtk::Button>>,
 }
 
 fn taille_menu() -> (i32, i32) {
@@ -288,6 +290,7 @@ impl Barre {
             contenu,
             attrape: RefCell::new(None),
             menu_contextuel: RefCell::new(None),
+            bouton_eteindre: RefCell::new(None),
         });
 
         vboite.pack_start(&barre.pied(), false, false, 0);
@@ -315,7 +318,9 @@ impl Barre {
         qui.pack_start(&l_nom, false, false, 0);
         qui.pack_start(&l_adr, false, false, 0);
         pied.pack_start(&qui, true, true, 0);
-        pied.pack_end(&self.petit("Éteindre", "grenos-arret", &["system-shutdown", "system-log-out"]), false, false, 0);
+        let eteindre = self.petit("Éteindre", "grenos-arret", &["system-shutdown", "system-log-out"]);
+        pied.pack_end(&eteindre, false, false, 0);
+        *self.bouton_eteindre.borrow_mut() = Some(eteindre);
         pied.pack_end(
             &self.petit("Réglages", "grenos-parametres", &["grenos-parametres", "preferences-system", "applications-system"]),
             false, false, 0,
@@ -637,7 +642,8 @@ impl Barre {
     fn ouvrir_menu(self: &Rc<Self>) {
         let (l, h) = taille_menu();
         self.menu.set_size_request(l, h);
-        self.menu.move_(((self.largeur - l) / 2).max(8), (self.hauteur_ecran - HAUTEUR - h - 8).max(8));
+        let (mx, my) = (((self.largeur - l) / 2).max(8), (self.hauteur_ecran - HAUTEUR - h - 8).max(8));
+        self.menu.move_(mx, my);
         *self.applications.borrow_mut() = apps::applications();
         self.recherche.set_text("");
         self.remplir();
@@ -650,6 +656,18 @@ impl Barre {
         }
         *self.attrape.borrow_mut() = Some(natif::Attrape::prendre(&self.menu));
         dire(&format!("menu ouvert, {} applications", self.applications.borrow().len()));
+        // Où est « Éteindre » : la CI clique dessus pour prouver que la fenêtre
+        // Fin de session s'ouvre (arret.rs). Mesuré une fois le menu dessiné —
+        // avant, l'allocation vaut zéro et le clic tomberait à côté.
+        let b = self.clone();
+        glib::timeout_add_local_once(Duration::from_millis(400), move || {
+            if let Some(bouton) = b.bouton_eteindre.borrow().as_ref() {
+                if let Some((x, y)) = bouton.translate_coordinates(&b.menu, 0, 0) {
+                    let zone = bouton.allocation();
+                    dire(&format!("bouton eteindre en {},{}", mx + x + zone.width() / 2, my + y + zone.height() / 2));
+                }
+            }
+        });
     }
 
     fn fermer_menu(&self) {

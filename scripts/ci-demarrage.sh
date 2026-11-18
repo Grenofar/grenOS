@@ -873,6 +873,34 @@ sleep 3
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
 sleep 2
 
+echo "--- la fenetre Fin de session s ouvre-t-elle ---"
+# Le 18 novembre, « Eteindre » quitte Python pour grenos-ui (arret.rs). Elle
+# n etait verifiee nulle part : personne ne l ouvrait avant Grenofar.
+#
+# On ouvre le menu, la barre dit ou est « Eteindre » (`bouton eteindre en
+# x,y`), on clique, et la fenetre annonce ce qu elle propose (`arret : N
+# geste(s), veille …`). On n y appuie sur RIEN d autre qu Echap : un Entree
+# de trop fermerait la session au milieu des essais. C est la DERNIERE
+# fenetre ouverte avant l extinction pour la meme raison.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+sleep 4
+POINT_ARRET=$(grep -a 'bouton eteindre en' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '' | sed 's/.*en //')
+if [ -n "$POINT_ARRET" ]; then
+  python3 scripts/ci-screen.py clic "$RUNNER_TEMP/qmp.sock" "${POINT_ARRET%,*}" "${POINT_ARRET#*,}" "$LARGEUR" "$HAUTEUR" || true
+  sleep 8
+  python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-arret.ppm" || true
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+  sleep 2
+else
+  echo "arret: la barre n a pas dit ou est Eteindre"
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey esc" || true
+fi
+if grep -aq 'grenos: arret : [0-9]* geste(s)' "$RUNNER_TEMP/serial.log"; then
+  grep -a 'grenos: arret : [0-9]* geste(s)' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+else
+  echo "arret: la fenetre Fin de session ne s est pas annoncee (test non bloquant, a affiner)"
+fi
+
 grep -a 'grenos:' "$RUNNER_TEMP/serial.log" | tail -n 24 || true
 
 if ! cp "$RUNNER_TEMP/ecran-5min.ppm" "$RUNNER_TEMP/final.ppm" 2>/dev/null; then

@@ -36,6 +36,17 @@ Cinq preuves vertes (run 44285528012), site à jour.
 - I8 Ctrl+Alt+Échap → mode jeu ; I13 sauvegardes (grenos-sauvegarde) ;
   I17 écrans Dev (zram/swappiness, ufw, journaux) ; D1 ufw. Voir todo.md.
 
+MIGRATION DES FENÊTRES PYTHON → grenos-ui (commencée le 18 novembre, après 1129) :
+- [écrit] 1/11 Arrêt (« Fin de session ») : `ui/src/arret.rs`, `web/arret.{js,css}`.
+  Mêmes règles que le Python (veille seulement si /sys/power/state la permet,
+  « Mettre à jour et redémarrer » seulement si quelque chose attend), la page
+  n'envoie qu'une clé, Rust refuse un geste non proposé. `grenos-arret` fait
+  `exec grenos-ui arret` (`--python` garde l'ancienne). Preuve CI ajoutée
+  (non bloquante au début) : la barre dit « bouton eteindre en x,y », la CI
+  clique, attend « arret : N geste(s), veille … », puis Échap.
+- [à faire] Bienvenue, Secours, Connexions, Son, Tâches, grenHub, Jeux,
+  GrenPlace, Réglages, Fichiers — dans cet ordre (du plus petit au plus gros).
+
 RESTE, et pourquoi ce n'est pas fait :
 - Fenêtres Python → pages grenos-ui (Fichiers, Réglages, GrenPlace, Tâches,
   Son, Connexions, grenHub, Jeux, Bienvenue, Secours, Arrêt) : onze fenêtres,

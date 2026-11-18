@@ -4,12 +4,14 @@
 //!     grenos-ui maj       Mises à jour
 //!     grenos-ui perf      grenPerf : mémoire, processeur, processus, mode jeu
 //!     grenos-ui lance     GrenLaunch : tous les jeux au même endroit
+//!     grenos-ui arret     Fin de session : veille, redémarrer, éteindre
 //!
 //! Chaque page est une fenêtre du MÊME processus (voir `systeme::instance`).
 //! Ajouter une application, c'est ajouter une page dans `web/` et ses
 //! commandes ici — pas un programme de plus à charger en mémoire.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod arret;
 mod lance;
 mod maj;
 mod materiel;
@@ -26,6 +28,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("maj", "Mises à jour", 760.0, 620.0),
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
+    ("arret", "Fin de session", 440.0, 560.0),
 ];
 
 pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
@@ -65,6 +68,14 @@ pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
         } else {
             constructeur = constructeur.inner_size(largeur, hauteur).position(0.0, 0.0);
         }
+    } else if page == "arret" {
+        // Un geste qu'on ne veut jamais déclencher par erreur : la fenêtre
+        // reste au-dessus, au centre, et ne se redimensionne pas.
+        constructeur = constructeur
+            .inner_size(largeur, hauteur)
+            .resizable(false)
+            .always_on_top(true)
+            .center();
     } else {
         constructeur = constructeur
             .inner_size(largeur, hauteur)
@@ -175,6 +186,8 @@ fn main() {
             lance::lance_steam_installer,
             lance::lance_ouvrir,
             lance::lance_installer,
+            arret::arret_vue,
+            arret::arret_faire,
         ])
         .on_window_event(fermeture_animee)
         .setup(move |app| {
