@@ -89,7 +89,7 @@ pub struct Instantane {
     mode_jeu: bool,
 }
 
-fn meminfo() -> HashMap<String, f64> {
+pub(crate) fn meminfo() -> HashMap<String, f64> {
     lire("/proc/meminfo")
         .lines()
         .filter_map(|l| {
@@ -100,7 +100,7 @@ fn meminfo() -> HashMap<String, f64> {
         .collect()
 }
 
-fn cpu_total() -> (u64, usize) {
+pub(crate) fn cpu_total() -> (u64, usize) {
     let texte = lire("/proc/stat");
     let total = texte
         .lines()

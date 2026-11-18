@@ -27,8 +27,4 @@ body[data-page="connexions"] { overflow: auto; }
 .cx-inter:checked { background: var(--accent); border-color: var(--accent); }
 .cx-inter:checked::after { transform: translateX(18px); background: #fff; }
 .cx-inter:disabled { opacity: .45; cursor: default; }
-.cx-fond { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(0, 0, 0, .45); }
-.cx-dialogue { width: min(420px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 12px; background: var(--surface-pleine); box-shadow: var(--ombre); }
-.cx-dialogue h2 { font-size: 18px; }
 .cx-voir { display: flex; align-items: center; gap: 8px; color: var(--texte-2); font-size: 13.5px; }
-.cx-boutons { display: flex; justify-content: flex-end; gap: 8px; }

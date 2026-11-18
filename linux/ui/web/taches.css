@@ -1,0 +1,19 @@
+/* Gestionnaire de tâches. */
+body[data-page="taches"] { overflow: hidden; }
+.page-taches { position: relative; z-index: 1; height: 100vh; box-sizing: border-box; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.tc-tete { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; padding: 16px 20px; }
+.tc-jauge { display: flex; flex-direction: column; gap: 5px; }
+.tc-jauge strong { font-size: 22px; font-weight: 800; }
+.tc-jauge small { color: var(--texte-3); font-size: 12px; }
+.tc-recherche { padding: 10px 14px; font-size: 14.5px; }
+.tc-defile { flex: 1; min-height: 0; overflow: auto; padding: 0; }
+.tc-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tc-table th { position: sticky; top: 0; z-index: 1; text-align: left; padding: 9px 12px; background: var(--surface-pleine); color: var(--texte-3); font-weight: 650; cursor: pointer; border-bottom: 1px solid var(--bord); user-select: none; }
+.tc-table th.trie { color: var(--accent-clair); }
+.tc-table th:first-child { width: 50%; }
+.tc-table td { padding: 7px 12px; border-bottom: 1px solid color-mix(in srgb, var(--bord) 50%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+.tc-table .nb { text-align: right; font-variant-numeric: tabular-nums; }
+.tc-table tbody tr { cursor: default; }
+.tc-table tbody tr:hover { background: var(--surface-haute); }
+.tc-table tbody tr.choisi { background: var(--accent); color: #fff; }
+.tc-pied { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arret;
+mod taches;
 mod connexions;
 mod secours;
 mod bienvenue;
@@ -103,6 +104,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("taches", "Gestionnaire de tâches", 900.0, 640.0),
     ("connexions", "Connexions", 560.0, 640.0),
     ("secours", "Mode sans échec de grenOS", 720.0, 560.0),
     ("bienvenue", "Bienvenue dans grenOS", 940.0, 700.0),
@@ -235,6 +237,7 @@ fn main() {
     tauri::Builder::default()
         .manage(maj::Etat::default())
         .manage(perf::Etat::default())
+        .manage(taches::Etat::default())
         .invoke_handler(tauri::generate_handler![
             apparence,
             regler_apparence,
@@ -270,6 +273,8 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            taches::taches_mesure,
+            taches::taches_arreter,
             connexions::connexions_etat,
             connexions::connexions_wifi_liste,
             connexions::connexions_wifi_radio,

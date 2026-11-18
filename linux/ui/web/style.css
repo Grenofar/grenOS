@@ -145,6 +145,9 @@ h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
 .bouton.grand { padding: 15px 34px; font-size: 16.5px; }
 .bouton svg { width: 18px; height: 18px; }
 .bouton.petit { padding: 7px 14px; font-size: 13px; }
+.bouton.danger { color: var(--danger); }
+.bouton.danger:not(:disabled):hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+.bouton.danger[data-confirme] { background: var(--danger); border-color: var(--danger); color: #fff; }
 .bouton.petit svg { width: 15px; height: 15px; }
 :focus-visible { outline: 2px solid var(--accent-clair); outline-offset: 3px; }
 
@@ -261,3 +264,9 @@ html { background: var(--fond); }
 
 /* Le petit message en bas, commun à toutes les pages (grenos.toast). */
 .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 20; padding: 12px 20px; border-radius: 99px; background: var(--surface-pleine); border: 1px solid var(--bord-fort); box-shadow: var(--ombre); font-weight: 600; animation: monte 300ms var(--courbe); }
+
+/* Une question posée au-dessus de la page (connexions, tâches…). */
+.cx-fond { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(0, 0, 0, .45); }
+.cx-dialogue { width: min(420px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 12px; background: var(--surface-pleine); box-shadow: var(--ombre); }
+.cx-dialogue h2 { font-size: 18px; }
+.cx-boutons { display: flex; justify-content: flex-end; gap: 8px; }
