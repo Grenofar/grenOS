@@ -246,9 +246,9 @@
   }
 
   // ---- Boîtes ----------------------------------------------------------------------
-  function demander(titre, question, defaut) {
+  function demander(titre, question, defaut, cache = false) {
     return new Promise((ok) => {
-      const champ = el("input.champ", { value: defaut, spellcheck: "false" });
+      const champ = el("input.champ", { value: defaut, spellcheck: "false", type: cache ? "password" : "text", autocomplete: "off" });
       const fond = el("div.cx-fond");
       const fin = (v) => { fond.remove(); D.liste.focus(); ok(v); };
       fond.append(el("form.cx-dialogue.carte", { onsubmit: (e) => { e.preventDefault(); fin(champ.value.trim() || null); } },
@@ -259,8 +259,10 @@
       document.body.append(fond);
       champ.focus();
       // Le nom sans son extension, comme Windows : on renomme « photo », pas « .jpg ».
-      const point = defaut.lastIndexOf(".");
-      champ.setSelectionRange(0, point > 0 ? point : defaut.length);
+      if (!cache) {
+        const point = defaut.lastIndexOf(".");
+        champ.setSelectionRange(0, point > 0 ? point : defaut.length);
+      }
     });
   }
 
@@ -335,6 +337,36 @@
     } catch (e) { etat(String(e)); }
   }
   const estArchive = (c) => /\.(zip|7z|rar|tar|gz|bz2|xz|tgz)$/i.test(c);
+  const estChiffre = (c) => /\.(gpg|pgp)$/i.test(c);
+
+  // B6 : une copie chiffrée, l'original gardé. La phrase est demandée deux
+  // fois : une faute de frappe ici, et le fichier ne se rouvrirait jamais.
+  async function chiffrer() {
+    const c = choisis();
+    if (c.length !== 1 || c[0].dossier) { etat("Choisis un seul fichier à chiffrer (un dossier : compresse-le d'abord)."); return; }
+    const p1 = await demander("Chiffrer", `Phrase de passe pour « ${c[0].nom} » (8 caractères au moins) :`, "", true);
+    if (!p1) return;
+    const p2 = await demander("Chiffrer", "La même, pour être sûr :", "", true);
+    if (p2 !== p1) { etat("Les deux phrases ne sont pas identiques : rien n'a été chiffré."); return; }
+    etat("Chiffrement…");
+    try {
+      const nom = await api.appeler("fichiers_chiffrer", { chemin: c[0].chemin, phrase: p1 });
+      await rafraichir();
+      etat(`« ${nom} » est prêt. L'original est toujours là : supprime-le quand tu as vérifié que la copie s'ouvre.`);
+    } catch (e) { etat(String(e)); }
+  }
+  async function dechiffrer() {
+    const c = choisis();
+    if (c.length !== 1) return;
+    const p = await demander("Déchiffrer", `Phrase de passe de « ${c[0].nom} » :`, "", true);
+    if (!p) return;
+    etat("Déchiffrement…");
+    try {
+      const nom = await api.appeler("fichiers_dechiffrer", { chemin: c[0].chemin, phrase: p });
+      await rafraichir();
+      etat(`« ${nom} » est déchiffré, à côté du fichier chiffré.`);
+    } catch (e) { etat(String(e)); }
+  }
 
   function menu(ev) {
     document.querySelector(".fx-menu")?.remove();
@@ -348,7 +380,8 @@
       entree("Copier", () => copier(false), true, "Ctrl+C"),
       entree("Couper", () => copier(true), true, "Ctrl+X"),
       entree("Coller", coller, S.pressePapier.length > 0, "Ctrl+V"), trait(),
-      c.every((e) => estArchive(e.chemin)) ? entree("Extraire ici", () => archive("extraire")) : entree("Compresser en .zip", () => archive("compresser")), trait(),
+      c.every((e) => estArchive(e.chemin)) ? entree("Extraire ici", () => archive("extraire")) : entree("Compresser en .zip", () => archive("compresser")),
+      c.length === 1 && estChiffre(c[0].chemin) ? entree("Déchiffrer…", dechiffrer) : entree("Chiffrer…", chiffrer, c.length === 1 && !c[0].dossier), trait(),
       entree("Mettre à la corbeille", corbeille, true, "Suppr"), trait(),
       entree("Propriétés", proprietes, c.length === 1),
     ] : [

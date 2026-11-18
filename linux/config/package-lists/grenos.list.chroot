@@ -628,3 +628,11 @@ cryptsetup-initramfs
 ## par minuteurs. Ils ne font rien sur ext4 : seulement si l'installation a
 ## choisi btrfs, que l'installateur propose.
 btrfsmaintenance
+## G23 / A2 les manettes : les règles udev de Valve qui ouvrent les manettes
+## Xbox, PlayStation, Switch et Steam à un compte ordinaire. Sans elles, un
+## jeu ne voit la manette qu'en root. Un paquet de règles, rien qui tourne.
+steam-devices
+## B6 chiffrer un fichier (explorateur › clic droit › Chiffrer…) : GnuPG,
+## AES-256 avec une phrase de passe. Lisible ailleurs, Windows compris
+## (Gpg4win) — un format à nous ne se rouvrirait que chez nous.
+gnupg

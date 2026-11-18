@@ -338,6 +338,8 @@ fn main() {
             fichiers::fichiers_nouvelle_fenetre,
             fichiers::fichiers_maison,
             fichiers::fichiers_apercu,
+            fichiers::fichiers_chiffrer,
+            fichiers::fichiers_dechiffrer,
             reglages::reglages_ouvert,
             reglages::reglages,
             reglages::reglages_signatures,

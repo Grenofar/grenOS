@@ -57,7 +57,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | B3 | **Retour arrière impossible à casser, même sur coupure de courant** | [à faire] — étude en cours |
 | B4 | **Gestion de disques** : partitions, formatage, montage, SMART | **[écrit]** (18 nov.) — Disques (gnome-disk-utility) : partitions, formatage, SMART, images ; ses actions udisks ouvertes à la session locale active (règle polkit 49). Pas vu sur une image |
 | B5 | **Chiffrement du disque**, idéalement complet, avec gestion correcte des clés | **[écrit]** (18 nov.) — la case « Chiffrer le système » de l'installateur existait, mais `cryptsetup-initramfs` manquait : un système chiffré n'aurait pas redémarré. Ajouté, et LUKS1 pour que GRUB ouvre /boot. Aucune installation chiffrée n'a encore été menée au bout |
-| B6 | **Chiffrement de fichiers** | [à faire] |
+| B6 | **Chiffrement de fichiers** | **[écrit]** (18 nov.) — explorateur › clic droit › « Chiffrer… » : une copie `.gpg` (GnuPG, AES-256, phrase demandée deux fois, transmise par l'entrée standard et jamais en argument) ; « Déchiffrer… » pour l'inverse. Lisible ailleurs, Windows compris. Pas encore vu sur une image |
 
 ## C. Sûreté : instantanés, retour arrière, grenRecovery, sauvegardes
 
@@ -180,7 +180,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | G20 | **Visionneuse d'images** | **[écrit]** (18 nov.) — Ristretto livré |
 | G21 | **Lecteur vidéo et audio** façon VLC | **[écrit]** (18 nov.) — Celluloid (mpv) livré ; VLC dans GrenPlace |
 | G22 | **Bluetooth** | [à faire] — la page Connexions existe, le matériel n'est pas prouvé |
-| G23 | **Support manette** | [à faire] |
+| G23 | **Support manette** | **[écrit]** (18 nov.) — `steam-devices` : les règles udev qui ouvrent les manettes Xbox, PlayStation, Switch et Steam à un compte ordinaire. Aucune manette dans la machine d'essai |
 | G24 | **Client SSH** | **[écrit]** (18 nov.) — openssh-client livré |
 | G25 | **Outils de diagnostic réseau** | **[écrit]** (18 nov.) — mtr, traceroute, dig livrés |
 | G26 | **VPN** | **[écrit]** (18 nov.) — OpenVPN dans la fenêtre des connexions, WireGuard compris par NetworkManager |

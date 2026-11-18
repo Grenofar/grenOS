@@ -497,6 +497,72 @@ pub fn fichiers_maison() -> String {
     maison().to_string_lossy().into_owned()
 }
 
+// ---- B6 : chiffrer et déchiffrer un fichier ---------------------------------------
+
+/// gpg, la phrase sur l'entrée standard (jamais en argument : elle serait
+/// lisible par tous dans la liste des processus).
+fn gpg(arguments: &[&str], phrase: &str) -> Result<(), String> {
+    use std::io::Write;
+    let mut enfant = std::process::Command::new("gpg")
+        .args(["--batch", "--yes", "--quiet", "--pinentry-mode", "loopback", "--passphrase-fd", "0"])
+        .args(arguments)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|_| "GnuPG n'est pas installé.".to_string())?;
+    if let Some(mut e) = enfant.stdin.take() {
+        let _ = e.write_all(phrase.as_bytes());
+    }
+    let fin = enfant.wait_with_output().map_err(|e| e.to_string())?;
+    if fin.status.success() {
+        Ok(())
+    } else {
+        let t = String::from_utf8_lossy(&fin.stderr);
+        Err(if t.contains("Bad passphrase") || t.contains("bad key") || t.contains("decryption failed") {
+            "Phrase de passe incorrecte.".into()
+        } else {
+            format!("GnuPG a refusé : {}", t.lines().last().unwrap_or("raison inconnue"))
+        })
+    }
+}
+
+/// Chiffre une COPIE (`nom.gpg`) ; l'original reste, à la personne de le
+/// supprimer une fois la copie vérifiée. Rend le nom du fichier chiffré.
+#[tauri::command]
+pub async fn fichiers_chiffrer(chemin: String, phrase: String) -> Result<String, String> {
+    let p = Path::new(&chemin);
+    if !p.is_file() {
+        return Err("On ne chiffre qu'un fichier (pour un dossier : le compresser d'abord).".into());
+    }
+    if phrase.chars().count() < 8 {
+        return Err("Huit caractères au moins : une phrase courte se devine.".into());
+    }
+    if phrase.contains('\n') {
+        return Err("La phrase tient sur une ligne.".into());
+    }
+    let nom = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let cible = nom_libre(p.parent().unwrap_or(Path::new("/")), &format!("{nom}.gpg")).ok_or("Trop de copies chiffrées ici.")?;
+    let c = cible.to_string_lossy().into_owned();
+    gpg(&["--symmetric", "--cipher-algo", "AES256", "--output", &c, &chemin], &phrase)?;
+    dire("fichiers : chiffrement -> un fichier .gpg ecrit");
+    Ok(cible.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
+}
+
+#[tauri::command]
+pub async fn fichiers_dechiffrer(chemin: String, phrase: String) -> Result<String, String> {
+    let p = Path::new(&chemin);
+    let nom = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let clair = nom.strip_suffix(".gpg").or_else(|| nom.strip_suffix(".pgp")).filter(|n| !n.is_empty()).unwrap_or("dechiffre");
+    let cible = nom_libre(p.parent().unwrap_or(Path::new("/")), clair).ok_or("Trop de copies ici.")?;
+    let c = cible.to_string_lossy().into_owned();
+    if let Err(e) = gpg(&["--output", &c, "--decrypt", &chemin], &phrase) {
+        let _ = fs::remove_file(&cible); // pas de fichier à moitié écrit
+        return Err(e);
+    }
+    Ok(cible.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
+}
+
 // ---- G3 : l'aperçu (Alt+P, comme Windows) --------------------------------------
 
 const APERCU_IMAGE_MAX: u64 = 8 * 1024 * 1024;
