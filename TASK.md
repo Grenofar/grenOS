@@ -25,6 +25,33 @@
   en pause après ~7 jours sans activité : « Restore » dans le tableau de bord,
   données conservées. Plafond de dépense activé : jamais facturé.
 
+## EN COURS le 18 novembre (matin) — séance autonome, Grenofar absent 5 h
+
+Demandé : « publie, ajoute un max d'apps au launcher et à GrenPlace, customise
+l'UI du cmd, crée le langage de grenOS comme PowerShell avec grenget, une page
+grenos.vercel.app/grenget (proposer une app → en attente → vérifiée ; login
+Google bientôt), refais le site en présentation avec Télécharger tout en haut ».
+
+Branche de travail `natif/barre-bureau` (grenOS), poussée aussi sur
+`claude/grenos-ui` pour la CI complète :
+- [écrit] barre et bureau en Rust natif : `linux/natif` (gtk-rs + x11rb),
+  binaires `/usr/lib/grenos/grenos-{shell,bureau}-natif`. `/usr/bin/grenos-shell`
+  (Python) reste l'entrée et fait `exec` du natif (`natif.py`) ; 3 chutes en
+  2 min → Python reprend, et le dit. `grenos-shell --python` force l'ancienne.
+  Compile et 15 tests verts (workflow `natif.yml`, ~2 min).
+- [écrit] terminal : xfconf `xfce4-terminal.xml` (palette nuit, Hack, sans
+  barres), `grensh.sh` (invite 2 lignes, Verbe-Nom FR, complétion), `gren`,
+  `grenget`. grenos-session pose la ligne dans ~/.bashrc une fois.
+- [écrit] GrenPlace 121 → 233 (vérifiés sur Flathub), GrenLaunch 126 → 190.
+- [écrit] propositions grenget : `.github/ISSUE_TEMPLATE/grenget.yml`,
+  `.github/workflows/grenget.yml`, `scripts/grenget-verifier.py`. N'agit
+  qu'une fois sur `main` (les workflows `issues` lisent la branche par défaut).
+- Site : branche `claude/presentation` (grenos-web-download) — présentation en
+  chapitres, en-tête avec Télécharger, page /grenget. À fusionner APRÈS la
+  Release, comme d'habitude.
+- Google : annoncé « bientôt » en texte, aucun bouton. Il faudra un client
+  OAuth Google (gratuit) + Supabase Auth, ou NextAuth sur Vercel.
+
 ## FAIT le 18 novembre vers 05:00 — version `linux-20261118-0449` PUBLIÉE
 
 claude/grenos-ui fusionnée dans main (5459886) : coins de fenêtre arrondis
