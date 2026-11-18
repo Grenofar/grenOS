@@ -8,6 +8,35 @@
 
 set -e
 
+# K3 — CONSTRUCTIONS REPRODUCTIBLES (18 novembre). Deux constructions du même
+# commit doivent donner la même image, à l'octet près. La première condition
+# est d'avoir les MÊMES paquets : deb.debian.org change tous les jours, donc
+# on lit Debian figé à une date, sur snapshot.debian.org. La date est écrite
+# dans `linux/debian-instantane` : la changer est un commit, donc une décision
+# qu'on voit passer — pas une dérive silencieuse.
+#
+# Le système INSTALLÉ, lui, garde deb.debian.org et security.debian.org
+# (`--mirror-binary`) : figer la machine de quelqu'un à une date le priverait
+# des correctifs de sécurité.
+#
+# Seulement quand GRENOS_INSTANTANE est donné (build.sh le lit dans le
+# fichier quand REPRODUCTIBLE=1) : snapshot est lent, et la construction de
+# tous les jours n'en dépend pas tant que la preuve n'est pas verte.
+if [ -n "${GRENOS_INSTANTANE:-}" ]; then
+    S="http://snapshot.debian.org/archive"
+    D="$S/debian/$GRENOS_INSTANTANE/"
+    SEC="$S/debian-security/$GRENOS_INSTANTANE/"
+    set -- \
+        --mirror-bootstrap "$D" --parent-mirror-bootstrap "$D" \
+        --mirror-chroot "$D" --parent-mirror-chroot "$D" \
+        --mirror-chroot-security "$SEC" --parent-mirror-chroot-security "$SEC" \
+        --mirror-binary "http://deb.debian.org/debian/" --parent-mirror-binary "http://deb.debian.org/debian/" \
+        --mirror-binary-security "http://security.debian.org/debian-security/" \
+        --parent-mirror-binary-security "http://security.debian.org/debian-security/" \
+        --apt-options "--yes --allow-downgrades -o Acquire::Check-Valid-Until=false" \
+        "$@"
+fi
+
 lb config noauto \
     --distribution trixie \
     --archive-areas "main contrib non-free non-free-firmware" \

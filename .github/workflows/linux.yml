@@ -242,42 +242,11 @@ jobs:
       - name: L interface Rust (grenos-ui)
         timeout-minutes: 40
         run: |
-          docker run --rm -v "$PWD:/work" -w /work/linux/ui \
-            -e CARGO_TERM_COLOR=never \
-            rust:1-trixie sh -ec '
-              apt-get update -qq
-              apt-get install -y -qq --no-install-recommends \
-                libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev \
-                build-essential pkg-config >/dev/null
-              cargo test --release
-              cargo build --release
-              # grenos-coins : le demon qui arrondit les fenetres d openbox.
-              # Pur Rust (x11rb), sans WebKit : quelques secondes de plus ici.
-              cd /work/linux/coins
-              cargo test --release
-              cargo build --release
-              # La barre et le bureau natifs (gtk-rs + x11rb). GTK 3 est deja
-              # la : libwebkit2gtk-4.1-dev l a tire pour grenos-ui.
-              cd /work/linux/natif
-              cargo test --release
-              cargo build --release
-            '
-          sudo install -m 0755 linux/ui/target/release/grenos-ui \
-            linux/config/includes.chroot/usr/bin/grenos-ui
-          sudo install -m 0755 linux/coins/target/release/grenos-coins \
-            linux/config/includes.chroot/usr/bin/grenos-coins
-          # Dans /usr/lib/grenos, pas sur le PATH : le point d entree reste
-          # /usr/bin/grenos-shell (Python), qui passe la main (natif.py).
-          for prog in grenos-shell-natif grenos-bureau-natif grenos-son-natif; do
-            sudo install -m 0755 "linux/natif/target/release/$prog" \
-              "linux/config/includes.chroot/usr/lib/grenos/$prog"
-          done
-          ls -l linux/config/includes.chroot/usr/bin/grenos-ui \
-            linux/config/includes.chroot/usr/bin/grenos-coins
-          # La place compte : l'image en demande beaucoup plus loin.
-          ls -l linux/config/includes.chroot/usr/lib/grenos/grenos-*-natif
-          sudo rm -rf linux/ui/target linux/coins/target linux/natif/target
-          docker image rm rust:1-trixie >/dev/null 2>&1 || true
+          # Le même script que la preuve de reproductibilité (K3) : ce qu'on
+          # prouve reproductible est ce qu'on publie. Rust figé, Cargo.lock
+          # exigé, et les essais des trois caisses avant la compilation.
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          sh scripts/construire-binaires.sh
 
       # La clé du dépôt APT de grenOS. Elle est fabriquée une seule fois, par
       # la CI, et gardée dans le bucket privé `signing` : personne ne la voit
@@ -446,7 +415,8 @@ jobs:
           docker run --privileged --rm \
             -v "$PWD:/work" -w /work \
             -e LB_PARENT_MIRROR_BOOTSTRAP=http://deb.debian.org/debian \
-            debian:trixie sh /work/linux/build.sh \
+            -e SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
+            debian:trixie-20261104 sh /work/linux/build.sh \
             > "$RUNNER_TEMP/construction.log" 2>&1 || RATE=1
 
           # Le journal entier fait des dizaines de milliers de lignes — 770

@@ -137,10 +137,12 @@ update-initramfs -u >/dev/null 2>&1 || true
 echo "--- grenOS : le magasin ---"
 
 # Flathub, branché d'avance : le magasin installe Steam sans rien configurer.
-# L'ajout ne télécharge rien.
+# Depuis le fichier livré dans l'image, pas depuis Internet : un ajout qui
+# télécharge son fichier pendant la construction rend deux images
+# différentes le jour où Flathub le change (K3, 18 novembre).
 if command -v flatpak >/dev/null 2>&1; then
     flatpak remote-add --if-not-exists flathub \
-        https://dl.flathub.org/repo/flathub.flatpakrepo || true
+        /usr/share/grenos/flathub.flatpakrepo || true
 fi
 
 echo "--- grenOS : les icones ---"

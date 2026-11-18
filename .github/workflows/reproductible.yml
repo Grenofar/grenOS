@@ -1,0 +1,138 @@
+# K3 — DEUX CONSTRUCTIONS INDÉPENDANTES DONNENT-ELLES LA MÊME IMAGE ?
+#
+# Demandé dans la liste : « deux constructions indépendantes doivent donner
+# exactement le même noyau ». On va plus loin que le noyau : l'ISO entière.
+#
+# Deux tâches (`a` et `b`), sur deux machines GitHub différentes, construisent
+# le même commit chacune de leur côté, avec Debian figé à la date de
+# `linux/debian-instantane` (snapshot.debian.org) et une seule date pour tous
+# les fichiers (celle du commit). Une troisième compare :
+#   - les deux ISO, octet pour octet (sha256) — c'est LE verdict ;
+#   - si elles diffèrent, la liste des fichiers de l'image qui diffèrent, pour
+#     savoir quoi corriger, au lieu d'un simple « non ».
+#
+# À la main (workflow_dispatch) et chaque lundi : deux constructions coûtent
+# une heure de machine chacune, et la reproductibilité ne se perd pas d'un
+# commit à l'autre aussi vite qu'un test d'écran.
+name: reproductible
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+  push:
+    branches: ["claude/**"]
+    paths:
+      - ".github/workflows/reproductible.yml"
+      - "linux/debian-instantane"
+
+concurrency:
+  group: reproductible-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  construire:
+    strategy:
+      fail-fast: false
+      matrix:
+        tour: [a, b]
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Faire de la place
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/powershell /usr/share/swift /opt/hostedtoolcache || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Les programmes Rust
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          sh scripts/construire-binaires.sh sans-essais
+
+      - name: La partie publique de la cle du depot
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://tpqzhzuoyqpfairatdrw.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          # La même clé que l'image publiée : sans elle, on prouverait la
+          # reproductibilité d'une autre image que celle qu'on livre.
+          [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || { echo "pas de cle : image sans depot grenOS"; exit 0; }
+          code=$(curl -s -o secret.asc -w '%{http_code}' \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            "$SUPABASE_URL/storage/v1/object/signing/apt-signing.asc")
+          [ "$code" = "200" ] || { rm -f secret.asc; echo "cle absente ($code)"; exit 0; }
+          export GNUPGHOME=$(mktemp -d)
+          chmod 700 "$GNUPGHOME"
+          gpg --batch --quiet --import secret.asc
+          rm -f secret.asc
+          gpg --batch --export > linux/grenos-apt.gpg
+          gpg --batch --armor --export > linux/grenos-apt.asc
+          rm -rf "$GNUPGHOME"
+
+      - name: Construire l image
+        run: |
+          set -o pipefail
+          docker run --privileged --rm -v "$PWD:/work" -w /work \
+            -e REPRODUCTIBLE=1 \
+            -e SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
+            debian:trixie-20261104 sh /work/linux/build.sh \
+            > construction.log 2>&1 || { grep -a "grenos:" construction.log; tail -n 150 construction.log; exit 1; }
+          grep -a "grenos:" construction.log || true
+          ls -l linux/*.iso
+
+      - name: L empreinte de chaque fichier de l image
+        run: |
+          sudo apt-get install -y -qq squashfs-tools >/dev/null
+          ISO=$(ls linux/*.iso | head -1)
+          sha256sum "$ISO" | cut -d' ' -f1 > iso.sha256
+          mkdir -p iso racine
+          sudo mount -o loop,ro "$ISO" iso
+          # Ce qui est à côté du système : noyau, initrd, chargeurs.
+          (cd iso && sudo find . -type f ! -name filesystem.squashfs -exec sha256sum {} + | sort -k2) > dehors.txt
+          sudo unsquashfs -no-progress -f -d racine iso/live/filesystem.squashfs >/dev/null
+          sudo umount iso
+          # Le contenu, et les métadonnées qui changent un octet de l'image :
+          # droits, propriétaires, dates, cibles des liens.
+          (cd racine && sudo find . -type f -exec sha256sum {} + | sort -k2) > contenu.txt
+          (cd racine && sudo find . -printf '%M %u %g %T@ %p -> %l\n' | sort -k6) > meta.txt
+          wc -l dehors.txt contenu.txt meta.txt
+          echo "iso ${{ matrix.tour }} : $(cat iso.sha256)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: empreintes-${{ matrix.tour }}
+          path: |
+            iso.sha256
+            dehors.txt
+            contenu.txt
+            meta.txt
+          retention-days: 14
+
+  comparer:
+    needs: construire
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Les deux images sont-elles identiques
+        run: |
+          A=$(cat empreintes-a/iso.sha256); B=$(cat empreintes-b/iso.sha256)
+          echo "construction a : $A"
+          echo "construction b : $B"
+          for f in dehors contenu meta; do
+            if diff -q "empreintes-a/$f.txt" "empreintes-b/$f.txt" >/dev/null; then
+              echo "$f : identique"
+            else
+              echo "--- $f : $(diff "empreintes-a/$f.txt" "empreintes-b/$f.txt" | grep -c '^[<>]') ligne(s) differente(s), les 80 premieres ---"
+              diff "empreintes-a/$f.txt" "empreintes-b/$f.txt" | grep '^[<>]' | head -80
+            fi
+          done
+          if [ "$A" = "$B" ]; then
+            echo "K3 : les deux constructions donnent la MEME image, a l octet pres."
+          else
+            echo "::error::K3 : deux constructions du meme commit donnent deux images differentes (liste ci-dessus)."
+            exit 1
+          fi

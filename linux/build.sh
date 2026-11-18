@@ -77,7 +77,9 @@ python3 tools/wallpaper.py config/includes.chroot/usr/share/grenos 2560 1440
 python3 tools/son-essai.py config/includes.chroot/usr/share/grenos 0.8
 # Le logo : le nom, dans la police du système, sur fond transparent. Il sert à
 # l'écran de démarrage et à l'accueil.
-convert -size 900x260 xc:none \
+# Sans date dans le PNG : ImageMagick y écrit l'heure de création, et deux
+# constructions donneraient deux logos différents à l'octet près (K3).
+convert -size 900x260 xc:none -define png:exclude-chunks=date,time \
     -font /usr/share/fonts/truetype/noto/NotoSans-Bold.ttf -pointsize 150 \
     -fill '#e6ebf5' -gravity center -annotate +0+0 'grenOS' \
     PNG32:config/includes.chroot/usr/share/grenos/logo.png
@@ -98,6 +100,20 @@ EOF
     echo "depot grenOS ajoute a l'image"
 else
     echo "pas de cle de depot : l'image n'aura que les depots Debian"
+fi
+
+echo "--- reproductibilite (K3) ---"
+# Une seule date pour tout ce que la construction écrit : celle du commit,
+# donnée par la CI. live-build, mksquashfs, xorriso, dpkg et initramfs-tools
+# la lisent (SOURCE_DATE_EPOCH) au lieu de l'heure de la construction.
+if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+    export SOURCE_DATE_EPOCH
+    echo "grenos: date de construction figee a $SOURCE_DATE_EPOCH"
+fi
+if [ "${REPRODUCTIBLE:-0}" = 1 ]; then
+    GRENOS_INSTANTANE=$(tr -d ' \n' < debian-instantane)
+    export GRENOS_INSTANTANE
+    echo "grenos: Debian fige au $GRENOS_INSTANTANE (snapshot.debian.org)"
 fi
 
 echo "--- configuration ---"
