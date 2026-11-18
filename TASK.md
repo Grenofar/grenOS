@@ -25,6 +25,28 @@
   en pause après ~7 jours sans activité : « Restore » dans le tableau de bord,
   données conservées. Plafond de dépense activé : jamais facturé.
 
+## FAIT le 18 novembre vers 12:30 — version `linux-20261118-1129` PUBLIÉE
+
+Cinq preuves vertes (run 44285528012), site à jour.
+- Fin du premier démarrage : la page reçoit le résultat par DEUX chemins
+  (réponse IPC + événement « premier-fini ») ; les deux filets (12 s dans
+  grenos-ui, 30 s dans le lanceur) restent et n'ont pas servi sur cette
+  version. Si « filet » ou « on le ferme » apparaît un jour dans un journal
+  série, la cause est ailleurs que dans la réponse IPC.
+- I8 Ctrl+Alt+Échap → mode jeu ; I13 sauvegardes (grenos-sauvegarde) ;
+  I17 écrans Dev (zram/swappiness, ufw, journaux) ; D1 ufw. Voir todo.md.
+
+RESTE, et pourquoi ce n'est pas fait :
+- Fenêtres Python → pages grenos-ui (Fichiers, Réglages, GrenPlace, Tâches,
+  Son, Connexions, grenHub, Jeux, Bienvenue, Secours, Arrêt) : onze fenêtres,
+  chacune vérifiée par la CI ligne à ligne (« son ouvert », « taches
+  ouvert »…). À faire une par une, chacune avec sa propre CI.
+- Connexion Google sur /grenget : il faut un identifiant OAuth Google créé
+  par Grenofar (console Google Cloud, gratuit) — je ne crée pas de compte.
+- K3 constructions reproductibles : un chantier de recherche (horodatages,
+  ordre des fichiers dans squashfs), pas une correction.
+- Le reste de todo.md (A, B, C, D, E, F) : la feuille de route d'un OS.
+
 ## FAIT le 18 novembre vers 10:00 — version `linux-20261118-0945` PUBLIÉE
 
 Cinq preuves vertes (run 44270687371) : barre et bureau natifs vus dans les
