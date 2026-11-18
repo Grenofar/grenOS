@@ -135,11 +135,13 @@ impl Presse {
         });
         natif::arrondir(&p.fenetre);
 
-        // L'écoute : chaque nouveau propriétaire du presse-papier.
+        // L'écoute : chaque nouveau propriétaire du presse-papier. gtk-rs 0.18
+        // ne génère pas `connect_owner_change` pour GtkClipboard (le signal
+        // porte un GdkEventOwnerChange) : on s'y branche par son nom.
         let q = p.clone();
-        p.presse_papier.connect_owner_change(move |presse, _| {
+        p.presse_papier.connect_local("owner-change", false, move |_| {
             let r = q.clone();
-            presse.request_text(move |_, texte| {
+            q.presse_papier.request_text(move |_, texte| {
                 let Some(texte) = texte else { return };
                 if r.pose.borrow().as_deref() == Some(texte) {
                     *r.pose.borrow_mut() = None;
@@ -149,6 +151,7 @@ impl Presse {
                     r.remplir();
                 }
             });
+            None
         });
         p
     }
