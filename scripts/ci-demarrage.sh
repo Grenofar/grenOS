@@ -938,6 +938,29 @@ sleep 3
 python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ret" || true
 sleep 2
 
+echo "--- grenRecovery voit-il les disques ---"
+# todo C3-C9 (18 novembre). La fenetre de reparation, ouverte depuis le menu
+# comme le ferait quelqu un sur sa cle grenOS. Elle passe par sudo vers
+# grenos-recuperation et doit dire combien de partitions elle a lues : c est
+# la preuve que la partie root repond et que les disques sont lus. On n y
+# clique RIEN : chacun de ses gestes ecrit sur un disque.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey ctrl-esc" || true
+sleep 4
+# recherche-menu: grenRecovery
+for touche in g r e n r e c ret; do
+  python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
+  sleep 1
+done
+sleep 15
+python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-recuperation.ppm" || true
+if grep -aq 'grenos: recuperation ouvert, ' "$RUNNER_TEMP/serial.log"; then
+  grep -a 'grenos: recuperation ouvert, ' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+else
+  echo "::warning::grenRecovery ne s est pas annonce (rapporte, pas bloquant)"
+fi
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey alt-f4" || true
+sleep 2
+
 echo "--- la fenetre Fin de session s ouvre-t-elle ---"
 # Le 18 novembre, « Eteindre » quitte Python pour grenos-ui (arret.rs). Elle
 # n etait verifiee nulle part : personne ne l ouvrait avant Grenofar.

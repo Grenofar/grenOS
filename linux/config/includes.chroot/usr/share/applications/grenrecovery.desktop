@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=grenRecovery
+Comment=Réparer un grenOS qui ne démarre plus, depuis la clé
+Keywords=réparer;secours;récupérer;grub;fsck;mot de passe;
+Exec=grenrecovery
+Icon=grenos-secours
+Terminal=false
+Categories=System;

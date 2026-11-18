@@ -2,7 +2,7 @@
 // `window.GRENOS_PAGE` ; dans un navigateur, c'est l'ancre (#maj).
 "use strict";
 (function () {
-  const PAGES = ["premier", "maj", "perf", "lance", "arret", "grenai", "agenda", "horloge", "fichiers", "reglages", "jeux", "grenplace", "hub", "taches", "connexions", "secours", "bienvenue"];
+  const PAGES = ["premier", "maj", "perf", "lance", "arret", "recuperation", "grenai", "agenda", "horloge", "fichiers", "reglages", "jeux", "grenplace", "hub", "taches", "connexions", "secours", "bienvenue"];
   let page = window.GRENOS_PAGE || location.hash.slice(1) || "premier";
   if (!PAGES.includes(page)) page = "premier";
   document.body.dataset.page = page;

@@ -1,0 +1,208 @@
+#!/bin/sh
+# grenRecovery, la partie root (todo C3 à C9, J11 — 18 novembre).
+#
+# Appelé par la fenêtre grenRecovery (grenos-ui, recuperation.rs) par sudo ou
+# pkexec. Fait pour tourner depuis la CLÉ grenOS, quand le système installé
+# ne démarre plus : on travaille sur ses partitions de l'extérieur.
+#
+#   grenos-recuperation lister                 une ligne JSON par partition
+#   grenos-recuperation verifier  /dev/sdXN    fsck (la partition doit être démontée)
+#   grenos-recuperation ouvrir    /dev/sdXN    montée en LECTURE SEULE, rend le chemin
+#   grenos-recuperation fermer    /dev/sdXN    démontée
+#   grenos-recuperation mdp       /dev/sdXN compte   retire le mot de passe du compte
+#   grenos-recuperation noyau     /dev/sdXN    refait l'initrd et le menu de GRUB
+#   grenos-recuperation demarrage /dev/sdXN    réinstalle GRUB (UEFI ou BIOS) et son menu
+#
+# RÈGLES :
+# - un nom de périphérique est vérifié avant tout usage (forme ET existence
+#   d'un périphérique bloc) : rien d'autre n'atteint mount, fsck ou chroot ;
+# - « ouvrir » monte en lecture seule : récupérer ses fichiers ne doit jamais
+#   pouvoir abîmer ce qui reste ;
+# - ce qui écrit (mdp, noyau, demarrage) monte, fait, et démonte TOUJOURS,
+#   même en cas d'échec (trap) ;
+# - chaque geste dit sur le port série ce qu'il a fait (grenos-dire).
+set -u
+RACINE=/run/grenos-recup
+mkdir -p "$RACINE"
+
+dire() { grenos-dire "recuperation : $1" 2>/dev/null || true; }
+
+valide() {
+    case "$1" in
+        /dev/sd[a-z][0-9]*|/dev/vd[a-z][0-9]*|/dev/nvme[0-9]*n[0-9]*p[0-9]*|/dev/mmcblk[0-9]*p[0-9]*) [ -b "$1" ] ;;
+        *) return 1 ;;
+    esac
+}
+
+point() { printf '%s/%s' "$RACINE" "$(basename "$1")"; }
+monte_ou() { findmnt -n -o TARGET --source "$1" 2>/dev/null | head -1; }
+propre() { printf '%s' "$1" | tr -d '"\\' | tr -cd '[:print:]'; }
+
+# Le disque qui porte une partition, et sa partition EFI s'il en a une.
+disque_de() { lsblk -no PKNAME "$1" 2>/dev/null | head -1; }
+efi_de() {
+    d=$(disque_de "$1")
+    [ -n "$d" ] || return 1
+    lsblk -lnpo NAME,PARTTYPE "/dev/$d" 2>/dev/null \
+        | awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" { print $1; exit }'
+}
+
+# Monter pour écrire, avec /dev /proc /sys (et efivars) : ce qu'il faut à un
+# chroot pour réinstaller GRUB ou refaire l'initrd.
+#
+# Appelée DIRECTEMENT, jamais dans $(…) : une substitution tourne dans un
+# sous-processus, et la liste MONTES s'y perdrait — le trap ne démonterait
+# rien, et la partition resterait montée après une erreur. Le chemin est
+# rendu dans P.
+MONTES=""
+P=""
+monter_rw() {
+    p=$(point "$1")
+    mkdir -p "$p"
+    # Ouverte en lecture seule par « Récupérer des fichiers » ? On la ferme
+    # d'abord : un second montage par-dessus échouerait.
+    umount "$p" 2>/dev/null
+    mount "$1" "$p" || return 1
+    MONTES="$p"
+    for d in dev proc sys dev/pts; do
+        mount --bind "/$d" "$p/$d" && MONTES="$p/$d $MONTES"
+    done
+    if [ -d /sys/firmware/efi/efivars ] && [ -d "$p/sys/firmware/efi/efivars" ]; then
+        mount --bind /sys/firmware/efi/efivars "$p/sys/firmware/efi/efivars" && MONTES="$p/sys/firmware/efi/efivars $MONTES"
+    fi
+    e=$(efi_de "$1")
+    if [ -n "$e" ] && [ -d "$p/boot/efi" ]; then
+        mount "$e" "$p/boot/efi" && MONTES="$p/boot/efi $MONTES"
+    fi
+    P=$p
+}
+
+# Lance une commande dans le chroot, montre la fin de ce qu'elle dit, et rend
+# SON code — pas celui de `tail`, qui réussit toujours (la faute qui a déjà
+# rendu une construction verte alors qu'elle échouait, le 7 octobre).
+dans() {
+    sortie=$(chroot "$P" "$@" 2>&1)
+    code=$?
+    printf '%s\n' "$sortie" | tail -n 4
+    return $code
+}
+tout_demonter() {
+    for m in $MONTES; do umount "$m" 2>/dev/null || umount -l "$m" 2>/dev/null; done
+    MONTES=""
+}
+trap tout_demonter EXIT
+
+geste=${1:-}
+dev=${2:-}
+
+case "$geste" in
+lister)
+    n=0; g=0
+    lsblk -Pnpo NAME,FSTYPE,SIZE,LABEL,TYPE 2>/dev/null | while read -r ligne; do
+        NAME=""; FSTYPE=""; SIZE=""; LABEL=""; TYPE=""
+        eval "$ligne"
+        [ "$TYPE" = part ] || continue
+        case "$FSTYPE" in ext4|btrfs|xfs) ;; *) continue ;; esac
+        valide "$NAME" || continue
+        ou=$(monte_ou "$NAME")
+        tmp=""
+        if [ -z "$ou" ]; then
+            tmp=$(point "$NAME"); mkdir -p "$tmp"
+            mount -o ro "$NAME" "$tmp" 2>/dev/null && ou=$tmp || tmp=""
+        fi
+        grenos=non; comptes=""; machine=""
+        if [ -n "$ou" ] && [ -f "$ou/etc/os-release" ]; then
+            grep -qi grenos "$ou/etc/os-release" "$ou/etc/grenos/identite" 2>/dev/null && grenos=oui
+            machine=$(propre "$(cat "$ou/etc/hostname" 2>/dev/null)")
+            for h in "$ou"/home/*; do
+                [ -d "$h" ] || continue
+                c=$(basename "$h")
+                case "$c" in [a-z_]*) comptes="$comptes${comptes:+,}\"$(propre "$c")\"" ;; esac
+            done
+        fi
+        [ -n "$tmp" ] && umount "$tmp" 2>/dev/null
+        printf '{"dev":"%s","fs":"%s","taille":"%s","etiquette":"%s","grenos":%s,"machine":"%s","comptes":[%s],"montee":"%s"}\n' \
+            "$NAME" "$FSTYPE" "$(propre "$SIZE")" "$(propre "$LABEL")" \
+            "$([ "$grenos" = oui ] && echo true || echo false)" "$machine" "$comptes" "$(monte_ou "$NAME")"
+    done
+    exit 0
+    ;;
+esac
+
+valide "$dev" || { echo "partition refusee : $dev" >&2; exit 2; }
+
+case "$geste" in
+verifier)
+    # fsck sur une partition montée l'abîmerait : on refuse.
+    if [ -n "$(monte_ou "$dev")" ]; then
+        echo "La partition est montée : ferme-la d'abord (« Fermer »)." >&2; exit 3
+    fi
+    fs=$(lsblk -no FSTYPE "$dev")
+    case "$fs" in
+        btrfs) sortie=$(btrfs check --readonly "$dev" 2>&1); code=$? ;;
+        xfs) sortie=$(xfs_repair "$dev" 2>&1); code=$? ;;
+        *) sortie=$(fsck -f -y "$dev" 2>&1); code=$? ;;
+    esac
+    printf '%s\n' "$sortie" | tail -n 8
+    # fsck : 0 rien à corriger, 1 corrigé, 2 corrigé mais il faut redémarrer,
+    # 4 et plus : des erreurs RESTENT.
+    case "$code" in
+        0) echo "Le système de fichiers est sain." ;;
+        1|2) echo "Des erreurs ont été trouvées et CORRIGÉES." ;;
+        *) echo "Des erreurs restent après la vérification (code $code)." >&2
+           dire "verification de $(basename "$dev") : erreurs restantes"
+           exit 1 ;;
+    esac
+    dire "verification de $(basename "$dev") terminee, code $code"
+    exit 0
+    ;;
+ouvrir)
+    ou=$(monte_ou "$dev")
+    if [ -z "$ou" ]; then
+        ou=$(point "$dev"); mkdir -p "$ou"
+        mount -o ro "$dev" "$ou" || exit 1
+    fi
+    trap - EXIT
+    dire "$(basename "$dev") ouverte en lecture seule"
+    printf '%s' "$ou"
+    exit 0
+    ;;
+fermer)
+    umount "$(point "$dev")" 2>/dev/null
+    exit 0
+    ;;
+mdp)
+    compte=${3:-}
+    case "$compte" in [a-z_][a-z0-9_-]*) ;; *) echo "compte refuse" >&2; exit 2 ;; esac
+    monter_rw "$dev" || exit 1
+    # Comme grenOS à l'installation : une session qui s'ouvre sans mot de
+    # passe. La personne en reposera un dans les Réglages.
+    dans passwd -d "$compte" || exit 1
+    dire "mot de passe retire pour un compte"
+    echo "Le mot de passe de « $compte » est retiré : la session s'ouvrira sans. Remets-en un dans Réglages › Compte."
+    exit 0
+    ;;
+noyau)
+    monter_rw "$dev" || exit 1
+    dans update-initramfs -u -k all || exit 1
+    dans update-grub || exit 1
+    dire "initrd et menu de demarrage refaits"
+    exit 0
+    ;;
+demarrage)
+    monter_rw "$dev" || exit 1
+    if [ -d /sys/firmware/efi ]; then
+        [ -n "$(efi_de "$dev")" ] || { echo "Aucune partition EFI sur ce disque." >&2; exit 1; }
+        dans grub-install --target=x86_64-efi --efi-directory=/boot/efi --recheck || exit 1
+    else
+        d=$(disque_de "$dev")
+        dans grub-install --target=i386-pc "/dev/$d" || exit 1
+    fi
+    dans update-grub || exit 1
+    dire "demarrage repare"
+    exit 0
+    ;;
+*)
+    echo "geste inconnu" >&2; exit 2
+    ;;
+esac

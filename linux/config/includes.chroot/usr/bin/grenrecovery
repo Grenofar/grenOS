@@ -1,0 +1,4 @@
+#!/bin/sh
+# grenRecovery (todo C3 à C9 — 18 novembre) : une page de grenos-ui. À lancer
+# depuis la clé grenOS quand l'installation ne démarre plus.
+exec grenos-ui recuperation "$@"

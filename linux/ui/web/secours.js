@@ -31,7 +31,11 @@
       el("header.tete", el("div.logo", svg("bouclier")), el("div", ...tete)),
       resume,
       v.cause ? el("section.carte.verre.sc-cause", el("div.etiquette", "Cause probable"), el("p", v.cause)) : null,
-      actions, etat));
+      actions,
+      el("section.carte.verre.sc-recup",
+        el("p.note", "Si rien de tout cela ne suffit : démarre sur la clé grenOS et ouvre grenRecovery. Il vérifie le disque, répare le démarrage, retire un mot de passe oublié et récupère tes fichiers."),
+        el("button.bouton.petit", { onclick: () => window.grenos.ouvrirProgramme("grenrecovery") }, "Ouvrir grenRecovery")),
+      etat));
     pret();
   })();
 })();

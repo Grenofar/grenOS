@@ -197,6 +197,8 @@
       case "agenda_retirer": return (await window.APERCU("agenda_lire")).filter((e) => e.id !== a.id);
       case "grenai_reglages": return { fournisseur: "ollama", fournisseurs: [{ cle: "ollama", nom: "Ollama (sur cette machine)", modele: "llama3.2", a_une_cle: false, local: true }, { cle: "openai", nom: "OpenAI (GPT)", modele: "gpt-4o-mini", a_une_cle: true, local: false }] };
       case "grenai_demander": await attendre(700); return "Voici une réponse d'exemple, écrite par l'aperçu : aucun modèle n'a été appelé.";
+      case "recuperation_lister": await attendre(500); return [{ dev: "/dev/nvme0n1p2", fs: "ext4", taille: "476,4G", etiquette: "", grenos: true, machine: "grenos-lea", comptes: ["lea"], montee: "" }, { dev: "/dev/sda1", fs: "ext4", taille: "20G", etiquette: "DONNEES", grenos: false, machine: "", comptes: [], montee: "" }];
+      case "recuperation_faire": await attendre(600); return a.geste === "ouvrir" ? "/run/grenos-recup/nvme0n1p2" : "Le système de fichiers est sain.";
       case "fichiers_dire": console.log("série :", a.texte); return null;
       default: return null;
     }

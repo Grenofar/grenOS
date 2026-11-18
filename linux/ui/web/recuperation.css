@@ -1,0 +1,12 @@
+/* grenRecovery. */
+body[data-page="recuperation"] { overflow: auto; }
+.page-recuperation { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 22px 22px 30px; display: flex; flex-direction: column; gap: 12px; }
+.page-recuperation .tete h1 { font-size: 24px; }
+.rc-outils { display: flex; flex-wrap: wrap; gap: 8px; }
+.rc-liste { display: flex; flex-direction: column; gap: 10px; }
+.rc-carte { display: flex; flex-direction: column; gap: 8px; }
+.rc-carte p { margin: 0; }
+.rc-tete { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+.rc-gestes { display: flex; flex-wrap: wrap; gap: 6px; }
+.rc-etat:empty { display: none; }
+.rc-etat { margin: 0; padding: 10px 14px; border-radius: var(--rayon-petit); background: var(--surface-haute); white-space: pre-line; font-size: 13.5px; user-select: text; -webkit-user-select: text; }
