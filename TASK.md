@@ -3,7 +3,28 @@
 > Tenu par Claude. Mis à jour le 2026-11-17 au soir. Une session qui reprend
 > le travail lit d'abord ce fichier, puis `CLAUDE.md` (local).
 
-## 0. En cours — la publication de la version grenos-ui
+## 0. En cours — le 18 novembre au soir (« termine tout, dans cet ordre »)
+
+1. [FAIT] Les 11 fenêtres en grenos-ui : PROUVÉES en machine (construction
+   44321910904) — Fin de session, Bienvenue, Réglages (10 pages et ses 4
+   preuves), GrenPlace (233), Jeux, grenHub, Tâches, Son natif, Explorateur
+   (Ctrl+H, recherche, Ctrl+Maj+N, F2, onglets).
+2. [FAIT] Corrections K3 poussées ; la double construction tourne
+   (reproductible.yml sur `main`). Premier passage : 5 différences, dont 3
+   corrigées et 2 venant de la mesure (propriétaires lus par nom).
+3. [EN COURS] `main` = claude/k3 (4cd7e91) : la construction publie la
+   version si tout est vert. Ensuite le site (il lit la dernière Release).
+4. [ÉCRIT, branche `claude/suite`] la suite de todo.md, à fusionner après
+   la version 3 : NVMe/USB à chaud/veille prouvés en CI, B1, B5 (le
+   chiffrement de l'installateur ne pouvait pas redémarrer), B6, C2-C9 et
+   C12 (grenRecovery), E11 (fuzzing — a trouvé une vraie panique dans
+   GrenLaunch), F3, F4, G3, G11, G23, G31, G32 (Agenda), H1/H3/H4/H6/H9/H11
+   (GrenAI, OCR). Voir todo.md : chaque ligne dit [écrit] ou [prouvé].
+5. RESTE vraiment : B3 (retour arrière atomique), D2, D9 (Secure Boot
+   signé), E10 (charge sur plusieurs jours), G12, G22 et J3 (matériel absent
+   de la machine d'essai), G28, H5, H8, H10, A9, A10.
+
+## (historique) la publication de la version grenos-ui
 
 - Branche `claude/grenos-ui` (grenOS) : grenos-ui en Rust/Tauri — premier
   démarrage, Mises à jour, grenPerf, GrenLaunch (126 jeux, « Mes jeux Steam »),
