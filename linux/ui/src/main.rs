@@ -49,11 +49,19 @@ const TITRE: f64 = 30.0;
 static DEMANDES: Mutex<Option<HashMap<String, Instant>>> = Mutex::new(None);
 static NAISSANCE: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
+/// Vrai une fois la première fenêtre du processus demandée.
+static PREMIERE_FAITE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn noter_demande(page: &str) {
-    let mut d = DEMANDES.lock().unwrap();
-    let carte = d.get_or_insert_with(HashMap::new);
-    let debut = if carte.is_empty() { *NAISSANCE.get_or_init(Instant::now) } else { Instant::now() };
-    carte.insert(page.to_string(), debut);
+    // La toute première fenêtre compte depuis la naissance du processus (le
+    // chargement de grenos-ui fait partie de son attente) ; les suivantes,
+    // depuis la demande. L'ancien test (« aucune fenêtre en attente ») donnait
+    // aux suivantes l'âge du processus : la CI du 18 novembre lisait
+    // « Réglages en 625732 ms » pour une fenêtre ouverte en une fraction de
+    // seconde.
+    let premiere = !PREMIERE_FAITE.swap(true, std::sync::atomic::Ordering::SeqCst);
+    let debut = if premiere { *NAISSANCE.get_or_init(Instant::now) } else { Instant::now() };
+    DEMANDES.lock().unwrap().get_or_insert_with(HashMap::new).insert(page.to_string(), debut);
 }
 
 /// La taille voulue, ramenée à ce que l'écran peut montrer sous la barre
@@ -75,8 +83,15 @@ fn ecran_logique(app: &AppHandle) -> Option<(f64, f64)> {
 /// remonter la fenêtre si son bas passe sous la barre, puis DIRE sa taille
 /// réelle et son temps d'ouverture — les mêmes lignes que les fenêtres
 /// Python, que la CI lit (« fenetre … : tient », « ouverture : … »).
+//
+// ASYNCHRONE, donc hors du fil principal (18 novembre). Synchrone, elle
+// tournait SUR le fil principal, et y déplacer la fenêtre (set_position)
+// attend ce même fil : seules les trois fenêtres qui n'avaient pas besoin
+// d'être remontées ont dit leur taille à la CI, les six autres se sont tues.
+// Et la ligne est dite AVANT le déplacement : même si celui-ci échouait, la
+// mesure arrive.
 #[tauri::command]
-fn fenetre_prete(fenetre: tauri::WebviewWindow) {
+async fn fenetre_prete(fenetre: tauri::WebviewWindow) {
     let page = fenetre.label().to_string();
     let titre = fenetre.title().unwrap_or_else(|_| page.clone());
     if let Some(debut) = DEMANDES.lock().unwrap().as_mut().and_then(|c| c.remove(&page)) {
@@ -93,17 +108,17 @@ fn fenetre_prete(fenetre: tauri::WebviewWindow) {
     let pos = pos.to_logical::<f64>(echelle);
     let (el, eh) = ecran_logique(fenetre.app_handle()).unwrap_or((taille.width, taille.height + BARRE));
     let utile_h = (eh - BARRE).max(240.0);
-    let mut y = pos.y;
-    if y + taille.height > utile_h {
-        y = TITRE.max(utile_h - taille.height);
-        let _ = fenetre.set_position(tauri::LogicalPosition::new(pos.x, y));
-    }
+    let bouger = pos.y + taille.height > utile_h;
+    let y = if bouger { TITRE.max(utile_h - taille.height) } else { pos.y };
     let tient = taille.width <= el && y + taille.height <= utile_h;
     systeme::dire(&format!(
         "fenetre {titre} {}x{} en {},{} dans {}x{} : {}",
         taille.width as i64, taille.height as i64, pos.x as i64, y as i64,
         el as i64, utile_h as i64, if tient { "tient" } else { "DEBORDE" }
     ));
+    if bouger {
+        let _ = fenetre.set_position(tauri::LogicalPosition::new(pos.x, y));
+    }
 }
 
 const PAGES: &[(&str, &str, f64, f64)] = &[
