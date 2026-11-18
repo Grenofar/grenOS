@@ -141,6 +141,15 @@ if [ -s /etc/grenos/date-construction ]; then
     export SOURCE_DATE_EPOCH
 fi
 update-initramfs -u >/dev/null 2>&1 || true
+# Le crochet zz-grenos-clavier-fixe a-t-il pris ? Une ligne dans le journal
+# plutot qu'une deuxieme construction pour le savoir.
+if lsinitramfs /boot/initrd.img-* 2>/dev/null | grep -q 'console-setup/tmpkbd\.' ; then
+    if lsinitramfs /boot/initrd.img-* | grep 'console-setup/tmpkbd\.' | grep -qv 'tmpkbd\.grenos$'; then
+        echo "grenos: initrd, clavier sous un NOM ALEATOIRE (K3 : deux constructions differeront)"
+    else
+        echo "grenos: initrd, clavier sous un nom fixe (tmpkbd.grenos)"
+    fi
+fi
 
 echo "--- grenOS : le magasin ---"
 

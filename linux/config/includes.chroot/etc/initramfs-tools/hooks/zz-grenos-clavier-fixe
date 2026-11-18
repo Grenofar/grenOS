@@ -1,0 +1,30 @@
+#!/bin/sh
+# K3 : le clavier de l'initrd sous un nom FIXE (18 novembre).
+#
+# Le crochet de console-setup copie dans l'initrd la disposition du clavier
+# — il le faut : c'est elle qui fait taper le mot de passe LUKS en AZERTY.
+# Mais setupcon la range sous un nom tire au sort (`mktemp`) :
+# etc/console-setup/tmpkbd.XjDzdU d'un cote, tmpkbd.AttCeY de l'autre, meme
+# contenu, et la copie de setupcon qui le nomme differe aussi. Deux
+# constructions du meme commit donnaient deux initrd (reproductible.yml,
+# run 44343831243). On renomme, et on corrige le nom partout ou il est ecrit.
+#
+# « zz » : les crochets passent dans l'ordre de leur nom ; celui-ci doit
+# passer apres console_setup.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in prereqs) prereqs; exit 0 ;; esac
+
+[ -n "$DESTDIR" ] || exit 0
+dossier="$DESTDIR/etc/console-setup"
+for f in "$dossier"/tmpkbd.*; do
+    [ -f "$f" ] || continue
+    ancien=$(basename "$f")
+    [ "$ancien" = "tmpkbd.grenos" ] && continue
+    mv "$f" "$dossier/tmpkbd.grenos"
+    # Le nom tire au sort est fait de lettres et de chiffres : sans risque
+    # dans une expression sed.
+    grep -rlF "$ancien" "$DESTDIR/usr/bin" "$DESTDIR/etc" "$DESTDIR/scripts" 2>/dev/null \
+        | while read -r ecrit; do sed -i "s/$ancien/tmpkbd.grenos/g" "$ecrit"; done
+done
+exit 0

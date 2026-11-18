@@ -55,6 +55,20 @@ def toile(taille):
     return image, xs / (taille - 1), ys / (taille - 1)
 
 
+def octets(image):
+    """La toile en octets, PAREILLE sur toutes les machines (K3, 18 novembre).
+
+    numpy choisit a l'execution ses versions SIMD de arctan2, sin, tanh… :
+    AVX-512 sur une machine de la CI, AVX2 sur l'autre, et le dernier chiffre
+    change. Tronquer 127,9999999 ou 128,0000001 en octet donne 127 ou 128 —
+    c'est ce qui rendait grenos-secours.png different d'une construction a
+    l'autre (deux constructions comparees octet par octet). On arrondit a
+    trois decimales AVANT de tronquer : un ecart de 1e-13 ne franchit plus
+    la frontiere d'un octet.
+    """
+    return np.clip(np.round(image, 3), 0, 255).astype(np.uint8)
+
+
 def poser(image, masque, couleur, force=1.0):
     """Pose une couleur là où le masque vaut 1, en gardant les bords doux."""
     alpha = np.clip(masque, 0.0, 1.0)[..., None] * force
@@ -100,7 +114,7 @@ def grenplace(chemin, taille):
     point = np.clip((0.055 - np.hypot(u - 0.5, v - 0.62)) / 0.012, 0.0, 1.0)
     poser(image, point, CLAIR, 0.92)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def fichiers(chemin, taille):
@@ -122,7 +136,7 @@ def fichiers(chemin, taille):
     feuille = rectangle(u, v, 0.30, 0.40, 0.70, 0.62, rayon=0.03)
     poser(image, feuille, CLAIR, 0.90)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def son(chemin, taille, niveau=2):
@@ -178,7 +192,7 @@ def son(chemin, taille, niveau=2):
             onde = np.clip((epaisseur - np.abs(rayon - distance)) / 0.022, 0.0, 1.0)
             poser(image, onde * ouvert, CLAIR, 0.95 - index * 0.10)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def nuage(chemin, taille):
@@ -204,7 +218,7 @@ def nuage(chemin, taille):
             & (np.abs(v - 0.50) < (0.60 - u) * 0.72))
     poser(image, dans.astype(float), CLAIR, 0.95)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def segment(u, v, x0, y0, x1, y1, epaisseur, flou=0.012):
@@ -273,7 +287,7 @@ def manette(chemin, taille):
         point = np.clip((0.038 - np.hypot(u - cx, v - cy)) / 0.010, 0.0, 1.0)
         poser(image, point, CLAIR, 0.95)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def feuille(u, v, x0, y0, angle, longueur, largeur, flou=0.012):
@@ -320,7 +334,7 @@ def marque(chemin, taille):
     point = np.clip((0.062 - np.hypot(u - 0.67, v - 0.24)) / 0.012, 0.0, 1.0)
     poser(image, point, CLAIR, 1.0)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def connexions(chemin, taille):
@@ -349,7 +363,7 @@ def connexions(chemin, taille):
         poser(image, arc, couleur, 1.0)
 
     poser(image, source, CLAIR, 1.0)
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def wifi(chemin, taille, barres=3):
@@ -382,7 +396,7 @@ def wifi(chemin, taille, barres=3):
 
     source = np.clip((0.075 - np.hypot(u - 0.5, v - 0.78)) / 0.014, 0.0, 1.0)
     poser(image, source, CLAIR if barres else (0x94, 0xA1, 0xBA), 1.0)
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def cable(chemin, taille):
@@ -423,7 +437,7 @@ def cable(chemin, taille):
     poser(image, rectangle(u, v, 0.43, 0.59, 0.57, 0.69), CLAIR, 1.0)
     poser(image, rectangle(u, v, 0.27, 0.69, 0.73, 0.79, rayon=0.03), CLAIR, 1.0)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def sans_reseau(chemin, taille):
@@ -454,7 +468,7 @@ def sans_reseau(chemin, taille):
         trait *= (np.hypot(u - 0.74, v - 0.74) < 0.115).astype(float)
         poser(image, trait, CLAIR, 1.0)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def taches(chemin, taille):
@@ -476,7 +490,7 @@ def taches(chemin, taille):
     socle = rectangle(u, v, 0.14, 0.885, 0.86, 0.925, rayon=0.02)
     poser(image, socle, CLAIR, 0.85)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def reglages(chemin, taille):
@@ -536,7 +550,7 @@ def dessin_reglages(taille):
     trou = np.clip((0.105 - rayon) / flou, 0.0, 1.0)
     poser(image, trou, CLAIR, 1.0)
 
-    return np.clip(image, 0, 255).astype(np.uint8)
+    return octets(image)
 
 
 def dessin_maj(taille):
@@ -570,7 +584,7 @@ def dessin_maj(taille):
     socle = rectangle(u, v, 0.18, 0.80, 0.82, 0.91, rayon=0.045)
     poser(image, socle, CLAIR, 0.9)
 
-    return np.clip(image, 0, 255).astype(np.uint8)
+    return octets(image)
 
 
 def dessin_installateur(taille):
@@ -596,7 +610,7 @@ def dessin_installateur(taille):
     pointe = pointe * np.clip((v - 0.50) / 0.02, 0.0, 1.0)
     poser(image, pointe, CLAIR, 1.0)
 
-    return np.clip(image, 0, 255).astype(np.uint8)
+    return octets(image)
 
 
 def dessin_theme(taille):
@@ -615,7 +629,7 @@ def dessin_theme(taille):
     morsure = np.clip((0.31 - np.hypot(u - 0.70, v - 0.34)) / 0.022, 0.0, 1.0)
     poser(image, plein * (1.0 - morsure), ACCENT_CLAIR, 1.0)
 
-    return np.clip(image, 0, 255).astype(np.uint8)
+    return octets(image)
 
 
 def maj(chemin, taille):
@@ -654,7 +668,7 @@ def hub(chemin, taille):
                         for c in range(3))
         poser(image, segment(u, v, x0, y0, x1, y1, 0.075), couleur, 1.0)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def perf(chemin, taille):
@@ -688,7 +702,7 @@ def perf(chemin, taille):
     # mange l'aiguille et l'icone devient une pastille.
     poser(image, np.clip((0.065 - distance) / 0.012, 0, 1), CLAIR, 0.95)
 
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def grenlaunch(chemin, taille):
@@ -710,7 +724,7 @@ def grenlaunch(chemin, taille):
         distance = signe * ((x1 - x0) * (v - y0) - (y1 - y0) * (u - x0)) / longueur
         masque = np.minimum(masque, np.clip(distance / 0.012, 0, 1))
     poser(image, masque, CLAIR, 1.0)
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def secours(chemin, taille):
@@ -748,7 +762,7 @@ def secours(chemin, taille):
     # couronne, donc le milieu est deja transparent. J avais ecrit ici un bloc
     # qui peignait une couleur de fond par-dessus — il aurait bouche le trou
     # au lieu de le creuser, et sur un fond sombre personne ne l aurait vu.
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def horloge(chemin, taille):
@@ -767,7 +781,7 @@ def horloge(chemin, taille):
     poser(image, segment(u, v, cx, cy, cx - 0.15, cy - 0.09, 0.055), ACCENT, 1.0)
     poser(image, segment(u, v, cx, cy, cx + 0.15, cy - 0.20, 0.045), ACCENT_CLAIR, 1.0)
     poser(image, np.clip((0.045 - distance) / 0.012, 0, 1), ACCENT, 1.0)
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def agenda(chemin, taille):
@@ -781,7 +795,7 @@ def agenda(chemin, taille):
     for x in (0.32, 0.68):
         poser(image, rectangle(u, v, x - 0.035, 0.12, x + 0.035, 0.28, rayon=0.03), ACCENT_CLAIR, 1.0)
     poser(image, rectangle(u, v, 0.56, 0.56, 0.74, 0.74, rayon=0.04), ACCENT, 1.0)
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def grenai(chemin, taille):
@@ -794,7 +808,7 @@ def grenai(chemin, taille):
         # Une astroïde : |x|^0.5 + |y|^0.5 <= r^0.5, des branches fines.
         forme = np.sqrt(du) + np.sqrt(dv)
         poser(image, np.clip((np.sqrt(r) - forme) / 0.02, 0, 1), CLAIR, 1.0)
-    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+    png(chemin, octets(image))
 
 
 def main():
