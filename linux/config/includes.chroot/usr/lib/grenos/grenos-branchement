@@ -1,0 +1,30 @@
+#!/bin/sh
+# Un disque USB branché ou retiré, dit sur le port série (todo J6, F5 — 18
+# novembre).
+#
+# Appelé par udev (/etc/udev/rules.d/90-grenos-branchement.rules) avec ce
+# qu'il sait du disque dans l'environnement : ID_FS_LABEL, ID_FS_TYPE,
+# ID_MODEL. C'est la preuve que le noyau ET udev voient une clé branchée à
+# chaud, avec son nom et son système de fichiers — ce que l'explorateur
+# montre ensuite dans « Ce PC ».
+#
+# `grenos-dire` ne fait rien sans port série : sur la machine de quelqu'un,
+# ce script ne laisse aucune trace et coûte un processus par branchement.
+#
+#   grenos-branchement ajout sdb1
+#   grenos-branchement retrait sdb1
+set -u
+quoi=${1:-}
+nom=${2:-?}
+etiquette=${ID_FS_LABEL:-sans nom}
+genre=${ID_FS_TYPE:-inconnu}
+modele=${ID_MODEL:-}
+case "$quoi" in
+    ajout)
+        grenos-dire "branchement : cle usb $nom branchee ($genre, $etiquette${modele:+, $modele})"
+        ;;
+    retrait)
+        grenos-dire "branchement : cle usb $nom retiree"
+        ;;
+esac
+exit 0

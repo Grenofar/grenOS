@@ -232,7 +232,9 @@ jobs:
           done
           # gdisk et e2fsprogs servent au disque de persistance, construit avant
           # le demarrage : la machine d'essai doit partir sur celui qu'on livre.
-          sudo apt-get install -y -qq qemu-system-x86 qemu-utils zip python3 gdisk e2fsprogs
+          # dosfstools et mtools : la cle USB d essai (FAT32, un fichier dedans),
+          # branchee a chaud pendant la session (todo J6, F5 — 18 novembre).
+          sudo apt-get install -y -qq qemu-system-x86 qemu-utils zip python3 gdisk e2fsprogs dosfstools mtools
           # Le peripherique existe sur les runners, mais appartient au groupe
           # kvm : sans droit d'ecriture, QEMU refuse de demarrer au lieu de se
           # rabattre sur l'emulation.

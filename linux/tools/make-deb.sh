@@ -325,6 +325,16 @@ install -m 0644 "$DEDANS/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-terminal
 install -m 0644 "$DEDANS/etc/polkit-1/rules.d/49-grenos-administration.rules" \
     "$BUILD/etc/polkit-1/rules.d/"
 
+# Le 18 novembre : le durcissement du noyau, la regle udev qui dit un
+# branchement, le theme des notifications (fichier d'appoint : dunstrc
+# appartient au paquet dunst) et le fichier de Flathub. Tous a nous, aucun
+# paquet ne les reclame — une machine deja posee doit les recevoir aussi.
+install -d "$BUILD/etc/sysctl.d" "$BUILD/etc/udev/rules.d" "$BUILD/etc/xdg/dunst/dunstrc.d"
+install -m 0644 "$DEDANS/etc/sysctl.d/50-grenos-durcissement.conf" "$BUILD/etc/sysctl.d/"
+install -m 0644 "$DEDANS/etc/udev/rules.d/90-grenos-branchement.rules" "$BUILD/etc/udev/rules.d/"
+install -m 0644 "$DEDANS/etc/xdg/dunst/dunstrc.d/50-grenos.conf" "$BUILD/etc/xdg/dunst/dunstrc.d/"
+install -m 0644 "$DEDANS/usr/share/grenos/flathub.flatpakrepo" "$BUILD/usr/share/grenos/"
+
 # L'habillage de l'installateur, et le partitionnement qu'il propose. Le
 # fichier de partitionnement va dans /usr/share : celui de /etc appartient à
 # calamares-settings-debian, et deux paquets ne peuvent pas posséder le même.
@@ -388,7 +398,7 @@ Section: x11
 Priority: optional
 Architecture: all
 Maintainer: grenOS <grenos@grenos-dev.vercel.app>
-Depends: grenos-systeme (= $VERSION), libwebkit2gtk-4.1-0, libxdo3, python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, xcvt, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils, dbus-user-session, pipewire-audio, wireplumber, xdg-user-dirs
+Depends: grenos-systeme (= $VERSION), libwebkit2gtk-4.1-0, libxdo3, python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, xcvt, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils, dbus-user-session, pipewire-audio, wireplumber, xdg-user-dirs, dunst, libnotify-bin, atril, ristretto, celluloid, gnome-disk-utility, gufw, seahorse, arandr, systemd-coredump
 Recommends: flatpak, lightdm, pcmanfm, xfce4-terminal, xfce4-taskmanager, papirus-icon-theme
 Installed-Size: $SIZE
 Homepage: https://grenos-dev.vercel.app

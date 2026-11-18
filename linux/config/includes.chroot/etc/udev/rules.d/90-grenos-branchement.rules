@@ -1,0 +1,6 @@
+# Un disque USB branché ou retiré : grenos-branchement le dit sur le port
+# série (todo J6, F5). Seulement ce qui porte un système de fichiers — une
+# partition, ou une clé formatée sans table (« super-disquette ») ; un disque
+# qui porte une table de partitions n'en a pas lui-même, et ne compte pas.
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{DEVTYPE}=="partition|disk", ENV{ID_FS_TYPE}=="?*", RUN+="/usr/lib/grenos/grenos-branchement ajout %k"
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{DEVTYPE}=="partition|disk", ENV{ID_FS_TYPE}=="?*", RUN+="/usr/lib/grenos/grenos-branchement retrait %k"

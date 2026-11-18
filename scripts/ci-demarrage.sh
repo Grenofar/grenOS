@@ -79,6 +79,22 @@ sudo mkfs.ext4 -q -L DONNEES "${BOUCLE}p1"
 sudo losetup -d "$BOUCLE"
 sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/disque.raw"
 echo "second disque : 20 Go, une partition ext4 etiquetee DONNEES"
+
+# UN DISQUE NVMe (todo A1, 18 novembre). « Rien ne le verifie, la machine
+# d'essai n'a que du SATA » : c'etait vrai. QEMU emule un controleur NVMe ; le
+# disque est vide, et la ligne « disques : » de la session doit le nommer
+# (nvme0n1) — c'est le meme chemin que celui d'un SSD NVMe reel.
+qemu-img create -f raw "$RUNNER_TEMP/nvme.raw" 4G >/dev/null
+echo "troisieme disque : 4 Go, NVMe"
+
+# LA CLE USB D'ESSAI (todo J6, F5). FAT32 comme une cle du commerce, une
+# etiquette et un fichier dedans. Elle n'est PAS branchee au demarrage : on la
+# branche a chaud pendant la session, puis on la retire.
+qemu-img create -f raw "$RUNNER_TEMP/cle.img" 64M >/dev/null
+mkfs.vfat -F 32 -n CLEGRENOS "$RUNNER_TEMP/cle.img" >/dev/null
+echo "grenOS lu depuis une cle" > "$RUNNER_TEMP/lisez-moi.txt"
+mcopy -i "$RUNNER_TEMP/cle.img" "$RUNNER_TEMP/lisez-moi.txt" ::lisez-moi.txt
+echo "cle USB : 64 Mo, FAT32, etiquette CLEGRENOS (branchee plus tard)"
 qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -cdrom "$ISO" -boot d \
   -drive file="$RUNNER_TEMP/persistence.vdi",format=vdi,if=none,id=garde \
@@ -86,6 +102,9 @@ qemu-system-x86_64 $ACCEL -m 3072 -smp 2 \
   -device ahci,id=sata \
   -device ide-hd,drive=garde,bus=sata.0 \
   -device ide-hd,drive=dur,bus=sata.1 \
+  -drive file="$RUNNER_TEMP/nvme.raw",format=raw,if=none,id=rapide \
+  -device nvme,drive=rapide,serial=grenos-nvme \
+  -device qemu-xhci,id=xhci \
   -display none -vga std \
   -global VGA.xres=1280 -global VGA.yres=720 \
   -usb -device usb-tablet \
@@ -594,6 +613,48 @@ COINS
   sleep 2
 else
   echo "son: la barre n a pas dit ou est son bouton"
+fi
+
+echo "--- une cle USB branchee a chaud est-elle vue, puis son retrait ---"
+# todo J6 (« brancher une cle USB ») et F5 (« branchement a chaud sans
+# plantage »), 18 novembre. On branche la cle d'essai sur le controleur USB 3
+# PENDANT la session, comme quelqu'un qui l'enfonce dans le port, puis on la
+# retire. La regle udev de l'image (90-grenos-branchement) dit les deux sur le
+# port serie, avec l'etiquette et le systeme de fichiers lus par udev.
+#
+# Rapporte, pas bloquant : une preuve neuve ne devient exigee qu'apres avoir
+# ete vue verte.
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" \
+  "drive_add 0 if=none,id=cle,file=$RUNNER_TEMP/cle.img,format=raw" || true
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" \
+  "device_add usb-storage,id=clef,drive=cle,bus=xhci.0" || true
+sleep 10
+if grep -aq 'grenos: branchement : cle usb .* branchee (vfat, CLEGRENOS' "$RUNNER_TEMP/serial.log"; then
+  grep -a 'grenos: branchement : cle usb' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+  echo "cle: branchee a chaud, vue avec son etiquette et son systeme de fichiers"
+else
+  echo "::warning::La cle USB branchee a chaud n a pas ete annoncee (rapporte, pas bloquant)"
+fi
+python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "device_del clef" || true
+sleep 6
+if grep -aq 'grenos: branchement : cle usb .* retiree' "$RUNNER_TEMP/serial.log"; then
+  echo "cle: retiree a chaud, et la session le sait"
+else
+  echo "::warning::Le retrait de la cle n a pas ete annonce (rapporte, pas bloquant)"
+fi
+# Et la session est-elle encore la apres ? Un branchement qui fait tomber la
+# barre serait exactement le « plantage » que F5 interdit.
+if grep -aq 'grenos: barre prete' "$RUNNER_TEMP/serial.log" \
+   && ! grep -aq 'grenos: shell : la version native est tombee' "$RUNNER_TEMP/serial.log"; then
+  echo "cle: la barre n est pas tombee pendant le branchement"
+fi
+
+echo "--- le disque NVMe est-il vu ---"
+if grep -aq 'grenos: disques : .*nvme0n1' "$RUNNER_TEMP/serial.log"; then
+  grep -a 'grenos: disques : ' "$RUNNER_TEMP/serial.log" | tail -1 | tr -d '[:cntrl:]' | sed 's/^.*grenos: //'
+  echo "nvme: le disque NVMe est vu par le systeme (A1)"
+else
+  echo "::warning::Le disque NVMe n a pas ete vu (rapporte, pas bloquant)"
 fi
 
 echo "--- l explorateur montre-t-il les disques ---"
