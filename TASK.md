@@ -25,7 +25,19 @@
   en pause après ~7 jours sans activité : « Restore » dans le tableau de bord,
   données conservées. Plafond de dépense activé : jamais facturé.
 
-## EN COURS le 18 novembre (matin) — séance autonome, Grenofar absent 5 h
+## FAIT le 18 novembre vers 10:00 — version `linux-20261118-0945` PUBLIÉE
+
+Cinq preuves vertes (run 44270687371) : barre et bureau natifs vus dans les
+quatre démarrages (« (native) », « (natif) »), grensh posé, catalogue 233 et
+jeux 190 publiés, site en présentation + /grenget en ligne.
+- RESTE : la course de fin du premier démarrage (réponse de premier_terminer
+  perdue, vue 3 fois sur ~8 machines le 18). Deux filets la rattrapent et le
+  DISENT (« fermeture par le filet », « on le ferme ») : chercher ces lignes
+  dans les prochains journaux série pour trouver la cause.
+- RESTE : connexion Google pour /grenget (annoncée « bientôt » en texte).
+- Le workflow grenget.yml n'a pas encore vu de vraie proposition.
+
+## (historique) le 18 novembre (matin) — séance autonome, Grenofar absent 5 h
 
 Demandé : « publie, ajoute un max d'apps au launcher et à GrenPlace, customise
 l'UI du cmd, crée le langage de grenOS comme PowerShell avec grenget, une page
