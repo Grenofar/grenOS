@@ -28,6 +28,7 @@ l'autre. Vérifié en ouvrant les deux paquets, après que la construction
 `36071774449` l'eut refusé.
 
     python3 linux/tools/verif-installateur.py [racine]
+    python3 linux/tools/verif-installateur.py --depot   (le défaut sous Windows)
 
 `racine` sert aux essais : par défaut, c'est le système lui-même.
 """
@@ -145,7 +146,42 @@ def verifier(racine=""):
     return fautes
 
 
+def verifier_depot():
+    """Ce que le DÉPÔT peut dire sans Calamares installé (18 novembre).
+
+    Le garde lit le système construit : sous Windows, il répondait
+    « settings.conf est absent » à chaque passage local, et une vérification
+    qui échoue toujours n'est plus lue. Ici on vérifie ce qui vient de nous :
+    l'habillage et les deux promesses du partitionnement, dans les fichiers
+    que l'image copiera. Calamares lui-même reste vérifié dans le conteneur
+    (essai-maj.sh), où ce mode n'est jamais pris.
+    """
+    depot = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config", "includes.chroot")
+    fautes = []
+    desc = os.path.join(depot, "usr", "share", "calamares", "branding", "grenos", "branding.desc")
+    if not os.path.exists(desc):
+        fautes.append("l'habillage grenos n'est pas dans le dépôt : " + desc)
+    partition = os.path.join(depot, "usr", "share", "grenos", "partition.conf")
+    try:
+        reglage = open(partition, encoding="utf-8").read()
+    except OSError:
+        return fautes + ["partition.conf est absent du dépôt"]
+    for cle in ("initialPartitioningChoice: none", "allowManualPartitioning: true"):
+        if not re.search("^" + re.escape(cle) + r"\s*$", reglage, re.M):
+            fautes.append(f"partition.conf ne promet pas « {cle} »")
+    if not fautes:
+        print("dépôt : habillage présent, aucun choix destructeur préchoisi, choix manuel possible")
+    return fautes
+
+
 def main(argv):
+    if "--depot" in argv or (len(argv) == 1 and sys.platform == "win32"):
+        fautes = verifier_depot()
+        for faute in fautes:
+            print("installateur : " + faute, file=sys.stderr)
+        if not fautes:
+            print("(Calamares lui-même : vérifié dans le conteneur, par essai-maj.sh)")
+        return 1 if fautes else 0
     racine = argv[1] if len(argv) > 1 else ""
     fautes = verifier(racine)
     for faute in fautes:

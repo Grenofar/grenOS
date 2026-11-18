@@ -18,7 +18,10 @@ import io
 import os
 import sys
 
-RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# La racine du DÉPÔT : trois niveaux au-dessus (linux/tools/ce-fichier).
+# Il n'en remontait que deux et cherchait « linux/linux/… » — le garde ne
+# pouvait réussir de nulle part (vu le 18 novembre).
+RACINE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def main(argv):
@@ -38,7 +41,8 @@ def main(argv):
 
     modeles_utilises = set()
     for ligne in appliquer_contenu.splitlines():
-        if ligne.startswith("poser "):
+        # « poser () { » est la fonction elle-même, pas un modèle.
+        if ligne.startswith("poser ") and not ligne.startswith("poser ()"):
             parties = ligne.split()
             if len(parties) >= 2:
                 modele = parties[1]
@@ -54,7 +58,9 @@ def main(argv):
     modeles_crees = set()
     prefixe = '$BUILD/usr/share/grenos/modeles/'
     for ligne in make_deb_contenu.splitlines():
-        if 'install -m 0644' in ligne and '"$DEDANS/"' in ligne and prefixe in ligne:
+        # « "$DEDANS/ » sans guillemet final : la version d'avant cherchait
+        # '"$DEDANS/"', qu'aucune ligne n'écrit, et ne voyait presque rien.
+        if 'install -m 0644' in ligne and '"$DEDANS/' in ligne and prefixe in ligne:
             # Exemple de ligne :
             # install -m 0644 "$DEDANS/etc/gtk-3.0/settings.ini" "$BUILD/usr/share/grenos/modeles/gtk-settings.ini"
             parties = ligne.split()

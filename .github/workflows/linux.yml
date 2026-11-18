@@ -180,6 +180,15 @@ jobs:
         continue-on-error: true
         run: python3 linux/tools/verif-desktop.py
 
+      # Meme histoire que le precedent : `verif-modeles.py` remontait d'un
+      # dossier de trop et cherchait « linux/linux/… », puis cherchait un
+      # guillemet que make-deb.sh n'ecrit jamais — il ne pouvait reussir de
+      # nulle part, et aucun workflow ne le lancait. Repare le 18 novembre
+      # (7 modeles, chacun installe ET pose). Rapporte avant d'etre exige.
+      - name: Chaque modele livre est-il pose, et chaque modele pose livre
+        continue-on-error: true
+        run: python3 linux/tools/verif-modeles.py
+
       # Un agent a livre `linux/tools/verif-catalogue.py` le 15 octobre, sa
       # tache a ete marquee **done**, et le fichier ne compilait pas : des
       # guillemets echappes a la deuxieme ligne. Rien ne l'a vu, parce que la
@@ -218,23 +227,38 @@ jobs:
         #
         # Dix minutes suffisent largement : au tour precedent, les etapes 7 a
         # 11 ont tenu en moins de cinq. Au-dela, ce n est plus de la lenteur.
-        timeout-minutes: 10
+        # Le 18 novembre (run 44374598840) : dix minutes SANS UNE LIGNE, puis
+        # coupure — toutes les portes fermees, rien de verifie. Les trois
+        # essais de `update` pouvaient a eux seuls manger neuf minutes, et
+        # `install` n'etait borne par rien. Maintenant : chaque appel borne,
+        # apt qui abandonne une requete morte en 30 s, et au deuxieme echec
+        # on quitte le miroir Azure du runner pour celui d'Ubuntu. Et l'etape
+        # dit l'heure a chaque pas : la prochaine panne nommera son appel.
+        timeout-minutes: 15
         run: |
-          # Trois essais, chacun borne. Un miroir qui ne repond pas est une
-          # panne passagere : la retenter coute quelques secondes, et
-          # echouer tout de suite coute une construction.
+          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          miroir_ubuntu() {
+            echo "$(date +%T) le miroir du runner ne repond pas : archive.ubuntu.com"
+            sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list 2>/dev/null || true
+          }
           for essai in 1 2 3; do
-            if timeout 180 sudo apt-get update -qq; then
-              break
-            fi
-            echo "apt-get update : essai $essai sans reponse, on recommence"
+            echo "$(date +%T) apt-get update, essai $essai"
+            if timeout 120 sudo apt-get $APT update -qq; then break; fi
+            [ "$essai" = 2 ] && miroir_ubuntu
             sleep 5
           done
           # gdisk et e2fsprogs servent au disque de persistance, construit avant
           # le demarrage : la machine d'essai doit partir sur celui qu'on livre.
           # dosfstools et mtools : la cle USB d essai (FAT32, un fichier dedans),
           # branchee a chaud pendant la session (todo J6, F5 — 18 novembre).
-          sudo apt-get install -y -qq qemu-system-x86 qemu-utils zip python3 gdisk e2fsprogs dosfstools mtools
+          for essai in 1 2 3; do
+            echo "$(date +%T) apt-get install, essai $essai"
+            if timeout 240 sudo apt-get $APT install -y -qq qemu-system-x86 qemu-utils zip python3 gdisk e2fsprogs dosfstools mtools; then break; fi
+            [ "$essai" = 3 ] && { echo "::error::Les outils de l'hote ne s'installent pas (trois essais)."; exit 1; }
+            [ "$essai" = 1 ] && { miroir_ubuntu; timeout 120 sudo apt-get $APT update -qq || true; }
+            sleep 5
+          done
+          echo "$(date +%T) outils installes"
           # Le peripherique existe sur les runners, mais appartient au groupe
           # kvm : sans droit d'ecriture, QEMU refuse de demarrer au lieu de se
           # rabattre sur l'emulation.
