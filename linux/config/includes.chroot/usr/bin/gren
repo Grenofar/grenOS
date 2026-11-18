@@ -285,6 +285,50 @@ def sauvegarde(args):
     return 2
 
 
+def _grenai(question):
+    """La question à GrenAI, par grenos-ui (les mêmes clés que la fenêtre)."""
+    if not os.access("/usr/bin/grenos-ui", os.X_OK):
+        print("GrenAI n'est pas installé sur cette machine.", file=sys.stderr)
+        return 1
+    print(c(GRIS, "GrenAI réfléchit… (le modèle et l'endroit où partent les mots se règlent dans la fenêtre GrenAI)"))
+    fin = subprocess.run(["/usr/bin/grenos-ui", "--grenai"], input=question, text=True,
+                         capture_output=True)
+    if fin.returncode != 0:
+        print(c(ROUGE, "✗ ") + (fin.stderr.strip() or "GrenAI n'a pas répondu."), file=sys.stderr)
+        return 1
+    print(fin.stdout.rstrip())
+    return 0
+
+
+def ia(args):
+    """H4 — une question à GrenAI, depuis le terminal."""
+    question = " ".join(args).strip()
+    if not question:
+        print("Usage : gren ia « ta question »", file=sys.stderr)
+        return 2
+    return _grenai(question)
+
+
+def corrige(args):
+    """H4 — corriger une commande qui a échoué.
+
+    On n'EXÉCUTE rien : on demande la commande corrigée, on l'affiche, et
+    c'est la personne qui décide de la lancer. Un assistant qui relance
+    lui-même une commande (rm, dd…) serait le pire outil à mettre dans un
+    terminal.
+    """
+    commande = " ".join(args).strip()
+    if not commande:
+        print("Usage : gren corrige « la commande »   (dans grensh : `corrige` reprend la dernière)", file=sys.stderr)
+        return 2
+    return _grenai(
+        "Cette commande Linux (bash, Debian) a échoué ou ne fait pas ce qu'on veut :\n\n"
+        f"    {commande}\n\n"
+        "Réponds en français. Première ligne : la commande corrigée seule, sans balises. "
+        "Puis une ou deux phrases qui disent ce qui n'allait pas. Si la commande peut "
+        "effacer ou casser quelque chose, dis-le clairement.")
+
+
 def version(_args):
     print(f"gren 1 · grensh {os.environ.get('GRENSH_VERSION', '1')}")
     return 0
@@ -300,6 +344,8 @@ COMMANDES = [
     ("maj", "Mettre-AJour", "l'état des mises à jour", maj),
     ("ouvrir", "Ouvrir-App", "ouvrir une application par son nom", ouvrir),
     ("sauvegarde", "Sauvegarder-Fichiers", "copies sur disque externe : etat, activer, maintenant", sauvegarde),
+    ("ia", "Demander-IA", "une question à GrenAI", ia),
+    ("corrige", "Corriger-Commande", "la commande corrigée par GrenAI (rien n'est lancé)", corrige),
     ("version", "", "la version de gren", version),
 ]
 

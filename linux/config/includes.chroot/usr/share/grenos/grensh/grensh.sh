@@ -106,6 +106,16 @@ Changer-Accent()      { gren accent "$@"; }
 Mettre-AJour()        { gren maj "$@"; }
 Ouvrir-App()          { gren ouvrir "$@"; }
 Sauvegarder-Fichiers() { gren sauvegarde "$@"; }
+Demander-IA()         { gren ia "$@"; }
+# `corrige` sans rien : la commande d'avant (l'avant-dernière ligne de
+# l'historique — la dernière, c'est `corrige` lui-même). Rien n'est relancé.
+Corriger-Commande() {
+    if [ "$#" -gt 0 ]; then gren corrige "$@"; return; fi
+    gren corrige "$(fc -ln -2 -2 2>/dev/null | sed 's/^[[:space:]]*//')"
+}
+alias corrige='Corriger-Commande'
+alias ia='Demander-IA'
+
 Chercher-App()        { grenget chercher "$@"; }
 Installer-App()       { grenget installer "$@"; }
 Desinstaller-App()    { grenget enlever "$@"; }

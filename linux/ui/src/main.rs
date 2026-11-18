@@ -274,6 +274,27 @@ fn fermeture_animee(fenetre: &tauri::Window, evenement: &tauri::WindowEvent) {
 fn main() {
     NAISSANCE.get_or_init(Instant::now);
     let page = std::env::args().nth(1).unwrap_or_else(|| "maj".into());
+
+    // `grenos-ui --grenai` : une question sur l'entrée standard, la réponse
+    // sur la sortie — pour `gren ia` et `gren corrige` (todo H4). La MÊME
+    // fonction que la fenêtre GrenAI : mêmes clés, même modèle, et aucune
+    // deuxième façon d'appeler un fournisseur qui finirait par diverger.
+    if page == "--grenai" {
+        use std::io::Read;
+        let mut question = String::new();
+        let _ = std::io::stdin().read_to_string(&mut question);
+        let messages = vec![grenai::Message { role: "user".into(), contenu: question }];
+        match tauri::async_runtime::block_on(grenai::grenai_demander(messages)) {
+            Ok(reponse) => {
+                println!("{reponse}");
+                return;
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
     systeme::preparer_webkit();
 
     // L'assistant tourne seul, en root, avant toute session : pas de prise à
