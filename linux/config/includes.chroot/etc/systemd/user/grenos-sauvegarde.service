@@ -1,0 +1,12 @@
+# La copie du jour de tes fichiers sur un disque externe (todo I13).
+# Ne fait rien sans disque branché, ni si la copie du jour existe déjà.
+[Unit]
+Description=grenOS : copie de tes fichiers sur un disque externe
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-sauvegarde
+# En arrière-plan, sans gêner : la copie passe après tout le reste.
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=6h

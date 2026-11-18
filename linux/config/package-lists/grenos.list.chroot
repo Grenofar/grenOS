@@ -91,6 +91,8 @@ mousepad
 xfce4-terminal
 ## La complétion par Tab de grensh (gren, grenget) et de tout le reste.
 bash-completion
+## Le pare-feu du parcours Dev (premier.rs, regler_dev) : entrant refusé.
+ufw
 xarchiver
 galculator
 xfce4-screenshooter

@@ -4,7 +4,8 @@
   const { api, el, svg, habiller, aurore, mesurerFluidite } = window.grenos;
   const D = {};
   let dernier = null;
-  let onglet = "processus";
+  // Ctrl+Alt+Échap ouvre directement le mode jeu (grenos-ui jeu).
+  let onglet = window.GRENOS_ONGLET || "processus";
   let filtre = "";
   let systeme = false;
   const aFermer = new Set();
@@ -179,6 +180,8 @@
     if (!document.hidden) rafraichir();
     setTimeout(boucle, 2000);
   }
+
+  window.grenosOnglet = (cle) => { onglet = cle; dessiner(); };
 
   (async function () {
     habiller(await api.appeler("apparence"));

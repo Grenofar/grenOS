@@ -272,6 +272,14 @@ done
 # machines en difficulte, absente precisement des machines en difficulte.
 #
 # Le glob prend tout ce que l arbre porte, et l arbre ne porte que nos unites.
+# Les unites de SESSION (minuteur de sauvegarde) : `systemctl --global
+# enable` les allume pour chaque compte, l'assistant ou `gren` le font.
+install -d "$BUILD/etc/systemd/user"
+for unite in "$DEDANS"/etc/systemd/user/*.service "$DEDANS"/etc/systemd/user/*.timer; do
+    [ -f "$unite" ] || continue
+    install -m 0644 "$unite" "$BUILD/etc/systemd/user/"
+done
+
 for service in "$DEDANS"/etc/systemd/system/*.service \
                "$DEDANS"/etc/systemd/system/*.timer; do
     [ -f "$service" ] || continue

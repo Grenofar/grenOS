@@ -29,6 +29,13 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
 ];
 
 pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
+    // « jeu » n'est pas une page : c'est grenPerf ouvert sur son onglet Mode
+    // jeu (Ctrl+Alt+Échap, todo I8). Fenêtre déjà ouverte : on change d'onglet.
+    let onglet = if page == "jeu" { Some("jeu") } else { None };
+    let page = if page == "jeu" { "perf" } else { page };
+    if let (Some(o), Some(fenetre)) = (onglet, app.get_webview_window(page)) {
+        let _ = fenetre.eval(&format!("window.grenosOnglet && window.grenosOnglet({o:?})"));
+    }
     let Some(&(page, titre, largeur, hauteur)) = PAGES.iter().find(|p| p.0 == page) else {
         systeme::dire(&format!("grenos-ui : page inconnue « {page} »"));
         return Ok(());
@@ -40,7 +47,10 @@ pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
     }
     let mut constructeur = WebviewWindowBuilder::new(app, page, WebviewUrl::App("index.html".into()))
         .title(titre)
-        .initialization_script(&format!("window.GRENOS_PAGE = {page:?};"));
+        .initialization_script(&format!(
+            "window.GRENOS_PAGE = {page:?}; window.GRENOS_ONGLET = {:?};",
+            onglet.unwrap_or("")
+        ));
 
     if page == "premier" {
         // Aucun gestionnaire de fenêtres ne tourne avant le bureau : une

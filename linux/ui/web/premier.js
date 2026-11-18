@@ -15,21 +15,24 @@
   // promesse à l'écran sans rien derrière.
   const CONSTRUITS = ["bienvenue", "langue", "clavier", "compte", "parcours", "reseau",
     "apparence", "usage", "confidentialite", "securite", "majs", "applications",
-    "optimisation", "final"];
+    "sauvegardes", "optimisation", "systeme", "pare-feu", "journaux", "final"];
   const ICONES = { bienvenue: "etoile", langue: "langue", clavier: "clavier", compte: "compte",
     parcours: "fusee", reseau: "wifi", apparence: "palette", usage: "bureau",
     confidentialite: "oeil", securite: "bouclier", majs: "maj", applications: "paquet",
-    optimisation: "eclair", final: "coche" };
+    optimisation: "eclair", sauvegardes: "paquet", systeme: "reglages", "pare-feu": "bouclier",
+    journaux: "oeil", final: "coche" };
   const COURTS = { bienvenue: "Bienvenue", langue: "Langue", clavier: "Clavier", compte: "Compte",
     parcours: "Parcours", reseau: "Internet", apparence: "Apparence", usage: "Usage",
     confidentialite: "Confidentialité", securite: "Sécurité", majs: "Mises à jour",
-    applications: "Applications", optimisation: "Matériel", final: "Terminé" };
+    applications: "Applications", optimisation: "Matériel", sauvegardes: "Sauvegardes",
+    systeme: "Système", "pare-feu": "Pare-feu", journaux: "Journaux", final: "Terminé" };
 
   const R = {
     langue: "fr_FR", clavier: "fr", clavier_index: "0", parcours: "personnalise",
     apparence: "auto", accent: "bleu", effets: "equilibres", usage: "bureautique",
     telemetrie: "aucune", majs: "automatiques", applications: "", optimiser: "non",
     compte: "", nom_affiche: "",
+    sauvegardes: "non", parefeu: "actif", journaux: "mois", echange: "zram", swappiness: "equilibre",
   };
   let infos = null;
   let cle = null;
@@ -436,6 +439,50 @@
       }))];
   };
 
+  // I13 — les sauvegardes. Une vraie promesse derrière chaque tuile :
+  // grenos-sauvegarde (rsync versionné, vérifié en relisant un fichier).
+  ecrans.sauvegardes = () => [
+    entete("Sauvegardes", "Garder une copie de tes fichiers", "Documents, Images, Musique, Vidéos et Bureau. Une copie par jour, les anciennes gardées, et chaque copie relue pour vérifier qu'elle se restaure."),
+    groupe("sauvegardes", [
+      { valeur: "externe", icone: "paquet", titre: "Sur un disque externe", note: "Chaque jour, dès qu'un disque USB est branché. Rien à régler : grenOS trouve le disque." },
+      { valeur: "non", icone: "retour", titre: "Pas maintenant", note: "Tu pourras l'activer plus tard avec « gren sauvegarde activer »." },
+    ], { colonnes: "deux-col" }),
+    el("p.note", "Le réseau (NAS, serveur) et le nuage arrivent ; aujourd'hui grenOS ne propose que ce qu'il sait vraiment faire."),
+  ];
+
+  // I17 — le parcours Dev. Chaque choix est appliqué pour de vrai par
+  // premier.rs ; ce qui ne peut pas l'être (partitionnement, Secure Boot,
+  // bac à sable) reste hors de la liste plutôt que d'y faire semblant.
+  ecrans.systeme = () => [
+    entete("Système", "Mémoire d'échange", "Ce que la machine fait quand la mémoire vive se remplit."),
+    groupe("echange", [
+      { valeur: "zram", icone: "eclair", titre: "zram (recommandé)", note: "Échange en mémoire compressée : dix fois plus rapide qu'un disque." },
+      { valeur: "aucun", icone: "retour", titre: "Pas de zram", note: "Seulement la mémoire d'échange sur disque, s'il y en a une." },
+    ], { colonnes: "deux-col" }),
+    el("div.etiquette", "Quand puiser dans l'échange"),
+    groupe("swappiness", [
+      { valeur: "reactif", icone: "eclair", titre: "Le plus tard possible", note: "vm.swappiness = 10 : les applications restent en mémoire vive." },
+      { valeur: "equilibre", icone: "reglages", titre: "Équilibré", note: "vm.swappiness = 60, le réglage de Debian." },
+    ], { colonnes: "deux-col", principal: false }),
+  ];
+
+  ecrans["pare-feu"] = () => [
+    entete("Réseau", "Pare-feu", "ufw : les connexions sortantes passent, les entrantes sont refusées sauf celles que tu ouvres."),
+    groupe("parefeu", [
+      { valeur: "actif", icone: "bouclier", titre: "Activé (recommandé)", note: "Refuser tout ce qui arrive sans y avoir été invité. « sudo ufw allow 22 » ouvre un port." },
+      { valeur: "non", icone: "retour", titre: "Désactivé", note: "Tout ce qui écoute sur la machine est joignable depuis le réseau." },
+    ], { colonnes: "deux-col" }),
+  ];
+
+  ecrans.journaux = () => [
+    entete("Journaux", "Combien de temps garder les journaux", "Les journaux du système restent sur la machine — jamais envoyés. Ils servent à comprendre une panne après coup."),
+    groupe("journaux", [
+      { valeur: "semaine", icone: "sablier", titre: "Une semaine", note: "50 Mo au plus." },
+      { valeur: "mois", icone: "sablier", titre: "Un mois (recommandé)", note: "100 Mo au plus." },
+      { valeur: "trimestre", icone: "sablier", titre: "Trois mois", note: "500 Mo au plus." },
+    ], { colonnes: "trois" }),
+  ];
+
   ecrans.optimisation = () => {
     const bascule = el("button.interrupteur", { role: "switch", type: "button", "aria-checked": String(R.optimiser === "oui"),
       onclick: () => { R.optimiser = R.optimiser === "oui" ? "non" : "oui"; bascule.setAttribute("aria-checked", String(R.optimiser === "oui")); } });
@@ -459,7 +506,13 @@
       ["oeil", "Télémétrie", MOTS[R.telemetrie]],
       ["maj", "Mises à jour", MOTS[R.majs]],
       ["paquet", "À installer", R.applications ? R.applications.split(",").join(", ") : "rien de plus"],
+      ["paquet", "Sauvegardes", R.sauvegardes === "externe" ? "Chaque jour, disque externe" : "Pas maintenant"],
     ];
+    if (R.parcours === "dev") {
+      lignes.push(["bouclier", "Pare-feu", R.parefeu === "actif" ? "Activé" : "Désactivé"]);
+      lignes.push(["reglages", "Échange", `${R.echange === "zram" ? "zram" : "sans zram"} · ${R.swappiness === "reactif" ? "swappiness 10" : "swappiness 60"}`]);
+      lignes.push(["oeil", "Journaux", { semaine: "Une semaine", mois: "Un mois", trimestre: "Trois mois" }[R.journaux]]);
+    }
     return [entete("Dernière étape", "Tout est prêt", "Vérifie, puis démarre. grenOS applique tes choix et ouvre ton bureau."),
       el("div.resume", ...lignes.map(([i, n, v]) => el("div.carte.verre.case-resume", el("span.icone", svg(i)), el("div.etiquette", n), el("div.valeur-resume", v))))];
   };
@@ -481,7 +534,13 @@
     const pas = setInterval(() => { if (i < items.length - 1) items[i++].classList.add("fait"); }, 420);
     let adresse = "";
     try {
-      adresse = await api.appeler("premier_terminer", { reponses: R, motDePasse: mdp.actif && mdp.mot ? mdp.mot : null });
+      // Le premier arrivé de deux chemins : la réponse de la commande, ou
+      // l'événement « premier-fini » (voir premier.rs, panne du 18 novembre).
+      const parEvenement = new Promise((ok) => api.ecouter("premier-fini", ok));
+      adresse = await Promise.race([
+        api.appeler("premier_terminer", { reponses: R, motDePasse: mdp.actif && mdp.mot ? mdp.mot : null }),
+        parEvenement,
+      ]);
     } catch (e) {
       clearInterval(pas);
       voile.remove();

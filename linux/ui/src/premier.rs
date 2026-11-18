@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use tauri::Emitter;
 
 const IDENTITE: &str = "/etc/grenos/identite";
 const REGLAGES: &str = "/etc/grenos/premier-choix";
@@ -230,6 +231,68 @@ fn regler_majs(mode: &str) {
     dire(&format!("premier : mises a jour reglees sur {mode}{}", if ok { "" } else { " — REFUSE" }));
 }
 
+/// I13 — les sauvegardes. « externe » allume le minuteur de session de
+/// grenos-sauvegarde pour TOUS les comptes (`--global`) : une copie par jour
+/// dès qu'un disque externe est branché, relue pour vérifier qu'elle se
+/// restaure. Rien n'est allumé sans le choix explicite.
+fn regler_sauvegardes(mode: &str) {
+    if mode != "externe" {
+        return;
+    }
+    let ok = reussit("systemctl", &["--global", "enable", "grenos-sauvegarde.timer"]);
+    let _ = fs::write("/etc/grenos/sauvegardes", "externe
+");
+    dire(&format!("premier : sauvegardes quotidiennes vers disque externe{}", if ok { "" } else { " — minuteur REFUSE" }));
+}
+
+/// I17 — ce que le parcours Dev choisit en plus, appliqué pour de vrai. Les
+/// écrans ne sont montrés qu'en Dev ; on n'applique rien hors de ce parcours,
+/// même si une valeur par défaut traîne dans les réponses.
+fn regler_dev(reponses: &BTreeMap<String, String>) {
+    if reponses.get("parcours").map(|s| s.as_str()) != Some("dev") {
+        return;
+    }
+    let v = |c: &str, d: &str| reponses.get(c).cloned().unwrap_or_else(|| d.to_string());
+
+    // Le pare-feu : ufw, entrant refusé, sortant permis.
+    if v("parefeu", "actif") == "actif" {
+        let ok = reussit("ufw", &["default", "deny", "incoming"])
+            && reussit("ufw", &["default", "allow", "outgoing"])
+            && reussit("ufw", &["--force", "enable"]);
+        dire(&format!("premier : pare-feu {}", if ok { "actif, entrant refuse" } else { "PAS active (ufw a refuse)" }));
+    }
+
+    // Les journaux : une taille et une durée, dans un fichier qui passe après
+    // le nôtre (10-grenos-persistant.conf) et l'emporte donc.
+    let (taille, duree) = match v("journaux", "mois").as_str() {
+        "semaine" => ("50M", "1week"),
+        "trimestre" => ("500M", "3month"),
+        _ => ("100M", "1month"),
+    };
+    let _ = fs::create_dir_all("/etc/systemd/journald.conf.d");
+    let _ = fs::write(
+        "/etc/systemd/journald.conf.d/60-grenos-choix.conf",
+        format!("# Choisi au premier démarrage (parcours Dev).
+[Journal]
+SystemMaxUse={taille}
+MaxRetentionSec={duree}
+"),
+    );
+    let _ = reussit("systemctl", &["restart", "systemd-journald"]);
+
+    // L'échange : zram, et quand y puiser.
+    if v("echange", "zram") == "aucun" {
+        let _ = reussit("systemctl", &["disable", "--now", "zramswap.service"]);
+    }
+    let swappiness = if v("swappiness", "equilibre") == "reactif" { 10 } else { 60 };
+    let _ = fs::create_dir_all("/etc/sysctl.d");
+    let _ = fs::write("/etc/sysctl.d/60-grenos-choix.conf", format!("# Choisi au premier démarrage (parcours Dev).
+vm.swappiness = {swappiness}
+"));
+    let _ = reussit("sysctl", &["-w", &format!("vm.swappiness={swappiness}")]);
+    dire(&format!("premier : dev — journaux {taille}/{duree}, echange {}, swappiness {swappiness}", v("echange", "zram")));
+}
+
 fn deposer_les_travaux(reponses: &BTreeMap<String, String>, donnees: &Donnees) {
     let mut travaux: Vec<(String, Vec<String>)> = Vec::new();
     let mut choisies: Vec<String> = reponses
@@ -365,6 +428,7 @@ pub fn premier_clavier(index: usize) {
 
 #[tauri::command]
 pub async fn premier_terminer(
+    app: tauri::AppHandle,
     reponses: BTreeMap<String, String>,
     mot_de_passe: Option<String>,
 ) -> Result<String, String> {
@@ -384,12 +448,21 @@ pub async fn premier_terminer(
     }
     poser_apparence(&retenu, &reponses);
     regler_majs(reponses.get("majs").map(|s| s.as_str()).unwrap_or("automatiques"));
+    regler_sauvegardes(reponses.get("sauvegardes").map(|s| s.as_str()).unwrap_or("non"));
+    regler_dev(&reponses);
     garder_choix(&reponses);
     deposer_les_travaux(&reponses, &donnees);
     dire(&format!("nom choisi, la machine est a {retenu}@{MACHINE}"));
     let v = |c: &str, d: &str| reponses.get(c).cloned().unwrap_or_else(|| d.to_string());
     dire(&format!("premier : choix gardes — apparence {}, telemetrie {}, majs {}",
                   v("apparence", "auto"), v("telemetrie", "aucune"), v("majs", "automatiques")));
+    // DEUX CHEMINS VERS LA PAGE (18 novembre). La réponse de cette commande
+    // passe par le protocole IPC de Tauri (une requête de la page) ; trois
+    // machines d'essai sur huit ne l'ont jamais reçue, la page restait sur
+    // « Mise en place… ». L'événement passe par un autre chemin — un script
+    // injecté dans la page par WebKit — et la page prend le premier arrivé.
+    let adresse = format!("{retenu}@{MACHINE}");
+    let _ = app.emit("premier-fini", adresse.clone());
     // LE FILET DE FIN (18 novembre). Tout est écrit à cette ligne : la page
     // n'a plus qu'à afficher « grenOS est prêt » et appeler premier_quitter.
     // Deux machines d'essai sur cinq sont pourtant restées figées ici, la
@@ -402,7 +475,7 @@ pub async fn premier_terminer(
         dire("premier : la page n a pas quitte seule apres 12 s — fermeture par le filet");
         std::process::exit(0);
     });
-    Ok(format!("{retenu}@{MACHINE}"))
+    Ok(adresse)
 }
 
 #[tauri::command]

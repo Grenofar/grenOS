@@ -1,0 +1,119 @@
+#!/bin/sh
+# grenos-sauvegarde — une copie de tes fichiers sur un disque externe.
+#
+# todo I13 (et le début de C10, C11, C13, C14). Choisie au premier démarrage
+# ou par `gren sauvegarde activer`, lancée par le minuteur de session
+# grenos-sauvegarde.timer toutes les heures — elle ne fait rien si la copie
+# du jour existe déjà, ou si aucun disque externe n'est branché. C'est ce qui
+# donne « chaque jour, dès qu'un disque est branché » sans démon qui surveille.
+#
+#   grenos-sauvegarde              la copie du jour, si besoin
+#   grenos-sauvegarde --forcer     une copie maintenant, même s'il y en a une
+#   grenos-sauvegarde --etat       où sont les copies, et la dernière
+#
+# CE QUE C'EST : rsync, une copie DATÉE par jour. Les fichiers qui n'ont pas
+# changé sont des liens physiques vers la copie d'avant (--link-dest) : trente
+# jours de copies coûtent à peine plus qu'une, et chaque dossier daté est une
+# copie complète qu'on ouvre dans l'explorateur pour reprendre UN fichier.
+# Sur un disque FAT32 ou exFAT (pas de liens physiques) chaque copie est
+# entière : ça marche, ça prend plus de place, et on le dit.
+#
+# ET ON VÉRIFIE QU'ELLE SE RESTAURE. Une sauvegarde jamais relue est une
+# promesse. Après chaque copie, un fichier tiré au hasard est relu depuis le
+# disque et comparé à l'original : « restauration vérifiée » ne s'écrit que si
+# les octets sont les mêmes.
+#
+# La copie se fait d'abord dans un dossier « .partielle » renommé à la fin :
+# un disque débranché au milieu ne laisse pas une copie qui a l'air complète.
+
+set -u
+SOURCES="Documents Images Musique Vidéos Bureau"
+GARDER=30
+
+dire() {
+    grenos-dire "sauvegarde : $1" 2>/dev/null || true
+    echo "$1"
+}
+
+# Le disque : le premier volume monté, inscriptible, sous /media/<compte> ou
+# /run/media/<compte> — là où l'explorateur monte les disques USB.
+destination() {
+    for base in "/media/$USER" "/run/media/$USER"; do
+        [ -d "$base" ] || continue
+        for d in "$base"/*; do
+            if [ -d "$d" ] && [ -w "$d" ]; then
+                printf '%s' "$d"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+DISQUE=$(destination) || DISQUE=""
+MACHINE=$(hostname 2>/dev/null || echo grenos)
+RACINE="${DISQUE}/grenOS-sauvegardes/${MACHINE}-${USER}"
+
+if [ "${1:-}" = "--etat" ]; then
+    if [ -z "$DISQUE" ]; then
+        echo "Aucun disque externe branché."
+        exit 0
+    fi
+    NOMBRE=$(ls -1d "$RACINE"/2* 2>/dev/null | wc -l)
+    DERNIERE=$(ls -1d "$RACINE"/2* 2>/dev/null | tail -1)
+    echo "Disque : $DISQUE"
+    echo "Copies : $NOMBRE, dans $RACINE"
+    [ -n "$DERNIERE" ] && echo "Dernière : $(basename "$DERNIERE")"
+    exit 0
+fi
+
+if [ -z "$DISQUE" ]; then
+    dire "aucun disque externe branche — rien a faire"
+    exit 0
+fi
+
+AUJOURDHUI=$(date +%Y-%m-%d)
+if [ "${1:-}" != "--forcer" ] && ls -1d "$RACINE/$AUJOURDHUI"* >/dev/null 2>&1; then
+    exit 0
+fi
+
+mkdir -p "$RACINE" || { dire "le disque $DISQUE refuse l'ecriture"; exit 0; }
+NOUVELLE="$RACINE/$(date +%Y-%m-%d_%H%M)"
+PARTIELLE="$NOUVELLE.partielle"
+DERNIERE=$(ls -1d "$RACINE"/2* 2>/dev/null | grep -v '\.partielle$' | tail -1)
+rm -rf "$RACINE"/*.partielle 2>/dev/null
+mkdir -p "$PARTIELLE"
+
+COPIES=0
+for dossier in $SOURCES; do
+    [ -d "$HOME/$dossier" ] || continue
+    LIEN=""
+    [ -n "$DERNIERE" ] && [ -d "$DERNIERE/$dossier" ] && LIEN="--link-dest=$DERNIERE/$dossier"
+    # shellcheck disable=SC2086
+    if rsync -a --delete $LIEN "$HOME/$dossier/" "$PARTIELLE/$dossier/" 2>/dev/null; then
+        COPIES=$((COPIES + 1))
+    else
+        dire "la copie de $dossier s'est arretee (disque plein ou debranche ?)"
+        rm -rf "$PARTIELLE"
+        exit 0
+    fi
+done
+mv "$PARTIELLE" "$NOUVELLE"
+
+# La relecture : un fichier au hasard, comparé octet par octet.
+TEMOIN=$(cd "$NOUVELLE" 2>/dev/null && find . -type f -size -50M 2>/dev/null | shuf -n 1 2>/dev/null)
+if [ -z "$TEMOIN" ]; then
+    VERDICT="rien a relire (dossiers vides)"
+elif cmp -s "$NOUVELLE/$TEMOIN" "$HOME/$TEMOIN"; then
+    VERDICT="restauration verifiee sur ${TEMOIN#./}"
+else
+    VERDICT="ATTENTION : ${TEMOIN#./} relu different de l'original"
+fi
+
+# Les plus anciennes au-delà de trente.
+ls -1d "$RACINE"/2* 2>/dev/null | grep -v '\.partielle$' | head -n "-$GARDER" | while read -r vieille; do
+    rm -rf "$vieille"
+done
+
+dire "copie $(basename "$NOUVELLE") sur $(basename "$DISQUE") — $COPIES dossier(s), $VERDICT"
+exit 0

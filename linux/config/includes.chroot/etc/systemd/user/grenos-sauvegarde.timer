@@ -1,0 +1,12 @@
+# Toutes les heures, cinq minutes après l'ouverture de la session : c'est ce
+# qui fait « chaque jour, dès qu'un disque est branché » — le programme sort
+# aussitôt s'il n'y a rien à faire.
+[Unit]
+Description=grenOS : la copie du jour, quand un disque externe est là
+
+[Timer]
+OnStartupSec=5min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target

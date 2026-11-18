@@ -141,6 +141,15 @@
       </action>
     </keybind>
 
+    <!-- Le mode jeu (todo I8) : grenPerf ouvert sur son onglet Mode jeu,
+         qui propose de fermer le superflu et passe le reste en arrière-plan.
+         Réversible : le recouper rend à chacun sa priorité. -->
+    <keybind key="C-A-Escape">
+      <action name="Execute">
+        <command>grenos-ui jeu</command>
+      </action>
+    </keybind>
+
     <!-- Le jour et la nuit. -->
     <keybind key="W-t">
       <action name="Execute">

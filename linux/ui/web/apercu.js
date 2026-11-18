@@ -6,8 +6,8 @@
   if (window.__TAURI__) return;
   const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
   const DONNEES = {
-    ecrans: ["bienvenue", "langue", "clavier", "compte", "parcours", "reseau", "apparence", "usage", "confidentialite", "securite", "majs", "applications", "sauvegardes", "optimisation", "final"]
-      .map((cle) => ({ cle, titre: cle, parcours: ["bienvenue", "langue", "clavier", "compte", "parcours", "final"].includes(cle) ? ["rapide", "personnalise", "dev"] : ["personnalise", "dev"] })),
+    ecrans: ["bienvenue", "langue", "clavier", "compte", "parcours", "reseau", "apparence", "usage", "confidentialite", "securite", "majs", "applications", "sauvegardes", "optimisation", "systeme", "pare-feu", "journaux", "final"]
+      .map((cle) => ({ cle, titre: cle, parcours: ["bienvenue", "langue", "clavier", "compte", "parcours", "final"].includes(cle) ? ["rapide", "personnalise", "dev"] : ["systeme", "pare-feu", "journaux"].includes(cle) ? ["dev"] : ["personnalise", "dev"] })),
     usages: [
       { cle: "bureautique", titre: "Bureautique et Internet", note: "Écrire, naviguer, regarder des vidéos.", paquets: [] },
       { cle: "developpement", titre: "Développement", note: "Visual Studio Code, Git, Python et Node.", paquets: ["vscode"] },

@@ -256,6 +256,35 @@ def ouvrir(args):
     return 0
 
 
+def sauvegarde(args):
+    """Les sauvegardes sur disque externe (grenos-sauvegarde + son minuteur)."""
+    action = args[0] if args else "etat"
+    outil = "/usr/lib/grenos/grenos-sauvegarde"
+    if action == "activer":
+        code = subprocess.run(["systemctl", "--user", "enable", "--now", "grenos-sauvegarde.timer"]).returncode
+        if code == 0:
+            print(c(VERT, "✓ ") + "Sauvegardes activées : une copie par jour dès qu'un disque externe est branché.")
+        return code
+    if action == "desactiver":
+        code = subprocess.run(["systemctl", "--user", "disable", "--now", "grenos-sauvegarde.timer"]).returncode
+        if code == 0:
+            print(c(VERT, "✓ ") + "Sauvegardes coupées. Les copies déjà faites restent sur le disque.")
+        return code
+    if action == "maintenant":
+        return subprocess.run([outil, "--forcer"]).returncode
+    if action == "etat":
+        actif = subprocess.run(["systemctl", "--user", "is-enabled", "grenos-sauvegarde.timer"],
+                               capture_output=True, text=True).stdout.strip() == "enabled"
+        titre("Sauvegardes")
+        ligne("Automatiques", c(VERT, "oui, chaque jour") if actif else c(GRIS, "non — ") + c(BLEU, "gren sauvegarde activer"))
+        for l in subprocess.run([outil, "--etat"], capture_output=True, text=True).stdout.splitlines():
+            cle, _, valeur = l.partition(" : ")
+            ligne(cle, valeur or "")
+        return 0
+    print("Usage : gren sauvegarde [etat|activer|desactiver|maintenant]", file=sys.stderr)
+    return 2
+
+
 def version(_args):
     print(f"gren 1 · grensh {os.environ.get('GRENSH_VERSION', '1')}")
     return 0
@@ -270,6 +299,7 @@ COMMANDES = [
     ("accent", "Changer-Accent", "la couleur d'accent", accent),
     ("maj", "Mettre-AJour", "l'état des mises à jour", maj),
     ("ouvrir", "Ouvrir-App", "ouvrir une application par son nom", ouvrir),
+    ("sauvegarde", "Sauvegarder-Fichiers", "copies sur disque externe : etat, activer, maintenant", sauvegarde),
     ("version", "", "la version de gren", version),
 ]
 
@@ -287,11 +317,11 @@ APPLIS = [
 def aide(_args):
     titre("gren — le système")
     for nom, verbe, texte, _ in COMMANDES:
-        print(f"  {c(BLEU, ('gren ' + nom).ljust(18))} {c(VIOLET, verbe.ljust(18))} {texte}")
+        print(f"  {c(BLEU, ('gren ' + nom).ljust(18))} {c(VIOLET, verbe.ljust(20))} {texte}")
     print()
     titre("grenget — les applications")
     for nom, verbe, texte in APPLIS:
-        print(f"  {c(BLEU, ('grenget ' + nom).ljust(18))} {c(VIOLET, verbe.ljust(18))} {texte}")
+        print(f"  {c(BLEU, ('grenget ' + nom).ljust(18))} {c(VIOLET, verbe.ljust(20))} {texte}")
     print()
     print(c(GRIS, "  Les deux formes font la même chose : ") + c(BLEU, "gren info") + c(GRIS, " = ") + c(VIOLET, "Afficher-Systeme") + c(GRIS, ". Tab complète."))
     print(c(GRIS, "  Tout le reste est du bash : les tutoriels Linux marchent ici tels quels."))

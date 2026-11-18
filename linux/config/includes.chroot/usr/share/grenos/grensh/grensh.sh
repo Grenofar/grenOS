@@ -105,6 +105,7 @@ Changer-Theme()       { gren theme "$@"; }
 Changer-Accent()      { gren accent "$@"; }
 Mettre-AJour()        { gren maj "$@"; }
 Ouvrir-App()          { gren ouvrir "$@"; }
+Sauvegarder-Fichiers() { gren sauvegarde "$@"; }
 Chercher-App()        { grenget chercher "$@"; }
 Installer-App()       { grenget installer "$@"; }
 Desinstaller-App()    { grenget enlever "$@"; }
@@ -135,16 +136,18 @@ complete -F _grensh_completer_slug Installer-App Afficher-App Desinstaller-App
 _grensh_completer_gren() {
     local mot=${COMP_WORDS[COMP_CWORD]}
     if [ "$COMP_CWORD" -eq 1 ]; then
-        COMPREPLY=($(compgen -W "aide info memoire liberer reseau theme accent maj ouvrir version" -- "$mot"))
+        COMPREPLY=($(compgen -W "aide info memoire liberer reseau theme accent maj ouvrir sauvegarde version" -- "$mot"))
         return
     fi
     case ${COMP_WORDS[1]} in
         theme)  COMPREPLY=($(compgen -W "nuit jour" -- "$mot")) ;;
         accent) COMPREPLY=($(compgen -W "bleu violet vert orange rose cyan" -- "$mot")) ;;
+        sauvegarde) COMPREPLY=($(compgen -W "etat activer desactiver maintenant" -- "$mot")) ;;
     esac
 }
 complete -F _grensh_completer_gren gren
 complete -W "nuit jour" Changer-Theme
+complete -W "etat activer desactiver maintenant" Sauvegarder-Fichiers
 complete -W "bleu violet vert orange rose cyan" Changer-Accent
 
 # ---- L'accueil ----------------------------------------------------------------
