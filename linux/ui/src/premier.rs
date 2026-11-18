@@ -390,6 +390,18 @@ pub async fn premier_terminer(
     let v = |c: &str, d: &str| reponses.get(c).cloned().unwrap_or_else(|| d.to_string());
     dire(&format!("premier : choix gardes — apparence {}, telemetrie {}, majs {}",
                   v("apparence", "auto"), v("telemetrie", "aucune"), v("majs", "automatiques")));
+    // LE FILET DE FIN (18 novembre). Tout est écrit à cette ligne : la page
+    // n'a plus qu'à afficher « grenOS est prêt » et appeler premier_quitter.
+    // Deux machines d'essai sur cinq sont pourtant restées figées ici, la
+    // réponse jamais arrivée à la page — et le bureau ne s'ouvrait jamais.
+    // La cause n'est pas encore trouvée ; en attendant, le processus se ferme
+    // seul douze secondes plus tard (la page le fait d'habitude à 2,6 s), et
+    // il le DIT : la ligne du port série nommera chaque fois où il a servi.
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_secs(12));
+        dire("premier : la page n a pas quitte seule apres 12 s — fermeture par le filet");
+        std::process::exit(0);
+    });
     Ok(format!("{retenu}@{MACHINE}"))
 }
 

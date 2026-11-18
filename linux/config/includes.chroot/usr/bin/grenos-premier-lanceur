@@ -44,7 +44,23 @@ if [ -x /usr/bin/grenos-ui ]; then
 
     if [ -e "$PRET" ]; then
         dire "premier : grenos-ui affiche en ${ATTENTE}s"
-        wait "$UI"
+        # Second filet (le premier est dans premier.rs) : une fois la machine
+        # nommée, l'interface a trente secondes pour se fermer. Sans cela, une
+        # page figée après « choix gardes » laissait le bureau ne jamais venir
+        # (vu deux fois en CI le 18 novembre).
+        APRES=0
+        while kill -0 "$UI" 2>/dev/null; do
+            if [ -e /etc/grenos/identite ]; then
+                APRES=$((APRES + 1))
+                if [ "$APRES" -ge 30 ]; then
+                    dire "premier : grenos-ui toujours ouvert 30 s apres le nom — on le ferme"
+                    kill "$UI" 2>/dev/null; sleep 1; kill -9 "$UI" 2>/dev/null
+                    break
+                fi
+            fi
+            sleep 1
+        done
+        wait "$UI" 2>/dev/null
     else
         dire "premier : grenos-ui ne s est pas affiche en ${ATTENTE}s — secours python"
         kill "$UI" 2>/dev/null
