@@ -67,3 +67,5 @@ grenos web download/
 linux/config/includes.chroot/usr/bin/grenos-ui
 linux/config/includes.chroot/usr/bin/grenos-coins
 linux/ui/gen/
+linux/config/includes.chroot/usr/lib/grenos/grenos-shell-natif
+linux/config/includes.chroot/usr/lib/grenos/grenos-bureau-natif

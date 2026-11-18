@@ -229,6 +229,7 @@ poser libfm.conf                /etc/xdg/libfm/libfm.conf
 poser lightdm-gtk-greeter.conf  /etc/lightdm/lightdm-gtk-greeter.conf
 poser gtk-settings.ini          /etc/gtk-3.0/settings.ini
 poser fonts-local.conf          /etc/fonts/local.conf
+poser xfce4-terminal.xml        /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-terminal.xml
 
 # ---- Le droit de faire du son sans hoquet -----------------------------------
 #

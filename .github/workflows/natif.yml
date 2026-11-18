@@ -1,0 +1,40 @@
+# La barre et le bureau natifs (linux/natif) compilent-ils, et leurs tests
+# passent-ils ? Quelques minutes, contre deux heures pour l'image entière.
+#
+# Pourquoi un workflow à part : gtk-rs ne se compile pas sous Windows (il lui
+# faut les en-têtes de GTK 3), donc on ne peut pas vérifier en local. Sans ce
+# raccourci, chaque faute de frappe coûterait une construction d'image — et
+# chaque push sur une branche `claude/**` ANNULE celle qui tourne.
+name: natif
+
+on:
+  push:
+    branches: ["natif/**", "claude/**", main]
+    paths:
+      - "linux/natif/**"
+      - "linux/config/includes.chroot/usr/lib/grenos/grenosui.py"
+      - ".github/workflows/natif.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: natif-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compiler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compiler et tester dans Debian trixie
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work/linux/natif \
+            -e CARGO_TERM_COLOR=never \
+            rust:1-trixie sh -ec '
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends \
+                libgtk-3-dev build-essential pkg-config >/dev/null
+              cargo test --release
+              cargo build --release
+              ls -l target/release/grenos-shell-natif target/release/grenos-bureau-natif
+            '

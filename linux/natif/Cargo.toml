@@ -1,0 +1,41 @@
+[package]
+name = "grenos-natif"
+version = "0.1.0"
+edition = "2021"
+description = "La barre et le bureau de grenOS, en Rust natif (GTK 3), sans Python"
+license = "MIT"
+
+# Deux programmes, deux processus : si le bureau tombe, la barre reste, et
+# l'inverse. C'est ce que faisaient les deux scripts Python qu'ils remplacent.
+# Leurs noms contiennent « grenos-shell » et « grenos-bureau » : tout ce qui
+# les vise par `pkill -f` (grenos-menu, grenos-theme, grenos-fond, la sonde)
+# les trouve sans changer une ligne.
+[[bin]]
+name = "grenos-shell-natif"
+path = "src/bin/barre.rs"
+
+[[bin]]
+name = "grenos-bureau-natif"
+path = "src/bin/bureau.rs"
+
+[lib]
+name = "natif"
+path = "src/lib.rs"
+
+[dependencies]
+# GTK 3, la même bibliothèque que les fenêtres Python et que WebKitGTK : elle
+# est déjà chargée en mémoire partagée par le reste du bureau. Pas de WebKit
+# ici — ce qui tourne en permanence doit rester léger (CLAUDE.md).
+gtk = "0.18"
+gdkx11 = "0.18"
+# Les fenêtres des autres (barre des tâches) et la bande réservée : x11rb, pur
+# Rust, comme grenos-coins. Il remplace libwnck, que gtk-rs ne lie plus.
+x11rb = { version = "0.13", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

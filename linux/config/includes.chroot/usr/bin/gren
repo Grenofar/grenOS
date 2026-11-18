@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+"""gren — le système grenOS, depuis le terminal.
+
+Le pendant en ligne de commande des fenêtres : ce que montrent grenPerf, les
+Réglages et Mises à jour, en une commande. Chaque sous-commande a aussi sa
+forme Verbe-Nom dans grensh (`Afficher-Systeme` = `gren info`).
+
+Rien ici n'importe GTK : une commande de terminal doit répondre en quelques
+millisecondes, pas charger une bibliothèque graphique.
+"""
+import os
+import shutil
+import subprocess
+import sys
+
+CONFIG = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "grenos")
+ACCENTS = ("bleu", "violet", "vert", "orange", "rose", "cyan")
+
+COULEUR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+
+
+def c(rvb, texte, gras=False):
+    if not COULEUR:
+        return texte
+    return f"\033[{'1;' if gras else ''}38;2;{rvb}m{texte}\033[0m"
+
+
+BLEU, VIOLET, GRIS, VERT, ROUGE, BLANC = "96;165;250", "167;139;250", "148;161;186", "43;196;138", "239;77;94", "238;242;250"
+
+
+def titre(texte):
+    print(c(VIOLET, "● ") + c(BLANC, texte, gras=True))
+
+
+def ligne(etiquette, valeur):
+    print(f"  {c(GRIS, etiquette.ljust(13))} {valeur}")
+
+
+def jauge(part, largeur=24):
+    part = max(0.0, min(1.0, part))
+    plein = round(part * largeur)
+    couleur = ROUGE if part > 0.88 else BLEU
+    return c(couleur, "━" * plein) + c("44;61;96", "━" * (largeur - plein))
+
+
+def lire(chemin, defaut=""):
+    try:
+        with open(chemin, encoding="utf-8", errors="replace") as f:
+            return f.read().strip()
+    except OSError:
+        return defaut
+
+
+def reglage(nom, defaut=""):
+    return lire(os.path.join(CONFIG, nom)) or defaut
+
+
+def meminfo():
+    valeurs = {}
+    for l in lire("/proc/meminfo").splitlines():
+        cle, _, reste = l.partition(":")
+        try:
+            valeurs[cle] = int(reste.split()[0]) / 1048576  # Go
+        except (IndexError, ValueError):
+            pass
+    return valeurs
+
+
+def go(x):
+    return f"{x:.1f}".replace(".", ",") + " Go"
+
+
+# ---- Les sous-commandes --------------------------------------------------------
+LOGO = [
+    "      ▄▄      ",
+    "   ▄████  ▄▄  ",
+    "   ██████████ ",
+    "    ▀███████▀ ",
+    "       ██     ",
+    "       ██     ",
+]
+
+
+def info(_args):
+    """Ce qu'est cette machine, d'un coup d'œil."""
+    os_nom = "grenOS"
+    for l in lire("/etc/os-release").splitlines():
+        if l.startswith("PRETTY_NAME="):
+            os_nom = l.split("=", 1)[1].strip('"')
+    construction = lire("/usr/share/grenos/version")
+    noyau = os.uname().release
+    modele = ""
+    for l in lire("/proc/cpuinfo").splitlines():
+        if l.startswith("model name"):
+            modele = " ".join(l.split(":", 1)[1].split())
+            break
+    coeurs = os.cpu_count() or 1
+    m = meminfo()
+    total, dispo = m.get("MemTotal", 0), m.get("MemAvailable", 0)
+    disque = shutil.disk_usage(os.path.expanduser("~"))
+    secondes = float(lire("/proc/uptime", "0").split()[0])
+    heures, minutes = int(secondes // 3600), int(secondes % 3600 // 60)
+    identite = {}
+    for l in lire("/etc/grenos/identite").splitlines():
+        if "=" in l:
+            k, v = l.split("=", 1)
+            identite[k.strip()] = v.strip()
+
+    lignes = [
+        c(BLEU, f"{os.environ.get('USER', '?')}", True) + c(GRIS, "@") + c(VIOLET, identite.get("machine", os.uname().nodename), True),
+        c(GRIS, "─" * 30),
+        f"{c(GRIS, 'Système'.ljust(11))} {os_nom}{c(GRIS, ' · ' + construction) if construction else ''}",
+        f"{c(GRIS, 'Noyau'.ljust(11))} {noyau}",
+        f"{c(GRIS, 'Processeur'.ljust(11))} {modele or '?'} ({coeurs} cœurs)",
+        f"{c(GRIS, 'Mémoire'.ljust(11))} {go(total - dispo)} / {go(total)}",
+        f"{c(GRIS, 'Disque'.ljust(11))} {go(disque.used / 1073741824)} / {go(disque.total / 1073741824)}",
+        f"{c(GRIS, 'Allumé'.ljust(11))} {heures} h {minutes:02d}",
+        f"{c(GRIS, 'Apparence'.ljust(11))} {reglage('theme', 'nuit')}, accent {reglage('accent', 'bleu')}",
+        f"{c(GRIS, 'Terminal'.ljust(11))} grensh {os.environ.get('GRENSH_VERSION', '1')} (bash {os.environ.get('BASH_VERSION', '').split('(')[0] or '?'})",
+    ]
+    for i in range(max(len(LOGO), len(lignes))):
+        gauche = LOGO[i] if i < len(LOGO) else " " * len(LOGO[0])
+        teinte = VERT if i >= 4 else (BLEU if i < 2 else VIOLET)
+        print(" " + c(teinte, gauche) + "  " + (lignes[i] if i < len(lignes) else ""))
+    return 0
+
+
+def memoire(_args):
+    m = meminfo()
+    total, dispo = m.get("MemTotal", 0), m.get("MemAvailable", 0)
+    cache = m.get("Cached", 0) + m.get("Buffers", 0)
+    titre("Mémoire")
+    ligne("Utilisée", f"{jauge((total - dispo) / max(total, 0.01))}  {go(total - dispo)} / {go(total)}")
+    ligne("Cache", f"{go(cache)} (rendu dès qu'une application en a besoin)")
+    et, el = m.get("SwapTotal", 0), m.get("SwapFree", 0)
+    if et > 0:
+        ligne("Échange", f"{jauge((et - el) / et)}  {go(et - el)} / {go(et)}")
+    # Les cinq plus gourmands, comme le haut de grenPerf.
+    lourds = []
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        statut = lire(f"/proc/{pid}/status")
+        nom, rss = "", 0
+        for l in statut.splitlines():
+            if l.startswith("Name:"):
+                nom = l.split()[1]
+            elif l.startswith("VmRSS:"):
+                rss = int(l.split()[1])
+        if rss:
+            lourds.append((rss, nom))
+    if lourds:
+        print()
+        titre("Les plus gourmands")
+        for rss, nom in sorted(lourds, reverse=True)[:5]:
+            ligne(nom[:13], f"{rss / 1024:.0f} Mo")
+    return 0
+
+
+def liberer(_args):
+    avant = meminfo().get("MemAvailable", 0)
+    outil = "/usr/lib/grenos/grenos-perf-liberer"
+    lanceur = ["sudo", "-n"] if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode == 0 else ["pkexec"]
+    code = subprocess.run(lanceur + [outil]).returncode
+    apres = meminfo().get("MemAvailable", 0)
+    if code == 0:
+        print(c(VERT, "✓ ") + f"Mémoire libérée : {go(max(0.0, apres - avant))} rendus ({go(apres)} disponibles).")
+    else:
+        print(c(ROUGE, "✗ ") + "Rien n'a été fait (autorisation refusée).")
+    return code
+
+
+def reseau(_args):
+    titre("Réseau")
+    sortie = subprocess.run(["ip", "-brief", "address"], capture_output=True, text=True).stdout
+    for l in sortie.splitlines():
+        champs = l.split()
+        if not champs or champs[0] == "lo":
+            continue
+        etat = champs[1] if len(champs) > 1 else "?"
+        adresses = " ".join(a for a in champs[2:] if "." in a) or "aucune adresse"
+        ligne(champs[0], (c(VERT, "● relié") if etat == "UP" else c(GRIS, "○ " + etat.lower())) + f"  {adresses}")
+    return 0
+
+
+def theme(args):
+    if args and args[0] not in ("nuit", "jour"):
+        print("Usage : gren theme [nuit|jour]", file=sys.stderr)
+        return 2
+    code = subprocess.run(["grenos-theme"] + args[:1]).returncode
+    if code == 0:
+        print(c(VERT, "✓ ") + f"Thème : {reglage('theme', 'nuit')}.")
+    return code
+
+
+def accent(args):
+    if not args or args[0] not in ACCENTS:
+        print(f"Usage : gren accent [{'|'.join(ACCENTS)}]  (actuel : {reglage('accent', 'bleu')})", file=sys.stderr)
+        return 2
+    os.makedirs(CONFIG, exist_ok=True)
+    with open(os.path.join(CONFIG, "accent"), "w", encoding="utf-8") as f:
+        f.write(args[0] + "\n")
+    # La barre se repeint au signal ; les fenêtres prennent l'accent à leur
+    # prochaine ouverture (c'est ce que font les Réglages).
+    subprocess.run(["pkill", "-USR1", "-f", "grenos-shell"], capture_output=True)
+    print(c(VERT, "✓ ") + f"Accent : {args[0]}. La barre suit tout de suite, les fenêtres à leur prochaine ouverture.")
+    return 0
+
+
+def maj(args):
+    nombre = lire("/run/grenos/maj")
+    date = lire("/run/grenos/maj-date")
+    titre("Mises à jour")
+    if nombre.isdigit():
+        n = int(nombre)
+        ligne("Système", c(VERT, "à jour") if n == 0 else c(BLEU, f"{n} paquet(s) prêt(s)"))
+    else:
+        ligne("Système", c(GRIS, "pas encore vérifié depuis le démarrage"))
+    if date:
+        ligne("Vérifié", f"le {date} UTC")
+    ligne("Mode", reglage("maj-mode") or lire("/etc/grenos/maj-mode", "automatiques"))
+    print()
+    print(c(GRIS, "  Le système s'installe au redémarrage, avant le bureau ; les applications"))
+    print(c(GRIS, "  tout de suite. ") + c(BLEU, "grenget maj") + c(GRIS, " met les applications à jour, ") + c(BLEU, "gren maj --fenetre") + c(GRIS, " ouvre la fenêtre."))
+    if "--fenetre" in args:
+        subprocess.Popen(["grenos-maj"], start_new_session=True)
+    return 0
+
+
+def ouvrir(args):
+    if not args:
+        print("Usage : gren ouvrir <application>", file=sys.stderr)
+        return 2
+    voulu = " ".join(args).lower()
+    trouve = None
+    for dossier in ("/usr/share/applications", os.path.expanduser("~/.local/share/applications"),
+                    "/var/lib/flatpak/exports/share/applications"):
+        if not os.path.isdir(dossier):
+            continue
+        for nom in sorted(os.listdir(dossier)):
+            if not nom.endswith(".desktop"):
+                continue
+            texte = lire(os.path.join(dossier, nom))
+            noms = [l.split("=", 1)[1].lower() for l in texte.splitlines() if l.startswith(("Name=", "Name[fr]="))]
+            if voulu == nom[:-8].lower() or voulu in noms:
+                trouve = nom[:-8]
+                break
+            if trouve is None and any(voulu in n for n in noms):
+                trouve = nom[:-8]
+        if trouve:
+            break
+    if not trouve:
+        print(c(ROUGE, "✗ ") + f"Aucune application « {voulu} ». " + c(GRIS, "Essaie ") + c(BLEU, f"grenget chercher {voulu}"))
+        return 1
+    subprocess.Popen(["gtk-launch", trouve], start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(c(VERT, "✓ ") + f"{trouve} s'ouvre.")
+    return 0
+
+
+def version(_args):
+    print(f"gren 1 · grensh {os.environ.get('GRENSH_VERSION', '1')}")
+    return 0
+
+
+COMMANDES = [
+    ("info", "Afficher-Systeme", "ce qu'est cette machine", info),
+    ("memoire", "Afficher-Memoire", "la mémoire, et qui la prend", memoire),
+    ("liberer", "Liberer-Memoire", "rendre le cache et rapatrier l'échange", liberer),
+    ("reseau", "Afficher-Reseau", "les connexions et leurs adresses", reseau),
+    ("theme", "Changer-Theme", "nuit ou jour", theme),
+    ("accent", "Changer-Accent", "la couleur d'accent", accent),
+    ("maj", "Mettre-AJour", "l'état des mises à jour", maj),
+    ("ouvrir", "Ouvrir-App", "ouvrir une application par son nom", ouvrir),
+    ("version", "", "la version de gren", version),
+]
+
+APPLIS = [
+    ("chercher", "Chercher-App", "trouver une application"),
+    ("installer", "Installer-App", "installer une application"),
+    ("enlever", "Desinstaller-App", "désinstaller"),
+    ("liste", "Lister-Apps", "ce qui est installé"),
+    ("info", "Afficher-App", "la fiche d'une application"),
+    ("maj", "", "mettre les applications à jour"),
+    ("proposer", "Proposer-App", "proposer une application au catalogue"),
+]
+
+
+def aide(_args):
+    titre("gren — le système")
+    for nom, verbe, texte, _ in COMMANDES:
+        print(f"  {c(BLEU, ('gren ' + nom).ljust(18))} {c(VIOLET, verbe.ljust(18))} {texte}")
+    print()
+    titre("grenget — les applications")
+    for nom, verbe, texte in APPLIS:
+        print(f"  {c(BLEU, ('grenget ' + nom).ljust(18))} {c(VIOLET, verbe.ljust(18))} {texte}")
+    print()
+    print(c(GRIS, "  Les deux formes font la même chose : ") + c(BLEU, "gren info") + c(GRIS, " = ") + c(VIOLET, "Afficher-Systeme") + c(GRIS, ". Tab complète."))
+    print(c(GRIS, "  Tout le reste est du bash : les tutoriels Linux marchent ici tels quels."))
+    return 0
+
+
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] in ("aide", "-h", "--help", "help"):
+        return aide(args[1:])
+    for nom, _, _, fonction in COMMANDES:
+        if args[0] == nom:
+            return fonction(args[1:])
+    print(c(ROUGE, "✗ ") + f"« {args[0]} » n'est pas une commande de gren. " + c(GRIS, "Tape ") + c(BLEU, "gren aide"), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)

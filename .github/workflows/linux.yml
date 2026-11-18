@@ -256,15 +256,27 @@ jobs:
               cd /work/linux/coins
               cargo test --release
               cargo build --release
+              # La barre et le bureau natifs (gtk-rs + x11rb). GTK 3 est deja
+              # la : libwebkit2gtk-4.1-dev l a tire pour grenos-ui.
+              cd /work/linux/natif
+              cargo test --release
+              cargo build --release
             '
           sudo install -m 0755 linux/ui/target/release/grenos-ui \
             linux/config/includes.chroot/usr/bin/grenos-ui
           sudo install -m 0755 linux/coins/target/release/grenos-coins \
             linux/config/includes.chroot/usr/bin/grenos-coins
+          # Dans /usr/lib/grenos, pas sur le PATH : le point d entree reste
+          # /usr/bin/grenos-shell (Python), qui passe la main (natif.py).
+          for prog in grenos-shell-natif grenos-bureau-natif; do
+            sudo install -m 0755 "linux/natif/target/release/$prog" \
+              "linux/config/includes.chroot/usr/lib/grenos/$prog"
+          done
           ls -l linux/config/includes.chroot/usr/bin/grenos-ui \
             linux/config/includes.chroot/usr/bin/grenos-coins
           # La place compte : l'image en demande beaucoup plus loin.
-          sudo rm -rf linux/ui/target linux/coins/target
+          ls -l linux/config/includes.chroot/usr/lib/grenos/grenos-*-natif
+          sudo rm -rf linux/ui/target linux/coins/target linux/natif/target
           docker image rm rust:1-trixie >/dev/null 2>&1 || true
 
       # La clé du dépôt APT de grenOS. Elle est fabriquée une seule fois, par

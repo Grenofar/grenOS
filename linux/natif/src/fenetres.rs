@@ -1,0 +1,255 @@
+//! Les fenêtres ouvertes, lues par EWMH — ce que libwnck faisait pour la
+//! barre Python.
+//!
+//! POURQUOI PAS LIBWNCK
+//!
+//! gtk-rs ne lie plus libwnck, et une liaison maison coûterait plus que ce
+//! qu'on en utilise : la liste des fenêtres, leur classe, celle qui a le
+//! focus, si elle est réduite, son icône, et trois gestes (afficher, réduire,
+//! fermer). Tout cela est une poignée de propriétés de la fenêtre racine que
+//! openbox tient à jour (`_NET_CLIENT_LIST`, `_NET_ACTIVE_WINDOW`…), et trois
+//! messages à lui envoyer. x11rb les parle en pur Rust, comme grenos-coins.
+//!
+//! On reproduit ce que wnck appelait « skip tasklist » : une fenêtre de type
+//! bureau, barre ou écran d'accueil, ou marquée SKIP_TASKBAR, n'a pas de tuile.
+
+use std::collections::HashMap;
+use std::os::unix::io::AsRawFd;
+
+use x11rb::connection::Connection;
+use x11rb::protocol::xproto::{
+    AtomEnum, ChangeWindowAttributesAux, ClientMessageEvent, ConnectionExt as _, EventMask, PropMode,
+    Window,
+};
+use x11rb::protocol::Event;
+use x11rb::rust_connection::RustConnection;
+use x11rb::wrapper::ConnectionExt as _;
+
+/// Ce qu'on sait d'une fenêtre ouverte.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fenetre {
+    pub xid: u32,
+    /// WM_CLASS, deuxième moitié (« Firefox-esr ») : wnck l'appelait le
+    /// nom du groupe de classe.
+    pub classe: String,
+    /// Le titre (wnck : `get_name`).
+    pub titre: String,
+    pub reduite: bool,
+}
+
+pub struct Ecran {
+    conn: RustConnection,
+    racine: Window,
+    atomes: HashMap<&'static str, u32>,
+}
+
+const NOMS: &[&str] = &[
+    "_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW", "_NET_CLIENT_LIST_STACKING", "_NET_WM_STATE",
+    "_NET_WM_STATE_HIDDEN", "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_WINDOW_TYPE",
+    "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_SPLASH",
+    "_NET_WM_NAME", "UTF8_STRING", "_NET_WM_ICON", "_NET_CLOSE_WINDOW", "WM_CHANGE_STATE",
+    "_NET_WM_STRUT", "_NET_WM_STRUT_PARTIAL",
+];
+
+impl Ecran {
+    pub fn ouvrir() -> Option<Ecran> {
+        let (conn, numero) = x11rb::connect(None).ok()?;
+        let racine = conn.setup().roots.get(numero)?.root;
+        let mut atomes = HashMap::new();
+        let cookies: Vec<_> = NOMS.iter().map(|n| conn.intern_atom(false, n.as_bytes())).collect();
+        for (nom, cookie) in NOMS.iter().zip(cookies) {
+            atomes.insert(*nom, cookie.ok()?.reply().ok()?.atom);
+        }
+        // On écoute les propriétés de la racine : liste, focus, empilement.
+        conn.change_window_attributes(racine, &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE))
+            .ok()?;
+        conn.flush().ok()?;
+        Some(Ecran { conn, racine, atomes })
+    }
+
+    fn a(&self, nom: &str) -> u32 {
+        self.atomes.get(nom).copied().unwrap_or(0)
+    }
+
+    pub fn fd(&self) -> i32 {
+        self.conn.stream().as_raw_fd()
+    }
+
+    fn propriete32(&self, fenetre: Window, nom: u32, genre: u32, longueur: u32) -> Vec<u32> {
+        self.conn
+            .get_property(false, fenetre, nom, genre, 0, longueur)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .and_then(|r| r.value32().map(|v| v.collect()))
+            .unwrap_or_default()
+    }
+
+    fn texte(&self, fenetre: Window, nom: u32, genre: u32) -> Option<String> {
+        let r = self.conn.get_property(false, fenetre, nom, genre, 0, 1024).ok()?.reply().ok()?;
+        if r.value.is_empty() {
+            return None;
+        }
+        Some(String::from_utf8_lossy(&r.value).into_owned())
+    }
+
+    pub fn active(&self) -> Option<u32> {
+        self.propriete32(self.racine, self.a("_NET_ACTIVE_WINDOW"), AtomEnum::WINDOW.into(), 1)
+            .first()
+            .copied()
+            .filter(|&x| x != 0)
+    }
+
+    /// Les fenêtres qui ont droit à une tuile, dans l'ordre d'ouverture.
+    pub fn fenetres(&self) -> Vec<Fenetre> {
+        let liste = self.propriete32(self.racine, self.a("_NET_CLIENT_LIST"), AtomEnum::WINDOW.into(), 4096);
+        let types_caches = [
+            self.a("_NET_WM_WINDOW_TYPE_DESKTOP"),
+            self.a("_NET_WM_WINDOW_TYPE_DOCK"),
+            self.a("_NET_WM_WINDOW_TYPE_SPLASH"),
+        ];
+        let mut sortie = Vec::new();
+        for xid in liste {
+            // On suit aussi chaque fenêtre : réduite ou rendue, sa tuile change.
+            let _ = self.conn.change_window_attributes(
+                xid,
+                &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
+            );
+            let etats = self.propriete32(xid, self.a("_NET_WM_STATE"), AtomEnum::ATOM.into(), 64);
+            if etats.contains(&self.a("_NET_WM_STATE_SKIP_TASKBAR")) {
+                continue;
+            }
+            let types = self.propriete32(xid, self.a("_NET_WM_WINDOW_TYPE"), AtomEnum::ATOM.into(), 16);
+            if types.iter().any(|t| types_caches.contains(t)) {
+                continue;
+            }
+            let classe = self
+                .texte(xid, AtomEnum::WM_CLASS.into(), AtomEnum::STRING.into())
+                .map(|t| t.split('\0').nth(1).unwrap_or("").to_string())
+                .unwrap_or_default();
+            let titre = self
+                .texte(xid, self.a("_NET_WM_NAME"), self.a("UTF8_STRING"))
+                .or_else(|| self.texte(xid, AtomEnum::WM_NAME.into(), AtomEnum::STRING.into()))
+                .unwrap_or_default();
+            sortie.push(Fenetre { xid, classe, titre, reduite: etats.contains(&self.a("_NET_WM_STATE_HIDDEN")) });
+        }
+        let _ = self.conn.flush();
+        sortie
+    }
+
+    /// L'icône que la fenêtre déclare (_NET_WM_ICON), à la taille voulue.
+    /// Rendue en octets RGBA, largeur, hauteur.
+    pub fn icone(&self, xid: u32, taille: u32) -> Option<(Vec<u8>, u32, u32)> {
+        let donnees = self.propriete32(xid, self.a("_NET_WM_ICON"), AtomEnum::CARDINAL.into(), 1 << 20);
+        choisir_icone(&donnees, taille)
+    }
+
+    fn message(&self, fenetre: Window, genre: u32, donnees: [u32; 5]) {
+        let ev = ClientMessageEvent::new(32, fenetre, genre, donnees);
+        let _ = self.conn.send_event(
+            false,
+            self.racine,
+            EventMask::SUBSTRUCTURE_NOTIFY | EventMask::SUBSTRUCTURE_REDIRECT,
+            ev,
+        );
+        let _ = self.conn.flush();
+    }
+
+    /// Afficher et donner le focus (openbox la rend aussi si elle est réduite).
+    /// Source 2 : « un pagineur », la demande qu'openbox honore toujours.
+    pub fn activer(&self, xid: u32, temps: u32) {
+        self.message(xid, self.a("_NET_ACTIVE_WINDOW"), [2, temps, 0, 0, 0]);
+    }
+
+    /// Réduire : WM_CHANGE_STATE IconicState (ICCCM 4.1.4).
+    pub fn reduire(&self, xid: u32) {
+        self.message(xid, self.a("WM_CHANGE_STATE"), [3, 0, 0, 0, 0]);
+    }
+
+    pub fn fermer(&self, xid: u32, temps: u32) {
+        self.message(xid, self.a("_NET_CLOSE_WINDOW"), [temps, 2, 0, 0, 0]);
+    }
+
+    /// Réserve la bande du bas : une fenêtre agrandie s'arrête au-dessus.
+    pub fn reserver(&self, xid: u32, hauteur: u32, largeur: u32) {
+        let _ = self.conn.change_property32(
+            PropMode::REPLACE, xid, self.a("_NET_WM_STRUT"), AtomEnum::CARDINAL, &[0, 0, 0, hauteur],
+        );
+        let _ = self.conn.change_property32(
+            PropMode::REPLACE,
+            xid,
+            self.a("_NET_WM_STRUT_PARTIAL"),
+            AtomEnum::CARDINAL,
+            &[0, 0, 0, hauteur, 0, 0, 0, 0, 0, 0, 0, largeur.saturating_sub(1)],
+        );
+        let _ = self.conn.flush();
+    }
+
+    /// Vide la file d'événements ; vrai si l'un d'eux change la barre.
+    pub fn evenements(&self) -> bool {
+        let interessants = [
+            self.a("_NET_CLIENT_LIST"),
+            self.a("_NET_ACTIVE_WINDOW"),
+            self.a("_NET_CLIENT_LIST_STACKING"),
+            self.a("_NET_WM_STATE"),
+            u32::from(AtomEnum::WM_CLASS),
+        ];
+        let mut change = false;
+        while let Ok(Some(ev)) = self.conn.poll_for_event() {
+            if let Event::PropertyNotify(p) = ev {
+                if interessants.contains(&p.atom) {
+                    change = true;
+                }
+            }
+        }
+        change
+    }
+}
+
+/// Dans un _NET_WM_ICON (plusieurs images : largeur, hauteur, pixels ARGB),
+/// la plus petite qui couvre `taille`, sinon la plus grande. En RGBA.
+pub fn choisir_icone(donnees: &[u32], taille: u32) -> Option<(Vec<u8>, u32, u32)> {
+    let mut i = 0;
+    let mut meilleure: Option<(usize, u32, u32)> = None;
+    while i + 2 <= donnees.len() {
+        let (l, h) = (donnees[i], donnees[i + 1]);
+        let n = (l as usize).checked_mul(h as usize)?;
+        if l == 0 || h == 0 || i + 2 + n > donnees.len() {
+            break;
+        }
+        let mieux = match meilleure {
+            None => true,
+            Some((_, ml, _)) => (l >= taille && (ml < taille || l < ml)) || (ml < taille && l > ml),
+        };
+        if mieux {
+            meilleure = Some((i + 2, l, h));
+        }
+        i += 2 + n;
+    }
+    let (debut, l, h) = meilleure?;
+    let mut rgba = Vec::with_capacity((l * h * 4) as usize);
+    for &argb in &donnees[debut..debut + (l * h) as usize] {
+        rgba.extend_from_slice(&[(argb >> 16) as u8, (argb >> 8) as u8, argb as u8, (argb >> 24) as u8]);
+    }
+    Some((rgba, l, h))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn on_choisit_la_bonne_icone() {
+        // Une 16×16 puis une 32×32 : pour 26 px, la 32.
+        let mut d = vec![16, 16];
+        d.extend(std::iter::repeat(0xff00_00ff).take(256));
+        d.extend([32, 32]);
+        d.extend(std::iter::repeat(0x80ff_0000).take(1024));
+        let (rgba, l, h) = choisir_icone(&d, 26).unwrap();
+        assert_eq!((l, h), (32, 32));
+        assert_eq!(&rgba[..4], &[0xff, 0, 0, 0x80]);
+        // Pour 12 px, la 16.
+        assert_eq!(choisir_icone(&d, 12).unwrap().1, 16);
+        // Des données tronquées ne font pas tomber la barre.
+        assert!(choisir_icone(&[64, 64, 1, 2], 26).is_none());
+    }
+}
