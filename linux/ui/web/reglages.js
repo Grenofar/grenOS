@@ -61,6 +61,8 @@
           ligne("Taille de l'affichage", choix([96, 108, 120, 144, 168, 192].map((d) => [String(d), `${Math.round(d * 100 / 96)} %`]),
             String(await api.appeler("reglages_dpi_lire")),
             async (v) => { try { dire.textContent = await api.appeler("reglages_dpi", { dpi: Number(v) }); } catch (e) { dire.textContent = String(e); } })),
+          ligne("Barre des tâches", choix([["barre", "Barre"], ["dock", "Dock"]], await api.appeler("reglages_barre_lire"),
+            async (v) => { try { dire.textContent = await api.appeler("reglages_barre", { disposition: v }); } catch (e) { dire.textContent = String(e); } })),
           dire,
           note("Meta+T fait la bascule sans ouvrir cette fenêtre. Le fond d'écran, la barre, les menus et les applications suivent ensemble.")),
         carte(ligne("Fond d'écran", bouton("Parcourir…", "principal", parcourir)), fonds,

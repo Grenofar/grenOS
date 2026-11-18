@@ -24,6 +24,11 @@ use natif::fenetres::{Ecran, Fenetre};
 use natif::{classe, dire, image_de, lancer, poser_infobulle};
 
 const HAUTEUR: i32 = 52;
+// Le dock (G12) : plus haut pour des icônes plus grandes, et décollé du bord.
+const HAUTEUR_DOCK: i32 = 64;
+const MARGE_DOCK: i32 = 8;
+const ICONE: i32 = 26;
+const ICONE_DOCK: i32 = 38;
 const MENU_LARGEUR: i32 = 640;
 const MENU_HAUTEUR: i32 = 640;
 
@@ -82,6 +87,18 @@ const STYLE: &str = r#"
     border: 1px solid transparent; border-radius: 10px; padding: 7px 12px; margin: 1px 10px;
 }
 .entree:hover { background-color: @survol; border-color: @bord; }
+/* Le dock : la même barre, flottante. Le rayon est celui de la découpe
+   (natif::RAYON_COINS) : un coin dessiné plus rond que la fenêtre laisserait
+   un liseré dans l'angle. */
+#panneau.dock {
+    background-image: none;
+    background-color: alpha(@fond, 0.94);
+    border: 1px solid @bord-clair;
+    border-radius: 14px;
+}
+#panneau.dock button { padding: 4px 8px; margin: 6px 2px 2px 2px; border-radius: 12px; }
+#panneau.dock button image { transition: -gtk-icon-transform 140ms ease; }
+#panneau.dock button:hover image { -gtk-icon-transform: scale(1.16); }
 "#;
 
 /// Une case de la barre : l'icône d'une application, et son trait.
@@ -97,6 +114,8 @@ struct Barre {
     panneau: gtk::Window,
     largeur: i32,
     hauteur_ecran: i32,
+    /// G12 : la disposition dock, lue au démarrage (Réglages relance la barre).
+    dock: bool,
     bouton_menu: gtk::ToggleButton,
     poignee: RefCell<Option<glib::SignalHandlerId>>,
     tuiles: gtk::Box,
@@ -129,7 +148,8 @@ struct Barre {
 
 fn taille_menu() -> (i32, i32) {
     let (l, h) = natif::taille_ecran();
-    ((l - 24).min(MENU_LARGEUR).max(420), (h - HAUTEUR - 24).min(MENU_HAUTEUR).max(360))
+    let bande = natif::bande_reservee(if natif::disposition_dock() { HAUTEUR_DOCK } else { HAUTEUR }, MARGE_DOCK, natif::disposition_dock());
+    ((l - 24).min(MENU_LARGEUR).max(420), (h - bande - 24).min(MENU_HAUTEUR).max(360))
 }
 
 fn temps() -> u32 {
@@ -205,8 +225,25 @@ impl Barre {
         panneau.set_keep_above(true);
         panneau.set_skip_taskbar_hint(true);
         panneau.set_skip_pager_hint(true);
-        panneau.set_default_size(largeur, HAUTEUR);
-        panneau.move_(0, hauteur_ecran - HAUTEUR);
+        let dock = natif::disposition_dock();
+        if dock {
+            // Pas de largeur imposée : le dock prend celle de ce qu'il porte,
+            // et se recentre chaque fois qu'elle change (une application
+            // s'ouvre, une autre se ferme).
+            panneau.set_size_request(-1, HAUTEUR_DOCK);
+            classe(&panneau, "dock");
+            natif::arrondir(&panneau);
+            panneau.connect_size_allocate(move |f, _| {
+                let (x, y) = natif::place_dock((largeur, hauteur_ecran), f.size(), MARGE_DOCK);
+                if f.position() != (x, y) {
+                    f.move_(x, y);
+                }
+            });
+            panneau.move_((largeur - 600).max(0) / 2, hauteur_ecran - HAUTEUR_DOCK - MARGE_DOCK);
+        } else {
+            panneau.set_default_size(largeur, HAUTEUR);
+            panneau.move_(0, hauteur_ecran - HAUTEUR);
+        }
 
         let boite = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         panneau.add(&boite);
@@ -226,7 +263,10 @@ impl Barre {
         if gtk::IconTheme::default().map(|t| t.has_icon("grenos")).unwrap_or(false) {
             etiquette.pack_start(&gtk::Image::from_icon_name(Some("grenos"), gtk::IconSize::LargeToolbar), false, false, 0);
         }
-        etiquette.pack_start(&gtk::Label::new(Some("grenOS")), false, false, 0);
+        // Dans le dock, le logo seul : chaque pixel de largeur y compte.
+        if !dock {
+            etiquette.pack_start(&gtk::Label::new(Some("grenOS")), false, false, 0);
+        }
         bouton_menu.add(&etiquette);
         bouton_menu.set_widget_name("bouton-menu");
         bouton_menu.set_tooltip_text(Some("Menu grenOS"));
@@ -296,6 +336,7 @@ impl Barre {
             panneau,
             largeur,
             hauteur_ecran,
+            dock,
             bouton_menu,
             poignee: RefCell::new(None),
             tuiles,
@@ -325,6 +366,15 @@ impl Barre {
         vboite.pack_start(&barre.pied(), false, false, 0);
         barre.brancher();
         barre
+    }
+
+    /// La bande du bas que la barre occupe (dock : avec l'air dessous).
+    fn bande(&self) -> i32 {
+        natif::bande_reservee(if self.dock { HAUTEUR_DOCK } else { HAUTEUR }, MARGE_DOCK, self.dock)
+    }
+
+    fn icone(&self) -> i32 {
+        if self.dock { ICONE_DOCK } else { ICONE }
     }
 
     fn pied(self: &Rc<Self>) -> gtk::Box {
@@ -379,7 +429,7 @@ impl Barre {
         self.panneau.connect_realize(move |p| {
             if let (Some(ecran), Some(f)) = (&b.ecran, p.window()) {
                 if let Ok(x) = f.downcast::<gdkx11::X11Window>() {
-                    ecran.reserver(x.xid() as u32, HAUTEUR as u32, b.largeur as u32);
+                    ecran.reserver(x.xid() as u32, b.bande() as u32, b.largeur as u32);
                 }
             }
         });
@@ -597,11 +647,11 @@ impl Barre {
             };
             // Sans application connue, l'icône que la fenêtre déclare.
             let propre = if t.icone.is_empty() {
-                self.ecran.as_ref().and_then(|e| e.icone(t.fenetres[0].xid, 26)).map(|(rgba, l, h)| {
+                self.ecran.as_ref().and_then(|e| e.icone(t.fenetres[0].xid, self.icone() as u32)).map(|(rgba, l, h)| {
                     let p = gdk_pixbuf::Pixbuf::from_bytes(
                         &glib::Bytes::from_owned(rgba), gdk_pixbuf::Colorspace::Rgb, true, 8, l as i32, h as i32, (l * 4) as i32,
                     );
-                    p.scale_simple(26, 26, gdk_pixbuf::InterpType::Bilinear).unwrap_or(p)
+                    p.scale_simple(self.icone(), self.icone(), gdk_pixbuf::InterpType::Bilinear).unwrap_or(p)
                 })
             } else {
                 None
@@ -621,7 +671,7 @@ impl Barre {
     fn faire_tuile(self: &Rc<Self>, t: Tuile, active: Option<u32>, propre: Option<gdk_pixbuf::Pixbuf>) -> gtk::Box {
         let boite = gtk::Box::new(gtk::Orientation::Vertical, 0);
         let bouton = gtk::Button::new();
-        match propre.map(|p| gtk::Image::from_pixbuf(Some(&p))).or_else(|| image_de(&[&t.icone, "application-x-executable"], 26)) {
+        match propre.map(|p| gtk::Image::from_pixbuf(Some(&p))).or_else(|| image_de(&[&t.icone, "application-x-executable"], self.icone())) {
             Some(i) => bouton.add(&i),
             None => bouton.add(&gtk::Label::new(Some(&t.nom.chars().take(8).collect::<String>()))),
         }
@@ -730,7 +780,7 @@ impl Barre {
     fn ouvrir_menu(self: &Rc<Self>) {
         let (l, h) = taille_menu();
         self.menu.set_size_request(l, h);
-        let (mx, my) = (((self.largeur - l) / 2).max(8), (self.hauteur_ecran - HAUTEUR - h - 8).max(8));
+        let (mx, my) = (((self.largeur - l) / 2).max(8), (self.hauteur_ecran - self.bande() - h - 8).max(8));
         self.menu.move_(mx, my);
         *self.applications.borrow_mut() = apps::applications();
         self.recherche.set_text("");
@@ -940,7 +990,10 @@ impl Barre {
         for (nom, bouton) in [("grenos", self.bouton_menu.clone().upcast::<gtk::Widget>()), ("son", self.bouton_son.clone().upcast())] {
             let zone = bouton.allocation();
             let x = zone.x() + zone.width() / 2;
-            let y = self.hauteur_ecran - HAUTEUR + zone.y() + zone.height() / 2;
+            // Dans le dock, la barre n'est ni à x = 0 ni collée au bord : on
+            // part de là où elle est vraiment.
+            let (px, py) = if self.dock { self.panneau.position() } else { (0, self.hauteur_ecran - HAUTEUR) };
+            let (x, y) = (px + x, py + zone.y() + zone.height() / 2);
             dire(&format!("bouton {nom} en {x},{y}"));
         }
     }
@@ -1002,7 +1055,7 @@ fn main() {
     let style = natif::Style::poser(STYLE);
     let barre = Barre::nouvelle();
     barre.panneau.show_all();
-    dire(&format!("barre prete, {} epinglees (native)", barre.epingles.borrow().len()));
+    dire(&format!("barre prete, {} epinglees (native{})", barre.epingles.borrow().len(), if barre.dock { ", dock" } else { "" }));
 
     let b = barre.clone();
     glib::timeout_add_seconds_local_once(3, move || b.dire_les_boutons());

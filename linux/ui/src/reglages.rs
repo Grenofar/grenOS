@@ -313,9 +313,50 @@ pub fn reglages_dpi(dpi: u32) -> Result<String, String> {
     Ok(format!("Taille {} %. Les fenêtres ouvertes à partir de maintenant la prennent ; la barre et le bureau, à la prochaine ouverture de session.", dpi * 100 / 96))
 }
 
+// ---------------------------------------------------------- G12 : le dock
+
+/// La disposition de la barre : « barre » (pleine largeur) ou « dock ».
+fn disposition_de(texte: &str) -> &'static str {
+    if texte.trim() == "dock" { "dock" } else { "barre" }
+}
+
+#[tauri::command]
+pub fn reglages_barre_lire() -> String {
+    let maison = std::env::var("HOME").unwrap_or_default();
+    disposition_de(&lire(&format!("{maison}/.config/grenos/barre"))).to_string()
+}
+
+/// Changer de disposition, et que ça se voie TOUT DE SUITE : on arrête la
+/// barre, grenos-veilleur la relance (une seconde), et elle relit le réglage
+/// en démarrant. Plutôt qu'un signal qui la rebâtirait en place : la barre
+/// pose sa bande réservée et sa forme à la création, et un état à moitié
+/// défait est exactement ce qu'on ne voit qu'une fois en panne.
+#[tauri::command]
+pub fn reglages_barre(disposition: String) -> Result<String, String> {
+    if !["barre", "dock"].contains(&disposition.as_str()) {
+        return Err("Disposition inconnue.".into());
+    }
+    crate::systeme::ecrire_reglage("barre", &disposition)?;
+    let _ = Command::new("pkill").args(["-TERM", "-f", "grenos-shell-natif"]).status();
+    dire(&format!("reglages : barre en {disposition}"));
+    Ok(if disposition == "dock" {
+        "Dock : la barre flotte, centrée, et ne prend que la place de ce qu'elle porte.".into()
+    } else {
+        "Barre : pleine largeur, collée en bas de l'écran.".into()
+    })
+}
+
 #[cfg(test)]
 mod essais {
     use super::*;
+
+    #[test]
+    fn la_disposition_ne_connait_que_deux_mots() {
+        assert_eq!(disposition_de("dock
+"), "dock");
+        assert_eq!(disposition_de(""), "barre");
+        assert_eq!(disposition_de("n'importe quoi"), "barre");
+    }
 
     #[test]
     fn dpi_garde_le_reste() {

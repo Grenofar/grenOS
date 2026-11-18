@@ -390,6 +390,8 @@ fn main() {
             reglages::reglages_fond,
             reglages::reglages_parcourir_fond,
             reglages::reglages_dpi_lire,
+            reglages::reglages_barre_lire,
+            reglages::reglages_barre,
             reglages::reglages_dpi,
             jeux::jeux_vue,
             jeux::jeux_paquet_nvidia,

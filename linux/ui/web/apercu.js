@@ -170,6 +170,8 @@
       case "reglages_parcourir_fond": return "/usr/share/backgrounds/aurore.png";
       case "maj_mode": case "maj_verifier": await attendre(300); return null;
       case "reglages_dpi_lire": return 96;
+      case "reglages_barre_lire": return window.APERCU_BARRE || "barre";
+      case "reglages_barre": window.APERCU_BARRE = a.disposition; return a.disposition === "dock" ? "Dock : la barre flotte, centrée, et ne prend que la place de ce qu'elle porte." : "Barre : pleine largeur, collée en bas de l'écran.";
       case "reglages_dpi": return `Taille ${Math.round(a.dpi * 100 / 96)} %.`;
       case "reglages_fonds": return [{ nom: "Images/montagne.jpg", chemin: "/home/lea/Images/montagne.jpg", actuel: true }, { nom: "Bureau/plage.png", chemin: "/home/lea/Bureau/plage.png", actuel: false }];
       case "fichiers_maison": return "/home/lea";

@@ -316,6 +316,33 @@ pub fn sur_signal(numero: i32, mut action: impl FnMut() + 'static) {
     });
 }
 
+// ------------------------------------------------------------- le dock
+//
+// G12 (18 novembre). La barre a deux dispositions, choisies dans Réglages ›
+// Apparence : la barre pleine largeur, collée en bas (Windows), ou le DOCK —
+// la même barre, flottante, centrée, arrondie, aux icônes plus grandes, qui
+// ne prend que la largeur de ce qu'elle porte (macOS). Pas un second
+// programme : deux barres qui montrent les mêmes applications se
+// contrediraient, et ce qui tourne toute la session doit rester UN processus.
+
+/// La disposition choisie : `~/.config/grenos/barre` vaut « dock », ou rien.
+pub fn disposition_dock() -> bool {
+    theme::reglage("barre") == "dock"
+}
+
+/// Où poser le dock : centré, à `marge` pixels au-dessus du bord bas. Un
+/// dock plus large que l'écran se colle à gauche plutôt que de déborder.
+pub fn place_dock(ecran: (i32, i32), dock: (i32, i32), marge: i32) -> (i32, i32) {
+    (((ecran.0 - dock.0) / 2).max(0), (ecran.1 - dock.1 - marge).max(0))
+}
+
+/// La bande que les fenêtres agrandies laissent libre en bas : la hauteur de
+/// la barre, plus l'air sous le dock (sans quoi une fenêtre agrandie
+/// passerait SOUS lui).
+pub fn bande_reservee(hauteur: i32, marge: i32, dock: bool) -> i32 {
+    if dock { hauteur + marge } else { hauteur }
+}
+
 pub const SIGUSR1: i32 = 10;
 pub const SIGUSR2: i32 = 12;
 
@@ -332,6 +359,17 @@ mod tests {
         // Toutes les lignes sont couvertes, une seule fois.
         let total: i32 = r.iter().map(|x| x.3).sum();
         assert_eq!(total, 60);
+    }
+
+    #[test]
+    fn le_dock_est_centre_et_ne_deborde_pas() {
+        // 1280x720, un dock de 600x64 : centré, 8 px au-dessus du bord.
+        assert_eq!(place_dock((1280, 720), (600, 64), 8), (340, 648));
+        // Plus large que l'écran : collé à gauche, jamais en x négatif.
+        assert_eq!(place_dock((800, 600), (900, 64), 8).0, 0);
+        // Le dock réserve aussi l'air qui le sépare du bord ; la barre non.
+        assert_eq!(bande_reservee(64, 8, true), 72);
+        assert_eq!(bande_reservee(52, 8, false), 52);
     }
 
     #[test]
