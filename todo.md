@@ -35,7 +35,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 | # | Demande | État |
 |---|---|---|
-| A1 | Compatibilité **NVMe** : voir et utiliser un disque NVMe | [à faire] — rien ne le vérifie, la machine d'essai n'a que du SATA |
+| A1 | Compatibilité **NVMe** : voir et utiliser un disque NVMe | **[écrit]** (18 nov.) — la machine d'essai a maintenant un disque NVMe ; la CI attend « disques : … nvme0n1 » (rapporté jusqu'à deux passages verts) |
 | A2 | Pilotes **USB au-delà du clavier et de la souris** : manette, webcam, casque | [à faire] |
 | A3 | Plus de **matériel Wi-Fi** reconnu | **[écrit]** — **la cause première est trouvée, et ce n'étaient pas les micrologiciels** : `wpasupplicant` etait absent, donc aucune carte ne pouvait rejoindre un réseau WPA. Corrigé le 14 octobre, avec un garde. Les micrologiciels par carte restent [à faire] |
 | A4 | **Son fonctionnel à 100 %**, en VirtualBox comme sur l'ISO | [sa main] — la CI entend un son propre, sa machine reste muette ; la page Son nomme maintenant la sortie |
@@ -52,7 +52,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 | # | Demande | État |
 |---|---|---|
-| B1 | **Protection contre la corruption du système de fichiers** | [à faire] |
+| B1 | **Protection contre la corruption du système de fichiers** | **[écrit]** (18 nov.) — ext4 monté avec `errors=remount-ro` (Calamares ne l'écrivait pas, lu dans son paquet) : au premier défaut, lecture seule au lieu d'écrire par-dessus ; btrfs vérifié chaque mois (btrfsmaintenance). Aucune installation n'a encore été menée au bout pour le voir dans un fstab |
 | B2 | **Chaîne d'approvisionnement sûre** : paquets signés, dépôt authentifié, dépendances vérifiées | [prouvé] pour notre dépôt (clé OpenPGP, signature acceptée, vu à chaque démarrage) ; les dépendances vérifiées : [à faire] |
 | B3 | **Retour arrière impossible à casser, même sur coupure de courant** | [à faire] — étude en cours |
 | B4 | **Gestion de disques** : partitions, formatage, montage, SMART | **[écrit]** (18 nov.) — Disques (gnome-disk-utility) : partitions, formatage, SMART, images ; ses actions udisks ouvertes à la session locale active (règle polkit 49). Pas vu sur une image |
@@ -138,7 +138,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | F2 | **Extinction et redémarrage** | [prouvé] — le menu d'arrêt, et l'écran d'extinction est noir et propre |
 | F3 | **Batterie** | **[écrit]** (18 nov.) — la barre native montre la charge et l'état (en charge, sur batterie, pleine, branchée sans charger), lus dans /sys sans lancer de programme ; une notification sous 10 %, une seule fois. La machine d'essai n'a pas de batterie : quatre essais Rust la simulent |
 | F4 | **Thermique** | [à faire] |
-| F5 | **Branchement à chaud** USB, réseau, stockage, sans plantage | [à faire] |
+| F5 | **Branchement à chaud** USB, réseau, stockage, sans plantage | **[écrit]** (18 nov.) — la même clé, branchée puis retirée à chaud ; la CI vérifie les deux annonces et que la barre ne tombe pas. Le réseau à chaud : pas encore |
 | F6 | **Multi-écran** | **[écrit]** (18 nov.) — arandr, depuis Réglages › Écran › « Disposer les écrans » |
 | F7 | **Résolution** | [prouvé] — page Écran, 13 définitions, 11 fréquences |
 | F8 | **DPI** | **[écrit]** (18 nov.) — Réglages › Apparence › Taille de l'affichage (100 à 200 %), `Xft.dpi` gardé dans ~/.Xresources |
@@ -261,7 +261,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | J3 | **Se connecter au Wi-Fi** | [à faire] — mais le maillon manquant est nommé : sans `wpasupplicant`, c'était impossible quelle que soit la carte. Corrigé ; QEMU n'ayant pas de Wi-Fi, seule sa machine pourra le prouver |
 | J4 | Installer une application | [prouvé] — Flathub répond, une application s'installe |
 | J5 | Mettre à jour | [prouvé] — y compris au redémarrage, avant le bureau |
-| J6 | Brancher une clé USB | [à faire] |
+| J6 | Brancher une clé USB | **[écrit]** (18 nov.) — une clé FAT32 branchée PENDANT la session (moniteur QEMU, USB 3) ; udev la dit avec son étiquette et son système de fichiers, et l'explorateur la monte d'un clic |
 | J7 | Naviguer | [prouvé] |
 | J8 | Lire une vidéo | **[écrit]** (18 nov.) — Celluloid est livré ; le décodage était déjà prouvé |
 | J9 | **Mettre en veille** | [à faire] |

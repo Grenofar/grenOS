@@ -620,6 +620,16 @@ if efi:
     besoins["mkfs.vfat"] = "la partition EFI, sans quoi aucun PC UEFI ne demarre"
 if luks:
     besoins["cryptsetup"] = "le chiffrement, que partition.conf active"
+    # ET le crochet de l'initrd, sans lequel un système chiffré ne demande
+    # jamais sa phrase au démarrage (cryptsetup-initramfs). Ce garde ne
+    # vérifiait que `cryptsetup` : il a laissé passer exactement ce cas
+    # jusqu'au 18 novembre — une installation chiffrée qui ne redémarrait pas.
+    import os
+    if not os.path.exists("/usr/share/initramfs-tools/hooks/cryptroot"):
+        print("grenos: le chiffrement est propose, mais l'initrd ne saurait pas"
+              " ouvrir le disque (cryptsetup-initramfs absent)", file=sys.stderr)
+        sys.exit(1)
+    print("grenos:   cryptroot       present  (l'initrd ouvre un disque chiffre)")
 
 if not besoins:
     print("grenos: partition.conf ne propose rien : la lecture a echoue",
