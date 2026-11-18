@@ -19,6 +19,14 @@ import sys
 
 sys.path.insert(0, "/usr/lib/grenos")
 
+# La version Rust native, si elle est là et qu'elle tient (voir natif.py) :
+# ce processus se REMPLACE par elle avant d'avoir chargé GTK. Python ne reste
+# que comme repli — et `grenos-bureau --python` le force, pour comparer.
+if __name__ == "__main__":
+    import natif  # noqa: E402
+
+    natif.passer_la_main("grenos-bureau")
+
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")

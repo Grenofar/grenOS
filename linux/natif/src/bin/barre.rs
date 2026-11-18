@@ -382,8 +382,13 @@ impl Barre {
         let b = self.clone();
         self.menu.connect_button_press_event(move |m, ev| {
             // Avec l'attrape, un clic ailleurs arrive ICI, hors de nos bornes.
-            let (x, y) = ev.position();
+            // Les coordonnées d'ÉCRAN : `position()` est relative à la
+            // sous-fenêtre cliquée (une liste défilée peut dépasser la hauteur
+            // du menu et passer pour un clic à côté).
+            let (rx, ry) = ev.root();
+            let (ox, oy) = m.window().map(|f| f.origin()).unwrap_or((0, 0));
             let (l, h) = m.size();
+            let (x, y) = (rx - ox as f64, ry - oy as f64);
             if !(0.0..l as f64).contains(&x) || !(0.0..h as f64).contains(&y) {
                 b.fermer_menu();
                 return glib::Propagation::Stop;
@@ -416,6 +421,11 @@ impl Barre {
         let b = self.clone();
         glib::timeout_add_seconds_local(1, move || {
             b.tic();
+            // Filet : un événement resté dans le tampon de x11rb après une
+            // lecture (afficher, réduire) est rattrapé dans la seconde.
+            if b.ecran.as_ref().map(|e| e.evenements()).unwrap_or(false) {
+                b.refaire();
+            }
             glib::ControlFlow::Continue
         });
         self.tic();
@@ -506,6 +516,13 @@ impl Barre {
             self.tuiles.pack_start(&self.faire_tuile(t, active, propre), false, false, 0);
         }
         self.tuiles.show_all();
+        // Les réponses lues ci-dessus ont pu faire entrer des événements dans
+        // le tampon de x11rb : la prise ne redeviendra pas lisible pour eux.
+        // On les vide ici, et on refait une fois de plus s'ils comptaient.
+        if self.ecran.as_ref().map(|e| e.evenements()).unwrap_or(false) {
+            let b = self.clone();
+            glib::timeout_add_local_once(Duration::from_millis(60), move || b.refaire());
+        }
     }
 
     fn faire_tuile(self: &Rc<Self>, t: Tuile, active: Option<u32>, propre: Option<gdk_pixbuf::Pixbuf>) -> gtk::Box {
@@ -869,11 +886,13 @@ fn force_wifi(texte: &str, interface: &str) -> u8 {
 }
 
 fn main() {
-    natif::nommer("grenos-shell");
     if gtk::init().is_err() {
         eprintln!("grenos-shell-natif : pas d'écran X");
         std::process::exit(1);
     }
+    // Après gtk::init : gtk-rs refuse tout appel GTK avant (panique), et la
+    // classe des fenêtres n'est lue qu'à leur création.
+    natif::nommer("grenos-shell");
     let style = natif::Style::poser(STYLE);
     let barre = Barre::nouvelle();
     barre.panneau.show_all();

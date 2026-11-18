@@ -615,11 +615,11 @@ impl Bureau {
 }
 
 fn main() {
-    natif::nommer("grenos-bureau");
     if gtk::init().is_err() {
         eprintln!("grenos-bureau-natif : pas d'écran X");
         std::process::exit(1);
     }
+    natif::nommer("grenos-bureau");
     let style = natif::Style::poser(STYLE);
     let bureau = Bureau::nouveau();
     bureau.fenetre.show_all();
