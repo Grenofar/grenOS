@@ -37,7 +37,7 @@ pub struct Element {
 }
 
 /// Une famille d'icône pour la page, d'après le type MIME.
-fn famille(mime: &str, nom: &str) -> &'static str {
+pub(crate) fn famille(mime: &str, nom: &str) -> &'static str {
     let bas = nom.to_lowercase();
     if est_une_archive(&bas) {
         "archive"
@@ -227,7 +227,7 @@ pub fn fichiers_viser(texte: String, depuis: String) -> Value {
 }
 
 /// `..` et `.` résolus sans toucher au disque (comme os.path.abspath).
-fn normaliser(p: &Path) -> PathBuf {
+pub(crate) fn normaliser(p: &Path) -> PathBuf {
     let mut r = PathBuf::from("/");
     for c in p.components() {
         match c {
@@ -241,7 +241,7 @@ fn normaliser(p: &Path) -> PathBuf {
     r
 }
 
-fn nom_valable(nom: &str) -> Result<(), &'static str> {
+pub(crate) fn nom_valable(nom: &str) -> Result<(), &'static str> {
     if nom.contains('/') {
         Err("porte un /")
     } else if nom.is_empty() || nom == "." || nom == ".." {
@@ -503,7 +503,7 @@ const APERCU_IMAGE_MAX: u64 = 8 * 1024 * 1024;
 const APERCU_TEXTE_MAX: usize = 16 * 1024;
 
 /// Base64 standard, sans dépendance de plus pour une seule fonction.
-fn base64(octets: &[u8]) -> String {
+pub(crate) fn base64(octets: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut s = String::with_capacity(octets.len().div_ceil(3) * 4);
     for bloc in octets.chunks(3) {
@@ -519,7 +519,7 @@ fn base64(octets: &[u8]) -> String {
     s
 }
 
-fn mime_image(nom: &str) -> Option<&'static str> {
+pub(crate) fn mime_image(nom: &str) -> Option<&'static str> {
     let bas = nom.to_lowercase();
     let ext = bas.rsplit('.').next()?;
     Some(match ext {
@@ -534,7 +534,7 @@ fn mime_image(nom: &str) -> Option<&'static str> {
 }
 
 /// Un texte lisible : de l'UTF-8 sans octet nul dans le début du fichier.
-fn texte_lisible(debut: &[u8]) -> Option<String> {
+pub(crate) fn texte_lisible(debut: &[u8]) -> Option<String> {
     if debut.contains(&0) {
         return None;
     }

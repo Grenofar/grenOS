@@ -34,7 +34,7 @@ fn paquets_installes(noms: &[&str]) -> HashSet<String> {
     paquets_de(&sortie("dpkg-query", &arguments))
 }
 
-fn paquets_de(texte: &str) -> HashSet<String> {
+pub(crate) fn paquets_de(texte: &str) -> HashSet<String> {
     texte
         .lines()
         .filter_map(|l| {

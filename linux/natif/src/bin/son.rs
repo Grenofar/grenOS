@@ -111,7 +111,11 @@ fn sortie_actuelle() -> String {
 /// Le premier « NN% » d'un texte.
 fn pour_cent(texte: &str) -> Option<u32> {
     let i = texte.find('%')?;
-    let debut = texte[..i].rfind(|c: char| !c.is_ascii_digit()).map(|j| j + 1).unwrap_or(0);
+    // La fin du dernier caractère qui n'est pas un chiffre — PAS « j + 1 » :
+    // ce caractère peut tenir sur plusieurs octets (la barre « ██42% » de
+    // flatpak), et couper au milieu fait paniquer Rust. Trouvé par le fuzzing
+    // (aleatoire.rs) le 18 novembre.
+    let debut = texte[..i].char_indices().rev().find(|(_, c)| !c.is_ascii_digit()).map(|(j, c)| j + c.len_utf8()).unwrap_or(0);
     texte[debut..i].parse().ok()
 }
 

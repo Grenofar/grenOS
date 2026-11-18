@@ -48,7 +48,7 @@ pub struct Lien {
     nom: String,
 }
 
-fn lien_de(appareils: &str) -> Lien {
+pub(crate) fn lien_de(appareils: &str) -> Lien {
     for ligne in appareils.lines() {
         let c = decouper(ligne);
         if c.len() >= 3 && c[1] == "connected" && (c[0] == "wifi" || c[0] == "ethernet") {
@@ -91,7 +91,7 @@ pub struct Reseau {
     connecte: bool,
 }
 
-fn reseaux_de(sortie: &str) -> Vec<Reseau> {
+pub(crate) fn reseaux_de(sortie: &str) -> Vec<Reseau> {
     let mut vus = std::collections::HashSet::new();
     let mut trouves = Vec::new();
     for ligne in sortie.lines() {
@@ -136,7 +136,7 @@ pub async fn connexions_wifi_connu(nom: String) -> bool {
     connu(&nom)
 }
 
-fn refus(message: &str) -> String {
+pub(crate) fn refus(message: &str) -> String {
     if message.contains("Secrets were required") || message.contains("no secrets") {
         "Ce réseau demande un mot de passe.".into()
     } else if message.to_lowercase().contains("invalid") || message.contains("802-11-wireless-security") {
@@ -180,7 +180,7 @@ pub struct Appareil {
     connecte: bool,
 }
 
-fn appareils_de(tous: &str, connectes: &str) -> Vec<Appareil> {
+pub(crate) fn appareils_de(tous: &str, connectes: &str) -> Vec<Appareil> {
     let lies: std::collections::HashSet<&str> = connectes
         .lines()
         .filter_map(|l| l.split_whitespace().nth(1))
@@ -223,7 +223,7 @@ pub async fn connexions_bt_chercher() {
 
 /// Une adresse Bluetooth : six paires hexadécimales. On ne passe rien d'autre
 /// à bluetoothctl.
-fn adresse_valide(a: &str) -> bool {
+pub(crate) fn adresse_valide(a: &str) -> bool {
     let p: Vec<&str> = a.split(':').collect();
     p.len() == 6 && p.iter().all(|x| x.len() == 2 && x.chars().all(|c| c.is_ascii_hexdigit()))
 }

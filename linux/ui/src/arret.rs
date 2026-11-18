@@ -31,7 +31,7 @@ pub struct Geste {
 
 /// Ce que le noyau sait faire ici : `mem` (vraie veille), `freeze` (les
 /// programmes s'arrêtent, la machine reste allumée), ou rien.
-fn veille_de(etats: &str) -> Option<&'static str> {
+pub(crate) fn veille_de(etats: &str) -> Option<&'static str> {
     let etats: Vec<&str> = etats.split_whitespace().collect();
     if etats.contains(&"mem") {
         Some("mem")

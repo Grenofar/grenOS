@@ -77,7 +77,7 @@ pub fn module_fautif(texte: &str) -> Option<String> {
     Some(nom.to_string())
 }
 
-fn echecs_de(brut: &str) -> u32 {
+pub(crate) fn echecs_de(brut: &str) -> u32 {
     // Un compteur illisible n'est pas un échec : c'est un compteur illisible.
     brut.trim().parse::<i64>().map(|n| n.max(0) as u32).unwrap_or(0)
 }

@@ -11,6 +11,7 @@
 //! commandes ici — pas un programme de plus à charger en mémoire.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod aleatoire;
 mod arret;
 mod horloge;
 mod fichiers;

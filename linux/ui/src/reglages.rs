@@ -277,7 +277,7 @@ fn xresources() -> std::path::PathBuf {
     std::path::Path::new(&std::env::var("HOME").unwrap_or_default()).join(".Xresources")
 }
 
-fn dpi_de(texte: &str) -> u32 {
+pub(crate) fn dpi_de(texte: &str) -> u32 {
     texte
         .lines()
         .find_map(|l| l.trim().strip_prefix("Xft.dpi:").and_then(|v| v.trim().parse().ok()))
@@ -285,7 +285,7 @@ fn dpi_de(texte: &str) -> u32 {
 }
 
 /// Remplace (ou ajoute) la ligne Xft.dpi, sans toucher au reste du fichier.
-fn avec_dpi(texte: &str, dpi: u32) -> String {
+pub(crate) fn avec_dpi(texte: &str, dpi: u32) -> String {
     let mut lignes: Vec<String> = texte.lines().filter(|l| !l.trim().starts_with("Xft.dpi:")).map(String::from).collect();
     lignes.push(format!("Xft.dpi: {dpi}"));
     lignes.join("\n") + "\n"

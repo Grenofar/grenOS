@@ -127,7 +127,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | E8 | **Rapport de panique du noyau** | **[écrit]** (18 nov.) — systemd-pstore garde le rapport quand l'UEFI le conserve ; `kernel.panic = 10` redémarre au lieu de figer, et le mode sans échec prend la main |
 | E9 | **Gestionnaire CPU / RAM / disque / réseau / processus**, propre | [prouvé] pour les processus (`taches ouvert, 103 processus`) ; le reste : [à faire] |
 | E10 | **Tests de charge sur plusieurs jours** : CPU, RAM, disque, réseau | [à faire] — hors de portée de la CI, qui dure 40 minutes |
-| E11 | **Fuzzing continu en CI** | [à faire] |
+| E11 | **Fuzzing continu en CI** | **[écrit]** (18 nov.) — `linux/ui/src/aleatoire.rs` : 20 000 entrées au hasard par analyseur (nmcli, bluetoothctl, journal du noyau, dpkg, pourcentages, chemins, UTF-8 coupé), à chaque `cargo test` donc à chaque construction, graine du jour imprimée en cas d'échec. **Il a trouvé une panique réelle au premier passage** : la lecture des pourcentages coupait un caractère multi-octets (« ██42% » de flatpak), dans trois fichiers dont GrenLaunch, déjà publié. Corrigé. Pas encore de fuzzing guidé par la couverture (cargo-fuzz) |
 | E12 | **Un test de régression par bogue corrigé** | [prouvé] comme pratique : chaque correctif de la semaine est arrivé avec son essai, exercé dans les deux sens |
 
 ## F. Énergie, écrans, périphériques à chaud
