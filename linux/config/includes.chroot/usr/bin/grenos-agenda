@@ -1,0 +1,3 @@
+#!/bin/sh
+# L'Agenda (todo G32 — 18 novembre) : une page de grenos-ui.
+exec grenos-ui agenda "$@"

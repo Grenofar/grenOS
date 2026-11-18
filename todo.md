@@ -194,7 +194,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 |---|---|---|
 | G30 | **Terminal avec un shell grenOS** | **[écrit]** (18 nov.) — grensh : invite, verbes Verbe-Nom en français, `gren` et `grenget` |
 | G31 | **Presse-papier avec historique** (Windows+V) | **[écrit]** (18 nov.) — `grenos-presse-natif` (Rust natif, toute la session) garde les 25 derniers textes copiés, EN MÉMOIRE seulement ; Win+V les montre, Entrée en recopie un, Suppr en retire un. Il ne colle pas tout seul comme Windows (il faudrait simuler Ctrl+V) : la fenêtre le dit. Quatre essais |
-| G32 | **Calendrier** | [à faire] |
+| G32 | **Calendrier** | **[écrit]** (18 nov.) — l'Agenda (grenos-ui) : le mois, les jours fériés français (Pâques calculé), des événements gardés dans ~/.local/share/grenos/agenda.json (écrit par renommage, jamais à moitié). Pas encore de rappel à l'heure, et la page le dit |
 | G33 | **Horloge** | **[écrit]** (18 nov.) — l'application Horloge (grenos-ui) : l'heure ici et dans huit villes |
 | G34 | **Minuteur** | **[écrit]** (18 nov.) — Horloge › Minuteur, qui prévient par une notification ; et un chronomètre avec les tours |
 | G35 | **Bloc-notes** | **[écrit]** — Mousepad est livré ; pas d'application à nous |

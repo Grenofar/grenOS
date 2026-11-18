@@ -1,0 +1,30 @@
+/* Agenda. */
+body[data-page="agenda"] { overflow: hidden; }
+.page-agenda { position: relative; z-index: 1; height: 100vh; box-sizing: border-box; padding: 18px; display: grid; grid-template-columns: 1fr 300px; gap: 18px; }
+.ag-mois { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.ag-barre { display: flex; align-items: center; gap: 8px; }
+.ag-titre { flex: 1; font-size: 24px; text-transform: capitalize; }
+.ag-grille { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: auto repeat(6, 1fr); gap: 4px; }
+.ag-entete { text-align: center; color: var(--texte-3); font-size: 12px; font-weight: 700; padding: 4px 0; text-transform: uppercase; letter-spacing: .06em; }
+.ag-jour { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 8px; border-radius: var(--rayon-petit); border: 1px solid var(--bord); background: var(--surface); color: var(--texte); cursor: pointer; text-align: left; overflow: hidden; min-height: 0; }
+.ag-jour:hover { border-color: var(--accent); }
+.ag-jour.autre { opacity: .4; }
+.ag-jour.weekend { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.ag-jour.aujourdhui .ag-num { background: var(--accent); color: #fff; border-radius: 99px; padding: 0 7px; }
+.ag-jour.choisi { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.ag-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ag-ferie { color: var(--accent-clair); font-size: 10.5px; line-height: 1.2; }
+.ag-points { position: absolute; bottom: 4px; right: 8px; color: var(--accent-clair); letter-spacing: 2px; }
+.ag-cote { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; }
+.ag-jour-titre { font-size: 17px; text-transform: capitalize; }
+.ag-liste { display: flex; flex-direction: column; gap: 6px; }
+.ag-evt { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--rayon-petit); background: var(--surface-haute); }
+.ag-evt.ferie { grid-template-columns: 1fr; color: var(--accent-clair); }
+.ag-evt small { display: block; color: var(--texte-2); font-size: 12px; }
+.ag-heure { color: var(--texte-2); font-variant-numeric: tabular-nums; font-size: 13px; }
+.ag-form { display: flex; flex-direction: column; gap: 8px; }
+.ag-form .champ { padding: 9px 12px; font-size: 14px; }
+.ag-ligne { display: flex; gap: 8px; }
+.ag-heure-champ { flex: 1; }
+.ag-note { margin: 0; }
+@media (max-width: 760px) { .page-agenda { grid-template-columns: 1fr; height: auto; } body[data-page="agenda"] { overflow: auto; } .ag-grille { min-height: 360px; } }

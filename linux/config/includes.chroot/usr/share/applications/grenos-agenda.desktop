@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Agenda
+Comment=Le mois, les jours fériés et tes rendez-vous
+Keywords=calendrier;rendez-vous;événement;date;
+Exec=grenos-agenda
+Icon=grenos-agenda
+Terminal=false
+Categories=Office;Calendar;

@@ -192,6 +192,9 @@
       case "fichiers_coller": return { faits: a.sources.length, soucis: [] };
       case "fichiers_corbeille": return { faits: a.chemins.length, refus: [] };
       case "fichiers_apercu": return /\.(jpg|png)$/.test(a.chemin) ? { genre: "image", donnees: "data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22260%22><rect width=%22400%22 height=%22260%22 fill=%22%233b82f6%22/></svg>" } : /\.txt$/.test(a.chemin) ? { genre: "texte", texte: "Courses :\n- pain\n- lait", coupe: false } : { genre: "rien" };
+      case "agenda_lire": return [{ id: "1", date: new Date().toISOString().slice(0, 10), heure: "14:30", titre: "Dentiste", note: "Apporter la carte" }, { id: "2", date: new Date().toISOString().slice(0, 10), heure: "", titre: "Anniversaire de Léa", note: "" }];
+      case "agenda_poser": return [...(await window.APERCU("agenda_lire")), a.evenement];
+      case "agenda_retirer": return (await window.APERCU("agenda_lire")).filter((e) => e.id !== a.id);
       case "fichiers_dire": console.log("série :", a.texte); return null;
       default: return null;
     }

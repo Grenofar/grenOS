@@ -770,6 +770,20 @@ def horloge(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def agenda(chemin, taille):
+    """L'Agenda (18 novembre) : une page de calendrier, deux anneaux, un jour
+    marqué. Trois éléments seulement : à seize pixels, une grille de trente
+    cases ne serait plus qu'une tache grise."""
+    image, u, v = toile(taille)
+    poser(image, rectangle(u, v, 0.14, 0.20, 0.86, 0.88, rayon=0.10), CLAIR, 0.96)
+    poser(image, rectangle(u, v, 0.14, 0.20, 0.86, 0.40, rayon=0.10), ACCENT, 1.0)
+    poser(image, rectangle(u, v, 0.14, 0.30, 0.86, 0.40), ACCENT, 1.0)
+    for x in (0.32, 0.68):
+        poser(image, rectangle(u, v, x - 0.035, 0.12, x + 0.035, 0.28, rayon=0.03), ACCENT_CLAIR, 1.0)
+    poser(image, rectangle(u, v, 0.56, 0.56, 0.74, 0.74, rayon=0.04), ACCENT, 1.0)
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
@@ -800,6 +814,7 @@ def main():
     secours(os.path.join(dossier, 'grenos-secours.png'), taille)
     grenlaunch(os.path.join(dossier, 'grenlaunch.png'), taille)
     horloge(os.path.join(dossier, 'grenos-horloge.png'), taille)
+    agenda(os.path.join(dossier, 'grenos-agenda.png'), taille)
 
 
 if __name__ == '__main__':
