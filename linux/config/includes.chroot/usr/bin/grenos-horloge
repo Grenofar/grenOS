@@ -1,0 +1,4 @@
+#!/bin/sh
+# Horloge, minuteur et chronomètre (todo G33, G34 — 18 novembre) : une page
+# de grenos-ui. Ce lanceur existe pour le menu et pour qu'on puisse la taper.
+exec grenos-ui horloge "$@"

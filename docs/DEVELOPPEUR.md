@@ -13,7 +13,18 @@
 
 Une distribution Linux **à base Debian trixie**, assemblée par `live-build`.
 Ce qui est à nous, c'est tout le visible : X11 sans composition, `openbox`
-pour placer les fenêtres, et notre bureau écrit en **Python 3 + GTK 3**.
+pour placer les fenêtres, et notre bureau. Depuis le 18 novembre, il est en
+**Rust** pour l'essentiel :
+
+| Partie | Langage | Où | Pourquoi ce choix |
+|---|---|---|---|
+| la barre, le bureau, le panneau du son | Rust + gtk-rs (natif) | `linux/natif/` | ils tournent en permanence : ils doivent être légers |
+| les fenêtres (Réglages, Fichiers, GrenPlace, Jeux, grenHub, grenPerf, Tâches, Mises à jour, l'assistant…) | Rust + Tauri 2, pages HTML/JS | `linux/ui/` | UN processus pour toutes, un seul thème (`web/style.css`) |
+| les bibliothèques de mesure et de réglage (`sante`, `jeux`, `magasin`, `ecran`, `heure`, `son`…) | Python 3 | `linux/config/includes.chroot/usr/lib/grenos/` | éprouvées par nos essais ; `pont.py` les appelle en JSON pour grenos-ui |
+
+Chaque `/usr/bin/grenos-*` en Python est resté le **point d'entrée** : il passe
+la main à la version Rust dès sa première ligne (`exec grenos-ui <page>`, ou
+`natif.passer_la_main`), et `--python` force l'ancienne fenêtre en repli.
 
 Le noyau Rust de `kernel/` est **arrêté depuis le 17 septembre**. Il reste dans
 le dépôt, ses images restent téléchargeables, et il n'est plus développé.
@@ -32,17 +43,52 @@ Tout est sous `linux/` :
 | `linux/data/catalogue.json` | le catalogue de GrenPlace |
 | `linux/tools/` | `make-deb.sh`, `make-apt-repo.sh`, `essai-maj.sh`, les `verif-*.py` |
 
-Les programmes du bureau sont des **scripts Python**, pas un binaire : `usr/bin/grenos-shell`
-(la barre et le menu), `grenos-bureau`, `grenos-fichiers`, `grenos-parametres`,
-`grenplace`, `grenos-hub`, `grenos-perf`. Ils partagent `usr/lib/grenos/grenosui.py`,
-qui tient **la seule palette** du système.
+Et pour le Rust :
+
+| Chemin | Ce qu'on y trouve |
+|---|---|
+| `linux/ui/` | `grenos-ui` : `src/<page>.rs` (les commandes), `web/<page>.js` et `.css` (la page) |
+| `linux/natif/` | la barre (`src/bin/barre.rs`), le bureau, le panneau du son |
+| `scripts/construire-binaires.sh` | compile les trois caisses Rust, Rust figé, `Cargo.lock` exigé |
+| `linux/debian-instantane` | la date où Debian est figé pour les constructions reproductibles (K3) |
+
+`usr/lib/grenos/grenosui.py` tient **la seule palette** du système : la barre
+native la lit (`linux/natif/src/theme.rs`), et `grenos-ui` lit les mêmes
+réglages (`~/.config/grenos/`).
+
+### Ajouter une fenêtre à grenos-ui
+
+1. `linux/ui/src/<page>.rs` : les commandes `#[tauri::command]`. Ce qui touche
+   au système passe par une **clé** ou une **liste blanche**, jamais par une
+   commande libre venue de la page (`systeme::ouvrir_programme`, `PERMISES`
+   dans `reglages.rs`).
+2. `linux/ui/web/<page>.js` et `<page>.css` ; appeler `grenos.pret()` une fois
+   la page dessinée — c'est ce qui dit sa taille et son temps d'ouverture à la
+   CI (« fenetre … : tient », « ouverture : … »).
+3. Inscrire la page : `PAGES` et `invoke_handler!` dans `src/main.rs`, la liste
+   de `web/demarrage.js`, la feuille dans `web/index.html`.
+4. Des données factices dans `web/apercu.js` : la page s'ouvre alors dans un
+   navigateur (`python -m http.server --directory linux/ui/web`, puis `#page`).
+5. Les lignes série que la CI attend : `systeme::dire`, au mot près.
 
 ## Construire
 
 La construction se fait **dans la CI**, pas sur une machine de développement :
 `.github/workflows/linux.yml` construit, démarre l'image dans QEMU avec KVM,
-garde les captures, et publie la Release. Une construction complète prend une
-quarantaine de minutes.
+garde les captures, et publie la Release (sur `main` seulement). Une
+construction complète prend une heure environ.
+
+Trois raccourcis :
+
+- `.github/workflows/natif.yml` compile et teste `linux/natif` **et**
+  `linux/ui` dans Debian trixie en quelques minutes. `cargo test` tourne aussi
+  sous Windows pour `linux/ui`, mais sans GIO ni GTK (dépendances Linux
+  seulement) : c'est natif.yml qui dit si le code Linux compile.
+- `.github/workflows/reproductible.yml` construit l'image **deux fois**, sur
+  deux machines, et compare les deux ISO à l'octet (K3). À la main et chaque
+  lundi.
+- les gardes locales, avant de pousser :
+  `for f in linux/tools/verif-*.py; do python3 "$f"; done` depuis la racine.
 
 Deux règles qui ont chacune coûté du temps :
 

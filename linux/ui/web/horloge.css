@@ -1,0 +1,27 @@
+/* Horloge. */
+body[data-page="horloge"] { overflow: auto; }
+.page-horloge { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; padding: 22px 22px 30px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.hg-onglets { align-self: center; }
+.hg-page { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.hg-page[hidden] { display: none; }
+.hg-cadran { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; font-variant-numeric: tabular-nums; }
+.hg-heure { font-size: clamp(64px, 14vw, 112px); font-weight: 800; letter-spacing: -.03em; line-height: 1; background: linear-gradient(120deg, var(--accent-clair), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hg-secondes { font-size: 28px; font-weight: 700; color: var(--texte-3); }
+.hg-date { margin: 0; color: var(--texte-2); font-size: 17px; text-transform: capitalize; }
+.hg-villes { width: 100%; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.hg-villes .carte { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; }
+.hg-villes strong { font-size: 22px; }
+.hg-cadre { padding: 6px; border-radius: 50%; }
+.hg-anneau { --part: 0deg; width: 250px; height: 250px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--accent) var(--part), var(--surface-haute) 0); }
+.hg-anneau .hg-grand { width: 226px; height: 226px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-pleine); font-size: 40px; }
+.hg-cadre.fini .hg-anneau { animation: hg-fini 600ms ease-in-out 6 alternate; }
+@keyframes hg-fini { to { transform: scale(1.04); box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 60%, transparent); } }
+[data-effets="performance"] .hg-cadre.fini .hg-anneau { animation: none; outline: 3px solid var(--accent); }
+.hg-grand { font-size: clamp(48px, 10vw, 76px); font-weight: 800; font-variant-numeric: tabular-nums; }
+.hg-reglage { display: flex; align-items: center; gap: 6px; color: var(--texte-2); }
+.hg-champ { width: 72px; padding: 8px 10px; font-size: 18px; text-align: center; }
+.hg-rapides { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.hg-actions { display: flex; gap: 10px; }
+.hg-note { text-align: center; max-width: 46ch; }
+.hg-tours { width: min(420px, 100%); margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.hg-tours li { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; padding: 8px 12px; border-radius: var(--rayon-petit); background: var(--surface); }

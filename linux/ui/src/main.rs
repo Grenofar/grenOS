@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arret;
+mod horloge;
 mod fichiers;
 mod reglages;
 mod jeux;
@@ -111,6 +112,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("horloge", "Horloge", 760.0, 640.0),
     ("fichiers", "Explorateur de fichiers", 1000.0, 640.0),
     ("reglages", "Réglages de grenOS", 960.0, 660.0),
     ("jeux", "Jeux", 900.0, 720.0),
@@ -302,6 +304,7 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            horloge::horloge_sonner,
             fichiers::fichiers_lister,
             fichiers::fichiers_rapides,
             fichiers::fichiers_ce_pc,
@@ -329,6 +332,8 @@ fn main() {
             reglages::reglages_fonds,
             reglages::reglages_fond,
             reglages::reglages_parcourir_fond,
+            reglages::reglages_dpi_lire,
+            reglages::reglages_dpi,
             jeux::jeux_vue,
             jeux::jeux_paquet_nvidia,
             jeux::jeux_preparer_rocket,

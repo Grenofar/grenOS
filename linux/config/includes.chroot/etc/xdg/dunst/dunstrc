@@ -1,0 +1,57 @@
+# Les notifications de grenOS (todo G13 — 18 novembre).
+#
+# dunst lit ce fichier quand ~/.config/dunst/dunstrc n'existe pas. Il n'est pas
+# lancé au démarrage : D-Bus le réveille à la première notification
+# (org.freedesktop.Notifications), donc il ne coûte rien tant que rien ne
+# s'annonce. Couleurs : la palette Nuit de grenosui.py.
+
+[global]
+    monitor = 0
+    follow = mouse
+    # En bas à droite, au-dessus de la barre (52 px) : là où le regard va
+    # chercher l'heure et le son.
+    origin = bottom-right
+    offset = (14, 66)
+    width = (280, 380)
+    height = (0, 160)
+    notification_limit = 4
+    corner_radius = 14
+    frame_width = 1
+    gap_size = 8
+    padding = 14
+    horizontal_padding = 16
+    separator_height = 0
+    font = Noto Sans 10
+    markup = full
+    format = "<b>%s</b>\n%b"
+    alignment = left
+    vertical_alignment = center
+    word_wrap = yes
+    ellipsize = end
+    icon_position = left
+    min_icon_size = 32
+    max_icon_size = 48
+    show_age_threshold = 60
+    idle_threshold = 120
+    mouse_left_click = do_action, close_current
+    mouse_middle_click = close_all
+    mouse_right_click = close_current
+    history_length = 30
+
+[urgency_low]
+    background = "#121a2bee"
+    foreground = "#aab4c8"
+    frame_color = "#22304a"
+    timeout = 5
+
+[urgency_normal]
+    background = "#121a2bf2"
+    foreground = "#eef2fa"
+    frame_color = "#3b82f6"
+    timeout = 8
+
+[urgency_critical]
+    background = "#2a1216f5"
+    foreground = "#fde2e2"
+    frame_color = "#f87171"
+    timeout = 0

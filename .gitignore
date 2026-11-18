@@ -21,6 +21,13 @@ build/
 # Rust / kernel
 target/
 Cargo.lock
+# SAUF les trois programmes de l'image (18 novembre, K3) : sans Cargo.lock
+# suivi, chaque construction prenait les dernières versions publiées de ses
+# dépendances — deux constructions du même commit pouvaient compiler deux
+# programmes différents. `--locked` (scripts/construire-binaires.sh) l'exige.
+!linux/ui/Cargo.lock
+!linux/natif/Cargo.lock
+!linux/coins/Cargo.lock
 *.iso
 *.img
 *.bin

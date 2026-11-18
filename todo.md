@@ -55,7 +55,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | B1 | **Protection contre la corruption du système de fichiers** | [à faire] |
 | B2 | **Chaîne d'approvisionnement sûre** : paquets signés, dépôt authentifié, dépendances vérifiées | [prouvé] pour notre dépôt (clé OpenPGP, signature acceptée, vu à chaque démarrage) ; les dépendances vérifiées : [à faire] |
 | B3 | **Retour arrière impossible à casser, même sur coupure de courant** | [à faire] — étude en cours |
-| B4 | **Gestion de disques** : partitions, formatage, montage, SMART | [à faire] |
+| B4 | **Gestion de disques** : partitions, formatage, montage, SMART | **[écrit]** (18 nov.) — Disques (gnome-disk-utility) : partitions, formatage, SMART, images ; ses actions udisks ouvertes à la session locale active (règle polkit 49). Pas vu sur une image |
 | B5 | **Chiffrement du disque**, idéalement complet, avec gestion correcte des clés | [à faire] — et il a écrit lui-même « faut pas que ça se retourne contre nous » |
 | B6 | **Chiffrement de fichiers** | [à faire] |
 
@@ -75,11 +75,11 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | C7 | grenRecovery — restaurer un instantané | [à faire] |
 | C8 | grenRecovery — récupérer des fichiers | [à faire] |
 | C9 | grenRecovery — réinitialiser un mot de passe | [à faire] |
-| C10 | **Sauvegardes automatiques intelligentes** | [à faire] |
-| C11 | Sauvegarde **locale, disque externe, réseau** | [à faire] |
+| C10 | **Sauvegardes automatiques intelligentes** | **[écrit]** (18 nov.) — `grenos-sauvegarde` : une copie par jour dès qu'un disque externe est branché, minuteur de session. Pas encore « intelligente » (pas de choix de fichiers) |
+| C11 | Sauvegarde **locale, disque externe, réseau** | **[écrit] pour le disque externe** (18 nov.) ; le réseau (NAS, serveur) : [à faire] |
 | C12 | Sauvegardes **chiffrées** | [à faire] |
-| C13 | Sauvegardes **versionnées** | [à faire] |
-| C14 | **Restauration fichier par fichier** | [à faire] |
+| C13 | Sauvegardes **versionnées** | **[écrit]** (18 nov.) — trente copies datées, liens physiques pour ce qui n'a pas changé |
+| C14 | **Restauration fichier par fichier** | **[écrit]** (18 nov.) — chaque copie datée est un dossier ordinaire : on y reprend UN fichier dans l'explorateur |
 | C15 | **Mode sans échec intelligent** : après un plantage noyau, un pilote fautif ou un échec de démarrage, démarrer seul dans un environnement minimal | **[écrit] pour la moitié qui manque à tout le reste** — *savoir* qu'un démarrage a échoué. Un démarrage raté ne laisse rien derrière lui, donc on prend le problème par l'autre bout : un témoin posé au début de chaque démarrage, effacé par l'ouverture du bureau. Un témoin encore là au démarrage suivant ne peut vouloir dire qu'une chose. Il porte le `boot_id` du noyau, sans quoi on relirait le sien et on compterait un échec à tous les coups — la faute exacte du témoin de persistance du 27 septembre. 8 cas exercés, **tous rendent 0** : un compteur d'échecs qui empêche de démarrer serait la panne qu'il prévient. **Et un défaut trouvé par la machine au premier démarrage réel** : la première version demandait à la session d'*effacer* un témoin posé par le service — donc un fichier appartenant à root, depuis une session qui tourne en tant que la personne. L'effacement était gardé derrière un `[ -w ]`, donc il échouait **en silence**, et la machine a aussitôt annoncé « le dernier démarrage n'a pas ouvert de bureau » sur un démarrage qui avait parfaitement ouvert le sien — une mesure qui aurait déclenché le mode sans échec à chaque démarrage réussi, indéfiniment. Le sens est inversé : **déposer demande moins de droits qu'effacer**. Le bureau dépose un jeton dans un dossier à bit collant (1777, comme `/tmp`). 10 cas exercés. **Reste** : démarrer vraiment en environnement minimal au bout de N échecs |
 | C16 | Le mode sans échec **nomme la cause probable** : « le dernier démarrage a échoué à cause de… » | **[écrit]** — la cause est demandée au journal du démarrage précédent, pas devinée, et dans l'ordre du plus grave au plus explicite : panique noyau, puis pilote qui ne se charge pas (son exemple exact), puis service qui n'a pas démarré. **Et si le journal ne dit rien, il le dit** — « coupure de courant ou arrêt au bouton » — au lieu d'inventer une cause. Chaque interrogation est bornée à dix secondes : nous sommes avant le bureau |
 | C17 | Le mode sans échec **propose** : désactiver le pilote, restaurer la version précédente, redémarrer en mode minimal, analyser | **[écrit]** — `grenos-secours`, une fenêtre qui dit la cause et offre quatre actions. **Un bouton impossible reste visible mais éteint, avec sa raison à côté** : le cacher ferait croire que grenOS ne sait pas le faire, l'allumer sans rien derrière serait la faute capitale de ce dépôt. « Désactiver le pilote » ne s'allume que si le journal **nomme** un module, et jamais pour `ahci`, `nvme`, `ext4` et leurs voisins — les mettre en liste noire empêcherait la machine de voir son disque, c'est-à-dire la panne que ce mode existe pour éviter. Le nom est celui du **module**, pas du micrologiciel : `iwlwifi-cc-a0-72.ucode` donne `iwlwifi`, sans quoi la liste noire n'aurait aucun effet — un correctif qui passe son garde sans rien corriger. 20 cas exercés sur la décision, qui vit dans `secours.py` sans aucun GTK. **Reste** : le redémarrage en environnement minimal, qui demande de toucher au chargeur |
@@ -91,16 +91,16 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 |---|---|---|
 | D1 | **Pare-feu** | **[écrit]** (18 novembre) — ufw livré ; activé au premier démarrage par le parcours Dev (entrant refusé, sortant permis). Hors Dev : pas activé par défaut (LocalSend, KDE Connect écoutent) |
 | D2 | **Validation stricte des paquets** réseau | [à faire] |
-| D3 | Protection contre le **déni de service** | [à faire] |
-| D4 | Protection contre l'**usurpation ARP** | [à faire] |
+| D3 | Protection contre le **déni de service** | **[écrit]** (18 nov.) — `/etc/sysctl.d/50-grenos-durcissement.conf` : SYN cookies, pas de réponse aux diffusions. Rien ne mesure encore une vraie inondation |
+| D4 | Protection contre l'**usurpation ARP** | **[écrit], partiel** (18 nov.) — filtre de chemin inverse (lâche, pour ne pas casser WireGuard), ARP limité à la bonne carte, redirections ICMP refusées. Aucun réglage du noyau n'empêche l'usurpation ARP sur un réseau partagé : c'est le pare-feu et le VPN qui protègent, et c'est écrit dans le fichier |
 | D5 | **Clés privées jamais en clair** dans l'OS ni dans les images | [prouvé] — la clé de signature vit dans un seau Supabase privé, jamais dans le dépôt |
-| D6 | **Isolation et sécurité du noyau** | [à faire] |
+| D6 | **Isolation et sécurité du noyau** | **[écrit]** (18 nov.) — adresses du noyau masquées, dmesg à root, ptrace limité aux enfants, eBPF à root, liens et tubes protégés dans /tmp. Les espaces de noms restent ouverts (bacs à sable de Flatpak, Steam, navigateurs) |
 | D7 | **Bac à sable** avec des profils existants (Windows 10/11, Debian, Ubuntu) | [à faire] |
-| D8 | **Contrôle de permission par application** | [à faire] |
+| D8 | **Contrôle de permission par application** | **[écrit], pour Flatpak seulement** (18 nov.) — Flatseal est dans GrenPlace et règle les permissions de chaque application Flatpak ; rien pour les paquets Debian |
 | D9 | **Gestion de Secure Boot** | [à faire] — nous livrons `grub-efi-amd64-bin` sans `shim-signed` : Secure Boot doit rester désactivé, et la page le dit |
-| D10 | **Gestion des clés SSH et GPG** | [à faire] |
-| D11 | **Gestionnaire de mots de passe** | [à faire] |
-| D12 | **Politique de sécurité** : un chemin clair pour signaler et corriger une vulnérabilité | [à faire] |
+| D10 | **Gestion des clés SSH et GPG** | **[écrit]** (18 nov.) — Seahorse livré : clés SSH et GPG en fenêtre |
+| D11 | **Gestionnaire de mots de passe** | **[écrit], à installer** (18 nov.) — KeePassXC est dans GrenPlace, pas dans l'image |
+| D12 | **Politique de sécurité** : un chemin clair pour signaler et corriger une vulnérabilité | **[écrit]** (18 nov.) — `docs/SECURITE.md` à jour et `.github/SECURITY.md` pour que GitHub l'affiche. **Le signalement privé de GitHub est DÉSACTIVÉ** sur le dépôt : le lien de la politique ne mène nulle part tant que Grenofar ne l'active pas |
 
 ## E. Observation : grenHub, grenPerf, diagnostic, journaux
 
@@ -117,14 +117,14 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 | # | Demande | État |
 |---|---|---|
-| E1 | **grenHub** : une application centrale qui affiche l'état complet de la machine | [à faire] |
-| E2 | **Mode diagnostic automatique** : tester CPU, RAM, stockage, réseau, GPU, USB et produire un rapport | [à faire] |
-| E3 | **grenPerf** : analyser les tâches d'arrière-plan inutiles au bon fonctionnement, et la gestion de la RAM | [à faire] — la mesure existe déjà (`perf : 17 service(s) en marche, 125 processus`), la fenêtre non |
+| E1 | **grenHub** : une application centrale qui affiche l'état complet de la machine | **[écrit]** (18 nov.) — grenHub, passé dans grenos-ui ; ses lignes série sont attendues par la CI |
+| E2 | **Mode diagnostic automatique** : tester CPU, RAM, stockage, réseau, GPU, USB et produire un rapport | **[écrit]** (18 nov.) — le diagnostic de grenHub (processeur, mémoire, disque, réseau, affichage, USB, services) et son verdict |
+| E3 | **grenPerf** : analyser les tâches d'arrière-plan inutiles au bon fonctionnement, et la gestion de la RAM | **[écrit]** — grenPerf (grenos-ui) nomme ce qui tourne et ce qui est de trop pour jouer |
 | E4 | **grenOS ne doit pas beaucoup consommer** en arrière-plan | [prouvé] et mesuré : 17 services dont 16 sont de Debian ; le seul en trop a été retiré |
 | E5 | **Moniteur système** avec température et état du matériel | **[écrit]** — grenHub montre les sondes **et les ventilateurs**, un ventilateur arrêté sur une machine chaude étant le signe le plus clair d'une panne. Dix cas sur de faux `/sys`, dont le portable qui n'a que des zones ACPI — et ce cas a trouvé un vrai défaut : sans `hwmon`, la lecture sortait avant de les regarder. La CI n'a ni sonde ni ventilateur, donc elle ne prouve que l'honnêteté de la page quand il n'y en a aucun |
 | E6 | **Journaux persistants** | **[écrit]** — `Storage=persistent`, 100 Mo au plus, un mois au plus. On ne croit pas le fichier : la session regarde ce que journald a **fait**, puisqu'il ne crée `/var/log/journal` que s'il a lu le réglage — une directive mal orthographiée ne créerait rien et la mesure le dirait. Et le nombre de démarrages connus est ce qui transforme « persistant » en preuve : au second démarrage de la même machine il doit valoir au moins deux. C'est aussi ce qui rend possible le détecteur de démarrage raté, qui lit `journalctl -b -1` : sans journal persistant il aurait toujours répondu « rien dans le journal ». Verdict exercé sur sept journaux, le bloc extrait du workflow lui-même |
-| E7 | **Vidages de plantage** (crash dump) | [à faire] |
-| E8 | **Rapport de panique du noyau** | [à faire] |
+| E7 | **Vidages de plantage** (crash dump) | **[écrit]** (18 nov.) — systemd-coredump livré : `coredumpctl` liste les plantages |
+| E8 | **Rapport de panique du noyau** | **[écrit]** (18 nov.) — systemd-pstore garde le rapport quand l'UEFI le conserve ; `kernel.panic = 10` redémarre au lieu de figer, et le mode sans échec prend la main |
 | E9 | **Gestionnaire CPU / RAM / disque / réseau / processus**, propre | [prouvé] pour les processus (`taches ouvert, 103 processus`) ; le reste : [à faire] |
 | E10 | **Tests de charge sur plusieurs jours** : CPU, RAM, disque, réseau | [à faire] — hors de portée de la CI, qui dure 40 minutes |
 | E11 | **Fuzzing continu en CI** | [à faire] |
@@ -139,9 +139,9 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | F3 | **Batterie** | [à faire] |
 | F4 | **Thermique** | [à faire] |
 | F5 | **Branchement à chaud** USB, réseau, stockage, sans plantage | [à faire] |
-| F6 | **Multi-écran** | [à faire] |
+| F6 | **Multi-écran** | **[écrit]** (18 nov.) — arandr, depuis Réglages › Écran › « Disposer les écrans » |
 | F7 | **Résolution** | [prouvé] — page Écran, 13 définitions, 11 fréquences |
-| F8 | **DPI** | [à faire] |
+| F8 | **DPI** | **[écrit]** (18 nov.) — Réglages › Apparence › Taille de l'affichage (100 à 200 %), `Xft.dpi` gardé dans ~/.Xresources |
 
 ## G. Les applications — la grande liste
 
@@ -157,17 +157,17 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | G2 | — **recherche** | **[écrit] — et ma propre liste avait tort** : le champ existe dans la barre depuis des semaines, avec Ctrl+F pour y aller et Échap pour l'effacer. Mais **rien ne l'essayait** : la machine exerçait Ctrl+H, Ctrl+Maj+N et F2, pas celui-là. *Un geste qu'aucune machine n'essaie est un geste dont on ne sait rien.* Elle tape maintenant « doc » et vérifie que le compte **descend** — un champ qui avalerait les lettres sans filtrer montrerait exactement le même écran |
 | G3 | — **aperçu** | [à faire] |
 | G4 | — **compression / décompression** | **[écrit]** — « Compresser en .zip » et « Extraire ici » dans le menu du clic droit. **Le .zip plutôt que le 7z** : les deux sont sur l'image et 7z compresse mieux, mais un .zip s'ouvre partout, et quelqu'un qui compresse le fait presque toujours pour envoyer. **Rien ne peut être écrasé** (`archive-2.zip`), et l'extraction va dans un dossier au nom de l'archive — trente fichiers déversés en vrac ne se rattrapent pas. `/usr/bin/7z` vérifié dans le `.deb` 25.01, le binaire ne s'appelle pas `7zz`. Un garde refuse l'image si le menu promet sans que `zip` et `7z` soient là, **même sans xarchiver** : 5 cas, 3 refus |
-| G5 | — **montage de clé USB** | [à faire] |
-| G6 | — **formatage de clé USB** | [à faire] |
+| G5 | — **montage de clé USB** | **[écrit]** (18 nov.) — l'explorateur monte un disque d'un clic dans « Ce PC » (udisksctl, sans mot de passe) |
+| G6 | — **formatage de clé USB** | **[écrit]** (18 nov.) — par Disques (voir B4) |
 | G7 | **Paramètres système centralisés** | [prouvé] — huit pages, ouvertes et photographiées |
 | G8 | **Centre de mise à jour avec retour arrière** | [prouvé] pour la mise à jour (y compris hors session, avant le bureau) ; le retour arrière : [à faire] |
 | G9 | **Barre des tâches** | [prouvé] |
 | G10 | **Gestionnaire de fenêtres propre** | [prouvé] — openbox à notre thème, boutons dessinés, croix vérifiée au pixel |
 | G11 | **Bureaux virtuels** | [à faire] |
 | G12 | **Dock** | [à faire] — la barre fait office, ce n'est pas la même chose |
-| G13 | **Notifications** | [à faire] |
+| G13 | **Notifications** | **[écrit]** (18 nov.) — dunst à notre thème ; AUCUN démon n'affichait les notifications jusqu'ici |
 | G14 | **Gestion audio complète** | [prouvé] pour le panneau et le mélangeur |
-| G15 | **Volume par application** | [à faire] |
+| G15 | **Volume par application** | **[écrit]** — le panneau du son règle chaque application qui joue (natif depuis le 18 nov.) |
 | G16 | **Accélération vidéo GPU** | [prouvé] — sept pilotes VA-API, libavcodec, et Firefox configuré selon la carte |
 | G17 | **Navigateur web** | [prouvé] — Firefox ESR |
 | G18 | **grenStore** (le nom qu'il donne à GrenPlace) | [prouvé] pour le magasin, 99 applications en ligne ; le nom et la refonte façon Microsoft Store : [à faire] |
@@ -176,28 +176,28 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 | # | Demande | État |
 |---|---|---|
-| G19 | **Lecteur PDF** | [à faire] |
-| G20 | **Visionneuse d'images** | [à faire] |
-| G21 | **Lecteur vidéo et audio** façon VLC | [à faire] |
+| G19 | **Lecteur PDF** | **[écrit]** (18 nov.) — Atril livré |
+| G20 | **Visionneuse d'images** | **[écrit]** (18 nov.) — Ristretto livré |
+| G21 | **Lecteur vidéo et audio** façon VLC | **[écrit]** (18 nov.) — Celluloid (mpv) livré ; VLC dans GrenPlace |
 | G22 | **Bluetooth** | [à faire] — la page Connexions existe, le matériel n'est pas prouvé |
 | G23 | **Support manette** | [à faire] |
-| G24 | **Client SSH** | [à faire] |
-| G25 | **Outils de diagnostic réseau** | [à faire] |
-| G26 | **VPN** | [à faire] |
-| G27 | **Pare-feu avec interface graphique** | [à faire] |
+| G24 | **Client SSH** | **[écrit]** (18 nov.) — openssh-client livré |
+| G25 | **Outils de diagnostic réseau** | **[écrit]** (18 nov.) — mtr, traceroute, dig livrés |
+| G26 | **VPN** | **[écrit]** (18 nov.) — OpenVPN dans la fenêtre des connexions, WireGuard compris par NetworkManager |
+| G27 | **Pare-feu avec interface graphique** | **[écrit]** (18 nov.) — Gufw livré, son action polkit ouverte (lue dans le .deb) |
 | G28 | **Gestionnaire de téléchargement** | [à faire] |
-| G29 | **Gestion de disques** (partitions, formatage, montage, SMART) | [à faire] — voir B4 |
+| G29 | **Gestion de disques** (partitions, formatage, montage, SMART) | **[écrit]** (18 nov.) — voir B4 |
 
 ### G.3 — Ce qu'il faut écrire
 
 | # | Demande | État |
 |---|---|---|
-| G30 | **Terminal avec un shell grenOS** | [à faire] — un terminal existe, il n'est pas à nous |
+| G30 | **Terminal avec un shell grenOS** | **[écrit]** (18 nov.) — grensh : invite, verbes Verbe-Nom en français, `gren` et `grenget` |
 | G31 | **Presse-papier avec historique** (Windows+V) | [à faire] |
 | G32 | **Calendrier** | [à faire] |
-| G33 | **Horloge** | [prouvé] dans la barre ; une application horloge : [à faire] |
-| G34 | **Minuteur** | [à faire] |
-| G35 | **Bloc-notes** | [à faire] |
+| G33 | **Horloge** | **[écrit]** (18 nov.) — l'application Horloge (grenos-ui) : l'heure ici et dans huit villes |
+| G34 | **Minuteur** | **[écrit]** (18 nov.) — Horloge › Minuteur, qui prévient par une notification ; et un chronomètre avec les tours |
+| G35 | **Bloc-notes** | **[écrit]** — Mousepad est livré ; pas d'application à nous |
 
 ## H. GrenAI
 
@@ -263,7 +263,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | J5 | Mettre à jour | [prouvé] — y compris au redémarrage, avant le bureau |
 | J6 | Brancher une clé USB | [à faire] |
 | J7 | Naviguer | [prouvé] |
-| J8 | Lire une vidéo | [prouvé] pour le décodage ; aucun lecteur local n'est livré |
+| J8 | Lire une vidéo | **[écrit]** (18 nov.) — Celluloid est livré ; le décodage était déjà prouvé |
 | J9 | **Mettre en veille** | [à faire] |
 | J10 | Redémarrer | [prouvé] |
 | J11 | **Récupérer d'une erreur** | [à faire] — c'est tout le bloc C |
@@ -274,8 +274,8 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 |---|---|---|
 | K1 | **Mise à jour des applications**, pas seulement du noyau | **[écrit]** (17 nov.) — les Flatpak se mettent à jour depuis la fenêtre Mises à jour, chaque jour en mode automatique, et au redémarrage de mise à jour. Pas encore vu sur une machine |
 | K2 | **Que les mises à jour fonctionnent correctement** (il l'a écrit deux fois) | [prouvé] pour le dépôt, le bouton, le service, la fenêtre d'avant-bureau et le retour du bureau |
-| K3 | **Constructions reproductibles** : deux constructions indépendantes doivent donner exactement le même noyau | [à faire] |
-| K4 | **Documentation développeur** : architecture, pilotes, appels système, contribution, débogage | [à faire] |
+| K3 | **Constructions reproductibles** : deux constructions indépendantes doivent donner exactement le même noyau | **[écrit]** (18 nov.) — Debian figé (snapshot.debian.org, `linux/debian-instantane`), date unique (SOURCE_DATE_EPOCH), Rust et Debian de construction figés, Cargo.lock suivis, PNG sans date, Flathub sans téléchargement. `reproductible.yml` construit DEUX fois et compare à l'octet : pas encore vert |
+| K4 | **Documentation développeur** : architecture, pilotes, appels système, contribution, débogage | **[écrit]** (18 nov.) — `docs/DEVELOPPEUR.md` remis à jour : l'architecture Rust, ajouter une fenêtre, construire, les raccourcis de CI |
 
 ---
 

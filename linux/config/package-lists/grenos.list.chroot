@@ -574,3 +574,49 @@ clamtk
 ## `pkexec` est son seul Recommends, et il est deja la par une dependance
 ## stricte : verifie dans la fermeture des Depends de cette liste, pas suppose.
 timeshift
+##
+## ---- todo G.2, B4, E7, G13 : ce que Debian livre et qu'il fallait intégrer
+## (18 novembre). Des paquets LÉGERS et en GTK quand il y a le choix : ce qui
+## tourne en permanence doit rester léger (CLAUDE.md), et rien ici ne tourne
+## sans qu'on l'ouvre — sauf dunst, réveillé par D-Bus à la première
+## notification et qui pèse quelques mégaoctets.
+##
+## G19 lire un PDF. Atril (GTK 3) plutôt qu'Evince : moins de dépendances.
+atril
+## G20 regarder une image : Ristretto, la visionneuse d'Xfce, s'ouvre en
+## une fraction de seconde.
+ristretto
+## G21 / J8 lire une vidéo ou de la musique : Celluloid, un lecteur moderne
+## au-dessus de mpv, qui profite du décodage matériel déjà réglé (G16). VLC
+## reste dans GrenPlace pour qui le veut.
+celluloid
+## B4 / G6 / G29 les disques : partitions, formatage d'une clé USB, état
+## SMART, images disque. Ses actions udisks sont ouvertes à la session active
+## par notre règle polkit (49-grenos-administration.rules), sinon ses boutons
+## seraient morts sur une machine sans mot de passe.
+gnome-disk-utility
+## G27 le pare-feu en fenêtre (D1 a posé ufw). Son action polkit
+## `com.ubuntu.pkexec.gufw` est en auth_admin, lue dans le .deb 24.04.0-3 :
+## ouverte par la même règle.
+gufw
+## G24 / G25 le client SSH et les outils de diagnostic réseau.
+openssh-client
+mtr-tiny
+traceroute
+bind9-dnsutils
+## G26 les VPN : OpenVPN dans la fenêtre des connexions ; WireGuard est
+## compris par NetworkManager lui-même, l'outil sert à importer un fichier.
+network-manager-openvpn-gnome
+wireguard-tools
+## E7 les vidages de plantage : `coredumpctl` les liste, la journalisation
+## les garde (bornée par systemd). E8 : systemd-pstore, déjà dans systemd,
+## garde le rapport d'une panique du noyau quand l'UEFI le conserve.
+systemd-coredump
+## G13 les notifications : dunst, à notre thème (/etc/xdg/dunst/dunstrc).
+## Jusqu'ici, AUCUN démon ne les affichait : chaque notify-send se perdait.
+dunst
+libnotify-bin
+## D10 les clés SSH et GPG, en fenêtre.
+seahorse
+## F6 plusieurs écrans : disposer, aligner, choisir le principal.
+arandr

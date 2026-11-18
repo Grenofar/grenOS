@@ -26,8 +26,26 @@ Dans votre message, veuillez inclure :
 
 Cette procédure s'applique aux éléments suivants de grenOS Linux :
 - L'image système située dans le répertoire `linux/`.
-- Les programmes du bureau grenOS (grenos-shell, grenos-fichiers, grenos-parametres, etc.).
-- Le dépôt APT personnalisé de grenOS.
+- Les programmes du bureau grenOS : la barre, le bureau et le panneau du son
+  natifs (`linux/natif/`, Rust), les fenêtres de `grenos-ui` (`linux/ui/`,
+  Rust et Tauri), et ce qui reste en Python sous
+  `linux/config/includes.chroot/usr/lib/grenos/`.
+- Le dépôt APT de grenOS et sa clé de signature.
+- Le site de téléchargement et la file des propositions `grenget`.
+
+## Versions suivies
+
+La **dernière** version publiée, et la branche `main`. Une machine grenOS se
+met à jour vers la dernière (au redémarrage, avant le bureau) : un correctif
+de sécurité arrive par là, pas par une image refaite pour une version ancienne.
+
+## Ce que grenOS durcit déjà, pour situer un signalement
+
+- le pare-feu `ufw` (entrant refusé dans le parcours Dev) ;
+- `/etc/sysctl.d/50-grenos-durcissement.conf` : SYN cookies, filtre de chemin
+  inverse, redirections ICMP refusées, adresses du noyau masquées, `ptrace`
+  limité aux enfants, eBPF réservé à root ;
+- les mises à jour signées (dépôt grenOS signé, clé privée jamais dans l'image).
 
 ## Ce qui est exclu
 

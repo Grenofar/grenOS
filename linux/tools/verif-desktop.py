@@ -54,16 +54,42 @@ def _lire_icones_disponibles():
     except OSError:
         # Si le fichier manque, on considère qu'aucune icône n'est disponible.
         return noms
-    # On cherche les appels à png(chemin, ...) où chemin se termine par /<nom>.png
+    # Les noms de fichiers que main() écrit : os.path.join(dossier, 'grenos-perf.png').
+    #
+    # L'ANCIEN MOTIF cherchait png("…/nom.png", …), une forme qu'icones.py n'a
+    # jamais écrite : il ne trouvait AUCUNE icône, et refusait donc toutes les
+    # nôtres. Personne ne l'a vu, parce qu'aucun workflow ne lançait ce garde
+    # (trouvé le 18 novembre). Un f-string (`grenos-reseau-wifi-{barres}`) est
+    # développé pour 0 à 3 barres, comme la boucle qui l'écrit.
     import re
-    for match in re.finditer(r'png\(\s*["\']([^"\']*?)["\']\s*,', contenu):
-        chemin = match.group(1)
-        if chemin.endswith('.png'):
-            nom = chemin[:-4]  # retire l'extension .png
-            # On ne garde que les noms qui commencent par 'grenos' (nos icones)
-            if nom.startswith('grenos'):
-                noms.add(nom)
+    for match in re.finditer(r"""f?['"]([A-Za-z0-9_{}-]+)\.png['"]""", contenu):
+        nom = match.group(1)
+        if '{' in nom:
+            noms.update(re.sub(r'\{[^}]*\}', str(n), nom) for n in range(4))
+        else:
+            noms.add(nom)
     return noms
+
+
+# Les programmes de Debian que nos entrées lancent, et le paquet qui les livre
+# (lu dans le paquet, pas deviné) : `pkexec` vient du paquet `pkexec` depuis
+# trixie, plus de policykit-1.
+PROGRAMMES_DEBIAN = {"pkexec": "pkexec"}
+
+
+def _paquets_livres():
+    """Les paquets de notre liste, et ceux qu'ils tirent à coup sûr."""
+    liste = os.path.join(RACINE, 'config', 'package-lists', 'grenos.list.chroot')
+    try:
+        paquets = {l.strip() for l in open(liste, encoding='utf-8') if l.strip() and not l.startswith('#')}
+    except OSError:
+        return set()
+    # `pkexec` n'est pas nommé dans la liste : il arrive par une dépendance
+    # STRICTE de timeshift et de calamares (vérifié dans la fermeture des
+    # Depends, voir le commentaire de timeshift dans la liste).
+    if 'timeshift' in paquets or 'calamares' in paquets:
+        paquets.add('pkexec')
+    return paquets
 
 
 def _lire_binaires_disponibles():
@@ -149,6 +175,11 @@ def _verifier_fichier(chemin, binaires, icones_disponibles):
         # On considère comme nôtre tout nom dont le basename commence par 'grenos' ou 'gren'
         basename = os.path.basename(premier_mot)
         est_nôtre = basename.startswith('grenos') or basename.startswith('gren')
+        # Un programme de Debian qu'une de NOS entrées lance : il doit venir
+        # d'un paquet de notre liste, sinon le menu montrerait une entrée morte.
+        paquet = PROGRAMMES_DEBIAN.get(basename)
+        if paquet and paquet in _paquets_livres():
+            est_nôtre = True
         if not est_nôtre and premier_mot not in binaires:
             print(f'::error file={chemin}::le programme « {premier_mot} » n\'est pas livré par grenOS ni présent dans Debian')
             ok = False

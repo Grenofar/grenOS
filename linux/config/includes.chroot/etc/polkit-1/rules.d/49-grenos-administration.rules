@@ -109,10 +109,30 @@ polkit.addRule(function (action, subject) {
         "org.freedesktop.udisks2.eject-media-system",
         "org.freedesktop.udisks2.power-off-drive-system",
         "in.teejeetech.pkexec.timeshift-gtk",
-        "in.teejeetech.pkexec.timeshift"
+        "in.teejeetech.pkexec.timeshift",
+        "com.ubuntu.pkexec.gufw"
+    ];
+    // Les disques (gnome-disk-utility, 18 novembre) : formater, partitionner,
+    // lire l'état SMART. Destructeur, donc SEULEMENT pour la session locale
+    // active — la personne assise devant l'écran, jamais une session distante
+    // — et l'outil demande lui-même confirmation avant d'effacer.
+    var disques = [
+        "org.freedesktop.udisks2.modify-device",
+        "org.freedesktop.udisks2.modify-device-system",
+        "org.freedesktop.udisks2.open-device",
+        "org.freedesktop.udisks2.open-device-system",
+        "org.freedesktop.udisks2.rescan",
+        "org.freedesktop.udisks2.ata-smart-update",
+        "org.freedesktop.udisks2.ata-smart-selftest",
+        "org.freedesktop.udisks2.modify-drive-settings",
+        "org.freedesktop.udisks2.loop-setup",
+        "org.freedesktop.udisks2.manage-swapspace"
     ];
     if (!subject.isInGroup("sudo")) {
         return polkit.Result.NOT_HANDLED;
+    }
+    if (subject.local && subject.active && disques.indexOf(action.id) >= 0) {
+        return polkit.Result.YES;
     }
     for (var i = 0; i < permis.length; i++) {
         var motif = permis[i];

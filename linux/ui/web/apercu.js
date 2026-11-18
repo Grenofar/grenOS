@@ -169,6 +169,8 @@
       case "reglages_compte": return { protege: false, adresse: "lea@grenos", nom: "Léa" };
       case "reglages_parcourir_fond": return "/usr/share/backgrounds/aurore.png";
       case "maj_mode": case "maj_verifier": await attendre(300); return null;
+      case "reglages_dpi_lire": return 96;
+      case "reglages_dpi": return `Taille ${Math.round(a.dpi * 100 / 96)} %.`;
       case "reglages_fonds": return [{ nom: "Images/montagne.jpg", chemin: "/home/lea/Images/montagne.jpg", actuel: true }, { nom: "Bureau/plage.png", chemin: "/home/lea/Bureau/plage.png", actuel: false }];
       case "fichiers_maison": return "/home/lea";
       case "fichiers_rapides": return [["Bureau", "bureau"], ["Téléchargements", "telechargement"], ["Documents", "texte"], ["Images", "image"], ["Musique", "audio"], ["Vidéos", "video"]].map(([nom, icone]) => ({ nom, icone, chemin: "/home/lea/" + nom }));

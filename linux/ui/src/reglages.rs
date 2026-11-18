@@ -267,9 +267,63 @@ pub fn reglages_fond(chemin: String) -> Result<(), String> {
     crate::systeme::detacher("grenos-fond", &[])
 }
 
+// ---- F8 : la taille de l'affichage (DPI) ------------------------------------------
+
+/// Les échelles proposées, en points par pouce : 100 % à 200 %. Rien entre
+/// deux : une valeur bizarre (103 %) floute le texte de certains programmes.
+const DPI: &[u32] = &[96, 108, 120, 144, 168, 192];
+
+fn xresources() -> std::path::PathBuf {
+    std::path::Path::new(&std::env::var("HOME").unwrap_or_default()).join(".Xresources")
+}
+
+fn dpi_de(texte: &str) -> u32 {
+    texte
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("Xft.dpi:").and_then(|v| v.trim().parse().ok()))
+        .unwrap_or(96)
+}
+
+/// Remplace (ou ajoute) la ligne Xft.dpi, sans toucher au reste du fichier.
+fn avec_dpi(texte: &str, dpi: u32) -> String {
+    let mut lignes: Vec<String> = texte.lines().filter(|l| !l.trim().starts_with("Xft.dpi:")).map(String::from).collect();
+    lignes.push(format!("Xft.dpi: {dpi}"));
+    lignes.join("\n") + "\n"
+}
+
+#[tauri::command]
+pub fn reglages_dpi_lire() -> u32 {
+    dpi_de(&lire(&xresources().to_string_lossy()))
+}
+
+/// La taille de tout l'affichage. Écrite dans ~/.Xresources — que la session
+/// relit à chaque ouverture (Xsession, 30x11-common_xresources) — et passée
+/// tout de suite à `xrdb` : les fenêtres OUVERTES ENSUITE la prennent ; la
+/// barre et le bureau, au prochain démarrage de session. La page le dit.
+#[tauri::command]
+pub fn reglages_dpi(dpi: u32) -> Result<String, String> {
+    if !DPI.contains(&dpi) {
+        return Err("Taille non proposée.".into());
+    }
+    let chemin = xresources();
+    let neuf = avec_dpi(&lire(&chemin.to_string_lossy()), dpi);
+    std::fs::write(&chemin, &neuf).map_err(|e| e.to_string())?;
+    let _ = Command::new("xrdb").args(["-merge", &chemin.to_string_lossy()]).status();
+    dire(&format!("reglages ecran : taille {} %", dpi * 100 / 96));
+    Ok(format!("Taille {} %. Les fenêtres ouvertes à partir de maintenant la prennent ; la barre et le bureau, à la prochaine ouverture de session.", dpi * 100 / 96))
+}
+
 #[cfg(test)]
 mod essais {
     use super::*;
+
+    #[test]
+    fn dpi_garde_le_reste() {
+        assert_eq!(dpi_de(""), 96);
+        assert_eq!(dpi_de("Xcursor.size: 24\nXft.dpi: 144\n"), 144);
+        assert_eq!(avec_dpi("Xcursor.size: 24\nXft.dpi: 96\n", 120), "Xcursor.size: 24\nXft.dpi: 120\n");
+        assert_eq!(avec_dpi("", 192), "Xft.dpi: 192\n");
+    }
 
     #[test]
     fn seules_les_fonctions_des_reglages() {

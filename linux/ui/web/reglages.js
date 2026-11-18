@@ -58,6 +58,9 @@
         carte(ligne("Thème", el("div.rg-rangee", bouton("Nuit", "", () => theme("nuit")), bouton("Jour", "", () => theme("jour")))),
           ligne("Couleur d'accent", reglage("accent", [["bleu", "Bleu"], ["violet", "Violet"], ["vert", "Vert"], ["orange", "Orange"], ["rose", "Rose"], ["cyan", "Cyan"]])),
           ligne("Effets", reglage("effets", [["complets", "Complets"], ["equilibres", "Équilibrés"], ["performance", "Performance"]])),
+          ligne("Taille de l'affichage", choix([96, 108, 120, 144, 168, 192].map((d) => [String(d), `${Math.round(d * 100 / 96)} %`]),
+            String(await api.appeler("reglages_dpi_lire")),
+            async (v) => { try { dire.textContent = await api.appeler("reglages_dpi", { dpi: Number(v) }); } catch (e) { dire.textContent = String(e); } })),
           dire,
           note("Meta+T fait la bascule sans ouvrir cette fenêtre. Le fond d'écran, la barre, les menus et les applications suivent ensemble.")),
         carte(ligne("Fond d'écran", bouton("Parcourir…", "principal", parcourir)), fonds,
@@ -86,6 +89,7 @@
       };
       return [titre("Écran", `Écran ${e.nom}, actuellement ${e.actuelle.replace("x", " × ") || "inconnu"} à ${e.taux || "?"} images par seconde.`),
         carte(ligne("Définition", tailles), ligne("Images par seconde", taux), bouton("Appliquer", "principal", appliquer), dire,
+          ligne("Plusieurs écrans", bouton("Disposer les écrans", "", () => ouvrirProgramme("arandr"))),
           note("Les fréquences marquées « à essayer » ne sont pas annoncées par le pilote : elles sont calculées puis proposées à l'écran. S'il refuse, rien ne change — et s'il accepte mais que l'image reste noire, attends dix secondes, rien n'est enregistré tant que l'essai n'a pas réussi."))];
     },
 
@@ -240,7 +244,8 @@
     async materiel() {
       const v = await R("reglages_materiel");
       return [titre("Matériel", "Ce que la machine a, et ce que grenOS en voit."),
-        carte(...v.lignes.map(([n, t]) => ligne(n, el("span.note", t)))),
+        carte(...v.lignes.map(([n, t]) => ligne(n, el("span.note", t))),
+          ligne("Disques et clés USB", bouton("Ouvrir Disques", "", () => ouvrirProgramme("gnome-disks")))),
         carte(el("p.rg-diag", v.explication))];
     },
   };

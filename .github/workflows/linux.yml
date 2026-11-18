@@ -171,6 +171,15 @@ jobs:
         continue-on-error: true
         run: python3 linux/tools/verif-docs.py
 
+      # Ce garde existait depuis octobre, et AUCUN workflow ne le lancait : son
+      # motif ne trouvait aucune icone et refusait donc toutes les notres, sans
+      # que personne le voie. Repare le 18 novembre et vu refuser dans les deux
+      # sens (programme absent, icone absente). Rapporte avant d'etre exige,
+      # comme chaque garde neuf.
+      - name: Chaque entree du menu lance un programme et montre une icone qui existent
+        continue-on-error: true
+        run: python3 linux/tools/verif-desktop.py
+
       # Un agent a livre `linux/tools/verif-catalogue.py` le 15 octobre, sa
       # tache a ete marquee **done**, et le fichier ne compilait pas : des
       # guillemets echappes a la deuxieme ligne. Rien ne l'a vu, parce que la

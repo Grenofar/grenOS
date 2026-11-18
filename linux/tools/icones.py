@@ -751,6 +751,25 @@ def secours(chemin, taille):
     png(chemin, np.clip(image, 0, 255).astype(np.uint8))
 
 
+def horloge(chemin, taille):
+    """L'Horloge (18 novembre) : un cadran, deux aiguilles à dix heures dix.
+
+    Dix heures dix, comme toutes les montres en vitrine : les aiguilles
+    dessinent un sourire et ne se cachent pas l'une derrière l'autre — à
+    seize pixels, deux aiguilles superposées ne font plus qu'un trait.
+    """
+    image, u, v = toile(taille)
+    cx, cy = 0.5, 0.5
+    distance = np.hypot(u - cx, v - cy)
+    poser(image, np.clip((0.40 - distance) / 0.012, 0, 1), ACCENT, 1.0)
+    poser(image, np.clip((0.33 - distance) / 0.012, 0, 1), CLAIR, 0.96)
+    # Les aiguilles : la petite vers 10 h, la grande vers 2 h (dix heures dix).
+    poser(image, segment(u, v, cx, cy, cx - 0.15, cy - 0.09, 0.055), ACCENT, 1.0)
+    poser(image, segment(u, v, cx, cy, cx + 0.15, cy - 0.20, 0.045), ACCENT_CLAIR, 1.0)
+    poser(image, np.clip((0.045 - distance) / 0.012, 0, 1), ACCENT, 1.0)
+    png(chemin, np.clip(image, 0, 255).astype(np.uint8))
+
+
 def main():
     dossier = sys.argv[1] if len(sys.argv) > 1 else '.'
     taille = int(sys.argv[2]) if len(sys.argv) > 2 else 256
@@ -780,6 +799,7 @@ def main():
     perf(os.path.join(dossier, 'grenos-perf.png'), taille)
     secours(os.path.join(dossier, 'grenos-secours.png'), taille)
     grenlaunch(os.path.join(dossier, 'grenlaunch.png'), taille)
+    horloge(os.path.join(dossier, 'grenos-horloge.png'), taille)
 
 
 if __name__ == '__main__':
