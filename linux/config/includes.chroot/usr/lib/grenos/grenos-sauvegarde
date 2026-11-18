@@ -54,10 +54,25 @@ DISQUE=$(destination) || DISQUE=""
 MACHINE=$(hostname 2>/dev/null || echo grenos)
 RACINE="${DISQUE}/grenOS-sauvegardes/${MACHINE}-${USER}"
 
+# C12 — LE DISQUE EST-IL CHIFFRÉ ? (18 novembre) On ne chiffre pas les
+# copies nous-mêmes : un format à nous ne se rouvrirait que chez nous. Un
+# disque chiffré par LUKS (Disques › Formater › chiffrement) chiffre tout ce
+# qu'on y pose, se déverrouille en le branchant, et s'ouvre sur n'importe quel
+# Linux. On regarde donc si le volume vient d'une couche « crypt ».
+chiffre() {
+    source=$(findmnt -n -o SOURCE --target "$1" 2>/dev/null | head -1)
+    [ -n "$source" ] && lsblk -s -no TYPE "$source" 2>/dev/null | grep -q crypt
+}
+
 if [ "${1:-}" = "--etat" ]; then
     if [ -z "$DISQUE" ]; then
         echo "Aucun disque externe branché."
         exit 0
+    fi
+    if chiffre "$DISQUE"; then
+        echo "Chiffré : oui (LUKS)"
+    else
+        echo "Chiffré : non — Disques › Formater, case « chiffré », le rend sûr si on le perd"
     fi
     NOMBRE=$(ls -1d "$RACINE"/2* 2>/dev/null | wc -l)
     DERNIERE=$(ls -1d "$RACINE"/2* 2>/dev/null | tail -1)
