@@ -386,7 +386,7 @@ impl Barre {
             // sous-fenêtre cliquée (une liste défilée peut dépasser la hauteur
             // du menu et passer pour un clic à côté).
             let (rx, ry) = ev.root();
-            let (ox, oy) = m.window().map(|f| f.origin()).unwrap_or((0, 0));
+            let (_, ox, oy) = m.window().map(|f| f.origin()).unwrap_or((0, 0, 0));
             let (l, h) = m.size();
             let (x, y) = (rx - ox as f64, ry - oy as f64);
             if !(0.0..l as f64).contains(&x) || !(0.0..h as f64).contains(&y) {
