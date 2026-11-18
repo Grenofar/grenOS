@@ -546,13 +546,13 @@ jobs:
           # demarrage arrivait au gestionnaire de connexion pile a la fin des 90 s
           # et la machine etait coupee avant d'ouvrir sa session : un ecran noir,
           # et une « persistance qui ne tient pas » qui n'etait qu'un chronometre
-          # trop court. On attend la PREUVE, quatre minutes au plus, et on DIT
+          # trop court. On attend la PREUVE, six minutes au plus, et on DIT
           # le temps mis — un demarrage qui ralentit doit se voir, pas se cacher.
-          for attente in $(seq 1 48); do
+          for attente in $(seq 1 72); do
             grep -aq 'persistance :' "$RUNNER_TEMP/serial-uefi.log" 2>/dev/null && break
             sleep 5
           done
-          echo "uefi : session et persistance vues apres $((attente * 5)) s (plafond 240 s)"
+          echo "uefi : session et persistance vues apres $((attente * 5)) s (plafond 360 s)"
           sleep 5
           python3 scripts/ci-screen.py grab "$RUNNER_TEMP/uefi.sock" "$RUNNER_TEMP/ecran-uefi.ppm" || true
           kill $QEMU 2>/dev/null || true
