@@ -104,6 +104,17 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 ## E. Observation : grenHub, grenPerf, diagnostic, journaux
 
+> **17 novembre — [écrit], pas encore vu sur une image :** grenPerf est passé
+> dans grenos-ui (Rust/Tauri), sur le modèle de Perf Saver : processus
+> regroupés par application avec processeur et mémoire mesurés dans /proc,
+> fermer et changer la priorité d'un clic (la barre, le son et le bureau sont
+> protégés), « Libérer la RAM » qui dit honnêtement ce qu'elle gagne, ce qui
+> démarre avec la session, et un mode jeu réversible. Et **GrenLaunch**
+> (`grenlaunch`) : la bibliothèque Steam (lue dans ses manifestes, donc un jeu
+> installé par Steam y apparaît seul), Heroic (Epic, GOG), Flathub, 30 jeux au
+> catalogue avec ce qui marche vraiment sous Linux — Fortnite en nuage,
+> Valorant, LoL, Apex, CoD, PUBG et Destiny 2 dits « non disponibles ».
+
 | # | Demande | État |
 |---|---|---|
 | E1 | **grenHub** : une application centrale qui affiche l'état complet de la machine | [à faire] |
@@ -206,6 +217,15 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 ## I. L'assistant de première configuration (OOBE)
 
+> **17 novembre : l'assistant est réécrit en Rust/Tauri (`linux/ui`, `grenos-ui premier`).**
+> L'assistant Python reste livré et reprend la main tout seul si la nouvelle
+> fenêtre ne s'affiche pas en deux minutes ou se ferme sans avoir nommé la
+> machine (`grenos-premier-lanceur`). Nouveau et **[écrit]**, pas encore vu
+> tourner sur une image : I4 (réseau), le mot de passe de I5, la couleur
+> d'accent et le niveau d'effets de I6, le disque/Wi-Fi/Bluetooth/son de I14,
+> l'écran final de I15. Et I11 est enfin **appliqué** : le choix des mises à
+> jour n'était rangé dans aucun fichier que quelqu'un relisait.
+
 > Quatorze écrans, dans son ordre exact. `grenos-premier` existe déjà et fait
 > aujourd'hui **deux** de ces quatorze écrans (le nom, et le pays/clavier).
 
@@ -214,8 +234,8 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | I1 | Au tout début **en anglais automatiquement**, puis « Welcome to grenOS », « configurons votre ordinateur en quelques étapes », un bouton **Start** | **[prouvé]** — la machine a traversé l'écran « Welcome to grenOS » et son bouton **Start** : `premier : ecran bienvenue (1/10)`. En anglais, et c'est la seule page qui l'est — quelqu'un qui ne lit pas le français doit pouvoir atteindre l'écran où l'on choisit la langue |
 | I2 | **Langue** — toutes les langues du monde, ou anglais et français si c'est trop long —, **région**, **format de date et d'heure**, **en ligne pour avoir l'heure**, bouton Continuer | [écrit] à moitié : le pays et le fuseau existent. **L'heure en ligne était une promesse vide** — l'interrupteur des Réglages appelle `set-ntp`, et aucun démon n'était livré ; corrigé le 14 octobre, avec un garde. La **langue**, elle, demande d'abord que nos fenêtres soient traduisibles : aucune ne l'est, tout le texte est du français en dur |
 | I3 | **Clavier** : azerty, qwerty, etc., **avec un champ pour le tester**, bouton Continuer | **[prouvé]** — et je l'avais marqué « à faire » à tort : le champ existe (`grenos-premier:215`), la bascule est immédiate (`clavier.appliquer_maintenant`), 16 dispositions. Démenti en relisant le code, pas en le croyant |
-| I4 | **Connexion à Internet** : une liste nette et fluide des réseaux, le mot de passe au clic, un bouton « continuer hors connexion », puis Continuer | [à faire] |
-| I5 | **Votre compte** : un nom qui devient `…@grenos`, un mot de passe au login s'il le souhaite, Continuer | [prouvé] pour le nom et le compte ; le mot de passe optionnel ici : [à faire] |
+| I4 | **Connexion à Internet** : une liste nette et fluide des réseaux, le mot de passe au clic, un bouton « continuer hors connexion », puis Continuer | **[écrit]** (17 nov.) — dans grenos-ui : la liste des réseaux par `nmcli`, le mot de passe au clic, « Continuer hors connexion ». Aucune machine d'essai n'a de Wi-Fi : seule la sienne pourra le prouver |
+| I5 | **Votre compte** : un nom qui devient `…@grenos`, un mot de passe au login s'il le souhaite, Continuer | [prouvé] pour le nom et le compte ; **le mot de passe optionnel est [écrit]** (17 nov., grenos-ui → `grenos-compte definir`) |
 | I6 | **Apparence** : sombre ou clair ou auto, choix de couleurs, **aperçu du bureau à droite**, Continuer | **[prouvé] pour les trois modes** — `premier : ecran apparence (6/10)`, et le choix est gardé. **L'aperçu du bureau à droite n'y est pas, et c'est délibéré** : l'assistant tourne avant qu'un bureau existe, donc l'aperçu serait un dessin qui lui ressemble sans en être un, et le jour où il divergerait il mentirait à l'endroit même où il sert à décider. Le choix de couleur d'accent reste à faire |
 | I7 | **Usage du PC** — s'il choisit *développement* : un bouton installe VS Code, Git, un terminal amélioré, les outils de compilation et GrenAI | **[écrit]** — quatre profils (bureautique, développement, jeu, montage), et c'est le **seul écran dont le choix installe vraiment quelque chose** : les applications partent dans la file d'avant-bureau, qui est prouvée depuis le 27 septembre. Chaque profil ne nomme que des fiches du catalogue, et un garde refuse un profil qui nommerait une fiche absente — 17 cas. **GrenAI n'est pas proposée** : zéro ligne écrite sur onze demandes, et la nommer serait une promesse de plus. Le dépôt du travail n'a pas encore été vu sur une machine |
 | I8 | — s'il choisit *jeu* : **Ctrl+Alt+Échap** ouvre un mode jeu qui ne laisse tourner que l'arrière-plan de sécurité, coupe GrenAI, et propose de fermer les autres applications | [à faire] |
@@ -252,7 +272,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 | # | Demande | État |
 |---|---|---|
-| K1 | **Mise à jour des applications**, pas seulement du noyau | [à faire] — la page Mises à jour de GrenPlace existe, les applications Flatpak ne sont pas mises à jour |
+| K1 | **Mise à jour des applications**, pas seulement du noyau | **[écrit]** (17 nov.) — les Flatpak se mettent à jour depuis la fenêtre Mises à jour, chaque jour en mode automatique, et au redémarrage de mise à jour. Pas encore vu sur une machine |
 | K2 | **Que les mises à jour fonctionnent correctement** (il l'a écrit deux fois) | [prouvé] pour le dépôt, le bouton, le service, la fenêtre d'avant-bureau et le retour du bureau |
 | K3 | **Constructions reproductibles** : deux constructions indépendantes doivent donner exactement le même noyau | [à faire] |
 | K4 | **Documentation développeur** : architecture, pilotes, appels système, contribution, débogage | [à faire] |

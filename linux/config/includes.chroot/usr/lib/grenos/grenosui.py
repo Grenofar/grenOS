@@ -308,15 +308,34 @@ menuitem:hover { background-color: @accent; color: #ffffff; }
 """
 
 
-def palette():
-    """La palette du moment : nuit par défaut, jour si la personne l'a choisi."""
+# Les couleurs d'accent proposées par l'assistant et grenos-ui — les MÊMES
+# valeurs que `style.css` de grenos-ui. Choisir « violet » au premier écran
+# doit se voir partout, y compris dans les fenêtres qui n'ont pas encore migré.
+ACCENTS = {
+    "bleu": ("#3b82f6", "#60a5fa", "#1d4ed8", "#7c4df0"),
+    "violet": ("#8b5cf6", "#a78bfa", "#6d28d9", "#ec4899"),
+    "vert": ("#10b981", "#34d399", "#047857", "#06b6d4"),
+    "orange": ("#f59e0b", "#fbbf24", "#b45309", "#ef4444"),
+    "rose": ("#ec4899", "#f472b6", "#be185d", "#8b5cf6"),
+    "cyan": ("#06b6d4", "#22d3ee", "#0e7490", "#3b82f6"),
+}
+
+
+def _reglage(nom):
     try:
-        with open(os.path.join(REGLAGES, "theme"), encoding="utf-8") as fichier:
-            if fichier.read().strip() == "jour":
-                return JOUR
+        with open(os.path.join(REGLAGES, nom), encoding="utf-8") as fichier:
+            return fichier.read().strip()
     except OSError:
-        pass
-    return NUIT
+        return ""
+
+
+def palette():
+    """La palette du moment : nuit par défaut, jour si choisi, et l'accent."""
+    base = dict(JOUR if _reglage("theme") == "jour" else NUIT)
+    accent = ACCENTS.get(_reglage("accent"))
+    if accent:
+        base["accent"], base["accent-clair"], base["accent-sombre"], base["second"] = accent
+    return base
 
 
 def feuille(couleurs=None):

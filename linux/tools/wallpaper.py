@@ -19,6 +19,7 @@ import numpy as np
 ACCENT = (0x2F, 0x7D, 0xF6)
 VIOLET = (0x7C, 0x4D, 0xF0)
 TEAL = (0x2B, 0xC4, 0xB0)
+INDIGO = (0x3B, 0x4F, 0xC8)
 
 
 def png(path, pixels):
@@ -36,56 +37,61 @@ def png(path, pixels):
 
 
 def make(path, width, height, night):
-    """Une composition en courbes, calculée : ni photo, ni motif répété.
+    """L'aurore de grenos-ui, en fond d'écran : calculée, ni photo ni motif.
 
-    Refaite le 23 septembre 2026 : l'ancienne version empilait trois halos et
-    une écharpe de lumière, ce qui donnait une brume uniforme. Celle-ci a une
-    ligne d'horizon — des ondes larges qui traversent l'image en biais, plus
-    claires là où elles se croisent. Un fond d'écran doit tenir derrière des
-    icônes : il garde donc ses valeurs sombres en bas à gauche, là où les
-    icônes se posent, et respire en haut à droite.
+    Refaite le 17 novembre pour que le bureau ressemble à ses fenêtres :
+    l'assistant, GrenLaunch et grenPerf dessinent tous ce même fond — trois
+    grandes masses de couleur douces (bleu en haut à gauche, violet en bas à
+    droite, un reflet cyan au centre) sur un bleu nuit. La pousse du logo y est
+    tracée en très grand et très discrète, comme un filigrane : on la devine,
+    on ne la lit pas. Le coin bas gauche, où se posent les icônes, reste calme.
     """
-    haut = np.array((0x0B, 0x12, 0x24) if night else (0xF2, 0xF6, 0xFD), dtype=float)
-    bas = np.array((0x04, 0x06, 0x0E) if night else (0xD6, 0xE0, 0xF3), dtype=float)
-
+    # Le jour n'est pas un blanc : un lavande pâle, sinon le filigrane et les
+    # masses de couleur disparaissent (« on voit rien », 17 novembre).
+    fond = np.array((0x07, 0x0B, 0x14) if night else (0xE4, 0xE6, 0xF4), dtype=float)
     ys, xs = np.mgrid[0:height, 0:width].astype(float)
+    ratio = width / height
     u = xs / max(width - 1, 1)
     v = ys / max(height - 1, 1)
+    image = np.broadcast_to(fond, (height, width, 3)).copy()
 
-    # Le fond : un dégradé en diagonale plutôt qu'à la verticale. Le regard
-    # suit la diagonale, et l'image paraît moins plate.
-    diagonale = np.clip(v * 0.78 + u * 0.22, 0.0, 1.0)
-    image = haut + (bas - haut) * diagonale[..., None]
+    def tache(cx, cy, rayon, couleur, force):
+        d = np.hypot((u - cx) * ratio, v - cy) / rayon
+        lueur = np.clip(1.0 - d, 0.0, 1.0) ** 2.2
+        image[...] += (np.array(couleur, dtype=float) - image) * (lueur * force)[..., None]
 
-    # Trois ondes larges. Leur amplitude diminue vers le bas de l'image, pour
-    # que la zone des icônes reste calme.
-    calme = np.clip(1.0 - v * 1.15, 0.0, 1.0)
-    for frequence, phase, hauteur_onde, tint, force in (
-            (1.6, 0.0, 0.30, ACCENT, 1.00),
-            (2.3, 1.7, 0.22, VIOLET, 0.75),
-            (3.1, 3.4, 0.14, TEAL, 0.45)):
-        ligne = 0.34 + hauteur_onde * np.sin(u * frequence * np.pi * 2 + phase) * 0.5
-        distance = np.abs(v - ligne)
-        lueur = np.clip(1.0 - distance / 0.34, 0.0, 1.0) ** 3
-        quantite = (lueur * calme * force * (0.55 if night else 0.32))[..., None]
-        image += (np.array(tint, dtype=float) - image) * quantite
+    # Le bleu du coin haut gauche « gâchait tout » : plus petit, plus doux,
+    # et tiré vers l'indigo pour répondre au violet au lieu de le combattre.
+    if night:
+        tache(0.06, 0.02, 0.62, INDIGO, 0.34)
+        tache(0.95, 0.98, 1.10, VIOLET, 0.55)
+    else:
+        tache(0.04, 0.00, 0.80, (0x9A, 0xB4, 0xF8), 0.55)
+        tache(0.96, 1.00, 1.15, (0xA5, 0x8C, 0xF5), 0.70)
+        tache(0.70, 0.30, 0.60, (0xF0, 0xC8, 0xF4), 0.35)
 
-    # Un point de lumière en haut à droite : une source, et l'image cesse
-    # d'être un aplat.
-    distance = np.hypot((u - 0.78) * (width / height), v - 0.16)
-    halo = np.clip(1.0 - distance / 0.55, 0.0, 1.0) ** 2
-    blanc = np.array((255, 255, 255), dtype=float)
-    image += (blanc - image) * (halo * (0.16 if night else 0.42))[..., None]
+    # Le filigrane : une feuille de la pousse, très grande, en haut à droite.
+    angle = np.radians(-118)
+    c, s = np.cos(angle), np.sin(angle)
+    x0, y0, longueur, largeur = 0.98 * ratio, 1.02, 1.35, 0.30
+    px, py = u * ratio - x0, v - y0
+    x = px * c + py * s
+    y = -px * s + py * c
+    bord = largeur * np.sin(np.pi * np.clip(x / longueur, 0, 1))
+    feuille = np.where((x > 0) & (x < longueur), np.clip((bord - np.abs(y)) / 0.004, 0, 1), 0.0)
+    contour = feuille * (1 - np.clip((bord - np.abs(y) - 0.006) / 0.004, 0, 1))
+    # La nuit, un trait clair ; le jour, un trait violet : du blanc sur du
+    # blanc ne se voit pas.
+    trait = np.array((255, 255, 255) if night else (0x6D, 0x4B, 0xD8), dtype=float)
+    image += (trait - image) * (feuille * (0.035 if night else 0.07) + contour * (0.10 if night else 0.38))[..., None]
 
-    # Un grain très fin : sans lui, un dégradé calculé montre des bandes sur
-    # les écrans qui n'affichent pas toutes les nuances.
-    grain = np.random.default_rng(7).normal(0.0, 1.4, size=(height, width))[..., None]
-    image += grain
+    # Un grain très fin : sans lui, un dégradé calculé montre des bandes.
+    image += np.random.default_rng(7).normal(0.0, 1.3, size=(height, width))[..., None]
 
     # Le coin des icônes reste sombre : c'est là qu'on lit des noms de fichier.
-    coin = np.clip(1.0 - np.hypot(u / 0.55, (1.0 - v) / 0.75), 0.0, 1.0) ** 2
-    sombre = np.array((0, 0, 0) if night else (0x8F, 0x9F, 0xBA), dtype=float)
-    image += (sombre - image) * (coin * (0.35 if night else 0.18))[..., None]
+    coin = np.clip(1.0 - np.hypot(u / 0.50, (1.0 - v) / 0.70), 0.0, 1.0) ** 2
+    sombre = np.array((0, 0, 0) if night else (0xA8, 0xB4, 0xCA), dtype=float)
+    image += (sombre - image) * (coin * (0.30 if night else 0.15))[..., None]
 
     png(path, np.clip(image, 0, 255).astype(np.uint8))
 

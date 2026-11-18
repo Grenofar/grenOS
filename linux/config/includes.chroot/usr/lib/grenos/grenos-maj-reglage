@@ -1,28 +1,63 @@
 #!/bin/sh
-# Activer ou couper l'installation automatique des mises à jour.
+# Le mode des mises à jour.
 #
-# Lancé en root par les Réglages, jamais directement. C'est un fichier qui
-# décide : le service d'installation automatique ne démarre pas s'il n'existe
-# pas. Un interrupteur qui se lit dans le système de fichiers vaut mieux qu'un
-# réglage caché dans une base.
+# Lancé en root par les Réglages, la fenêtre Mises à jour ou l'assistant de
+# première configuration, jamais directement. C'est un fichier qui décide : le
+# service d'installation automatique ne démarre pas s'il n'existe pas. Un
+# interrupteur qui se lit dans le système de fichiers vaut mieux qu'un réglage
+# caché dans une base.
 #
-#   grenos-maj-reglage activer|couper|etat
+#   grenos-maj-reglage mode automatiques|demander|manuelles
+#   grenos-maj-reglage activer|couper|maintenant|etat
+#
+# Les trois modes, ceux de l'assistant :
+#   automatiques  télécharger, mettre à jour les Flatpak, armer l'installation
+#                 au prochain démarrage (grenos-maj-auto, chaque jour) ;
+#   demander      télécharger et prévenir ; rien ne s'installe sans accord ;
+#   manuelles     compter, sans même télécharger.
+#
+# Le mode est écrit dans /etc/grenos/maj-mode. La marque maj-automatique reste
+# ce que lisent la condition du service et `appliquer-systeme` : « activer »
+# et « couper » gardent leur sens pour les Réglages qui les appellent encore.
 
 set -eu
 
 MARQUE=/etc/grenos/maj-automatique
+MODE=/etc/grenos/maj-mode
+
+poser_mode() {
+    mkdir -p /etc/grenos
+    printf '%s\n' "$1" > "$MODE"
+    chmod 0644 "$MODE"
+    if [ "$1" = automatiques ]; then
+        printf 'Les mises a jour sont preparees chaque jour et posees au redemarrage.\n' \
+            > "$MARQUE"
+        systemctl enable --now grenos-maj-auto.timer >/dev/null 2>&1 || true
+    else
+        rm -f "$MARQUE"
+        systemctl disable --now grenos-maj-auto.timer >/dev/null 2>&1 || true
+    fi
+}
 
 case "${1:-etat}" in
+mode)
+    case "${2:-}" in
+        automatiques|demander|manuelles)
+            poser_mode "$2"
+            echo "$2"
+            ;;
+        *)
+            echo "usage: grenos-maj-reglage mode automatiques|demander|manuelles" >&2
+            exit 2
+            ;;
+    esac
+    ;;
 activer)
-    mkdir -p /etc/grenos
-    printf 'Les mises a jour de grenOS et de Debian sont installees chaque jour.\n' \
-        > "$MARQUE"
-    systemctl enable --now grenos-maj-auto.timer >/dev/null 2>&1 || true
+    poser_mode automatiques
     echo activer
     ;;
 couper)
-    rm -f "$MARQUE"
-    systemctl disable --now grenos-maj-auto.timer >/dev/null 2>&1 || true
+    poser_mode demander
     echo couper
     ;;
 maintenant)
@@ -33,7 +68,7 @@ etat)
     if [ -e "$MARQUE" ]; then echo activer; else echo couper; fi
     ;;
 *)
-    echo "usage: grenos-maj-reglage activer|couper|maintenant|etat" >&2
+    echo "usage: grenos-maj-reglage mode <m>|activer|couper|maintenant|etat" >&2
     exit 2
     ;;
 esac

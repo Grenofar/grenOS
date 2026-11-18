@@ -9,7 +9,14 @@ derrière un bouton pour qui veut le lire.
 Le travail lui-même est dans `/usr/lib/grenos/maj.py`, partagé avec la page
 Mises à jour des Réglages : une seule façon de mettre à jour la machine.
 """
+import os
 import sys
+
+# La fenêtre vit désormais dans grenos-ui (Rust/Tauri), qui partage un seul
+# processus avec les autres fenêtres. Celle-ci reste le repli : une machine
+# dont le paquet n'a pas encore apporté grenos-ui garde sa fenêtre.
+if os.access("/usr/bin/grenos-ui", os.X_OK) and "--python" not in sys.argv:
+    os.execv("/usr/bin/grenos-ui", ["grenos-ui", "maj"])
 
 sys.path.insert(0, "/usr/lib/grenos")
 

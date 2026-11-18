@@ -1,0 +1,54 @@
+#!/bin/sh
+# Le mode « Automatiques », chaque jour — et il n'installe plus RIEN à chaud.
+#
+# CE QU'IL FAISAIT, ET POURQUOI C'ÉTAIT FAUX. Le service lançait
+# `apt-get full-upgrade` directement, pendant la session : exactement ce que
+# `maj.py` raconte avoir payé le 1er octobre — le bureau remplacé pendant
+# qu'il tourne, un écran noir, et une machine qui peut s'éteindre en plein
+# dpkg. Le bouton avait appris la leçon ; le mode automatique, non.
+#
+# CE QU'IL FAIT : le même chemin que le bouton.
+#   1. vérifier et télécharger (`grenos-maj-verif`) ;
+#   2. mettre à jour les applications Flatpak, sûres à chaud ;
+#   3. s'il y a des paquets prêts, armer `grenos-maj-demarrage` : ils seront
+#      posés au prochain redémarrage, avant le bureau, sous la barre de
+#      progression de Plymouth.
+#
+# Rend toujours 0 : un échec se lit dans /run/grenos, il ne fait pas rougir
+# un minuteur que personne ne regarde.
+
+set -u
+DOSSIER=/run/grenos
+
+dire() {
+    echo "grenos: maj-auto : $1" > /dev/ttyS0 2>/dev/null || true
+    echo "grenos: maj-auto : $1"
+}
+
+[ -e /etc/grenos/maj-automatique ] || { dire "mode automatique coupe, rien a faire"; exit 0; }
+
+/usr/lib/grenos/grenos-maj-verif || true
+
+if command -v flatpak >/dev/null 2>&1 && flatpak remotes --system 2>/dev/null | grep -q .; then
+    if timeout 900 flatpak update -y --noninteractive --system >/dev/null 2>&1; then
+        printf '0\n' > "$DOSSIER/maj-flatpak" 2>/dev/null || true
+        dire "applications flatpak a jour"
+    else
+        dire "flatpak : echec ou delai, on reessaiera demain"
+    fi
+fi
+
+NOMBRE=$(cat "$DOSSIER/maj" 2>/dev/null || echo 0)
+case "$NOMBRE" in ''|*[!0-9]*) NOMBRE=0 ;; esac
+PRETE=$(cat "$DOSSIER/maj-telechargee" 2>/dev/null || echo non)
+
+if [ "$NOMBRE" -gt 0 ] && [ "$PRETE" = oui ]; then
+    if systemctl enable grenos-maj-demarrage.service >/dev/null 2>&1; then
+        dire "$NOMBRE paquets prets, installation armee au prochain demarrage"
+    else
+        dire "$NOMBRE paquets prets, mais l installation n a pas pu etre armee"
+    fi
+else
+    dire "rien a armer ($NOMBRE paquets, telechargement $PRETE)"
+fi
+exit 0

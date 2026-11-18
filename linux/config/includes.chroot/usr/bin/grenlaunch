@@ -1,0 +1,9 @@
+#!/bin/sh
+# GrenLaunch : tous les jeux au même endroit — Steam, Heroic et Flathub.
+#
+# La fenêtre est une page de grenos-ui (Rust/Tauri). Sans lui, on ouvre la
+# page Jeux, qui sait au moins installer Steam et préparer les pilotes.
+if [ -x /usr/bin/grenos-ui ]; then
+    exec /usr/bin/grenos-ui lance
+fi
+exec /usr/bin/grenos-jeux

@@ -1,0 +1,81 @@
+/* GrenLaunch. La tête, les onglets et le toast viennent de perf.css. */
+.page-lance { max-width: 1320px; }
+.page-lance .recherche { width: 300px; }
+
+.une:empty { display: none; }
+.banniere {
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 24px;
+  min-height: 230px; padding: 30px 34px; border-radius: 24px; color: #fff;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c1) 92%, transparent) 30%, transparent 75%), var(--art, none) center / cover no-repeat, radial-gradient(circle at 85% 20%, color-mix(in srgb, var(--c2) 70%, transparent), transparent 55%), linear-gradient(120deg, var(--c1), color-mix(in srgb, var(--c1) 60%, var(--c2)));
+  border: 1px solid rgba(255, 255, 255, .08);
+}
+.banniere-texte { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 10px; max-width: 620px; align-items: flex-start; }
+.banniere h2 { font-size: 40px; font-weight: 900; letter-spacing: -.03em; }
+.banniere p { margin: 0; color: rgba(255, 255, 255, .82); font-size: 14.5px; }
+.banniere .etiquette { color: rgba(255, 255, 255, .7); }
+.banniere .badge { background: rgba(255, 255, 255, .14); color: #fff; }
+.banniere-art { position: absolute; right: -30px; bottom: -40px; width: 300px; height: 300px; color: rgba(255, 255, 255, .1); transform: rotate(-12deg); }
+.banniere-art svg { width: 100%; height: 100%; stroke-width: 1.2; }
+[data-effets="complets"] .banniere-art, [data-effets="equilibres"] .banniere-art { animation: flotte 9s ease-in-out infinite alternate; }
+@keyframes flotte { to { transform: rotate(-6deg) translateY(-14px); } }
+.badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge svg { width: 13px; height: 13px; }
+
+.corps-lance { display: flex; flex-direction: column; gap: 16px; }
+
+/* ---- Les jaquettes ------------------------------------------------------ */
+.jaquette {
+  position: relative; aspect-ratio: 3 / 4; border-radius: 16px; overflow: hidden; display: grid; place-items: center;
+  background: radial-gradient(circle at 70% 15%, color-mix(in srgb, var(--c2) 75%, transparent), transparent 60%), linear-gradient(160deg, var(--c1), color-mix(in srgb, var(--c1) 50%, var(--c2)));
+}
+.jaquette img.couverture { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.logo-jeu { width: 44%; max-width: 128px; aspect-ratio: 1; object-fit: contain; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, .45)); margin-bottom: 18px; }
+.fiche-jeu .logo-jeu { width: 30%; margin-bottom: 0; }
+.titre-repli { padding: 0 16px; text-align: center; color: #fff; font-size: 26px; font-weight: 900; letter-spacing: -.03em; line-height: 1.05; text-shadow: 0 6px 24px rgba(0, 0, 0, .4); }
+.fiche-jeu .titre-repli { font-size: 30px; }
+.jaquette.repli .titre-jaquette { display: none; }
+.titre-jaquette { position: absolute; left: 12px; right: 12px; bottom: 12px; color: #fff; font-weight: 800; font-size: 15px; line-height: 1.2; text-shadow: 0 2px 10px rgba(0, 0, 0, .5); }
+
+.grille-jeux { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
+.carte-jeu { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 0; border: none; background: none; color: inherit; text-align: left; cursor: pointer; }
+.carte-jeu .jaquette { transition: transform 200ms var(--courbe), box-shadow 200ms; }
+.carte-jeu:hover .jaquette { transform: translateY(-4px) scale(1.02); box-shadow: 0 18px 40px color-mix(in srgb, var(--accent) 30%, transparent); }
+[data-effets="performance"] .carte-jeu:hover .jaquette { transform: none; box-shadow: 0 0 0 2px var(--accent); }
+.survol { position: absolute; left: 0; right: 0; top: 0; aspect-ratio: 3 / 4; display: grid; place-items: center; opacity: 0; transition: opacity 180ms; pointer-events: none; }
+.carte-jeu:hover .survol, .carte-jeu:focus-visible .survol { opacity: 1; }
+.lecture { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); }
+.lecture svg { width: 26px; height: 26px; stroke-width: 2.4; }
+.legende { display: flex; flex-direction: column; padding: 0 2px; }
+.legende b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- Découvrir ---------------------------------------------------------- */
+.puces-filtre { display: flex; gap: 8px; flex-wrap: wrap; }
+.puce-filtre { padding: 8px 15px; border-radius: 999px; border: 1px solid var(--bord-fort); background: var(--surface); color: var(--texte-2); font-weight: 600; cursor: pointer; }
+.puce-filtre[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 18%, var(--surface-pleine)); border-color: var(--accent); color: var(--texte); }
+.grille-fiches { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.fiche-jeu { display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; background: var(--surface); border: 1px solid var(--bord); transition: border-color 160ms, transform 160ms var(--courbe); }
+[data-effets="performance"] .fiche-jeu { background: var(--surface-pleine); }
+.fiche-jeu:hover { border-color: var(--bord-fort); transform: translateY(-2px); }
+[data-effets="performance"] .fiche-jeu:hover { transform: none; }
+.fiche-jeu .jaquette { aspect-ratio: 16 / 8; border-radius: 0; }
+.fiche-jeu .titre-jaquette { display: none; }
+.fiche-corps { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 16px; flex: 1; align-items: flex-start; }
+.fiche-corps b { font-size: 16px; }
+.resume-note { margin: 2px 0 8px; line-height: 1.45; flex: 1; }
+.fiche-jeu.grise .jaquette { filter: grayscale(.85) brightness(.75); }
+.installation { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+
+/* ---- Vide --------------------------------------------------------------- */
+.vide { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 50px 20px; }
+.vide .sous { margin: 0 auto; }
+.halo-vide { width: 92px; height: 92px; border-radius: 28px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.halo-vide svg { width: 44px; height: 44px; }
+
+@media (max-width: 760px) {
+  .page-lance .recherche { width: 100%; }
+  .tete { flex-wrap: wrap; }
+  .banniere h2 { font-size: 30px; }
+}
+.banniere[style*="--art"] .banniere-art { display: none; }
+.carte-jeu.a-installer .jaquette { filter: grayscale(.7) brightness(.7); }
+.carte-jeu.a-installer:hover .jaquette { filter: none; }

@@ -1,0 +1,59 @@
+#!/bin/sh
+# Le premier écran : la nouvelle interface, et l'ancienne en filet.
+#
+# Lancé par `grenos-premier-x`, à l'intérieur du serveur X éphémère.
+#
+# grenos-ui (Rust/Tauri) est l'assistant qu'on montre. Mais c'est le SEUL
+# programme dont une panne empêche d'entrer dans la machine, et un moteur web
+# a des façons de tomber qu'un programme GTK n'a pas : une carte graphique qui
+# laisse une fenêtre blanche, une bibliothèque absente sur une machine mise à
+# jour. Deux filets, donc :
+#
+#   1. grenos-ui doit dire qu'il est affiché (/run/grenos/premier-ui-pret) en
+#      moins de deux minutes, sinon on l'arrête ;
+#   2. s'il se termine sans que la machine ait de nom (/etc/grenos/identite),
+#      l'assistant Python prend le relais.
+#
+# Dans les deux cas, la personne finit devant un assistant qui marche.
+
+set -u
+
+PRET=/run/grenos/premier-ui-pret
+
+dire() {
+    echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
+}
+
+if [ -x /usr/bin/grenos-ui ]; then
+    rm -f "$PRET"
+    mkdir -p /run/grenos /run/user/0
+    chmod 0700 /run/user/0
+    # Root sous systemd n'a ni dossier d'exécution ni bus d'accessibilité :
+    # WebKit attendrait l'un et chercherait l'autre.
+    export XDG_RUNTIME_DIR=/run/user/0 HOME=/root NO_AT_BRIDGE=1
+
+    dire "premier ecran : le programme demarre (grenos-ui)"
+    /usr/bin/grenos-ui premier &
+    UI=$!
+
+    ATTENTE=0
+    while kill -0 "$UI" 2>/dev/null && [ ! -e "$PRET" ] && [ "$ATTENTE" -lt 120 ]; do
+        sleep 1
+        ATTENTE=$((ATTENTE + 1))
+    done
+
+    if [ -e "$PRET" ]; then
+        dire "premier : grenos-ui affiche en ${ATTENTE}s"
+        wait "$UI"
+    else
+        dire "premier : grenos-ui ne s est pas affiche en ${ATTENTE}s — secours python"
+        kill "$UI" 2>/dev/null
+        sleep 1
+        kill -9 "$UI" 2>/dev/null
+    fi
+
+    [ -e /etc/grenos/identite ] && exit 0
+    dire "premier : grenos-ui s est termine sans nommer la machine — secours python"
+fi
+
+exec /usr/bin/grenos-premier

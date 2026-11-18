@@ -1,0 +1,31 @@
+#!/bin/sh
+# Une session qui ne s'ouvre pas ne dit rien : la sonde parle à sa place.
+#
+# Le 17 novembre, le second démarrage UEFI de la machine d'essai est resté sur
+# un écran noir — gestionnaire de connexion « actif », aucune session, et
+# aucune ligne pour dire pourquoi. `grenos-surveiller-demarrage` ne raconte que
+# le démarrage PRÉCÉDENT : trop tard pour un essai.
+#
+# Deux minutes et demie après lightdm, si aucune barre ne tourne, on écrit sur
+# le port série (et dans le journal) la fin du journal de lightdm, les erreurs
+# du serveur X et celles de la session. Ne fait rien quand tout va bien. Rend
+# toujours 0 : une sonde ne doit jamais faire échouer un démarrage.
+
+set -u
+dire() { echo "grenos: session : $1" > /dev/ttyS0 2>/dev/null || true; echo "grenos: session : $1"; }
+
+sleep 150
+if pgrep -f grenos-shell >/dev/null 2>&1; then
+    exit 0
+fi
+dire "AUCUNE session apres 150 s — lightdm $(systemctl is-active lightdm 2>/dev/null)"
+for f in /var/log/lightdm/lightdm.log /var/log/lightdm/x-0.log /var/log/Xorg.0.log; do
+    [ -r "$f" ] || continue
+    grep -aE "\(EE\)|rror|fail|Fail|denied|Session pid|Autologin|exited" "$f" 2>/dev/null \
+        | tail -n 12 | while IFS= read -r l; do dire "$(basename "$f"): $l"; done
+done
+for h in /home/*; do
+    [ -r "$h/.xsession-errors" ] || continue
+    tail -n 12 "$h/.xsession-errors" | while IFS= read -r l; do dire "$(basename "$h") xsession: $l"; done
+done
+exit 0

@@ -14,4 +14,6 @@ command -v Xorg >/dev/null 2>&1 || exit 0
 
 # `-keeptty` : sans terminal de contrôle — c'est le cas sous systemd — Xorg
 # refuse de démarrer sans cette option.
-exec xinit /usr/bin/grenos-premier -- /usr/bin/Xorg :0 vt7 -keeptty -nolisten tcp -novtswitch
+# Le lanceur essaie grenos-ui, et rebascule sur l'assistant Python s'il ne
+# s'affiche pas ou s'arrête sans avoir nommé la machine.
+exec xinit /usr/bin/grenos-premier-lanceur -- /usr/bin/Xorg :0 vt7 -keeptty -nolisten tcp -novtswitch

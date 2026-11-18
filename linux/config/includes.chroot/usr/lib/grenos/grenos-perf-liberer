@@ -1,0 +1,28 @@
+#!/bin/sh
+# « Libérer la RAM » dans grenPerf, lancé en root (sudo -n ou pkexec).
+#
+# Ce que ça fait, et pas plus :
+#   1. sync, puis rendre le cache de pages, d'inodes et d'entrées (drop_caches=3) ;
+#   2. compacter la mémoire : de grands blocs contigus, que les jeux et les
+#      pilotes graphiques demandent et qu'une mémoire morcelée refuse ;
+#   3. si l'échange est utilisé et que la mémoire libre peut l'accueillir,
+#      le rapatrier en mémoire vive (swapoff/swapon), borné à deux minutes.
+#
+# Rien ici ne ferme une application ni ne touche aux réglages. Rend toujours 0
+# quand le geste a été tenté : la fenêtre mesure elle-même ce qui a changé.
+
+set -u
+sync
+echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
+
+DISPO=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+ECHANGE=$(awk '/^SwapTotal:/ {t=$2} /^SwapFree:/ {f=$2} END {print t-f}' /proc/meminfo)
+case "$DISPO" in ''|*[!0-9]*) DISPO=0 ;; esac
+case "$ECHANGE" in ''|*[!0-9]*) ECHANGE=0 ;; esac
+# On ne rapatrie que si la marge est large : le double de ce qui est échangé.
+if [ "$ECHANGE" -gt 0 ] && [ "$DISPO" -gt $((ECHANGE * 2)) ]; then
+    timeout 120 swapoff -a 2>/dev/null && swapon -a 2>/dev/null || swapon -a 2>/dev/null || true
+fi
+echo "grenos: perf : memoire liberee (echange ${ECHANGE} ko)" > /dev/ttyS0 2>/dev/null || true
+exit 0

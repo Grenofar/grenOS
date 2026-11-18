@@ -1,0 +1,14 @@
+# Dire pourquoi la session ne s'ouvre pas, quand elle ne s'ouvre pas.
+# Voir /usr/lib/grenos/grenos-sonde-session.
+
+[Unit]
+Description=grenOS : dire pourquoi la session ne s ouvre pas
+After=lightdm.service display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-sonde-session
+TimeoutStartSec=240
+
+[Install]
+WantedBy=graphical.target

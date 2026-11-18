@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "grenOS",
+  "version": "0.1.0",
+  "identifier": "fr.grenos.ui",
+  "build": {
+    "frontendDist": "web"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.cloudflare.steamstatic.com https://dl.flathub.org https://cmsassets.rgpub.io; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["icons/icon.png", "icons/icon.ico"]
+  }
+}

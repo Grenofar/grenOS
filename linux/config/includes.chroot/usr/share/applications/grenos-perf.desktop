@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=grenPerf
-Comment=Ce qui tourne en arrière-plan, et ce que ça coûte
+Comment=Mémoire, processeur, processus et mode jeu
 Exec=grenos-perf
 Icon=grenos-perf
 Terminal=false

@@ -294,7 +294,7 @@ petites=""
 for nom in grenos grenplace grenos-fichiers grenos-taches grenos-jeux \
            grenos-son grenos-son-muet grenos-reseau-cable grenos-reseau-aucun \
            grenos-parametres grenos-maj grenos-installer grenos-theme \
-           grenos-hub grenos-perf grenos-secours; do
+           grenos-hub grenos-perf grenos-secours grenlaunch; do
     if [ ! -f "/usr/share/icons/hicolor/24x24/apps/$nom.png" ]; then
         petites="$petites $nom"
     fi
@@ -950,6 +950,14 @@ print("grenos: la mise a jour au demarrage lance : %s"
 print("grenos: le bouton telecharge : %s"
       % " ".join(maj.COMMANDE_TELECHARGER))
 
+# LE MODE AUTOMATIQUE N'INSTALLE PLUS RIEN A CHAUD, ET C'EST CE QU'ON JUGE.
+#
+# Ce controle exigeait autrefois que le service lance lui-meme
+# `apt-get full-upgrade` : c'etait la meme commande que l'avant-bureau, mais
+# PENDANT la session — exactement l'ecran noir du 1er octobre. Le service
+# lance desormais `grenos-maj-auto`, qui telecharge et arme
+# `grenos-maj-demarrage` ; seul ce dernier pose les paquets, avant le bureau.
+# On refuse donc toute ligne qui installerait a chaud, et on exige l'armement.
 service = "/etc/systemd/system/grenos-maj-auto.service"
 try:
     texte = open(service, encoding="utf-8").read()
@@ -957,20 +965,24 @@ except OSError:
     print("grenos: le service de mise a jour automatique est absent", file=sys.stderr)
     raise SystemExit(1)
 
-ligne = [l for l in texte.split("\n")
-         if l.startswith("ExecStart=") and "full-upgrade" in l]
-if not ligne:
-    print("grenos: le service n'a aucune ligne full-upgrade", file=sys.stderr)
+lignes = [l for l in texte.splitlines() if l.startswith("ExecStart")]
+if any("full-upgrade" in l and " -d " not in l + " " for l in lignes):
+    print("grenos: le service automatique installe pendant la session :", file=sys.stderr)
+    for l in lignes:
+        print("grenos:   %s" % l, file=sys.stderr)
     raise SystemExit(1)
-
-trouve = ligne[0].split("apt-get", 1)[1].split()
-if trouve != attendu:
-    print("grenos: le service et le bouton ne lancent pas la meme chose",
-          file=sys.stderr)
-    print("grenos:   bouton  : %s" % " ".join(attendu), file=sys.stderr)
-    print("grenos:   service : %s" % " ".join(trouve), file=sys.stderr)
+if not any("/usr/lib/grenos/grenos-maj-auto" in l for l in lignes):
+    print("grenos: le service automatique ne lance pas grenos-maj-auto", file=sys.stderr)
     raise SystemExit(1)
-print("grenos: le service automatique lance exactement la meme commande")
+try:
+    auto = open("/usr/lib/grenos/grenos-maj-auto", encoding="utf-8").read()
+except OSError:
+    print("grenos: /usr/lib/grenos/grenos-maj-auto est absent", file=sys.stderr)
+    raise SystemExit(1)
+if "systemctl enable grenos-maj-demarrage.service" not in auto:
+    print("grenos: grenos-maj-auto n arme pas l installation au redemarrage", file=sys.stderr)
+    raise SystemExit(1)
+print("grenos: le mode automatique telecharge et arme le redemarrage, sans rien poser a chaud")
 
 # ET LE TROISIEME ENDROIT, QUE CE GARDE NE REGARDAIT PAS.
 #
@@ -1167,7 +1179,10 @@ for chemin in sorted(glob.glob("/usr/bin/grenos-*") + ["/usr/bin/grenplace"]):
                 continue
             fichier.seek(0)
             arbre = ast.parse(fichier.read(), chemin)
-    except (OSError, SyntaxError):
+    # ValueError couvre UnicodeDecodeError : `grenos-ui` est un BINAIRE (Rust),
+    # et le lire comme du texte levait une exception que rien n'attrapait —
+    # la construction entiere serait morte sur un fichier qui n'a rien a voir.
+    except (OSError, SyntaxError, ValueError):
         continue
     for noeud in ast.walk(arbre):
         if not isinstance(noeud, ast.Call):

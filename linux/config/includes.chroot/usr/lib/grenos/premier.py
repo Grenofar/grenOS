@@ -41,36 +41,23 @@ PARCOURS = (RAPIDE, PERSONNALISE, DEV)
 # L'ordre de ce tableau EST l'ordre des écrans. Un seul endroit décide, donc
 # il n'y a rien qui puisse diverger — pas de liste d'ordre à côté d'une liste
 # d'écrans, qui finiraient par ne plus s'accorder.
-ECRANS = (
-    # — Le tronc commun, avant même le choix du parcours. —
-    ("bienvenue", "Welcome to grenOS", PARCOURS),
-    ("langue", "Langue et région", PARCOURS),
-    ("clavier", "Clavier", PARCOURS),
-    ("compte", "Votre compte", PARCOURS),
-    ("parcours", "Comment voulez-vous continuer ?", PARCOURS),
+def _donnees():
+    """Le fichier partagé avec grenos-ui : une seule source pour les deux assistants.
 
-    # — Ce que le parcours rapide saute. —
-    ("reseau", "Connexion à Internet", (PERSONNALISE, DEV)),
-    ("apparence", "Apparence", (PERSONNALISE, DEV)),
-    ("usage", "À quoi va servir cet ordinateur ?", (PERSONNALISE, DEV)),
-    ("confidentialite", "Vos données vous appartiennent", (PERSONNALISE, DEV)),
-    ("securite", "Protégeons votre ordinateur", (PERSONNALISE, DEV)),
-    ("majs", "Mises à jour", (PERSONNALISE, DEV)),
-    ("applications", "Applications proposées", (PERSONNALISE, DEV)),
-    ("sauvegardes", "Sauvegardes", (PERSONNALISE, DEV)),
-    ("optimisation", "Optimisation automatique", (PERSONNALISE, DEV)),
+    Chemin relatif à ce module (usr/lib/grenos → usr/share/grenos) : il marche
+    sur la machine comme dans le dépôt, où les essais l'importent.
+    """
+    import json
+    chemin = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "..", "..", "share", "grenos", "premier.json")
+    with open(chemin, encoding="utf-8") as fichier:
+        return json.load(fichier)
 
-    # — Ce que seul le parcours Dev montre. —
-    ("partitionnement", "Partitionnement et chiffrement", (DEV,)),
-    ("demarrage", "Secure Boot et démarrage", (DEV,)),
-    ("systeme", "Swap, ordonnanceur et services", (DEV,)),
-    ("pare-feu", "Réseau et pare-feu", (DEV,)),
-    ("journaux", "Télémétrie et journaux", (DEV,)),
-    ("bac-a-sable", "Bac à sable et paramètres du noyau", (DEV,)),
 
-    # — La fin, pour tout le monde. —
-    ("final", "grenOS est prêt", PARCOURS),
-)
+DONNEES = _donnees()
+
+ECRANS = tuple((e["cle"], e["titre"], tuple(e["parcours"]))
+               for e in DONNEES["ecrans"])
 
 # Les écrans dont on ne peut pas sortir sans réponse. Tous les autres ont un
 # défaut sensé et se passent d'un clic : *un assistant qui bloque sur une
@@ -123,22 +110,8 @@ DEFAUTS = {
 # s'installe par apt ou par Flatpak, et son adresse est vérifiée à la source à
 # chaque construction. Deux listes de paquets finiraient par diverger, et
 # c'est alors celle qui ne sert à rien qu'on croirait.
-USAGES = (
-    ("bureautique", "Bureautique et Internet",
-     "Écrire, naviguer, regarder des vidéos. Rien de plus n'est installé.",
-     ()),
-    ("developpement", "Développement",
-     "Visual Studio Code, Git, Python et Node. GrenAI n'est pas encore "
-     "écrite, donc elle n'est pas proposée.",
-     ("vscode", "git", "python", "nodejs")),
-    ("jeu", "Jeux",
-     "Steam, et Heroic pour les jeux Epic. GameMode est déjà là et donne la "
-     "priorité au jeu qui tourne.",
-     ("steam", "heroic")),
-    ("montage", "Montage photo, vidéo et son",
-     "Kdenlive, GIMP et Audacity.",
-     ("kdenlive", "gimp", "audacity")),
-)
+USAGES = tuple((u["cle"], u["titre"], u["note"], tuple(u["paquets"]))
+               for u in DONNEES["usages"])
 
 
 def paquets_pour(usage):

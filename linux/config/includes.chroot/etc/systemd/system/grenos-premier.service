@@ -19,7 +19,12 @@ ConditionPathExists=!/etc/grenos/identite
 [Service]
 Type=oneshot
 ExecStart=-/usr/bin/grenos-premier-x
-TimeoutStartSec=300
+# Une heure, et non cinq minutes : l'assistant a quatorze écrans, et une
+# personne qui lit ce qu'on lui demande dépasse facilement cinq minutes. Au bout
+# de 300 s, systemd tuait l'assistant au milieu d'une réponse et ouvrait la
+# session sous le nom par défaut. Un serveur X qui refuse de démarrer, lui,
+# rend la main en quelques secondes : ce délai ne retient donc personne.
+TimeoutStartSec=3600
 StandardOutput=journal
 StandardError=journal
 

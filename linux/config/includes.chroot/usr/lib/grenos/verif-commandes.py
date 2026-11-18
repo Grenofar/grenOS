@@ -92,7 +92,15 @@ NOM = re.compile(r"^[a-z][a-z0-9._+-]*$")
 
 def commandes_de(chemin):
     """Les commandes extérieures qu'un fichier lance."""
+    # UN PROGRAMME COMPILÉ N'EST PAS UN SCRIPT. `grenos-ui` est un binaire
+    # Rust : le lire comme du texte faisait prendre au garde cent mots de ses
+    # chaînes internes (« the », « window », « strerror_r »…) pour des
+    # commandes appelées, et la construction mourait. Ses appels réels sont
+    # dans son code source (linux/ui/src), pas dans ses octets.
     try:
+        with io.open(chemin, "rb") as fichier:
+            if fichier.read(4) == b"\x7fELF":
+                return set()
         contenu = io.open(chemin, encoding="utf-8", errors="replace").read()
     except OSError:
         return set()

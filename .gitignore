@@ -61,3 +61,8 @@ linux/config/packages.chroot/
 # Le site public vit dans son PROPRE depot (Grenofar/grenos-web-download),
 # clone ici par commodite. Il ne doit jamais partir dans celui-ci.
 grenos web download/
+
+# grenos-ui : le binaire est compile par la CI et depose dans l arborescence
+# de l image juste avant la construction ; le schema est regenere par Tauri.
+linux/config/includes.chroot/usr/bin/grenos-ui
+linux/ui/gen/
