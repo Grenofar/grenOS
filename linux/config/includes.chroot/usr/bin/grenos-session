@@ -151,6 +151,20 @@ if [ -d /usr/share/icons/Breeze_Light/cursors ]; then
     printf 'Xcursor.theme: Breeze_Light\nXcursor.size: 24\n' | xrdb -merge 2>/dev/null || true
 fi
 
+# LE SON DANS UNE MACHINE VIRTUELLE (19 novembre). VirtualBox et QEMU
+# servent la carte son par a-coups : avec les petits tampons que PipeWire
+# prend par defaut (quelques ms), le son hache, claque, « fait bip bip ».
+# Sur une machine virtuelle seulement, on impose des tampons de 1024
+# echantillons (~21 ms a 48 kHz) : inaudible comme latence, et le flux tient.
+# Sur un vrai PC on ne touche a rien — la latence courte y est un merite.
+(
+    virt=$(systemd-detect-virt 2>/dev/null || echo none)
+    if [ "$virt" != none ] && command -v pw-metadata >/dev/null 2>&1; then
+        sleep 3   # que PipeWire soit levé (socket-activé par la session)
+        pw-metadata -n settings 0 clock.min-quantum 1024 >/dev/null 2>&1             && grenos-dire "son : machine virtuelle ($virt), tampons de 1024 echantillons"
+    fi
+) &
+
 # L'écran reste allumé, et le pointeur est une flèche dès la première seconde.
 xset s off -dpms s noblank 2>/dev/null || true
 xsetroot -cursor_name left_ptr 2>/dev/null || true
@@ -352,7 +366,19 @@ fi
     # trouvera aura ete creuse par la machine.
     ESSAI=/usr/share/grenos/essai-son.wav
     [ -r "$ESSAI" ] || ESSAI=/usr/share/sounds/alsa/Front_Center.wav
-    if [ -r "$ESSAI" ] && command -v paplay >/dev/null 2>&1; then
+
+    # LE BIP N'EST PLUS POUR TOUT LE MONDE (19 novembre). Grenofar : « le son
+    # fonctionne pas, ca fait bip bip ». Ce son d'essai se jouait a CHAQUE
+    # ouverture de session, sur toutes les machines — chez lui, et demain chez
+    # ses clients. Il ne sert qu'a la machine d'integration : on le reserve a
+    # celle que la CI marque elle-meme (SMBIOS « grenos-essai-charge », ou le
+    # fichier pose dans son disque). Ailleurs, la session s'ouvre en silence.
+    MARQUE_CI=""
+    [ -e /etc/grenos/essai-charge ] && MARQUE_CI=1
+    grep -qs grenos-essai-charge /sys/class/dmi/id/product_version && MARQUE_CI=1
+    if [ -z "$MARQUE_CI" ]; then
+        grenos-dire "son : pas d essai sonore ici (reserve a la machine d integration)"
+    elif [ -r "$ESSAI" ] && command -v paplay >/dev/null 2>&1; then
         if paplay "$ESSAI" 2>/dev/null; then
             grenos-dire "son : un son a ete joue par PipeWire"
         else
