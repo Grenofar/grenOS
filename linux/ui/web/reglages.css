@@ -1,12 +1,17 @@
 /* Réglages. Le volet reprend celui de GrenPlace (.gp-volet). */
 body[data-page="reglages"] { overflow: hidden; }
 .page-reglages { position: relative; z-index: 1; height: 100vh; box-sizing: border-box; padding: 18px; display: grid; grid-template-columns: 220px 1fr; gap: 18px; }
-.rg-volet button { justify-content: flex-start; gap: 10px; }
+/* Le volet des Réglages : l'icône PUIS l'intitulé, collés à gauche. La
+   feuille de GrenPlace, chargée après, imposait « space-between » et
+   envoyait chaque intitulé à droite (vu le 19 novembre). */
+.gp-volet.rg-volet button { justify-content: flex-start; }
+.rg-volet { padding-top: 14px; }
 .rg-icone svg { width: 17px; height: 17px; display: block; }
 .rg-contenu { min-height: 0; overflow: auto; padding-right: 4px; }
 .rg-page { display: flex; flex-direction: column; gap: 14px; max-width: 760px; }
 .rg-page[hidden] { display: none; }
-.rg-titre h2 { font-size: 24px; }
+.rg-titre { padding-top: 6px; }
+.rg-titre h2 { font-size: 26px; letter-spacing: -.03em; }
 .rg-titre p { margin: 4px 0 0; }
 .rg-carte { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
 .rg-carte > .bouton { align-self: flex-start; }

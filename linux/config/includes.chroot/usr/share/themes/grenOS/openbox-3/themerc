@@ -21,15 +21,15 @@ menu.overlap.y: 0
 
 ! La fenêtre au premier plan : sa barre est un cran plus claire, et ses
 ! glyphes plus nets. C'est ce qui dit laquelle reçoit le clavier.
-window.active.border.color: #131b2e
+window.active.border.color: #0d1018
 window.active.title.bg: flat solid
-window.active.title.bg.color: #131b2e
+window.active.title.bg.color: #0d1018
 window.active.label.bg: parentrelative
-window.active.label.text.color: #eef2fa
+window.active.label.text.color: #e7e9f1
 window.active.handle.bg: flat solid
-window.active.handle.bg.color: #131b2e
+window.active.handle.bg.color: #0d1018
 window.active.grip.bg: flat solid
-window.active.grip.bg.color: #131b2e
+window.active.grip.bg.color: #0d1018
 
 ! LES BOUTONS DE WINDOWS (19 novembre). Les trois ronds de couleur du
 ! 17 novembre faisaient jouet (« fais comme sur Windows, fais trop cheap ») :
@@ -37,23 +37,23 @@ window.active.grip.bg.color: #131b2e
 ! au survol un FOND — gris clair pour Réduire et Agrandir, rouge vif pour
 ! Fermer, glyphe blanc. C'est le geste que tout le monde a dans la main.
 window.active.button.unpressed.bg: parentrelative
-window.active.button.unpressed.image.color: #dbe3f0
+window.active.button.unpressed.image.color: #d6dae6
 window.active.button.hover.bg: flat solid
-window.active.button.hover.bg.color: #24304a
+window.active.button.hover.bg.color: #1c2131
 window.active.button.hover.image.color: #ffffff
 window.active.button.pressed.bg: flat solid
-window.active.button.pressed.bg.color: #1c2740
-window.active.button.pressed.image.color: #c9d6ee
+window.active.button.pressed.bg.color: #151926
+window.active.button.pressed.image.color: #b9bfd0
 window.active.button.disabled.bg: parentrelative
 window.active.button.disabled.image.color: #46506b
 window.active.button.toggled.unpressed.bg: parentrelative
-window.active.button.toggled.unpressed.image.color: #dbe3f0
+window.active.button.toggled.unpressed.image.color: #d6dae6
 window.active.button.toggled.hover.bg: flat solid
-window.active.button.toggled.hover.bg.color: #24304a
+window.active.button.toggled.hover.bg.color: #1c2131
 window.active.button.toggled.hover.image.color: #ffffff
 window.active.button.toggled.pressed.bg: flat solid
-window.active.button.toggled.pressed.bg.color: #1c2740
-window.active.button.toggled.pressed.image.color: #c9d6ee
+window.active.button.toggled.pressed.bg.color: #151926
+window.active.button.toggled.pressed.image.color: #b9bfd0
 
 ! Fermer : rouge au survol, plus sombre à l'appui — le seul geste qu'on ne
 ! rattrape pas se signale avant le clic.
@@ -66,30 +66,30 @@ window.active.button.close.pressed.image.color: #ffffff
 
 ! Les autres fenêtres, en retrait : glyphes gris, qui prennent leur fond au
 ! survol pour qu'on puisse fermer sans d'abord cliquer la fenêtre.
-window.inactive.border.color: #0f1524
+window.inactive.border.color: #0a0c12
 window.inactive.title.bg: flat solid
-window.inactive.title.bg.color: #0f1524
+window.inactive.title.bg.color: #0a0c12
 window.inactive.label.bg: parentrelative
-window.inactive.label.text.color: #8b98b0
+window.inactive.label.text.color: #7d8499
 window.inactive.handle.bg: flat solid
-window.inactive.handle.bg.color: #0f1524
+window.inactive.handle.bg.color: #0a0c12
 window.inactive.grip.bg: flat solid
-window.inactive.grip.bg.color: #0f1524
+window.inactive.grip.bg.color: #0a0c12
 window.inactive.button.unpressed.bg: parentrelative
 window.inactive.button.unpressed.image.color: #6b7790
 window.inactive.button.hover.bg: flat solid
-window.inactive.button.hover.bg.color: #1f2a42
-window.inactive.button.hover.image.color: #eef2fa
+window.inactive.button.hover.bg.color: #191d2a
+window.inactive.button.hover.image.color: #e7e9f1
 window.inactive.button.pressed.bg: flat solid
-window.inactive.button.pressed.bg.color: #1a2338
-window.inactive.button.pressed.image.color: #c9d6ee
+window.inactive.button.pressed.bg.color: #141824
+window.inactive.button.pressed.image.color: #b9bfd0
 window.inactive.button.disabled.bg: parentrelative
 window.inactive.button.disabled.image.color: #2a3247
 window.inactive.button.toggled.unpressed.bg: parentrelative
 window.inactive.button.toggled.unpressed.image.color: #6b7790
 window.inactive.button.toggled.hover.bg: flat solid
-window.inactive.button.toggled.hover.bg.color: #1f2a42
-window.inactive.button.toggled.hover.image.color: #eef2fa
+window.inactive.button.toggled.hover.bg.color: #191d2a
+window.inactive.button.toggled.hover.image.color: #e7e9f1
 window.inactive.button.close.hover.bg: flat solid
 window.inactive.button.close.hover.bg.color: #e81123
 window.inactive.button.close.hover.image.color: #ffffff
@@ -97,34 +97,35 @@ window.inactive.button.close.hover.image.color: #ffffff
 ! Le titre à gauche, comme dans toutes les fenêtres qu'on connaît.
 window.label.text.justify: left
 
-! Le menu du gestionnaire de fenêtres, et la liste d'Alt+Tab.
-menu.border.color: #22304d
+! Le menu du gestionnaire de fenêtres, et la liste d'Alt+Tab. Couleurs de la
+! deuxième édition (19 novembre) : celles du portfolio, comme grenos-ui.
+menu.border.color: #1f2433
 menu.border.width: 1
 menu.title.bg: flat solid
-menu.title.bg.color: #141b2d
-menu.title.text.color: #eef2fa
+menu.title.bg.color: #0f121b
+menu.title.text.color: #e7e9f1
 menu.title.text.justify: left
 menu.items.bg: flat solid
-menu.items.bg.color: #0b101c
-menu.items.text.color: #eef2fa
+menu.items.bg.color: #0a0c12
+menu.items.text.color: #e7e9f1
 menu.items.disabled.text.color: #5b6474
 menu.items.active.bg: flat solid
-menu.items.active.bg.color: #3b82f6
+menu.items.active.bg.color: #7c5cff
 menu.items.active.text.color: #ffffff
-menu.separator.color: #22304d
+menu.separator.color: #1f2433
 menu.separator.width: 1
 menu.separator.padding.width: 6
 menu.separator.padding.height: 3
 
 ! La bulle qui montre où va la fenêtre pendant un déplacement.
 osd.border.width: 1
-osd.border.color: #22304d
+osd.border.color: #1f2433
 osd.bg: flat solid
-osd.bg.color: #0b101c
+osd.bg.color: #0a0c12
 osd.label.bg: flat solid
-osd.label.bg.color: #0b101c
-osd.label.text.color: #eef2fa
+osd.label.bg.color: #0a0c12
+osd.label.text.color: #e7e9f1
 osd.hilight.bg: flat solid
-osd.hilight.bg.color: #3b82f6
+osd.hilight.bg.color: #7c5cff
 osd.unhilight.bg: flat solid
-osd.unhilight.bg.color: #1c2740
+osd.unhilight.bg.color: #151926

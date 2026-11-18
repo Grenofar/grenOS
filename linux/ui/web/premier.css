@@ -165,3 +165,7 @@
 
 /* La marque en vecteur : elle remplit le carré sans le toucher. */
 .logo svg { width: 64%; height: 64%; }
+
+/* Le choix qui fait avancer tout seul : un bref éclat avant l'écran suivant. */
+@keyframes valide { 50% { transform: scale(.985); } }
+[data-effets="complets"] .tuile.valide, [data-effets="equilibres"] .tuile.valide { animation: valide 240ms var(--courbe); }

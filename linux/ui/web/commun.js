@@ -102,7 +102,7 @@ function themeReel(theme) {
   return h >= 7 && h < 19 ? "jour" : "nuit";
 }
 
-function habiller({ theme = "auto", accent = "bleu", effets = "equilibres" } = {}) {
+function habiller({ theme = "auto", accent = "violet", effets = "equilibres" } = {}) {
   const r = document.documentElement;
   r.dataset.theme = themeReel(theme);
   r.dataset.accent = accent;

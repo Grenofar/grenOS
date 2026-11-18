@@ -13,3 +13,6 @@ linux/**/*.png binary
 linux/**/*.ico binary
 linux/**/*.jpg binary
 linux/**/*.wav binary
+linux/**/*.ttf binary
+linux/**/*.otf binary
+linux/**/*.woff2 binary

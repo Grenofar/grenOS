@@ -64,10 +64,17 @@ const STYLE: &str = r#"
 #panneau button:hover { background-color: @survol; border-color: @bord; }
 #bouton-menu { font-weight: 700; padding-left: 14px; padding-right: 14px; }
 #bouton-menu:checked {
-    background-image: linear-gradient(to bottom, @accent-clair, @accent);
+    background-image: linear-gradient(135deg, @accent, @second);
     color: #ffffff;
-    border-color: @accent-sombre;
+    border-color: transparent;
 }
+#zone-etat {
+    background-color: alpha(@texte, 0.045);
+    border: 1px solid alpha(@texte, 0.07);
+    border-radius: 10px;
+    padding: 0 2px;
+}
+#zone-etat button { padding: 2px 7px; margin: 3px 0; border-radius: 8px; }
 .trait {
     background-color: transparent;
     border-radius: 999px;
@@ -82,14 +89,16 @@ const STYLE: &str = r#"
 /* L'horloge sur deux lignes, l'heure au-dessus de la date, comme Windows. */
 #horloge { color: @texte; font-size: 12px; padding: 0 14px; }
 #menu { background-color: @fond; border: 1px solid @bord-clair; border-radius: 14px; }
+#menu entry { border-radius: 10px; }
 #recherche-menu { margin: 16px 16px 6px; }
 #pied-menu { background-color: @fond-haut; border-top: 1px solid @bord; padding: 12px 16px; }
-.titre-section { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: @texte-faible; padding: 10px 18px 4px; }
+/* L'étiquette de section de la deuxième édition : petite, espacée, en accent. */
+.titre-section { font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; color: @accent-clair; padding: 12px 18px 4px; }
 .epingle {
     background-color: transparent; background-image: none;
     border: 1px solid transparent; border-radius: 12px; padding: 12px 6px; margin: 3px;
 }
-.epingle:hover { background-color: @survol; border-color: @bord; }
+.epingle:hover { background-color: @survol; border-color: @bord-clair; }
 .epingle label { font-size: 12px; }
 .entree {
     background-color: transparent; background-image: none;
@@ -300,10 +309,14 @@ impl Barre {
         let image_reseau = gtk::Image::new();
         bouton_reseau.add(&image_reseau);
         bouton_reseau.connect_clicked(|_| lancer("grenos-connexions", false));
-        // `pack_end` se lit à l'envers : de gauche à droite, réseau, son,
-        // horloge — l'ordre de la barre de Windows.
-        boite.pack_end(&bouton_son, false, false, 0);
-        boite.pack_end(&bouton_reseau, false, false, 0);
+        // LA ZONE D'ÉTAT (19 novembre) : batterie, réseau et son dans UN
+        // groupe, sur un fond commun, comme Windows 11 — trois boutons
+        // espacés au hasard faisaient « pas fini » (capture de Grenofar).
+        // Chacun garde son geste. `pack_start` : l'ordre se lit de gauche à
+        // droite, batterie, réseau, son.
+        let zone_etat = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        zone_etat.set_widget_name("zone-etat");
+        zone_etat.set_valign(gtk::Align::Center);
 
         // La batterie, à gauche du réseau comme sur Windows. Cachée tant
         // qu'on n'a pas lu qu'elle existe : un fixe n'en montre jamais.
@@ -317,7 +330,10 @@ impl Barre {
         bouton_batterie.set_no_show_all(true);
         contenu_batterie.show_all();
         bouton_batterie.connect_clicked(|_| lancer("grenos-hub", false));
-        boite.pack_end(&bouton_batterie, false, false, 0);
+        zone_etat.pack_start(&bouton_batterie, false, false, 0);
+        zone_etat.pack_start(&bouton_reseau, false, false, 0);
+        zone_etat.pack_start(&bouton_son, false, false, 0);
+        boite.pack_end(&zone_etat, false, false, 4);
 
         let bouton_maj = gtk::Button::with_label("");
         bouton_maj.set_no_show_all(true);

@@ -118,7 +118,7 @@ pub fn apparence() -> Apparence {
     };
     Apparence {
         theme: lu("theme", "auto"),
-        accent: lu("accent", "bleu"),
+        accent: lu("accent", "violet"),
         effets: lu("effets", "equilibres"),
     }
 }

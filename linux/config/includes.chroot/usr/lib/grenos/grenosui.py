@@ -29,20 +29,23 @@ from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 REGLAGES = os.path.expanduser("~/.config/grenos")
 IDENTITE = "/etc/grenos/identite"
 
+# La deuxième édition (19 novembre) : les couleurs du portfolio de Grenofar
+# (grnfr.vercel.app), les mêmes que style.css de grenos-ui. La barre, le
+# menu et les panneaux natifs les lisent ici (natif/src/theme.rs).
 NUIT = {
-    "fond": "#0b101c",
-    "fond-haut": "#141b2d",
-    "fond-clair": "#1a2338",
-    "fond-creux": "#080c16",
-    "bord": "#22304d",
-    "bord-clair": "#2c3d60",
-    "texte": "#eef2fa",
-    "texte-faible": "#94a1ba",
-    "accent": "#3b82f6",
-    "accent-clair": "#60a5fa",
-    "accent-sombre": "#1d4ed8",
-    "second": "#7c4df0",
-    "survol": "#1c2740",
+    "fond": "#07080d",
+    "fond-haut": "#0f121b",
+    "fond-clair": "#151927",
+    "fond-creux": "#05060a",
+    "bord": "#1b1f2c",
+    "bord-clair": "#2a2f42",
+    "texte": "#e7e9f1",
+    "texte-faible": "#9aa1b5",
+    "accent": "#7c5cff",
+    "accent-clair": "#a796ff",
+    "accent-sombre": "#5b3fe0",
+    "second": "#22d3ee",
+    "survol": "#181c29",
     "danger": "#ef4d5e",
     "reussi": "#2bc48a",
     "ombre": "rgba(0, 0, 0, 0.45)",
@@ -312,12 +315,12 @@ menuitem:hover { background-color: @accent; color: #ffffff; }
 # valeurs que `style.css` de grenos-ui. Choisir « violet » au premier écran
 # doit se voir partout, y compris dans les fenêtres qui n'ont pas encore migré.
 ACCENTS = {
-    "bleu": ("#3b82f6", "#60a5fa", "#1d4ed8", "#7c4df0"),
-    "violet": ("#8b5cf6", "#a78bfa", "#6d28d9", "#ec4899"),
-    "vert": ("#10b981", "#34d399", "#047857", "#06b6d4"),
-    "orange": ("#f59e0b", "#fbbf24", "#b45309", "#ef4444"),
-    "rose": ("#ec4899", "#f472b6", "#be185d", "#8b5cf6"),
-    "cyan": ("#06b6d4", "#22d3ee", "#0e7490", "#3b82f6"),
+    "violet": ("#7c5cff", "#a796ff", "#5b3fe0", "#22d3ee"),
+    "bleu": ("#3b82f6", "#7cb0ff", "#1d4ed8", "#22d3ee"),
+    "vert": ("#10b981", "#4ade9f", "#047857", "#22d3ee"),
+    "orange": ("#f97316", "#fdae6b", "#c2410c", "#fbbf24"),
+    "rose": ("#ec4899", "#f58ac4", "#be185d", "#a855f7"),
+    "cyan": ("#06b6d4", "#5ad8ee", "#0e7490", "#7c5cff"),
 }
 
 

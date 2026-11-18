@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn les_palettes_se_lisent() {
         let nuit = palette_pour("nuit", "");
-        assert_eq!(nuit.get("fond").map(String::as_str), Some("#0b101c"));
+        assert_eq!(nuit.get("fond").map(String::as_str), Some("#07080d"));
         assert!(nuit.len() >= 15, "palette nuit incomplète : {nuit:?}");
         let jour = palette_pour("jour", "");
         assert_eq!(jour.get("fond").map(String::as_str), Some("#f3f6fc"));
@@ -123,8 +123,8 @@ mod tests {
     fn les_accents_s_appliquent() {
         assert_eq!(accents().len(), 6);
         let violet = palette_pour("nuit", "violet");
-        assert_eq!(violet.get("accent").map(String::as_str), Some("#8b5cf6"));
-        assert_eq!(violet.get("second").map(String::as_str), Some("#ec4899"));
+        assert_eq!(violet.get("accent").map(String::as_str), Some("#7c5cff"));
+        assert_eq!(violet.get("second").map(String::as_str), Some("#22d3ee"));
     }
 
     #[test]
