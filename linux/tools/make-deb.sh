@@ -226,6 +226,10 @@ install -m 0644 "$HERE/data/catalogue.json" "$BUILD/usr/share/grenos/catalogue.j
 install -m 0644 "$DEDANS/usr/share/grenos/premier.json" "$BUILD/usr/share/grenos/premier.json"
 # Le catalogue de GrenLaunch, avec ce que chaque jeu permet vraiment sous Linux.
 install -m 0644 "$DEDANS/usr/share/grenos/jeux.json" "$BUILD/usr/share/grenos/jeux.json"
+# grensh : l'invite et les commandes Verbe-Nom du terminal (gren, grenget
+# partent avec usr/bin/*).
+install -d "$BUILD/usr/share/grenos/grensh"
+install -m 0644 "$DEDANS/usr/share/grenos/grensh/grensh.sh" "$BUILD/usr/share/grenos/grensh/"
 # Le son d'essai : c'est lui qui bipe a l'ouverture de session et sur lequel la
 # machine d'integration compte les trous. Sans cette ligne il n'arriverait que
 # par une ISO.
@@ -304,6 +308,10 @@ install -m 0644 "$DEDANS/etc/xdg/pcmanfm/default/pcmanfm.conf" "$BUILD/usr/share
 install -m 0644 "$DEDANS/etc/xdg/libfm/libfm.conf" "$BUILD/usr/share/grenos/modeles/libfm.conf"
 install -m 0644 "$DEDANS/etc/lightdm/lightdm-gtk-greeter.conf" "$BUILD/usr/share/grenos/modeles/lightdm-gtk-greeter.conf"
 install -m 0644 "$DEDANS/etc/xdg/openbox/rc.xml" "$BUILD/usr/share/grenos/modeles/openbox-rc.xml"
+# Le terminal (xfconf) : couleurs, police, sans barres. Le fichier n'appartient
+# a aucun paquet, mais il vit dans /etc/xdg ou d'autres pourraient en poser :
+# modele, comme ses voisins, pose par appliquer-systeme.
+install -m 0644 "$DEDANS/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-terminal.xml"     "$BUILD/usr/share/grenos/modeles/xfce4-terminal.xml"
 
 # Celui-ci est bien le notre : personne d'autre ne le reclame.
 install -m 0644 "$DEDANS/etc/polkit-1/rules.d/49-grenos-administration.rules" \

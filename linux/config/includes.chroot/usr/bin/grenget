@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+"""grenget — installer des applications depuis le terminal.
+
+Le GrenPlace de la ligne de commande : le MÊME catalogue (en ligne, puis le
+dernier connu, puis celui livré avec l'image), les mêmes règles de sûreté, la
+même façon d'installer. Une application qu'on voit dans GrenPlace s'installe
+par `grenget installer <nom>`, et inversement.
+
+    grenget chercher discord
+    grenget installer discord
+    grenget enlever discord
+    grenget liste
+    grenget info obs
+    grenget maj
+    grenget proposer          → https://grenos.vercel.app/grenget
+
+LA RÈGLE DE SÛRETÉ, reprise telle quelle de GrenPlace : le catalogue vient du
+réseau, il dit QUOI installer, jamais COMMENT. La commande est construite ici,
+et un identifiant qui ne ressemble pas à un identifiant est refusé — sans
+cela, une fiche trafiquée pourrait glisser une option à apt ou à flatpak.
+
+Hors catalogue, `grenget installer` accepte aussi un identifiant Flathub
+complet (`org.exemple.App`) : c'est ce que fait déjà `flatpak install`, avec
+la même vérification de forme.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+CATALOGUE_EN_LIGNE = "https://tpqzhzuoyqpfairatdrw.supabase.co/storage/v1/object/public/catalogue/magasin.json"
+CATALOGUE_LIVRE = "/usr/share/grenos/catalogue.json"
+CACHE = os.path.expanduser("~/.cache/grenos")
+CATALOGUE_GARDE = os.path.join(CACHE, "catalogue.json")
+PAGE = "https://grenos.vercel.app/grenget"
+
+IDENTIFIANT_SAIN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+ID_FLATHUB = re.compile(r"^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){2,}$")
+
+COULEUR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+BLEU, VIOLET, GRIS, VERT, ROUGE, BLANC = "96;165;250", "167;139;250", "148;161;186", "43;196;138", "239;77;94", "238;242;250"
+
+
+def c(rvb, texte, gras=False):
+    if not COULEUR:
+        return texte
+    return f"\033[{'1;' if gras else ''}38;2;{rvb}m{texte}\033[0m"
+
+
+def ok(texte):
+    print(c(VERT, "✓ ") + texte)
+
+
+def non(texte):
+    print(c(ROUGE, "✗ ") + texte, file=sys.stderr)
+
+
+# ---- Le catalogue --------------------------------------------------------------
+def fiche_valable(a):
+    return (a.get("source") in ("flatpak", "apt")
+            and bool(IDENTIFIANT_SAIN.match(a.get("identifiant", "")))
+            and bool(a.get("slug") and a.get("nom")))
+
+
+def lire_json(chemin):
+    try:
+        with open(chemin, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def catalogue(en_ligne=True):
+    """(applications, origine). Le réseau d'abord, borné à six secondes."""
+    if en_ligne:
+        try:
+            requete = urllib.request.Request(CATALOGUE_EN_LIGNE, headers={"User-Agent": "grenget"})
+            with urllib.request.urlopen(requete, timeout=6) as r:
+                donnees = json.loads(r.read().decode("utf-8"))
+            applis = [a for a in donnees.get("applications", []) if fiche_valable(a)]
+            if applis:
+                os.makedirs(CACHE, exist_ok=True)
+                with open(CATALOGUE_GARDE, "w", encoding="utf-8") as f:
+                    json.dump(donnees, f, ensure_ascii=False)
+                return applis, "en ligne"
+        except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+            pass
+    for chemin, origine in ((CATALOGUE_GARDE, "dernier connu"), (CATALOGUE_LIVRE, "livré avec l'image")):
+        donnees = lire_json(chemin)
+        if donnees:
+            applis = [a for a in donnees.get("applications", []) if fiche_valable(a)]
+            if applis:
+                return applis, origine
+    return [], "introuvable"
+
+
+def simplifier(texte):
+    """Minuscules, sans accents ni espaces : « Écran » trouve « ecran »."""
+    table = str.maketrans("àâäéèêëîïôöùûüçœ", "aaaeeeeiioouuuco")
+    return re.sub(r"[\s_-]+", "", texte.lower().translate(table))
+
+
+def trouver(applis, nom):
+    """La fiche désignée par un slug, un nom ou un identifiant exact."""
+    s = simplifier(nom)
+    for a in applis:
+        if s in (simplifier(a["slug"]), simplifier(a["nom"]), simplifier(a["identifiant"])):
+            return a
+    return None
+
+
+def installe(a):
+    if a["source"] == "flatpak":
+        return subprocess.run(["flatpak", "info", a["identifiant"]], capture_output=True).returncode == 0
+    r = subprocess.run(["dpkg-query", "-W", "-f=${Status}", a["identifiant"]], capture_output=True, text=True)
+    return "install ok installed" in r.stdout
+
+
+def lanceur():
+    if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode == 0:
+        return ["sudo", "-n"]
+    return ["pkexec"]
+
+
+def ligne_appli(a, marque=False):
+    puce = c(VERT, "●") if marque else c(GRIS, "○")
+    print(f"  {puce} {c(BLEU, a['slug'].ljust(18), True)} {a['nom']}" + c(GRIS, f" — {a.get('description', '')[:60]}"))
+
+
+# ---- Les sous-commandes --------------------------------------------------------
+def chercher(args):
+    if not args:
+        non("Usage : grenget chercher <mot>")
+        return 2
+    mot = simplifier(" ".join(args))
+    applis, origine = catalogue()
+    trouvees = [a for a in applis if mot in simplifier(a["nom"]) or mot in simplifier(a["slug"])
+                or mot in simplifier(a.get("description", "")) or mot in simplifier(a.get("rayon", ""))]
+    if trouvees:
+        print(c(GRIS, f"{len(trouvees)} application(s) · catalogue {origine}"))
+        for a in trouvees[:40]:
+            ligne_appli(a)
+        print(c(GRIS, "\nPour installer : ") + c(BLEU, f"grenget installer {trouvees[0]['slug']}"))
+        return 0
+    print(c(GRIS, f"Rien dans le catalogue grenOS pour « {' '.join(args)} ». Sur Flathub :"))
+    r = subprocess.run(["flatpak", "search", " ".join(args)], capture_output=True, text=True)
+    sortie = r.stdout.strip()
+    if r.returncode == 0 and sortie and "No matches" not in sortie:
+        print(sortie)
+        print(c(GRIS, "\nUn identifiant de la colonne « Application ID » s'installe aussi : ")
+              + c(BLEU, "grenget installer org.exemple.App"))
+    else:
+        print(c(GRIS, "  aucun résultat. ") + c(BLEU, "grenget proposer") + c(GRIS, " pour la demander."))
+    return 0
+
+
+def installer(args):
+    if not args:
+        non("Usage : grenget installer <application> [<application>…]")
+        return 2
+    applis, _ = catalogue()
+    code_final = 0
+    for nom in args:
+        a = trouver(applis, nom)
+        if a is None and ID_FLATHUB.match(nom):
+            a = {"slug": nom, "nom": nom, "source": "flatpak", "identifiant": nom}
+        if a is None:
+            non(f"« {nom} » n'est pas dans le catalogue. " + c(GRIS, "Cherche : ") + c(BLEU, f"grenget chercher {nom}"))
+            code_final = 1
+            continue
+        if installe(a):
+            ok(f"{a['nom']} est déjà installé.")
+            continue
+        print(c(VIOLET, "● ") + c(BLANC, f"Installation de {a['nom']}", True) + c(GRIS, f" ({a['source']} · {a['identifiant']})"))
+        if a["source"] == "flatpak":
+            subprocess.run(["flatpak", "remote-add", "--if-not-exists", "flathub",
+                            "https://dl.flathub.org/repo/flathub.flatpakrepo"], capture_output=True)
+            code = subprocess.run(["flatpak", "install", "-y", "--noninteractive", "flathub", a["identifiant"]]).returncode
+        else:
+            subprocess.run(lanceur() + ["apt-get", "update", "-qq"])
+            code = subprocess.run(lanceur() + ["apt-get", "install", "-y", a["identifiant"]]).returncode
+        if code == 0:
+            ok(f"{a['nom']} est installé. Il est dans le menu, et s'ouvre par " + c(BLEU, f"gren ouvrir {a['slug']}"))
+        else:
+            non(f"L'installation de {a['nom']} s'est arrêtée (code {code}).")
+            code_final = code
+    return code_final
+
+
+def enlever(args):
+    if not args:
+        non("Usage : grenget enlever <application>")
+        return 2
+    applis, _ = catalogue(en_ligne=False)
+    code_final = 0
+    for nom in args:
+        a = trouver(applis, nom)
+        if a is None and ID_FLATHUB.match(nom):
+            a = {"slug": nom, "nom": nom, "source": "flatpak", "identifiant": nom}
+        if a is None or not installe(a):
+            non(f"« {nom} » n'est pas installé.")
+            code_final = 1
+            continue
+        if a["source"] == "flatpak":
+            code = subprocess.run(["flatpak", "uninstall", "-y", "--noninteractive", a["identifiant"]]).returncode
+        else:
+            code = subprocess.run(lanceur() + ["apt-get", "remove", "-y", a["identifiant"]]).returncode
+        if code == 0:
+            ok(f"{a['nom']} est désinstallé. Tes fichiers à toi n'ont pas été touchés.")
+        else:
+            non(f"La désinstallation de {a['nom']} s'est arrêtée (code {code}).")
+            code_final = code
+    return code_final
+
+
+def liste(_args):
+    applis, origine = catalogue(en_ligne=False)
+    flatpaks = set(subprocess.run(["flatpak", "list", "--app", "--columns=application"],
+                                  capture_output=True, text=True).stdout.split())
+    connues = [a for a in applis if (a["source"] == "flatpak" and a["identifiant"] in flatpaks)
+               or (a["source"] == "apt" and installe(a))]
+    print(c(VIOLET, "● ") + c(BLANC, f"{len(connues)} application(s) du catalogue installée(s)", True))
+    for a in connues:
+        ligne_appli(a, marque=True)
+    autres = sorted(flatpaks - {a["identifiant"] for a in applis})
+    if autres:
+        print(c(GRIS, f"\n  et {len(autres)} autre(s) Flatpak : ") + ", ".join(autres))
+    return 0
+
+
+def info(args):
+    if not args:
+        non("Usage : grenget info <application>")
+        return 2
+    applis, _ = catalogue()
+    a = trouver(applis, " ".join(args))
+    if a is None:
+        non(f"« {' '.join(args)} » n'est pas dans le catalogue.")
+        return 1
+    print(c(VIOLET, "● ") + c(BLANC, a["nom"], True) + c(GRIS, f" — {a.get('editeur', '')}"))
+    for etiquette, valeur in (("Rayon", a.get("rayon", "")), ("Source", f"{a['source']} · {a['identifiant']}"),
+                              ("Site", a.get("site", "")), ("Installée", "oui" if installe(a) else "non")):
+        print(f"  {c(GRIS, etiquette.ljust(10))} {valeur}")
+    print(f"\n  {a.get('description', '')}")
+    return 0
+
+
+def maj(_args):
+    print(c(VIOLET, "● ") + c(BLANC, "Mise à jour des applications", True))
+    code = subprocess.run(["flatpak", "update", "-y", "--noninteractive"]).returncode
+    if code == 0:
+        ok("Applications à jour. Le système, lui, s'installe au prochain redémarrage : " + c(BLEU, "gren maj"))
+    return code
+
+
+def proposer(_args):
+    print(c(VIOLET, "● ") + c(BLANC, "Proposer une application au catalogue grenOS", True))
+    print(c(GRIS, "  Une page explique tout et prend ta proposition : ") + c(BLEU, PAGE))
+    print(c(GRIS, "  Elle passe en attente, une vérification automatique la contrôle,"))
+    print(c(GRIS, "  puis elle est relue avant d'arriver dans GrenPlace et dans grenget."))
+    subprocess.Popen(["xdg-open", PAGE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    return 0
+
+
+def aide(_args):
+    print(c(VIOLET, "● ") + c(BLANC, "grenget — les applications de grenOS", True))
+    for nom, texte in (("chercher <mot>", "trouver une application"), ("installer <nom>", "l'installer (plusieurs à la fois si tu veux)"),
+                       ("enlever <nom>", "la désinstaller"), ("liste", "ce qui est installé"), ("info <nom>", "sa fiche"),
+                       ("maj", "mettre les applications à jour"), ("proposer", "proposer une application au catalogue")):
+        print(f"  {c(BLEU, ('grenget ' + nom).ljust(26))} {texte}")
+    print(c(GRIS, f"\n  Le catalogue est celui de GrenPlace. Comment ça marche : {PAGE}"))
+    return 0
+
+
+COMMANDES = {"chercher": chercher, "installer": installer, "enlever": enlever, "liste": liste,
+             "info": info, "maj": maj, "proposer": proposer, "aide": aide}
+# Les mots anglais qu'on tape par réflexe (winget, apt) : acceptés en silence.
+SYNONYMES = {"search": "chercher", "install": "installer", "remove": "enlever", "uninstall": "enlever",
+             "list": "liste", "show": "info", "upgrade": "maj", "update": "maj", "help": "aide"}
+
+
+def main():
+    args = sys.argv[1:]
+    if args[:1] == ["--slugs"]:
+        # Pour la complétion de grensh : rien que les noms, sans réseau.
+        applis, _ = catalogue(en_ligne=False)
+        print(" ".join(a["slug"] for a in applis))
+        return 0
+    if not args or args[0] in ("-h", "--help"):
+        return aide([])
+    commande = SYNONYMES.get(args[0], args[0])
+    if commande not in COMMANDES:
+        non(f"« {args[0]} » n'est pas une commande de grenget. " + c(GRIS, "Tape ") + c(BLEU, "grenget aide"))
+        return 2
+    return COMMANDES[commande](args[1:])
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)

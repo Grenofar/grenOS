@@ -119,6 +119,28 @@ if [ ! -e "$MARQUES" ]; then
     grenos-dire "emplacements : $(wc -l < "$MARQUES" 2>/dev/null) marque-pages poses"
 fi
 
+# Le terminal grenOS (grensh) : une ligne dans ~/.bashrc, posée UNE fois.
+# ~/.bashrc appartient à la personne ; on n'y écrit que ce `source`, et on ne
+# le réécrit jamais — si elle l'enlève, il reste enlevé (le témoin le dit).
+if [ ! -e "$CONFIG/grensh-pose" ]; then
+    if ! grep -qs "grensh/grensh.sh" "$HOME/.bashrc"; then
+        printf '
+# grenOS : invite et commandes du terminal (gren aide)
+[ -r /usr/share/grenos/grensh/grensh.sh ] && . /usr/share/grenos/grensh/grensh.sh
+' >> "$HOME/.bashrc"
+    fi
+    # Un peu d'air autour du texte du terminal : la seule règle de ce fichier,
+    # et seulement s'il n'existe pas déjà.
+    GTKCSS="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/gtk.css"
+    if [ ! -e "$GTKCSS" ]; then
+        mkdir -p "$(dirname "$GTKCSS")"
+        printf 'vte-terminal { padding: 10px 14px; }
+' > "$GTKCSS"
+    fi
+    touch "$CONFIG/grensh-pose"
+    grenos-dire "terminal : grensh branche dans .bashrc"
+fi
+
 # L'écran reste allumé, et le pointeur est une flèche dès la première seconde.
 xset s off -dpms s noblank 2>/dev/null || true
 xsetroot -cursor_name left_ptr 2>/dev/null || true
