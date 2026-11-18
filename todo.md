@@ -136,7 +136,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 |---|---|---|
 | F1 | **Veille et réveil** | **[écrit] pour la veille** — « Mettre en veille » est dans le menu d'arrêt, et **il n'apparaît que si le noyau sait le faire** : `/sys/power/state` est lu avant de l'offrir. Un bouton qui échoue au clic serait pire que pas de bouton. `org.freedesktop.login1.suspend` est en `allow_active = yes` — lu dans le `.deb` de systemd 257.13 — donc aucune règle polkit n'est nécessaire. La session dit ce que la machine sait faire, et **le mot compte plus que le oui** : `mem` est la vraie veille, `freeze` n'arrête que les processus. **Ce qui n'est pas prouvé** : le clic lui-même — l'endormir au milieu du parcours tuerait la construction, et personne ne serait là pour la réveiller. Réveil, extinction, batterie et thermique restent à faire |
 | F2 | **Extinction et redémarrage** | [prouvé] — le menu d'arrêt, et l'écran d'extinction est noir et propre |
-| F3 | **Batterie** | [à faire] |
+| F3 | **Batterie** | **[écrit]** (18 nov.) — la barre native montre la charge et l'état (en charge, sur batterie, pleine, branchée sans charger), lus dans /sys sans lancer de programme ; une notification sous 10 %, une seule fois. La machine d'essai n'a pas de batterie : quatre essais Rust la simulent |
 | F4 | **Thermique** | [à faire] |
 | F5 | **Branchement à chaud** USB, réseau, stockage, sans plantage | [à faire] |
 | F6 | **Multi-écran** | **[écrit]** (18 nov.) — arandr, depuis Réglages › Écran › « Disposer les écrans » |

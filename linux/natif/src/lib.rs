@@ -3,6 +3,7 @@
 //! `grenosui.py` donnait aux programmes Python.
 
 pub mod applications;
+pub mod batterie;
 pub mod fenetres;
 pub mod theme;
 

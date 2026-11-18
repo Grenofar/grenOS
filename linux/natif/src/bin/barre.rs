@@ -105,6 +105,11 @@ struct Barre {
     image_son: gtk::Image,
     bouton_reseau: gtk::Button,
     image_reseau: gtk::Image,
+    /// La batterie (F3) : cachée sur une machine qui n'en a pas.
+    bouton_batterie: gtk::Button,
+    image_batterie: gtk::Image,
+    texte_batterie: gtk::Label,
+    batterie_prevenue: std::cell::Cell<bool>,
     bouton_maj: gtk::Button,
     epingles: RefCell<Vec<Epingle>>,
     applications: RefCell<Vec<Application>>,
@@ -242,6 +247,20 @@ impl Barre {
         boite.pack_end(&bouton_son, false, false, 0);
         boite.pack_end(&bouton_reseau, false, false, 0);
 
+        // La batterie, à gauche du réseau comme sur Windows. Cachée tant
+        // qu'on n'a pas lu qu'elle existe : un fixe n'en montre jamais.
+        let bouton_batterie = gtk::Button::new();
+        let contenu_batterie = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        let image_batterie = gtk::Image::new();
+        let texte_batterie = gtk::Label::new(None);
+        contenu_batterie.pack_start(&image_batterie, false, false, 0);
+        contenu_batterie.pack_start(&texte_batterie, false, false, 0);
+        bouton_batterie.add(&contenu_batterie);
+        bouton_batterie.set_no_show_all(true);
+        contenu_batterie.show_all();
+        bouton_batterie.connect_clicked(|_| lancer("grenos-hub", false));
+        boite.pack_end(&bouton_batterie, false, false, 0);
+
         let bouton_maj = gtk::Button::with_label("");
         bouton_maj.set_no_show_all(true);
         bouton_maj.connect_clicked(|_| lancer("grenos-maj", false));
@@ -283,6 +302,10 @@ impl Barre {
             image_son,
             bouton_reseau,
             image_reseau,
+            bouton_batterie,
+            image_batterie,
+            texte_batterie,
+            batterie_prevenue: std::cell::Cell::new(false),
             bouton_maj,
             epingles: RefCell::new(apps::lire_epingles()),
             applications: RefCell::new(apps::applications()),
@@ -449,7 +472,40 @@ impl Barre {
             glib::ControlFlow::Continue
         });
         self.relire_maj();
+        let b = self.clone();
+        glib::timeout_add_seconds_local(30, move || {
+            b.relire_batterie();
+            glib::ControlFlow::Continue
+        });
+        self.relire_batterie();
         self.surveiller_son();
+    }
+
+    /// La batterie (F3), lue dans /sys : aucun programme lancé.
+    fn relire_batterie(&self) {
+        use natif::batterie;
+        let Some(b) = batterie::lire_batterie(std::path::Path::new("/sys/class/power_supply")) else {
+            self.bouton_batterie.hide();
+            return;
+        };
+        let (icone, phrase) = batterie::decrire(b);
+        self.image_batterie.set_from_icon_name(Some(icone), gtk::IconSize::LargeToolbar);
+        self.texte_batterie.set_text(&format!("{} %", b.pour_cent));
+        poser_infobulle(&self.bouton_batterie, &phrase);
+        self.bouton_batterie.show();
+        if batterie::prevenir(b, self.batterie_prevenue.get()) {
+            self.batterie_prevenue.set(true);
+            lancer(
+                &format!(
+                    "notify-send --app-name=grenOS --urgency=critical --icon=battery-caution 'Batterie faible' 'Plus que {} %. Branche le chargeur pour ne rien perdre.'",
+                    b.pour_cent
+                ),
+                false,
+            );
+        } else if b.etat != batterie::Etat::SurBatterie {
+            // Rebranché : la prochaine descente sous 10 % prévient de nouveau.
+            self.batterie_prevenue.set(false);
+        }
     }
 
     // ---- Les tuiles ----------------------------------------------------------
