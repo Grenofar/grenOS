@@ -97,8 +97,14 @@ jobs:
           sudo umount iso
           # Le contenu, et les métadonnées qui changent un octet de l'image :
           # droits, propriétaires, dates, cibles des liens.
+          #
+          # Les propriétaires en NOMBRES (%U %G), pas en noms : `find` traduit
+          # un nombre avec le /etc/passwd de la MACHINE GitHub, et deux machines
+          # n'ont pas les mêmes comptes. Le premier passage (18 novembre)
+          # montrait « pollinate » d'un côté et « 103 » de l'autre, peut-être
+          # pour le même nombre : une différence de mesure, pas d'image.
           (cd racine && sudo find . -type f -exec sha256sum {} + | sort -k2) > contenu.txt
-          (cd racine && sudo find . -printf '%M %u %g %T@ %p -> %l\n' | sort -k6) > meta.txt
+          (cd racine && sudo find . -printf '%M %U %G %T@ %p -> %l\n' | sort -k5) > meta.txt
           wc -l dehors.txt contenu.txt meta.txt
           echo "iso ${{ matrix.tour }} : $(cat iso.sha256)"
 
