@@ -2,10 +2,6 @@
 body[data-page="fichiers"] { overflow: hidden; }
 .page-fichiers { position: relative; z-index: 1; height: 100vh; display: flex; flex-direction: column; }
 .fx-barre { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--bord); background: color-mix(in srgb, var(--surface-pleine) 80%, transparent); }
-.fx-outil { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--texte-2); cursor: pointer; }
-.fx-outil:hover:not(:disabled) { background: var(--surface-haute); color: var(--texte); }
-.fx-outil:disabled { opacity: .35; cursor: default; }
-.fx-outil svg { width: 18px; height: 18px; }
 .fx-haut svg { transform: rotate(-90deg); }
 .fx-adresse-cadre { flex: 1; min-width: 0; height: 34px; display: flex; border-radius: 9px; border: 1px solid var(--bord-fort); background: var(--surface-pleine); }
 .fx-fil { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; padding: 0 6px; overflow: hidden; cursor: text; }

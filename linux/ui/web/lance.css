@@ -50,8 +50,6 @@
 
 /* ---- Découvrir ---------------------------------------------------------- */
 .puces-filtre { display: flex; gap: 8px; flex-wrap: wrap; }
-.puce-filtre { padding: 8px 15px; border-radius: 999px; border: 1px solid var(--bord-fort); background: var(--surface); color: var(--texte-2); font-weight: 600; cursor: pointer; }
-.puce-filtre[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 18%, var(--surface-pleine)); border-color: var(--accent); color: var(--texte); }
 .grille-fiches { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
 .fiche-jeu { display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; background: var(--surface); border: 1px solid var(--bord); transition: border-color 160ms, transform 160ms var(--courbe); }
 [data-effets="performance"] .fiche-jeu { background: var(--surface-pleine); }

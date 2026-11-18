@@ -22,9 +22,4 @@ body[data-page="connexions"] { overflow: auto; }
 .cx-barres i.plein { background: var(--texte-2); }
 .cx-note:empty, .cx-dire:empty { display: none; }
 .cx-dire { color: var(--texte-2); font-size: 13px; margin: 0; }
-.cx-inter { appearance: none; -webkit-appearance: none; width: 42px; height: 24px; border-radius: 99px; background: var(--surface-haute); border: 1px solid var(--bord-fort); position: relative; cursor: pointer; transition: background 160ms; }
-.cx-inter::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--texte-2); transition: transform 160ms var(--courbe), background 160ms; }
-.cx-inter:checked { background: var(--accent); border-color: var(--accent); }
-.cx-inter:checked::after { transform: translateX(18px); background: #fff; }
-.cx-inter:disabled { opacity: .45; cursor: default; }
 .cx-voir { display: flex; align-items: center; gap: 8px; color: var(--texte-2); font-size: 13.5px; }

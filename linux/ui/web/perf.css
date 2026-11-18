@@ -4,10 +4,6 @@ body[data-page="perf"], body[data-page="lance"] { overflow: auto; }
 .tete .espace { flex: 1; }
 .tete .logo svg { width: 22px; height: 22px; }
 
-.onglets { display: flex; gap: 6px; padding: 5px; border-radius: 999px; background: var(--surface); border: 1px solid var(--bord); align-self: flex-start; }
-.onglet { border: none; background: transparent; color: var(--texte-2); font-weight: 650; padding: 9px 18px; border-radius: 999px; cursor: pointer; transition: background 150ms, color 150ms; }
-.onglet:hover { color: var(--texte); }
-.onglet[aria-selected="true"] { background: var(--accent); color: #fff; }
 
 .tuiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .tuile-ram { display: flex; flex-direction: column; gap: 8px; }
@@ -23,7 +19,7 @@ body[data-page="perf"], body[data-page="lance"] { overflow: auto; }
 
 .corps-perf { display: flex; flex-direction: column; gap: 14px; min-height: 300px; }
 .barre-outils { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-.recherche { max-width: 360px; padding: 10px 14px; font-size: 14.5px; }
+.recherche { max-width: 360px; padding: 10px 14px 10px 40px; font-size: 14.5px; }
 label.ligne-option { display: flex; align-items: center; gap: 10px; }
 
 .liste-processus { display: flex; flex-direction: column; }

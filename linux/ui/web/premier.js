@@ -186,19 +186,10 @@
     for (const o of options) {
       const t = el("button.tuile", {
         role: "radio", type: "button", "aria-checked": String(R[cleR] === o.valeur),
-        onclick: (e) => {
+        onclick: () => {
           R[cleR] = o.valeur;
           g.querySelectorAll('[role="radio"]').forEach((x) => x.setAttribute("aria-checked", String(x === t)));
           if (rappel) rappel(o.valeur);
-          // MOINS DE « CONTINUER » (19 novembre) : « pas de continuer
-          // partout ». Quand l'écran ne pose QUE cette question, un clic de
-          // souris répond et avance. Seulement un vrai clic (detail > 0) : les
-          // flèches du clavier cochent par .click() et ne doivent pas faire
-          // avancer — on change d'avis avec elles, et la CI les utilise.
-          if (e && e.detail > 0 && D.ecran.querySelectorAll('[role="radiogroup"], input, textarea, select').length === 1) {
-            t.classList.add("valide");
-            setTimeout(() => { if (D.ecran.contains(t)) avancer(); }, 260);
-          }
         },
       },
       o.dessin || (o.icone ? el("span.pastille", svg(o.icone)) : null),

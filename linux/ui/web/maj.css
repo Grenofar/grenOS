@@ -1,8 +1,6 @@
 /* La fenêtre Mises à jour. */
 body[data-page="maj"] { overflow: auto; }
 .page-maj { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 26px 24px 40px; display: flex; flex-direction: column; gap: 16px; }
-.tete { display: flex; align-items: center; gap: 14px; }
-.tete h1 { font-size: 24px; }
 .tete .logo svg { width: 22px; height: 22px; }
 
 .hero { display: flex; gap: 24px; align-items: flex-start; padding: 26px; }
