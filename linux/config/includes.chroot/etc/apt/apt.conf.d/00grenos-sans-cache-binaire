@@ -1,0 +1,8 @@
+// K3 — CONSTRUCTIONS REPRODUCTIBLES (18 novembre). Le cache binaire d'apt
+// (pkgcache.bin) porte des adresses et des dates qui changent d'une
+// construction à l'autre : effacé par notre hook, apt le recréait juste après
+// (vu par reproductible.yml, deux passages de suite). On ne le fait plus
+// écrire du tout : apt le construit en mémoire à chaque lancement, ce qui
+// coûte une fraction de seconde.
+Dir::Cache::pkgcache "";
+Dir::Cache::srcpkgcache "";

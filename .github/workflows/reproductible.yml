@@ -86,7 +86,7 @@ jobs:
 
       - name: L empreinte de chaque fichier de l image
         run: |
-          sudo apt-get install -y -qq squashfs-tools >/dev/null
+          sudo apt-get install -y -qq squashfs-tools initramfs-tools-core >/dev/null
           ISO=$(ls linux/*.iso | head -1)
           sha256sum "$ISO" | cut -d' ' -f1 > iso.sha256
           mkdir -p iso racine
@@ -105,7 +105,15 @@ jobs:
           # pour le même nombre : une différence de mesure, pas d'image.
           (cd racine && sudo find . -type f -exec sha256sum {} + | sort -k2) > contenu.txt
           (cd racine && sudo find . -printf '%M %U %G %T@ %p -> %l\n' | sort -k5) > meta.txt
-          wc -l dehors.txt contenu.txt meta.txt
+          # L'INTÉRIEUR DE L'INITRD. Deux passages de suite, c'est lui qui
+          # différait, sans dire pourquoi : une archive ne montre qu'une
+          # empreinte. On la déballe et on compare fichier par fichier, avec
+          # les dates (une date oubliée suffit à changer l'archive).
+          mkdir -p initrd
+          sudo unmkinitramfs racine/boot/initrd.img-* initrd >/dev/null 2>&1 || echo "initrd illisible"
+          (cd initrd && sudo find . -type f -exec sha256sum {} + | sort -k2) > initrd.txt
+          (cd initrd && sudo find . -printf '%M %T@ %p\n' | sort -k3) >> initrd.txt
+          wc -l dehors.txt contenu.txt meta.txt initrd.txt
           echo "iso ${{ matrix.tour }} : $(cat iso.sha256)"
 
       - uses: actions/upload-artifact@v4
@@ -116,6 +124,7 @@ jobs:
             dehors.txt
             contenu.txt
             meta.txt
+            initrd.txt
           retention-days: 14
 
   comparer:
@@ -128,7 +137,7 @@ jobs:
           A=$(cat empreintes-a/iso.sha256); B=$(cat empreintes-b/iso.sha256)
           echo "construction a : $A"
           echo "construction b : $B"
-          for f in dehors contenu meta; do
+          for f in dehors contenu meta initrd; do
             if diff -q "empreintes-a/$f.txt" "empreintes-b/$f.txt" >/dev/null; then
               echo "$f : identique"
             else
