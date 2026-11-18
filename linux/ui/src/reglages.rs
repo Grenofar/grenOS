@@ -221,7 +221,7 @@ pub fn reglages_parcourir_fond(fenetre: tauri::WebviewWindow) -> Result<Option<S
         filtre.add_pattern(&format!("*.{e}"));
         filtre.add_pattern(&format!("*.{}", e.to_uppercase()));
     }
-    boite.add_filter(&filtre);
+    boite.add_filter(filtre);
     let maison = std::env::var("HOME").unwrap_or_default();
     let images = std::path::Path::new(&maison).join("Images");
     let _ = boite.set_current_folder(if images.is_dir() { images } else { std::path::PathBuf::from(&maison) });
