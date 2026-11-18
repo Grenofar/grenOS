@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arret;
+mod reglages;
 mod jeux;
 mod grenplace;
 mod hub;
@@ -109,6 +110,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("reglages", "Réglages de grenOS", 960.0, 660.0),
     ("jeux", "Jeux", 900.0, 720.0),
     ("grenplace", "GrenPlace", 980.0, 720.0),
     ("hub", "grenHub", 900.0, 660.0),
@@ -120,9 +122,14 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
 
 pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
     // « jeu » n'est pas une page : c'est grenPerf ouvert sur son onglet Mode
-    // jeu (Ctrl+Alt+Échap, todo I8). Fenêtre déjà ouverte : on change d'onglet.
-    let onglet = if page == "jeu" { Some("jeu") } else { None };
-    let page = if page == "jeu" { "perf" } else { page };
+    // jeu (Ctrl+Alt+Échap, todo I8). Et « reglages:son » ouvre les Réglages
+    // sur leur page Son (`grenos-parametres son`). Fenêtre déjà ouverte : on
+    // change d'onglet.
+    let (page, onglet) = match page.split_once(':') {
+        _ if page == "jeu" => ("perf", Some("jeu")),
+        Some((p, o)) if !o.is_empty() => (p, Some(o)),
+        _ => (page, None),
+    };
     if let (Some(o), Some(fenetre)) = (onglet, app.get_webview_window(page)) {
         let _ = fenetre.eval(&format!("window.grenosOnglet && window.grenosOnglet({o:?})"));
     }
@@ -282,6 +289,16 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            reglages::reglages_ouvert,
+            reglages::reglages,
+            reglages::reglages_signatures,
+            reglages::reglages_reseau,
+            reglages::reglages_compte,
+            reglages::reglages_mot_de_passe,
+            reglages::reglages_retirer_mot_de_passe,
+            reglages::reglages_theme,
+            reglages::reglages_fonds,
+            reglages::reglages_fond,
             jeux::jeux_vue,
             jeux::jeux_paquet_nvidia,
             jeux::jeux_preparer_rocket,

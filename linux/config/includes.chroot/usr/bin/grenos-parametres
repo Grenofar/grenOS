@@ -14,6 +14,17 @@ import subprocess
 import sys
 import threading
 
+# La fenêtre vit désormais dans grenos-ui (reglages.rs, reglages.js), le
+# processus partagé par les autres fenêtres (18 novembre). « grenos-parametres
+# son » l'ouvre sur sa page Son. `--restaurer-ecran` (lancé à l'ouverture de
+# session) reste ici : ce n'est pas une fenêtre. `--python` force l'ancienne.
+if (os.access("/usr/bin/grenos-ui", os.X_OK) and "--python" not in sys.argv
+        and "--restaurer-ecran" not in sys.argv):
+    _page = sys.argv[1] if len(sys.argv) > 1 else ""
+    os.execv("/usr/bin/grenos-ui", ["grenos-ui", "reglages:" + _page if _page else "reglages"])
+if "--python" in sys.argv:
+    sys.argv.remove("--python")
+
 sys.path.insert(0, "/usr/lib/grenos")
 
 import gi  # noqa: E402

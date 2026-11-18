@@ -225,7 +225,235 @@ def jeux_poser_fortnite():
     return {"manque": jeux.poser_fortnite() or ""}
 
 
+# ---- Réglages ---------------------------------------------------------------------
+#
+# Chaque page des Réglages lit et agit par les modules d'avant (ecran.py,
+# son.py, heure.py, composants.py, securite.py, maj.py, materiel.py). Les
+# phrases sont celles de l'ancienne fenêtre, au mot près, et les lignes série
+# aussi : « reglages son : melangeur », « reglages securite : », « reglages
+# composants : » sont des preuves EXIGÉES par la construction.
+
+def _nombre(valeur, decimales=1):
+    return ("%.*f" % (decimales, valeur)).replace(".", ",")
+
+
+def reglages_ecran():
+    import ecran
+    sorties = ecran.sorties()
+    if not sorties:
+        return {"ecran": None, "modes": []}
+    premier = sorties[0]
+    modes = sorted(premier["modes"], key=lambda m: ecran.surface(m["taille"]), reverse=True)
+    rendu = []
+    for mode in modes:
+        rendu.append({"taille": mode["taille"], "taux": [
+            {"arrondi": a, "brut": b, "annoncee": bool(n)}
+            for a, b, n in ecran.frequences_proposees(mode["taux"])]})
+    return {"ecran": {"nom": premier["nom"], "actuelle": premier["actuelle"] or "",
+                      "taux": premier["taux"] or ""}, "modes": rendu}
+
+
+def reglages_ecran_appliquer(nom, taille, brut, annoncee):
+    import ecran
+    if annoncee:
+        souci = ecran.appliquer(nom, taille, brut)
+    else:
+        largeur, hauteur = taille.split("x")
+        souci = ecran.ajouter_mode(nom, largeur, hauteur, float(brut))
+    return {"souci": souci or ""}
+
+
+def reglages_composants():
+    import composants
+    if not composants.present():
+        return {"present": False, "composants": []}
+    return {"present": True, "composants": composants.composants()}
+
+
+def reglages_composants_chercher():
+    import composants
+    reussi, _dit = composants.rafraichir()
+    if not reussi:
+        return {"texte": "La liste des constructeurs n'a pas pu être relue. Vérifie le réseau."}
+    attendues = composants.mises_a_jour()
+    if not attendues:
+        return {"texte": "Tous les composants sont à jour."}
+    return {"texte": "\n".join("%s : %s vers %s" % (m["nom"], m["de"], m["vers"]) for m in attendues)}
+
+
+def reglages_securite():
+    import securite
+    return {"resume": securite.resume(), "present": bool(securite.present()),
+            "signatures": bool(securite.signatures()["presentes"])}
+
+
+def reglages_son():
+    """L'état du son et le diagnostic, en phrases, comme la page d'avant."""
+    import materiel
+    import son
+    lu = materiel.son_et_video()
+    if lu["profils_alsa"]:
+        profils = f"{lu['profils_alsa']} profils ALSA trouvés."
+    else:
+        profils = "Aucun profil ALSA trouvé : sur un portable récent, le son peut rester muet sans eux."
+    if lu["carte"]:
+        carte = f"Carte son : {lu['carte']}" + (f", pilotée par {lu['module']}" if lu["module"] else "") + "."
+    else:
+        carte = "Aucune carte son détectée."
+    decodeur = "Le décodeur vidéo est installé." if lu["decodeur"] else "Aucun décodeur vidéo installé."
+    if lu["pilotes_video"]:
+        pilotes = (f"{lu['pilotes_video']} pilote{'s' if lu['pilotes_video'] > 1 else ''} "
+                   "de décodage vidéo sur la carte graphique.")
+    else:
+        pilotes = ("Aucun pilote de décodage vidéo sur la carte graphique : "
+                   "les vidéos seront décodées par le processeur.")
+    canaux = lu.get("melangeur", [])
+    coupes = [c for c in canaux if c["coupe"]]
+    bas = [c for c in canaux if not c["coupe"] and c["niveau"] is not None and c["niveau"] < 10]
+    if coupes:
+        melangeur = ("LE SON EST COUPÉ dans le mélangeur de la carte : "
+                     + ", ".join(c["nom"] for c in coupes)
+                     + ". C'est la cause la plus probable d'un silence complet. "
+                       "Ouvre le mélangeur ci-dessus et remonte-les.")
+    elif bas:
+        melangeur = ("Le mélangeur de la carte est très bas : "
+                     + ", ".join("%s à %d %%" % (c["nom"], c["niveau"]) for c in bas) + ".")
+    elif canaux:
+        melangeur = ("Le mélangeur de la carte est ouvert ("
+                     + ", ".join("%s %d %%" % (c["nom"], c["niveau"]) for c in canaux
+                                 if c["niveau"] is not None) + ").")
+    else:
+        melangeur = "Aucun canal de mélangeur lisible sur cette carte."
+    temps_reel = lu.get("temps_reel")
+    if temps_reel is True:
+        priorite = "PipeWire tourne en temps réel : le son tiendra quand la machine peine."
+    elif temps_reel is False:
+        priorite = "PipeWire ne tourne PAS en temps réel : le son hachera dès que la machine peine."
+    else:
+        priorite = "PipeWire ne tourne pas."
+    try:
+        verdict_sortie, _soucis = son.diagnostic()
+    except Exception:  # noqa: BLE001
+        verdict_sortie = "Impossible de lire la sortie audio."
+    lignes = [
+        "reglages son : %d profils ALSA, carte %s, decodeur %s, %d pilotes video"
+        % (lu["profils_alsa"], lu["carte"] or "aucune",
+           "present" if lu["decodeur"] else "absent", lu["pilotes_video"]),
+        "reglages son : melangeur %s" % (", ".join(
+            "%s %s %s" % (c["nom"], "?" if c["niveau"] is None else "%d%%" % c["niveau"],
+                          "COUPE" if c["coupe"] else "ouvert") for c in canaux) or "illisible"),
+        "reglages son : sortie — %s" % verdict_sortie,
+    ]
+    return {
+        "sorties": [[n, d] for n, d in son.sorties()],
+        "courante": son.sortie_actuelle(),
+        "volume": son.volume(),
+        "muet": son.muet(),
+        "diagnostic": "\n".join([verdict_sortie, melangeur, priorite, carte, profils, decodeur, pilotes]),
+        "lignes_serie": lignes,
+    }
+
+
+def reglages_son_regler(geste, valeur=""):
+    import son
+    if geste == "sortie":
+        son.choisir_sortie(valeur)
+    elif geste == "volume":
+        son.regler_volume(float(valeur))
+    elif geste == "muet":
+        son.basculer_muet()
+    return {}
+
+
+def reglages_heure():
+    import heure
+    etat = heure.etat()
+    return {"fuseau": etat["fuseau"], "automatique": bool(etat["automatique"]),
+            "fuseaux": heure.fuseaux()}
+
+
+def reglages_heure_regler(geste, valeur):
+    import heure
+    if geste == "fuseau":
+        souci = heure.choisir_fuseau(valeur)
+        return {"texte": souci or f"Fuseau : {valeur}."}
+    if geste == "automatique":
+        souci = heure.horloge_automatique(bool(valeur))
+        return {"texte": souci or ("L'heure se règle toute seule." if valeur
+                                   else "L'heure ne se règle plus toute seule.")}
+    texte = str(valeur).strip()
+    if not texte:
+        return {"texte": "Écris une date et une heure."}
+    souci = heure.regler(texte)
+    return {"texte": souci or f"Heure réglée sur {texte}."}
+
+
+def reglages_materiel():
+    import materiel
+    infos = materiel.resume()
+    virtuelle = infos["virtuelle"]
+    lignes = [
+        ["Processeur", f"{infos['coeurs']} cœurs"],
+        ["Modèle", infos["processeur"][:52]],
+        ["Mémoire vive", f"{_nombre(infos['memoire'])} Go ({_nombre(infos['memoire_libre'])} Go libres)"],
+        ["Carte graphique", infos["carte"][:52]],
+        ["Pilote", infos["pilote"][:52]],
+        ["Système sur", f"{infos['disque']:.0f} Go ({infos['disque_libre']:.0f} Go libres)"],
+    ]
+    vus = infos.get("disques") or []
+    for index, d in enumerate(vus):
+        nom = d["modele"] or d["nom"]
+        lignes.append(["Disque" if index == 0 and len(vus) == 1 else f"Disque {index + 1}",
+                       f"{nom[:34]} — {materiel.genre_du_disque(d)} ({d['nom']})"])
+    if not vus:
+        lignes.append(["Disques", "aucun disque vu : rien à installer dessus"])
+    explication = ("grenOS utilise d'office tout ce que la machine lui donne : tous les "
+                   "cœurs, toute la mémoire, toute la mémoire vidéo. Il n'y a rien à débloquer.")
+    if len(vus) > 1:
+        explication += ("\n\nCette machine a plusieurs disques. L'installateur les propose "
+                        "tous et demande lequel prendre : il n'efface jamais avant que tu "
+                        "aies choisi.")
+    if virtuelle:
+        explication += (f"\n\nCette machine est virtuelle ({virtuelle}) : c'est l'hôte qui "
+                        "décide de ce qu'elle voit. Pour lui en donner plus, éteins-la et "
+                        "augmente la mémoire, les processeurs et la mémoire vidéo dans les "
+                        "réglages de la machine.")
+    return {"lignes": lignes, "explication": explication}
+
+
+def reglages_maj():
+    import maj
+    attendus = maj.disponibles()
+    quand = maj.derniere_verification()
+    if attendus is None:
+        resume = "Aucune vérification depuis le démarrage, ou pas de réseau."
+    elif attendus == 0:
+        resume = f"Rien à installer. Dernière vérification : {quand} UTC."
+    else:
+        resume = f"{attendus} paquet{'s' if attendus > 1 else ''} à installer. Vérifié le {quand} UTC."
+    version = "grenOS"
+    try:
+        with open("/etc/os-release", encoding="utf-8") as fichier:
+            for ligne in fichier:
+                if ligne.startswith("PRETTY_NAME="):
+                    version = ligne.split("=", 1)[1].strip().strip('"')
+    except OSError:
+        pass
+    return {"resume": resume, "version": version}
+
+
 FONCTIONS = {
+    "reglages_ecran": reglages_ecran,
+    "reglages_ecran_appliquer": reglages_ecran_appliquer,
+    "reglages_composants": reglages_composants,
+    "reglages_composants_chercher": reglages_composants_chercher,
+    "reglages_securite": reglages_securite,
+    "reglages_son": reglages_son,
+    "reglages_son_regler": reglages_son_regler,
+    "reglages_heure": reglages_heure,
+    "reglages_heure_regler": reglages_heure_regler,
+    "reglages_materiel": reglages_materiel,
+    "reglages_maj": reglages_maj,
     "jeux_vue": jeux_vue,
     "jeux_paquet_nvidia": jeux_paquet_nvidia,
     "jeux_preparer_rocket": jeux_preparer_rocket,

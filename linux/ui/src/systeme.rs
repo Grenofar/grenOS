@@ -225,7 +225,7 @@ pub const PROGRAMMES: &[&str] = &[
     "grenplace", "grenlaunch", "grenos-jeux", "grenos-connexions", "grenos-parametres",
     "grenos-maj", "grenos-fichiers", "grenos-taches", "grenos-son", "grenos-hub",
     "grenos-perf", "grenos-secours", "grenos-bienvenue", "grenos-arret",
-    "firefox-esr", "x-terminal-emulator", "installer",
+    "firefox-esr", "x-terminal-emulator", "installer", "pavucontrol", "nm-connection-editor",
 ];
 
 #[tauri::command]
