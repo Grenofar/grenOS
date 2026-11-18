@@ -141,6 +141,16 @@ if [ ! -e "$CONFIG/grensh-pose" ]; then
     grenos-dire "terminal : grensh branche dans .bashrc"
 fi
 
+# LE CURSEUR (19 novembre) : Breeze Light, blanc au liseré sombre, net à
+# toutes les tailles — Adwaita faisait daté (« ameliore le curseur »). Pour
+# TOUT ce qui le lit : GTK (settings.ini), mais aussi Openbox, le bureau
+# natif et les fenêtres X qui ne lisent que XCURSOR_THEME ou Xresources.
+# Sans le paquet, on garde Adwaita plutôt qu'un curseur X de 1990.
+if [ -d /usr/share/icons/Breeze_Light/cursors ]; then
+    export XCURSOR_THEME=Breeze_Light XCURSOR_SIZE=24
+    printf 'Xcursor.theme: Breeze_Light\nXcursor.size: 24\n' | xrdb -merge 2>/dev/null || true
+fi
+
 # L'écran reste allumé, et le pointeur est une flèche dès la première seconde.
 xset s off -dpms s noblank 2>/dev/null || true
 xsetroot -cursor_name left_ptr 2>/dev/null || true

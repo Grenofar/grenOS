@@ -43,7 +43,8 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// La hauteur de notre barre et d'une barre de titre d'Openbox : les mêmes
 /// nombres que `grenosui.py` (BARRE, TITRE), pour juger le 720p pareil.
-const BARRE: f64 = 52.0;
+// 52 de barre + 8 d air dessous : la barre flotte depuis le 19 novembre.
+const BARRE: f64 = 60.0;
 const TITRE: f64 = 30.0;
 
 /// Quand chaque fenêtre a été demandée : pour dire « ouverture : X en N ms ».
@@ -96,17 +97,33 @@ fn ecran_logique(app: &AppHandle) -> Option<(f64, f64)> {
 #[tauri::command]
 async fn fenetre_prete(fenetre: tauri::WebviewWindow) {
     let page = fenetre.label().to_string();
+    // La fenêtre est née cachée (voir `ouvrir`) : sa page est dessinée, on la
+    // montre — après l'avoir remontée au besoin, pour qu'elle n'apparaisse
+    // pas à un endroit puis saute à un autre.
+    let montrer = |f: &tauri::WebviewWindow| {
+        if !f.is_visible().unwrap_or(true) {
+            let _ = f.show();
+            let _ = f.set_focus();
+        }
+    };
     let titre = fenetre.title().unwrap_or_else(|_| page.clone());
     if let Some(debut) = DEMANDES.lock().unwrap().as_mut().and_then(|c| c.remove(&page)) {
         systeme::dire(&format!("ouverture : {titre} en {} ms (grenos-ui)", debut.elapsed().as_millis()));
     } else {
-        return; // déjà dite : une page qui se redessine ne se rechronomètre pas
+        // Déjà dite (une page qui se redessine ne se rechronomètre pas), ou
+        // une fenêtre sans chrono (une 2e fenêtre de l'explorateur) : on la
+        // montre quand même, sans attendre le filet.
+        montrer(&fenetre);
+        return;
     }
     if page == "premier" {
         return;
     }
     let echelle = fenetre.scale_factor().unwrap_or(1.0);
-    let (Ok(taille), Ok(pos)) = (fenetre.inner_size(), fenetre.inner_position()) else { return };
+    let (Ok(taille), Ok(pos)) = (fenetre.inner_size(), fenetre.inner_position()) else {
+        montrer(&fenetre);
+        return;
+    };
     let taille = taille.to_logical::<f64>(echelle);
     let pos = pos.to_logical::<f64>(echelle);
     let (el, eh) = ecran_logique(fenetre.app_handle()).unwrap_or((taille.width, taille.height + BARRE));
@@ -122,6 +139,7 @@ async fn fenetre_prete(fenetre: tauri::WebviewWindow) {
     if bouger {
         let _ = fenetre.set_position(tauri::LogicalPosition::new(pos.x, y));
     }
+    montrer(&fenetre);
 }
 
 const PAGES: &[(&str, &str, f64, f64)] = &[
@@ -208,14 +226,31 @@ pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
             .inner_size(largeur, hauteur)
             .resizable(false)
             .always_on_top(true)
-            .center();
+            .center()
+            .visible(false);
     } else {
         constructeur = constructeur
             .inner_size(largeur, hauteur)
             .min_inner_size(480.0, 400.0)
-            .center();
+            .center()
+            .visible(false);
     }
-    constructeur.build()?;
+    let fenetre = constructeur.build()?;
+    // OUVRIR SANS CADRE VIDE (19 novembre) : « rend plus smooth les ouvertures
+    // d'app ». La fenêtre naît cachée et se montre quand sa page est dessinée
+    // (`fenetre_prete`) ; on ne voit plus un cadre vide 200 ms avant le
+    // contenu. LE FILET : une page qui ne dirait jamais « prête » (erreur JS)
+    // laisserait une application invisible — elle se montre seule à 1,5 s.
+    if page != "premier" {
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            if !fenetre.is_visible().unwrap_or(true) {
+                systeme::dire(&format!("ouverture : {} montree par le filet (la page n a rien dit en 1,5 s)", fenetre.label()));
+                let _ = fenetre.show();
+                let _ = fenetre.set_focus();
+            }
+        });
+    }
     Ok(())
 }
 
@@ -438,8 +473,9 @@ mod essais {
 
     #[test]
     fn la_taille_tient_en_720p() {
-        // 1280×720 : 668 sous la barre, 638 sans la barre de titre.
-        assert_eq!(taille_tenable(1220.0, 800.0, Some((1280.0, 720.0))), (1220.0, 638.0));
+        // 1280×720 : 660 au-dessus de la barre flottante (52 + 8 d'air),
+        // 630 sans la barre de titre.
+        assert_eq!(taille_tenable(1220.0, 800.0, Some((1280.0, 720.0))), (1220.0, 630.0));
         assert_eq!(taille_tenable(1400.0, 600.0, Some((1280.0, 720.0))), (1264.0, 600.0));
         assert_eq!(taille_tenable(760.0, 620.0, Some((1920.0, 1080.0))), (760.0, 620.0));
         assert_eq!(taille_tenable(760.0, 620.0, None), (760.0, 620.0));

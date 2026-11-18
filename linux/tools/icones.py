@@ -421,21 +421,19 @@ def cable(chemin, taille):
     """
     image, u, v = toile(taille)
 
-    # Tout tient entre 0.22 et 0.80 en hauteur, comme les autres icones de la
-    # barre : quel que soit l'endroit ou elle centre, il reste de la marge.
-    ecran = rectangle(u, v, 0.10, 0.22, 0.90, 0.60, rayon=0.06)
-    poser(image, ecran, CLAIR, 1.0)
+    # CINQUIEME DESSIN (19 novembre) : AU TRAIT, comme ses voisins. Grenofar :
+    # « ameliore le logo ethernet ». L'ecran plein a dalle bleue etait le seul
+    # aplat colore de la barre, a cote d'un haut-parleur et d'arcs Wi-Fi
+    # blancs et fins : il criait plus fort que les autres. Meme metaphore
+    # (un ecran, comme Windows), meme epaisseur de trait que le son.
+    trait = 0.075
+    exterieur = rectangle(u, v, 0.10, 0.20, 0.90, 0.64, rayon=0.07)
+    interieur = rectangle(u, v, 0.10 + trait, 0.20 + trait, 0.90 - trait, 0.64 - trait, rayon=0.02)
+    poser(image, np.clip(exterieur - interieur, 0.0, 1.0), CLAIR, 1.0)
 
-    # La dalle, en bleu : c'est elle qui fait lire « ecran » plutot que
-    # « rectangle ». Un seul aplat interieur, pas deux — deux redeviendraient
-    # des rayures, et on connait la fin de cette histoire.
-    dalle = rectangle(u, v, 0.19, 0.29, 0.81, 0.53, rayon=0.03)
-    poser(image, dalle, ACCENT, 1.0)
-
-    # Le pied : une tige courte et une base large. Sans la base, l'ecran flotte
-    # et redevient un rectangle.
-    poser(image, rectangle(u, v, 0.43, 0.59, 0.57, 0.69), CLAIR, 1.0)
-    poser(image, rectangle(u, v, 0.27, 0.69, 0.73, 0.79, rayon=0.03), CLAIR, 1.0)
+    # Le pied : une tige et une base arrondie, du meme trait.
+    poser(image, rectangle(u, v, 0.4625, 0.63, 0.5375, 0.73), CLAIR, 1.0)
+    poser(image, rectangle(u, v, 0.30, 0.725, 0.70, 0.725 + trait, rayon=0.035), CLAIR, 1.0)
 
     png(chemin, octets(image))
 

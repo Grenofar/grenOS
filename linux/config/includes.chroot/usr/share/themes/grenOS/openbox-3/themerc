@@ -7,8 +7,8 @@
 ! c'est ce qui garde le pointeur fluide.
 
 ! Depuis le 17 novembre : coins arrondis (posés par grenos-coins, un masque
-! de forme sur chaque cadre — sans compositeur, c'est la seule façon), une
-! barre un peu plus haute et trois ronds de couleur à droite. Bordure 0 : un
+! de forme sur chaque cadre — sans compositeur, c'est la seule façon) et une
+! barre un peu plus haute ; depuis le 19, les boutons de Windows. Bordure 0 : un
 ! liseré d'un pixel se casserait en escalier dans un coin arrondi.
 border.width: 0
 padding.width: 10
@@ -19,8 +19,8 @@ window.client.padding.height: 0
 menu.overlap.x: 0
 menu.overlap.y: 0
 
-! La fenêtre au premier plan : sa barre est un cran plus claire, et ses ronds
-! sont en couleur. C'est ce qui dit laquelle reçoit le clavier.
+! La fenêtre au premier plan : sa barre est un cran plus claire, et ses
+! glyphes plus nets. C'est ce qui dit laquelle reçoit le clavier.
 window.active.border.color: #131b2e
 window.active.title.bg: flat solid
 window.active.title.bg.color: #131b2e
@@ -31,38 +31,41 @@ window.active.handle.bg.color: #131b2e
 window.active.grip.bg: flat solid
 window.active.grip.bg.color: #131b2e
 
-! Le fond des boutons reste celui de la barre : seul le rond se dessine.
+! LES BOUTONS DE WINDOWS (19 novembre). Les trois ronds de couleur du
+! 17 novembre faisaient jouet (« fais comme sur Windows, fais trop cheap ») :
+! trois glyphes fins de la couleur du texte (tools/boutons-fenetre.py), et
+! au survol un FOND — gris clair pour Réduire et Agrandir, rouge vif pour
+! Fermer, glyphe blanc. C'est le geste que tout le monde a dans la main.
 window.active.button.unpressed.bg: parentrelative
-window.active.button.unpressed.image.color: #cbd5e8
-window.active.button.hover.bg: parentrelative
+window.active.button.unpressed.image.color: #dbe3f0
+window.active.button.hover.bg: flat solid
+window.active.button.hover.bg.color: #24304a
 window.active.button.hover.image.color: #ffffff
-window.active.button.pressed.bg: parentrelative
-window.active.button.pressed.image.color: #8fb4ff
+window.active.button.pressed.bg: flat solid
+window.active.button.pressed.bg.color: #1c2740
+window.active.button.pressed.image.color: #c9d6ee
 window.active.button.disabled.bg: parentrelative
 window.active.button.disabled.image.color: #46506b
 window.active.button.toggled.unpressed.bg: parentrelative
-window.active.button.toggled.unpressed.image.color: #cbd5e8
-window.active.button.toggled.hover.bg: parentrelative
+window.active.button.toggled.unpressed.image.color: #dbe3f0
+window.active.button.toggled.hover.bg: flat solid
+window.active.button.toggled.hover.bg.color: #24304a
 window.active.button.toggled.hover.image.color: #ffffff
-window.active.button.toggled.pressed.bg: parentrelative
-window.active.button.toggled.pressed.image.color: #8fb4ff
+window.active.button.toggled.pressed.bg: flat solid
+window.active.button.toggled.pressed.bg.color: #1c2740
+window.active.button.toggled.pressed.image.color: #c9d6ee
 
-! Les feux. Fermer rouge : c'est le seul geste qu'on ne rattrape pas.
-window.active.button.close.unpressed.image.color: #ef4d5e
-window.active.button.close.hover.image.color: #ef4d5e
-window.active.button.close.pressed.image.color: #b31f2e
-window.active.button.iconify.unpressed.image.color: #fbbf24
-window.active.button.iconify.hover.image.color: #fbbf24
-window.active.button.iconify.pressed.image.color: #c58f0c
-window.active.button.max.unpressed.image.color: #2bc48a
-window.active.button.max.hover.image.color: #2bc48a
-window.active.button.max.pressed.image.color: #1d8f63
-window.active.button.max.toggled.unpressed.image.color: #2bc48a
-window.active.button.max.toggled.hover.image.color: #2bc48a
-window.active.button.max.toggled.pressed.image.color: #1d8f63
+! Fermer : rouge au survol, plus sombre à l'appui — le seul geste qu'on ne
+! rattrape pas se signale avant le clic.
+window.active.button.close.hover.bg: flat solid
+window.active.button.close.hover.bg.color: #e81123
+window.active.button.close.hover.image.color: #ffffff
+window.active.button.close.pressed.bg: flat solid
+window.active.button.close.pressed.bg.color: #b10e1c
+window.active.button.close.pressed.image.color: #ffffff
 
-! Les autres fenêtres, en retrait : ronds gris, qui reprennent leur couleur
-! au survol pour qu'on puisse fermer sans d'abord cliquer la fenêtre.
+! Les autres fenêtres, en retrait : glyphes gris, qui prennent leur fond au
+! survol pour qu'on puisse fermer sans d'abord cliquer la fenêtre.
 window.inactive.border.color: #0f1524
 window.inactive.title.bg: flat solid
 window.inactive.title.bg.color: #0f1524
@@ -73,21 +76,23 @@ window.inactive.handle.bg.color: #0f1524
 window.inactive.grip.bg: flat solid
 window.inactive.grip.bg.color: #0f1524
 window.inactive.button.unpressed.bg: parentrelative
-window.inactive.button.unpressed.image.color: #3a4560
-window.inactive.button.hover.bg: parentrelative
+window.inactive.button.unpressed.image.color: #6b7790
+window.inactive.button.hover.bg: flat solid
+window.inactive.button.hover.bg.color: #1f2a42
 window.inactive.button.hover.image.color: #eef2fa
-window.inactive.button.pressed.bg: parentrelative
-window.inactive.button.pressed.image.color: #8fb4ff
+window.inactive.button.pressed.bg: flat solid
+window.inactive.button.pressed.bg.color: #1a2338
+window.inactive.button.pressed.image.color: #c9d6ee
 window.inactive.button.disabled.bg: parentrelative
 window.inactive.button.disabled.image.color: #2a3247
 window.inactive.button.toggled.unpressed.bg: parentrelative
-window.inactive.button.toggled.unpressed.image.color: #3a4560
-window.inactive.button.toggled.hover.bg: parentrelative
+window.inactive.button.toggled.unpressed.image.color: #6b7790
+window.inactive.button.toggled.hover.bg: flat solid
+window.inactive.button.toggled.hover.bg.color: #1f2a42
 window.inactive.button.toggled.hover.image.color: #eef2fa
-window.inactive.button.close.hover.image.color: #ef4d5e
-window.inactive.button.iconify.hover.image.color: #fbbf24
-window.inactive.button.max.hover.image.color: #2bc48a
-window.inactive.button.max.toggled.hover.image.color: #2bc48a
+window.inactive.button.close.hover.bg: flat solid
+window.inactive.button.close.hover.bg.color: #e81123
+window.inactive.button.close.hover.image.color: #ffffff
 
 ! Le titre à gauche, comme dans toutes les fenêtres qu'on connaît.
 window.label.text.justify: left

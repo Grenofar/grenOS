@@ -23,7 +23,8 @@ const TAILLE_ICONE: i32 = 56;
 const LARGEUR_CASE: i32 = 118;
 const HAUTEUR_CASE: i32 = 116;
 const MARGE: i32 = 24;
-const BARRE: i32 = 52;
+// 52 de barre + 8 d air dessous : la barre flotte depuis le 19 novembre.
+const BARRE: i32 = 60;
 
 const STYLE: &str = r#"
 #bureau { background-color: @fond; }

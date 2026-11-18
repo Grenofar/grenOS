@@ -337,8 +337,9 @@ pub fn place_dock(ecran: (i32, i32), dock: (i32, i32), marge: i32) -> (i32, i32)
 }
 
 /// La bande que les fenêtres agrandies laissent libre en bas : la hauteur de
-/// la barre, plus l'air sous le dock (sans quoi une fenêtre agrandie
-/// passerait SOUS lui).
+/// la barre, plus l'air dessous (sans quoi une fenêtre agrandie passerait
+/// SOUS elle). Depuis le 19 novembre la barre flotte aussi : les deux
+/// dispositions passent `flottante = true`.
 pub fn bande_reservee(hauteur: i32, marge: i32, dock: bool) -> i32 {
     if dock { hauteur + marge } else { hauteur }
 }

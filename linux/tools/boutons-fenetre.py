@@ -168,13 +168,57 @@ def petit_moins_plus():
         (milieu - 1, 3), (milieu, 3), (milieu - 1, TAILLE - 4), (milieu, TAILLE - 4)}
 
 
-# Les feux : au repos un rond plein, au survol et à l'appui le même rond
-# avec son glyphe creusé. La couleur vient du themerc (une par bouton).
+def fin_trait():
+    """Réduire, à la Windows : un trait d'UN pixel, au milieu, sur 10 px."""
+    milieu = TAILLE // 2
+    return {(x, milieu) for x in range(1, TAILLE - 1)}
+
+
+def fin_carre():
+    """Agrandir : un carré d'un pixel de trait, coins à peine adoucis."""
+    points = set()
+    for i in range(2, TAILLE - 2):
+        points |= {(i, 1), (i, TAILLE - 2), (1, i), (TAILLE - 2, i)}
+    return points
+
+
+def fin_restaurer():
+    """Restaurer : deux carrés fins décalés, celui de devant entier."""
+    points = set()
+    # Devant : de (1,3) à (8,10).
+    for i in range(1, 9):
+        points |= {(i, 3), (i, 10)}
+    for j in range(3, 11):
+        points |= {(1, j), (8, j)}
+    # Derrière : seulement ce qui dépasse, en haut et à droite.
+    for i in range(3, 11):
+        points.add((i, 1))
+    for j in range(1, 9):
+        points.add((10, j))
+    points |= {(3, 2), (10, 1)}
+    return points
+
+
+def fine_croix():
+    """Fermer : deux diagonales d'un pixel, de coin à coin, sur 10 px."""
+    points = set()
+    for i in range(1, TAILLE - 1):
+        points.add((i, i))
+        points.add((TAILLE - 1 - i, i))
+    return points
+
+
+# LES BOUTONS DE WINDOWS (19 novembre). Grenofar : « fais comme sur Windows,
+# fais trop cheap ». Les trois ronds de couleur du 17 novembre faisaient
+# jouet ; on revient à ce que tout le monde connaît : trois glyphes fins
+# (—, □, ✕), de la couleur du texte, et au survol un fond — gris clair pour
+# Réduire et Agrandir, ROUGE pour Fermer (themerc). Le même dessin dans tous
+# les états : c'est le fond qui change, pas le glyphe.
 FEUX = {
-    "close": petite_croix,
-    "max": petit_plus,
-    "max_toggled": petit_moins_plus,
-    "iconify": petit_trait,
+    "close": fine_croix,
+    "max": fin_carre,
+    "max_toggled": fin_restaurer,
+    "iconify": fin_trait,
 }
 
 # Les autres boutons gardent leur glyphe, dans tous leurs états. Openbox lit
@@ -193,13 +237,9 @@ ETATS = ("", "_hover", "_pressed", "_disabled")
 def dessins():
     """Chaque fichier à écrire, avec ses points : {nom: points}."""
     sortie = {}
-    rond = disque()
     for base, glyphe in FEUX.items():
-        creuse = rond - glyphe()
-        sortie[base] = rond
-        sortie[base + "_disabled"] = rond
-        sortie[base + "_hover"] = creuse
-        sortie[base + "_pressed"] = creuse
+        for etat in ETATS:
+            sortie[base + etat] = glyphe()
     for base, dessin in BASES.items():
         for etat in ETATS:
             sortie[base + etat] = dessin()

@@ -23,7 +23,8 @@ use gtk::{gdk, glib};
 use natif::{classe, dire};
 
 const LARGEUR: i32 = 380;
-const HAUTEUR_BARRE: i32 = 52;
+// 52 de barre + 8 d air dessous : la barre flotte depuis le 19 novembre.
+const HAUTEUR_BARRE: i32 = 60;
 
 const STYLE: &str = r#"
 #panneau-son {

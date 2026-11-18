@@ -41,6 +41,14 @@ const STYLE: &str = r#"
     background-image: linear-gradient(to bottom, @fond-haut, @fond);
     border-top: 1px solid @bord;
 }
+/* LA BARRE DÉCOLLÉE (19 novembre) : « fais que la barre des tâches ne se
+   colle pas aux extrémités ». 8 px d'air tout autour, les coins de la découpe
+   (natif::RAYON_COINS), un liseré clair : elle flotte au-dessus du bureau. */
+#panneau.flottante {
+    border: 1px solid @bord-clair;
+    border-radius: 14px;
+}
+#panneau.flottante button { border-radius: 9px; }
 #panneau button {
     color: @texte;
     background-color: transparent;
@@ -71,7 +79,8 @@ const STYLE: &str = r#"
 .trait-ouverte { background-color: alpha(@accent, 0.55); opacity: 1; margin: 0 16px 3px 16px; }
 .trait-active { background-color: @accent-clair; opacity: 1; margin: 0 9px 3px 9px; }
 .trait-reduite { background-color: alpha(@accent, 0.30); opacity: 1; margin: 0 19px 3px 19px; }
-#horloge { color: @texte; font-size: 12.5px; padding: 0 14px; }
+/* L'horloge sur deux lignes, l'heure au-dessus de la date, comme Windows. */
+#horloge { color: @texte; font-size: 12px; padding: 0 14px; }
 #menu { background-color: @fond; border: 1px solid @bord-clair; border-radius: 14px; }
 #recherche-menu { margin: 16px 16px 6px; }
 #pied-menu { background-color: @fond-haut; border-top: 1px solid @bord; padding: 12px 16px; }
@@ -148,7 +157,7 @@ struct Barre {
 
 fn taille_menu() -> (i32, i32) {
     let (l, h) = natif::taille_ecran();
-    let bande = natif::bande_reservee(if natif::disposition_dock() { HAUTEUR_DOCK } else { HAUTEUR }, MARGE_DOCK, natif::disposition_dock());
+    let bande = natif::bande_reservee(if natif::disposition_dock() { HAUTEUR_DOCK } else { HAUTEUR }, MARGE_DOCK, true);
     ((l - 24).min(MENU_LARGEUR).max(420), (h - bande - 24).min(MENU_HAUTEUR).max(360))
 }
 
@@ -241,8 +250,11 @@ impl Barre {
             });
             panneau.move_((largeur - 600).max(0) / 2, hauteur_ecran - HAUTEUR_DOCK - MARGE_DOCK);
         } else {
-            panneau.set_default_size(largeur, HAUTEUR);
-            panneau.move_(0, hauteur_ecran - HAUTEUR);
+            // Pleine largeur MOINS l'air des deux côtés, et décollée du bas.
+            panneau.set_default_size(largeur - 2 * MARGE_DOCK, HAUTEUR);
+            panneau.move_(MARGE_DOCK, hauteur_ecran - HAUTEUR - MARGE_DOCK);
+            classe(&panneau, "flottante");
+            natif::arrondir(&panneau);
         }
 
         let boite = gtk::Box::new(gtk::Orientation::Horizontal, 0);
@@ -263,8 +275,11 @@ impl Barre {
         if gtk::IconTheme::default().map(|t| t.has_icon("grenos")).unwrap_or(false) {
             etiquette.pack_start(&gtk::Image::from_icon_name(Some("grenos"), gtk::IconSize::LargeToolbar), false, false, 0);
         }
-        // Dans le dock, le logo seul : chaque pixel de largeur y compte.
-        if !dock {
+        // Le logo seul, comme le bouton Démarrer de Windows 11 (19 novembre) :
+        // le mot « grenOS » à côté faisait étiquette. Le nom reste dans
+        // l'infobulle. Sans thème d'icônes, le mot revient : un bouton vide
+        // serait une promesse sans rien dedans.
+        if etiquette.children().is_empty() {
             etiquette.pack_start(&gtk::Label::new(Some("grenOS")), false, false, 0);
         }
         bouton_menu.add(&etiquette);
@@ -278,6 +293,7 @@ impl Barre {
 
         let horloge = gtk::Label::new(None);
         horloge.set_widget_name("horloge");
+        horloge.set_justify(gtk::Justification::Right);
         boite.pack_end(&horloge, false, false, 0);
 
         let bouton_reseau = gtk::Button::new();
@@ -370,7 +386,7 @@ impl Barre {
 
     /// La bande du bas que la barre occupe (dock : avec l'air dessous).
     fn bande(&self) -> i32 {
-        natif::bande_reservee(if self.dock { HAUTEUR_DOCK } else { HAUTEUR }, MARGE_DOCK, self.dock)
+        natif::bande_reservee(if self.dock { HAUTEUR_DOCK } else { HAUTEUR }, MARGE_DOCK, true)
     }
 
     fn icone(&self) -> i32 {
@@ -921,7 +937,7 @@ impl Barre {
         if let Ok(m) = m {
             let jour = JOURS[(m.day_of_week() as usize).clamp(1, 7) - 1];
             let mois = MOIS[(m.month() as usize).clamp(1, 12) - 1];
-            let texte = format!("{:02}:{:02}  ·  {} {} {}", m.hour(), m.minute(), jour, m.day_of_month(), mois);
+            let texte = format!("{:02}:{:02}\n{} {} {}", m.hour(), m.minute(), jour, m.day_of_month(), mois);
             if self.horloge.text() != texte {
                 self.horloge.set_text(&texte);
             }
@@ -992,7 +1008,7 @@ impl Barre {
             let x = zone.x() + zone.width() / 2;
             // Dans le dock, la barre n'est ni à x = 0 ni collée au bord : on
             // part de là où elle est vraiment.
-            let (px, py) = if self.dock { self.panneau.position() } else { (0, self.hauteur_ecran - HAUTEUR) };
+            let (px, py) = if self.dock { self.panneau.position() } else { (MARGE_DOCK, self.hauteur_ecran - HAUTEUR - MARGE_DOCK) };
             let (x, y) = (px + x, py + zone.y() + zone.height() / 2);
             dire(&format!("bouton {nom} en {x},{y}"));
         }

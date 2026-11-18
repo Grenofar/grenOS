@@ -444,6 +444,9 @@ os-prober
 adwaita-icon-theme
 adwaita-icon-theme-legacy
 papirus-icon-theme
+## Le curseur (19 novembre) : Breeze Light, blanc au liseré sombre, plus net
+## qu'Adwaita. Réglé par settings.ini, lightdm et grenos-session.
+breeze-cursor-theme
 ## Le lecteur d'images SVG. Papirus est un theme **en SVG** : sans lui,
 ## GdkPixbuf ne sait pas ouvrir ses fichiers, et ces icones ne s'affichent pas
 ## du tout. On reglait le theme et on ne pouvait pas le dessiner.

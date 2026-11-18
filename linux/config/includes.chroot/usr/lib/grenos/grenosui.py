@@ -676,7 +676,7 @@ def bouton(texte, action=None, genre="", nom_icone="", taille_icone=18):
 # barre de titre en haut. Une fenêtre qui demande toute la hauteur de l'écran
 # déborde donc des deux côtés. Ces deux nombres sont les mêmes que ceux de
 # `grenos-shell` et du thème openbox ; s'ils y changent, ils changent ici.
-BARRE = 52
+BARRE = 60  # 52 de barre + 8 d'air dessous : la barre flotte depuis le 19 novembre
 TITRE = 30
 
 
