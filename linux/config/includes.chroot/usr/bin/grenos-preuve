@@ -36,12 +36,29 @@ if [ "${TEMOIN_AU_DEMARRAGE%% *}" = "$(cat /proc/sys/kernel/random/boot_id 2>/de
     PRECEDENT=$(cat /home/*/.config/grenos/temoin-persistance.precedent 2>/dev/null | head -1)
     [ -n "$PRECEDENT" ] && TEMOIN_AU_DEMARRAGE="$PRECEDENT"
 fi
+
+# VERDICT_TEMOIN — dit TOUT DE SUITE. Il ne depend que de ce qu'on vient de
+# lire ; l'attendre a la fin des verifications (reseau, depot, son, video)
+# le faisait arriver apres les quatre minutes que l'essai UEFI accorde.
+VERDICT_TEMOIN() {
+    temoin="$TEMOIN_AU_DEMARRAGE"
+    demarrage=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)
+    if [ -z "$temoin" ]; then
+        dire "persistance : aucun temoin — premier demarrage, ou rien n'a ete garde"
+    elif [ "${temoin%% *}" = "$demarrage" ]; then
+        dire "persistance : le temoin est de CE demarrage, il ne prouve rien"
+    else
+        dire "persistance : un fichier d'un demarrage PRECEDENT est revenu (${temoin#* })"
+    fi
+}
 mkdir -p "$BOITE" 2>/dev/null || true
 chmod 1777 "$BOITE" 2>/dev/null || true
 
 dire () {
     echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
 }
+
+VERDICT_TEMOIN
 
 # ---- SANS PORT SERIE, TOUT CE QUI SUIT EST DU TRAVAIL POUR RIEN ------------
 #
@@ -480,15 +497,7 @@ esac
 # elle ne prouvait rien. Le noyau tire un `boot_id` neuf a chaque demarrage,
 # donc un temoin qui en porte un autre vient forcement d'avant — et aucune
 # course ne peut plus s'y glisser.
-temoin="$TEMOIN_AU_DEMARRAGE"
-demarrage=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)
-if [ -z "$temoin" ]; then
-    dire "persistance : aucun temoin — premier demarrage, ou rien n'a ete garde"
-elif [ "${temoin%% *}" = "$demarrage" ]; then
-    dire "persistance : le temoin est de CE demarrage, il ne prouve rien"
-else
-    dire "persistance : un fichier d'un demarrage PRECEDENT est revenu (${temoin#* })"
-fi
+# Le verdict du temoin est dit tout en haut de ce fichier : voir VERDICT_TEMOIN.
 
 # E1 — LE JOURNAL SURVIT-IL AU REDEMARRAGE ?
 #
