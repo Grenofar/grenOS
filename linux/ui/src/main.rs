@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arret;
+mod secours;
 mod bienvenue;
 mod lance;
 mod maj;
@@ -101,6 +102,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("perf", "grenPerf", 1080.0, 720.0),
     ("lance", "GrenLaunch", 1220.0, 800.0),
     ("arret", "Fin de session", 440.0, 560.0),
+    ("secours", "Mode sans échec de grenOS", 720.0, 560.0),
     ("bienvenue", "Bienvenue dans grenOS", 940.0, 700.0),
 ];
 
@@ -266,6 +268,8 @@ fn main() {
             lance::lance_installer,
             arret::arret_vue,
             arret::arret_faire,
+            secours::secours_vue,
+            secours::secours_faire,
             bienvenue::bienvenue_vue,
         ])
         .on_window_event(fermeture_animee)

@@ -1,0 +1,12 @@
+/* Mode sans échec. */
+body[data-page="secours"] { overflow: auto; }
+.page-secours { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; padding: 24px 24px 30px; display: flex; flex-direction: column; gap: 14px; }
+.page-secours .tete h1 { font-size: 24px; }
+.page-secours .tete .sous { margin-top: 4px; font-size: 14.5px; }
+.sc-compte { display: flex; align-items: baseline; gap: 12px; }
+.sc-compte strong { font-size: 30px; font-weight: 800; color: var(--danger); }
+.sc-compte span, .sc-rassurant { color: var(--texte-2); margin: 0; }
+.sc-cause p { margin: 8px 0 0; font-size: 15px; user-select: text; -webkit-user-select: text; }
+.sc-actions { display: flex; flex-direction: column; gap: 10px; }
+.sc-ligne { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.sc-ligne small, .sc-etat { color: var(--texte-3); font-size: 12.5px; margin: 0; }
