@@ -123,15 +123,30 @@ Lister-Apps()         { grenget liste "$@"; }
 Afficher-App()        { grenget info "$@"; }
 Proposer-App()        { grenget proposer "$@"; }
 
+# ---- La langue (19 novembre) ---------------------------------------------------
+# L'anglais par défaut, le français au choix : le réglage de grenOS, sinon
+# $LANG — la même règle que gren et grenget. La complétion propose les mots
+# de la langue choisie ; les DEUX marchent toujours une fois tapés.
+_grensh_langue() {
+    local v
+    v=$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/grenos/langue" 2>/dev/null)
+    case $v in en|fr) echo "$v"; return ;; esac
+    case $LANG in fr*) echo fr ;; *) echo en ;; esac
+}
+
 # ---- La complétion par Tab -----------------------------------------------------
 _grensh_completer_grenget() {
     local mot=${COMP_WORDS[COMP_CWORD]}
     if [ "$COMP_CWORD" -eq 1 ]; then
-        COMPREPLY=($(compgen -W "chercher installer enlever liste info maj proposer aide" -- "$mot"))
+        if [ "$(_grensh_langue)" = fr ]; then
+            COMPREPLY=($(compgen -W "chercher installer enlever liste info maj proposer aide" -- "$mot"))
+        else
+            COMPREPLY=($(compgen -W "search install remove list info update suggest help" -- "$mot"))
+        fi
         return
     fi
     case ${COMP_WORDS[1]} in
-        installer|info|enlever)
+        installer|info|enlever|install|remove|uninstall|show)
             COMPREPLY=($(compgen -W "$(grenget --slugs 2>/dev/null)" -- "$mot")) ;;
     esac
 }
@@ -146,13 +161,17 @@ complete -F _grensh_completer_slug Installer-App Afficher-App Desinstaller-App
 _grensh_completer_gren() {
     local mot=${COMP_WORDS[COMP_CWORD]}
     if [ "$COMP_CWORD" -eq 1 ]; then
-        COMPREPLY=($(compgen -W "aide info memoire liberer reseau theme accent maj ouvrir sauvegarde version" -- "$mot"))
+        if [ "$(_grensh_langue)" = fr ]; then
+            COMPREPLY=($(compgen -W "aide info memoire liberer reseau theme accent maj ouvrir sauvegarde ia corrige version" -- "$mot"))
+        else
+            COMPREPLY=($(compgen -W "help info memory free network theme accent update open backup ai fix version" -- "$mot"))
+        fi
         return
     fi
     case ${COMP_WORDS[1]} in
-        theme)  COMPREPLY=($(compgen -W "nuit jour" -- "$mot")) ;;
-        accent) COMPREPLY=($(compgen -W "bleu violet vert orange rose cyan" -- "$mot")) ;;
-        sauvegarde) COMPREPLY=($(compgen -W "etat activer desactiver maintenant" -- "$mot")) ;;
+        theme)  COMPREPLY=($(compgen -W "nuit jour night day" -- "$mot")) ;;
+        accent) COMPREPLY=($(compgen -W "bleu violet vert orange rose cyan blue purple green pink" -- "$mot")) ;;
+        sauvegarde|backup) COMPREPLY=($(compgen -W "etat activer desactiver maintenant status on off now" -- "$mot")) ;;
     esac
 }
 complete -F _grensh_completer_gren gren
@@ -164,5 +183,9 @@ complete -W "bleu violet vert orange rose cyan" Changer-Accent
 # Une ligne, pas une affiche : on ouvre un terminal pour travailler.
 if [ -z "$GRENSH_ACCUEILLI" ]; then
     export GRENSH_ACCUEILLI=1
-    printf '\033[38;2;167;139;250m●\033[0m \033[1mgrenOS\033[0m \033[38;2;148;161;186m— tape \033[38;2;96;165;250mgren aide\033[38;2;148;161;186m pour les commandes, \033[38;2;96;165;250mgrenget chercher\033[38;2;148;161;186m pour une application.\033[0m\n'
+    if [ "$(_grensh_langue)" = fr ]; then
+        printf '\033[38;2;167;139;250m●\033[0m \033[1mgrenOS\033[0m \033[38;2;148;161;186m— tape \033[38;2;96;165;250mgren aide\033[38;2;148;161;186m pour les commandes, \033[38;2;96;165;250mgrenget chercher\033[38;2;148;161;186m pour une application.\033[0m\n'
+    else
+        printf '\033[38;2;167;139;250m●\033[0m \033[1mgrenOS\033[0m \033[38;2;148;161;186m— type \033[38;2;96;165;250mgren help\033[38;2;148;161;186m for the commands, \033[38;2;96;165;250mgrenget search\033[38;2;148;161;186m for an app.\033[0m\n'
+    fi
 fi
