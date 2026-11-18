@@ -110,6 +110,8 @@ struct Barre {
     image_batterie: gtk::Image,
     texte_batterie: gtk::Label,
     batterie_prevenue: std::cell::Cell<bool>,
+    /// F4 : l'alerte de chaleur a été donnée, en attendant que ça retombe.
+    chaleur_prevenue: std::cell::Cell<bool>,
     bouton_maj: gtk::Button,
     epingles: RefCell<Vec<Epingle>>,
     applications: RefCell<Vec<Application>>,
@@ -306,6 +308,7 @@ impl Barre {
             image_batterie,
             texte_batterie,
             batterie_prevenue: std::cell::Cell::new(false),
+            chaleur_prevenue: std::cell::Cell::new(false),
             bouton_maj,
             epingles: RefCell::new(apps::lire_epingles()),
             applications: RefCell::new(apps::applications()),
@@ -475,10 +478,36 @@ impl Barre {
         let b = self.clone();
         glib::timeout_add_seconds_local(30, move || {
             b.relire_batterie();
+            b.relire_chaleur();
             glib::ControlFlow::Continue
         });
         self.relire_batterie();
+        self.relire_chaleur();
         self.surveiller_son();
+    }
+
+    /// La chaleur (F4) : une notification quand une zone approche de son
+    /// seuil critique, une seule, réarmée quand tout est redescendu.
+    fn relire_chaleur(&self) {
+        use natif::thermique;
+        let zones = thermique::lire_zones(std::path::Path::new("/sys/class/thermal"));
+        if self.chaleur_prevenue.get() {
+            if thermique::retombe(&zones) {
+                self.chaleur_prevenue.set(false);
+            }
+            return;
+        }
+        if let Some((degres, critique)) = thermique::alerte(&zones) {
+            self.chaleur_prevenue.set(true);
+            dire(&format!("chaleur : {degres} degres, seuil critique {critique}"));
+            lancer(
+                &format!(
+                    "notify-send --app-name=grenOS --urgency=critical --icon=dialog-warning 'La machine chauffe' '{degres} °C, à {} °C de l’arrêt de sécurité. Ferme ce qui tourne fort, et vérifie que les aérations ne sont pas bouchées.'",
+                    (critique - degres).max(0)
+                ),
+                false,
+            );
+        }
     }
 
     /// La batterie (F3), lue dans /sys : aucun programme lancé.
