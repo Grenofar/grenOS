@@ -78,8 +78,8 @@
     <number>2</number>
     <firstdesk>1</firstdesk>
     <names>
-      <name>Bureau</name>
-      <name>Second</name>
+      <name>Bureau 1</name>
+      <name>Bureau 2</name>
     </names>
     <popupTime>600</popupTime>
   </desktops>
@@ -212,6 +212,33 @@
     </keybind>
     <keybind key="W-Down">
       <action name="Unmaximize"/>
+    </keybind>
+
+    <!-- G11 — les bureaux virtuels, avec les raccourcis de Windows (18
+         novembre). Deux bureaux existaient depuis septembre, mais AUCUN
+         raccourci n'y menait : ils étaient inatteignables.
+         Ctrl+Win+Gauche/Droite : passer d'un bureau à l'autre ;
+         Ctrl+Win+Maj+Gauche/Droite : y emmener la fenêtre ;
+         Ctrl+Win+D : un bureau de plus ; Ctrl+Win+F4 : fermer celui-ci (ses
+         fenêtres passent sur le voisin, openbox ne les ferme pas). -->
+    <keybind key="C-W-Left">
+      <action name="GoToDesktop"><to>left</to><wrap>no</wrap></action>
+    </keybind>
+    <keybind key="C-W-Right">
+      <action name="GoToDesktop"><to>right</to><wrap>no</wrap></action>
+    </keybind>
+    <keybind key="C-W-S-Left">
+      <action name="SendToDesktop"><to>left</to><wrap>no</wrap></action>
+    </keybind>
+    <keybind key="C-W-S-Right">
+      <action name="SendToDesktop"><to>right</to><wrap>no</wrap></action>
+    </keybind>
+    <keybind key="C-W-d">
+      <action name="AddDesktop"><where>last</where></action>
+      <action name="GoToDesktop"><to>last</to></action>
+    </keybind>
+    <keybind key="C-W-F4">
+      <action name="RemoveDesktop"><where>current</where></action>
     </keybind>
   </keyboard>
 

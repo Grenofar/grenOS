@@ -163,7 +163,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | G8 | **Centre de mise à jour avec retour arrière** | [prouvé] pour la mise à jour (y compris hors session, avant le bureau) ; le retour arrière : [à faire] |
 | G9 | **Barre des tâches** | [prouvé] |
 | G10 | **Gestionnaire de fenêtres propre** | [prouvé] — openbox à notre thème, boutons dessinés, croix vérifiée au pixel |
-| G11 | **Bureaux virtuels** | [à faire] |
+| G11 | **Bureaux virtuels** | **[écrit]** (18 nov.) — deux bureaux existaient sans AUCUN raccourci pour y aller. Ctrl+Win+←/→ pour changer, avec Maj pour emmener la fenêtre, Ctrl+Win+D pour en ajouter un, Ctrl+Win+F4 pour fermer ; la barre ne montre plus que les fenêtres du bureau courant (essai Rust) |
 | G12 | **Dock** | [à faire] — la barre fait office, ce n'est pas la même chose |
 | G13 | **Notifications** | **[écrit]** (18 nov.) — dunst à notre thème ; AUCUN démon n'affichait les notifications jusqu'ici |
 | G14 | **Gestion audio complète** | [prouvé] pour le panneau et le mélangeur |

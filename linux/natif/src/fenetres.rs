@@ -49,7 +49,18 @@ const NOMS: &[&str] = &[
     "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_SPLASH",
     "_NET_WM_NAME", "UTF8_STRING", "_NET_WM_ICON", "_NET_CLOSE_WINDOW", "WM_CHANGE_STATE",
     "_NET_WM_STRUT", "_NET_WM_STRUT_PARTIAL",
+    "_NET_CURRENT_DESKTOP", "_NET_WM_DESKTOP",
 ];
+
+/// Une fenêtre a-t-elle sa tuile sur ce bureau ? Celles « de tous les
+/// bureaux » (0xFFFFFFFF) partout, celles sans bureau déclaré aussi : mieux
+/// vaut une tuile de trop qu'une fenêtre qu'on ne retrouve plus.
+pub fn sur_ce_bureau(sien: Option<u32>, courant: Option<u32>) -> bool {
+    match (sien, courant) {
+        (Some(0xFFFF_FFFF), _) | (None, _) | (_, None) => true,
+        (Some(s), Some(c)) => s == c,
+    }
+}
 
 impl Ecran {
     pub fn ouvrir() -> Option<Ecran> {
@@ -107,6 +118,9 @@ impl Ecran {
             self.a("_NET_WM_WINDOW_TYPE_DOCK"),
             self.a("_NET_WM_WINDOW_TYPE_SPLASH"),
         ];
+        // G11 — les bureaux virtuels (18 novembre) : comme Windows, la barre ne
+        // montre que les fenêtres du bureau où l'on est.
+        let courant = self.propriete32(self.racine, self.a("_NET_CURRENT_DESKTOP"), AtomEnum::CARDINAL.into(), 1).first().copied();
         let mut sortie = Vec::new();
         for xid in liste {
             // On suit aussi chaque fenêtre : réduite ou rendue, sa tuile change.
@@ -114,6 +128,10 @@ impl Ecran {
                 xid,
                 &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
             );
+            let sien = self.propriete32(xid, self.a("_NET_WM_DESKTOP"), AtomEnum::CARDINAL.into(), 1).first().copied();
+            if !sur_ce_bureau(sien, courant) {
+                continue;
+            }
             let etats = self.propriete32(xid, self.a("_NET_WM_STATE"), AtomEnum::ATOM.into(), 64);
             if etats.contains(&self.a("_NET_WM_STATE_SKIP_TASKBAR")) {
                 continue;
@@ -191,6 +209,8 @@ impl Ecran {
             self.a("_NET_ACTIVE_WINDOW"),
             self.a("_NET_CLIENT_LIST_STACKING"),
             self.a("_NET_WM_STATE"),
+            self.a("_NET_CURRENT_DESKTOP"),
+            self.a("_NET_WM_DESKTOP"),
             u32::from(AtomEnum::WM_CLASS),
         ];
         let mut change = false;
@@ -235,6 +255,16 @@ pub fn choisir_icone(donnees: &[u32], taille: u32) -> Option<(Vec<u8>, u32, u32)
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn une_tuile_par_bureau() {
+        assert!(sur_ce_bureau(Some(1), Some(1)));
+        assert!(!sur_ce_bureau(Some(0), Some(1)));
+        assert!(sur_ce_bureau(Some(0xFFFF_FFFF), Some(1)));
+        assert!(sur_ce_bureau(None, Some(1)));
+        assert!(sur_ce_bureau(Some(2), None));
+    }
+
     use super::*;
 
     #[test]
