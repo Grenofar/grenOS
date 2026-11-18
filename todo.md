@@ -35,7 +35,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 
 | # | Demande | État |
 |---|---|---|
-| A1 | Compatibilité **NVMe** : voir et utiliser un disque NVMe | **[écrit]** (18 nov.) — la machine d'essai a maintenant un disque NVMe ; la CI attend « disques : … nvme0n1 » (rapporté jusqu'à deux passages verts) |
+| A1 | Compatibilité **NVMe** : voir et utiliser un disque NVMe | **[prouvé]** (18 nov.) — la machine d'essai a un disque NVMe ; « nvme0n1 4G : le disque NVMe est vu » dans deux passages verts du même commit (CI 44343831083 sur claude/suite, 44354350634 sur main) |
 | A2 | Pilotes **USB au-delà du clavier et de la souris** : manette, webcam, casque | **[écrit] en partie** (18 nov.) — manettes : `steam-devices` ouvre leurs règles udev ; webcams (UVC) et casques USB (audio class) sont des pilotes du noyau Debian, sans rien à ajouter. Rien n'est prouvé : la machine d'essai n'a ni l'un ni l'autre |
 | A3 | Plus de **matériel Wi-Fi** reconnu | **[écrit]** — **la cause première est trouvée, et ce n'étaient pas les micrologiciels** : `wpasupplicant` etait absent, donc aucune carte ne pouvait rejoindre un réseau WPA. Corrigé le 14 octobre, avec un garde. Les micrologiciels par carte restent [à faire] |
 | A4 | **Son fonctionnel à 100 %**, en VirtualBox comme sur l'ISO | [sa main] — la CI entend un son propre, sa machine reste muette ; la page Son nomme maintenant la sortie |
@@ -138,7 +138,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | F2 | **Extinction et redémarrage** | [prouvé] — le menu d'arrêt, et l'écran d'extinction est noir et propre |
 | F3 | **Batterie** | **[écrit]** (18 nov.) — la barre native montre la charge et l'état (en charge, sur batterie, pleine, branchée sans charger), lus dans /sys sans lancer de programme ; une notification sous 10 %, une seule fois. La machine d'essai n'a pas de batterie : quatre essais Rust la simulent |
 | F4 | **Thermique** | **[écrit]** (18 nov.) — la barre native lit les zones thermiques toutes les 30 s (sans programme) et prévient UNE fois à 5 °C du seuil critique (95 °C sans seuil déclaré), réarmée 10 °C plus bas ; grenHub montrait déjà sondes et ventilateurs. La machine d'essai n'a pas de sonde : trois essais Rust |
-| F5 | **Branchement à chaud** USB, réseau, stockage, sans plantage | **[écrit]** (18 nov.) — la même clé, branchée puis retirée à chaud ; la CI vérifie les deux annonces et que la barre ne tombe pas. Le réseau à chaud : pas encore |
+| F5 | **Branchement à chaud** USB, réseau, stockage, sans plantage | **[prouvé] pour la clé USB, [à faire] pour le réseau** (18 nov.) — la même clé, branchée puis retirée à chaud ; la CI vérifie les deux annonces et que la barre ne tombe pas. Le réseau à chaud : pas encore — deux passages verts du même commit (CI 44343831083 sur claude/suite, 44354350634 sur main) |
 | F6 | **Multi-écran** | **[écrit]** (18 nov.) — arandr, depuis Réglages › Écran › « Disposer les écrans » |
 | F7 | **Résolution** | [prouvé] — page Écran, 13 définitions, 11 fréquences |
 | F8 | **DPI** | **[écrit]** (18 nov.) — Réglages › Apparence › Taille de l'affichage (100 à 200 %), `Xft.dpi` gardé dans ~/.Xresources |
@@ -261,10 +261,10 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | J3 | **Se connecter au Wi-Fi** | [à faire] — mais le maillon manquant est nommé : sans `wpasupplicant`, c'était impossible quelle que soit la carte. Corrigé ; QEMU n'ayant pas de Wi-Fi, seule sa machine pourra le prouver |
 | J4 | Installer une application | [prouvé] — Flathub répond, une application s'installe |
 | J5 | Mettre à jour | [prouvé] — y compris au redémarrage, avant le bureau |
-| J6 | Brancher une clé USB | **[écrit]** (18 nov.) — une clé FAT32 branchée PENDANT la session (moniteur QEMU, USB 3) ; udev la dit avec son étiquette et son système de fichiers, et l'explorateur la monte d'un clic |
+| J6 | Brancher une clé USB | **[prouvé]** (18 nov.) — une clé FAT32 branchée PENDANT la session (moniteur QEMU, USB 3) ; udev la dit avec son étiquette et son système de fichiers, et l'explorateur la monte d'un clic — deux passages verts du même commit (CI 44343831083 sur claude/suite, 44354350634 sur main) |
 | J7 | Naviguer | [prouvé] |
 | J8 | Lire une vidéo | **[écrit]** (18 nov.) — Celluloid est livré ; le décodage était déjà prouvé |
-| J9 | **Mettre en veille** | **[écrit]** (18 nov.) — la machine d'essai ouvre Fin de session, appuie sur V (touche d'accès, comme le menu de Windows), puis QEMU la réveille ; un crochet systemd-sleep dit « veille : entree » et « veille : reveil ». Rapporté jusqu'à deux passages verts |
+| J9 | **Mettre en veille** | **[prouvé]** (18 nov.) — la machine d'essai ouvre Fin de session, appuie sur V (touche d'accès, comme le menu de Windows), puis QEMU la réveille ; un crochet systemd-sleep dit « veille : entree » et « veille : reveil ». « la machine est partie en veille » puis « elle s'est réveillée » dans deux passages verts du même commit (CI 44343831083 sur claude/suite, 44354350634 sur main) |
 | J10 | Redémarrer | [prouvé] |
 | J11 | **Récupérer d'une erreur** | **[écrit]** le mode sans échec dit la cause et propose ; grenRecovery répare de l'extérieur. (18 nov.) — grenRecovery (grenos-ui, depuis la clé grenOS) trouve les installations grenOS sur les disques ; tout le travail root passe par `grenos-recuperation`, qui vérifie chaque partition et démonte toujours. Pas encore exercé sur une vraie installation cassée |
 
@@ -274,7 +274,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 |---|---|---|
 | K1 | **Mise à jour des applications**, pas seulement du noyau | **[écrit]** (17 nov.) — les Flatpak se mettent à jour depuis la fenêtre Mises à jour, chaque jour en mode automatique, et au redémarrage de mise à jour. Pas encore vu sur une machine |
 | K2 | **Que les mises à jour fonctionnent correctement** (il l'a écrit deux fois) | [prouvé] pour le dépôt, le bouton, le service, la fenêtre d'avant-bureau et le retour du bureau |
-| K3 | **Constructions reproductibles** : deux constructions indépendantes doivent donner exactement le même noyau | **[écrit]** (18 nov.) — Debian figé (snapshot.debian.org, `linux/debian-instantane`), date unique (SOURCE_DATE_EPOCH), Rust et Debian de construction figés, Cargo.lock suivis, PNG sans date, Flathub sans téléchargement. `reproductible.yml` construit DEUX fois et compare à l'octet : pas encore vert |
+| K3 | **Constructions reproductibles** : deux constructions indépendantes doivent donner exactement le même noyau | **[écrit]** (18 nov.) — Debian figé (snapshot.debian.org, `linux/debian-instantane`), date unique (SOURCE_DATE_EPOCH), Rust et Debian de construction figés, Cargo.lock suivis, PNG sans date, Flathub sans téléchargement. `reproductible.yml` construit DEUX fois et compare à l'octet : pas encore vert ; le 18 nov. au soir, il ne restait que deux différences, corrigées dans 121826a : le nom tiré au sort du clavier dans l'initrd (crochet `zz-grenos-clavier-fixe`) et les icônes, qui dépendaient des instructions SIMD du processeur (`octets()` arrondit avant de tronquer). Double construction relancée (run 44374598459) |
 | K4 | **Documentation développeur** : architecture, pilotes, appels système, contribution, débogage | **[écrit]** (18 nov.) — `docs/DEVELOPPEUR.md` remis à jour : l'architecture Rust, ajouter une fenêtre, construire, les raccourcis de CI |
 
 ---
