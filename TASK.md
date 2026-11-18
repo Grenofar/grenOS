@@ -25,6 +25,15 @@
   en pause après ~7 jours sans activité : « Restore » dans le tableau de bord,
   données conservées. Plafond de dépense activé : jamais facturé.
 
+## FAIT le 18 novembre vers 05:00 — version `linux-20261118-0449` PUBLIÉE
+
+claude/grenos-ui fusionnée dans main (5459886) : coins de fenêtre arrondis
+(grenos-coins, x11rb SHAPE), trois ronds de couleur dans la barre de titre,
+fondus d'ouverture/fermeture de grenos-ui. Cinq preuves vertes sur main
+(run 44235178436), coins vus sur la capture ecran-perf de la CI.
+ISO + VirtualBox en Release, dépôt APT et catalogue publiés,
+grenos.vercel.app propose 20261118-0449.
+
 ## FAIT le 18 novembre vers 03:00 — version `linux-20261118-0233` PUBLIÉE
 
 - Release GitHub (ISO 1,6 Go + zip VirtualBox), dépôt APT et catalogue publiés
