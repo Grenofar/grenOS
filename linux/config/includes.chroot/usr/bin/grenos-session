@@ -157,6 +157,19 @@ fi
 # Sur une machine virtuelle seulement, on impose des tampons de 1024
 # echantillons (~21 ms a 48 kHz) : inaudible comme latence, et le flux tient.
 # Sur un vrai PC on ne touche a rien — la latence courte y est un merite.
+# LA MOLETTE DANS UNE MACHINE VIRTUELLE (19 novembre). Grenofar : « des
+# fois le scroll fonctionne pas ». Dans VirtualBox, la souris est une
+# tablette virtuelle (USBTablet) : GTK 3 lit sa molette par XInput2, en
+# défilement « fluide », et ces événements se perdent par intermittence —
+# toutes nos fenêtres sont GTK (WebKit compris). GDK_CORE_DEVICE_EVENTS=1
+# fait lire la molette comme des clics de boutons 4 et 5, qui ne se perdent
+# pas. Seulement en machine virtuelle : un vrai PC garde le défilement fluide
+# du pavé tactile. Exporté AVANT de lancer la barre et les fenêtres.
+if [ "$(systemd-detect-virt 2>/dev/null || echo none)" != none ]; then
+    export GDK_CORE_DEVICE_EVENTS=1
+    grenos-dire "souris : machine virtuelle, molette lue en evenements X classiques"
+fi
+
 (
     virt=$(systemd-detect-virt 2>/dev/null || echo none)
     if [ "$virt" != none ] && command -v pw-metadata >/dev/null 2>&1; then
