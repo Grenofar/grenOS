@@ -18,8 +18,8 @@ use std::os::unix::io::AsRawFd;
 
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{
-    AtomEnum, ChangeWindowAttributesAux, ClientMessageEvent, ConnectionExt as _, EventMask, PropMode,
-    Window,
+    AtomEnum, ChangeWindowAttributesAux, ClientMessageEvent, ConnectionExt as _, EventMask, ImageFormat,
+    PropMode, Window,
 };
 use x11rb::protocol::Event;
 use x11rb::rust_connection::RustConnection;
@@ -161,6 +161,27 @@ impl Ecran {
         choisir_icone(&donnees, taille)
     }
 
+    /// L'APERÇU D'UNE FENÊTRE (19 novembre) : « quand on reste sur l'app
+    /// ouverte dans le dock, il faut qu'elle affiche la fenêtre avec un
+    /// aperçu ». Sans compositeur, on lit ce que l'écran montre de la fenêtre
+    /// (GetImage) : une fenêtre réduite n'a rien à montrer — `None`, et la
+    /// bulle met son icône — et une partie couverte par une autre montre
+    /// celle du dessus. C'est la limite honnête d'un bureau sans compositeur.
+    /// Rendu en RGBA, réduit à `largeur` pixels de large au plus.
+    pub fn apercu(&self, xid: u32, largeur: u32) -> Option<(Vec<u8>, u32, u32)> {
+        let geo = self.conn.get_geometry(xid).ok()?.reply().ok()?;
+        let (l, h) = (geo.width as u32, geo.height as u32);
+        if l == 0 || h == 0 {
+            return None;
+        }
+        let image = self.conn.get_image(ImageFormat::Z_PIXMAP, xid, 0, 0, geo.width, geo.height, !0).ok()?.reply().ok()?;
+        // 24 ou 32 bits de profondeur : 4 octets par pixel, B G R X.
+        if image.depth < 24 || image.data.len() < (l * h * 4) as usize {
+            return None;
+        }
+        Some(reduire_bgrx(&image.data, l, h, largeur))
+    }
+
     fn message(&self, fenetre: Window, genre: u32, donnees: [u32; 5]) {
         let ev = ClientMessageEvent::new(32, fenetre, genre, donnees);
         let _ = self.conn.send_event(
@@ -225,6 +246,42 @@ impl Ecran {
     }
 }
 
+/// Réduire une image B G R X à `cible` pixels de large (proportions
+/// gardées), en moyennant chaque bloc — au plus 4×4 points par bloc, pour
+/// qu'une fenêtre 4K se réduise en quelques millisecondes. Rendue en RGBA.
+pub fn reduire_bgrx(src: &[u8], l: u32, h: u32, cible: u32) -> (Vec<u8>, u32, u32) {
+    let cl = cible.min(l).max(1);
+    let ch = ((h as u64 * cl as u64) / l.max(1) as u64).max(1) as u32;
+    let mut sortie = Vec::with_capacity((cl * ch * 4) as usize);
+    for y in 0..ch {
+        let y0 = y * h / ch;
+        let y1 = ((y + 1) * h / ch).max(y0 + 1).min(h);
+        let pas_y = ((y1 - y0) / 4).max(1);
+        for x in 0..cl {
+            let x0 = x * l / cl;
+            let x1 = ((x + 1) * l / cl).max(x0 + 1).min(l);
+            let pas_x = ((x1 - x0) / 4).max(1);
+            let (mut r, mut g, mut b, mut n) = (0u32, 0u32, 0u32, 0u32);
+            let mut yy = y0;
+            while yy < y1 {
+                let mut xx = x0;
+                while xx < x1 {
+                    let i = ((yy * l + xx) * 4) as usize;
+                    b += src[i] as u32;
+                    g += src[i + 1] as u32;
+                    r += src[i + 2] as u32;
+                    n += 1;
+                    xx += pas_x;
+                }
+                yy += pas_y;
+            }
+            let n = n.max(1);
+            sortie.extend_from_slice(&[(r / n) as u8, (g / n) as u8, (b / n) as u8, 255]);
+        }
+    }
+    (sortie, cl, ch)
+}
+
 /// Dans un _NET_WM_ICON (plusieurs images : largeur, hauteur, pixels ARGB),
 /// la plus petite qui couvre `taille`, sinon la plus grande. En RGBA.
 pub fn choisir_icone(donnees: &[u32], taille: u32) -> Option<(Vec<u8>, u32, u32)> {
@@ -255,6 +312,19 @@ pub fn choisir_icone(donnees: &[u32], taille: u32) -> Option<(Vec<u8>, u32, u32)
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn l_apercu_se_reduit_en_gardant_les_proportions_et_les_couleurs() {
+        // 400×200 entièrement rouge (B G R X = 0 0 255 0) → 100×50, rouge.
+        let src: Vec<u8> = std::iter::repeat([0u8, 0, 255, 0]).take(400 * 200).flatten().collect();
+        let (rgba, l, h) = super::reduire_bgrx(&src, 400, 200, 100);
+        assert_eq!((l, h), (100, 50));
+        assert_eq!(rgba.len(), 100 * 50 * 4);
+        assert_eq!(&rgba[0..4], &[255, 0, 0, 255]);
+        // Plus petite que la cible : rendue telle quelle, jamais agrandie.
+        let (_, l, h) = super::reduire_bgrx(&src[..40 * 20 * 4], 40, 20, 100);
+        assert_eq!((l, h), (40, 20));
+    }
+
 
     #[test]
     fn une_tuile_par_bureau() {

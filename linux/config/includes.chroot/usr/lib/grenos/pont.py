@@ -244,13 +244,31 @@ def reglages_ecran():
         return {"ecran": None, "modes": []}
     premier = sorties[0]
     modes = sorted(premier["modes"], key=lambda m: ecran.surface(m["taille"]), reverse=True)
+    # EN MACHINE VIRTUELLE, RIEN « À ESSAYER » (19 novembre). Grenofar :
+    # « j'ai l'impression que ça change rien que je passe en 360 (j'ai un
+    # écran 300 Hz) ». C'est vrai : l'écran de la VM est virtuel, et c'est
+    # VirtualBox qui le recopie sur le vrai écran, à SA cadence. Proposer
+    # 360 Hz y était une promesse sans rien derrière. On n'offre plus que ce
+    # que l'écran virtuel annonce, et la page dit pourquoi.
+    virtuelle = _virtuelle()
     rendu = []
     for mode in modes:
         rendu.append({"taille": mode["taille"], "taux": [
             {"arrondi": a, "brut": b, "annoncee": bool(n)}
-            for a, b, n in ecran.frequences_proposees(mode["taux"])]})
+            for a, b, n in ecran.frequences_proposees(mode["taux"], () if virtuelle else ecran.FREQUENCES_USUELLES)]})
     return {"ecran": {"nom": premier["nom"], "actuelle": premier["actuelle"] or "",
-                      "taux": premier["taux"] or ""}, "modes": rendu}
+                      "taux": premier["taux"] or ""}, "modes": rendu, "virtuelle": virtuelle}
+
+
+def _virtuelle():
+    """Le nom de l'hyperviseur (« oracle », « kvm »…), ou "" sur un vrai PC."""
+    import subprocess
+    try:
+        r = subprocess.run(["systemd-detect-virt"], capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    nom = r.stdout.strip()
+    return "" if r.returncode != 0 or nom in ("", "none") else nom
 
 
 def reglages_ecran_appliquer(nom, taille, brut, annoncee):

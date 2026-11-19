@@ -92,7 +92,9 @@
       return [titre("Écran", `Écran ${e.nom}, actuellement ${e.actuelle.replace("x", " × ") || "inconnu"} à ${e.taux || "?"} images par seconde.`),
         carte(ligne("Définition", tailles), ligne("Images par seconde", taux), bouton("Appliquer", "principal", appliquer), dire,
           ligne("Plusieurs écrans", bouton("Disposer les écrans", "", () => ouvrirProgramme("arandr"))),
-          note("Les fréquences marquées « à essayer » ne sont pas annoncées par le pilote : elles sont calculées puis proposées à l'écran. S'il refuse, rien ne change — et s'il accepte mais que l'image reste noire, attends dix secondes, rien n'est enregistré tant que l'essai n'a pas réussi."))];
+          v.virtuelle
+            ? note(`grenOS tourne dans une machine virtuelle (${v.virtuelle}) : son écran est virtuel, et c'est ${v.virtuelle === "oracle" ? "VirtualBox" : "l'hyperviseur"} qui le recopie sur ton vrai écran, à sa propre cadence. Choisir une fréquence plus haute ici n'y changerait rien ; sur un vrai PC, toutes celles de ton écran sont proposées.`)
+            : note("Les fréquences marquées « à essayer » ne sont pas annoncées par le pilote : elles sont calculées puis proposées à l'écran. S'il refuse, rien ne change — et s'il accepte mais que l'image reste noire, attends dix secondes, rien n'est enregistré tant que l'essai n'a pas réussi."))];
     },
 
     async son() {

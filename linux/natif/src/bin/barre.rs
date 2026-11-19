@@ -16,6 +16,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
+use gtk::gdk::prelude::GdkContextExt;
 use gtk::prelude::*;
 use gtk::{gdk, gdk_pixbuf, glib, pango};
 
@@ -68,6 +69,17 @@ const STYLE: &str = r#"
     color: #ffffff;
     border-color: transparent;
 }
+/* La bulle d'aperçus du dock (19 novembre). Découpée en forme par
+   natif::arrondir comme le menu : ses coins montrent le bureau, pas du noir. */
+#apercu { background-color: @fond-haut; border: 1px solid @bord-clair; border-radius: 14px; }
+.apercu-carte { padding: 8px; border-radius: 12px; }
+.apercu-titre { color: @texte; font-size: 12px; font-weight: 600; }
+.apercu-fermer {
+    min-width: 22px; min-height: 22px; padding: 0; margin: 0;
+    border-radius: 7px; border: none; background-image: none; background-color: transparent;
+    color: @texte-faible; box-shadow: none;
+}
+.apercu-fermer:hover { background-color: #e81123; color: #ffffff; }
 #zone-etat {
     background-color: alpha(@texte, 0.045);
     border: 1px solid alpha(@texte, 0.07);
@@ -162,6 +174,12 @@ struct Barre {
     menu_contextuel: RefCell<Option<gtk::Menu>>,
     /// Le bouton « Éteindre » du pied du menu : la CI le vise (18 novembre).
     bouton_eteindre: RefCell<Option<gtk::Button>>,
+    /// La bulle d'aperçus ouverte au survol d'une tuile, s'il y en a une.
+    apercu: RefCell<Option<gtk::Window>>,
+    /// Le minuteur qui l'ouvrira ou la fermera ; un seul à la fois.
+    minuteur_apercu: RefCell<Option<glib::SourceId>>,
+    /// Le pointeur est-il sur la bulle ? Alors elle reste.
+    survol_apercu: std::cell::Cell<bool>,
 }
 
 fn taille_menu() -> (i32, i32) {
@@ -393,6 +411,9 @@ impl Barre {
             attrape: RefCell::new(None),
             menu_contextuel: RefCell::new(None),
             bouton_eteindre: RefCell::new(None),
+            apercu: RefCell::new(None),
+            minuteur_apercu: RefCell::new(None),
+            survol_apercu: std::cell::Cell::new(false),
         });
 
         vboite.pack_start(&barre.pied(), false, false, 0);
@@ -621,6 +642,11 @@ impl Barre {
 
     // ---- Les tuiles ----------------------------------------------------------
     fn refaire(self: &Rc<Self>) {
+        // Les tuiles vont être refaites : une bulle ouverte pointerait sur
+        // des fenêtres qui ont peut-être changé (celle qu'on vient de fermer).
+        if !self.survol_apercu.get() {
+            self.fermer_apercu();
+        }
         for enfant in self.tuiles.children() {
             self.tuiles.remove(&enfant);
         }
@@ -728,6 +754,24 @@ impl Barre {
         let b = self.clone();
         let tt = t.clone();
         bouton.connect_clicked(move |_| b.activer(&tt));
+
+        // L'APERÇU AU SURVOL (19 novembre) : rester sur une application
+        // ouverte montre ses fenêtres. Son infobulle se tait alors — deux
+        // bulles l'une sur l'autre se gêneraient.
+        if !t.fenetres.is_empty() {
+            bouton.set_has_tooltip(false);
+            let b = self.clone();
+            let tt = t.clone();
+            bouton.connect_enter_notify_event(move |w, _| {
+                b.programmer_apercu(tt.clone(), w.clone());
+                glib::Propagation::Proceed
+            });
+            let b = self.clone();
+            bouton.connect_leave_notify_event(move |_, _| {
+                b.cacher_apercu_bientot();
+                glib::Propagation::Proceed
+            });
+        }
         let b = self.clone();
         bouton.connect_button_press_event(move |_, ev| {
             if ev.button() != 3 {
@@ -737,6 +781,174 @@ impl Barre {
             glib::Propagation::Stop
         });
         boite
+    }
+
+    fn annuler_minuteur_apercu(&self) {
+        if let Some(id) = self.minuteur_apercu.borrow_mut().take() {
+            id.remove();
+        }
+    }
+
+    /// Ouvrir la bulle dans 450 ms, si le pointeur est resté sur la tuile.
+    fn programmer_apercu(self: &Rc<Self>, t: Rc<Tuile>, bouton: gtk::Button) {
+        self.annuler_minuteur_apercu();
+        let b = self.clone();
+        let id = glib::timeout_add_local_once(Duration::from_millis(450), move || {
+            *b.minuteur_apercu.borrow_mut() = None;
+            b.montrer_apercu(&t, &bouton);
+        });
+        *self.minuteur_apercu.borrow_mut() = Some(id);
+    }
+
+    /// Fermer la bulle dans 280 ms — le temps d'y amener le pointeur.
+    fn cacher_apercu_bientot(self: &Rc<Self>) {
+        self.annuler_minuteur_apercu();
+        let b = self.clone();
+        let id = glib::timeout_add_local_once(Duration::from_millis(280), move || {
+            *b.minuteur_apercu.borrow_mut() = None;
+            if !b.survol_apercu.get() {
+                b.fermer_apercu();
+            }
+        });
+        *self.minuteur_apercu.borrow_mut() = Some(id);
+    }
+
+    fn fermer_apercu(&self) {
+        self.survol_apercu.set(false);
+        if let Some(f) = self.apercu.borrow_mut().take() {
+            f.close();
+        }
+    }
+
+    /// La bulle : une carte par fenêtre — son titre, un ✕ qui la ferme, et
+    /// son image aux coins arrondis. Un clic sur la carte l'affiche.
+    fn montrer_apercu(self: &Rc<Self>, t: &Rc<Tuile>, bouton: &gtk::Button) {
+        self.fermer_apercu();
+        let Some(ecran) = &self.ecran else { return };
+        const L: i32 = 220;
+        const H: i32 = 132;
+
+        let fenetre = gtk::Window::new(gtk::WindowType::Popup);
+        fenetre.set_widget_name("apercu");
+        fenetre.set_type_hint(gdk::WindowTypeHint::Tooltip);
+        fenetre.add_events(gdk::EventMask::ENTER_NOTIFY_MASK | gdk::EventMask::LEAVE_NOTIFY_MASK);
+        let rangee = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        rangee.set_margin_top(6);
+        rangee.set_margin_bottom(6);
+        rangee.set_margin_start(6);
+        rangee.set_margin_end(6);
+        fenetre.add(&rangee);
+
+        for f in t.fenetres.iter().take(6) {
+            let carte = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            classe(&carte, "apercu-carte");
+
+            let tete = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+            let titre = gtk::Label::new(Some(if f.titre.is_empty() { &t.nom } else { &f.titre }));
+            classe(&titre, "apercu-titre");
+            titre.set_ellipsize(pango::EllipsizeMode::End);
+            titre.set_max_width_chars(24);
+            titre.set_xalign(0.0);
+            tete.pack_start(&titre, true, true, 0);
+            let fermer = gtk::Button::with_label("✕");
+            classe(&fermer, "apercu-fermer");
+            poser_infobulle(&fermer, "Fermer cette fenêtre");
+            let b = self.clone();
+            let xid = f.xid;
+            fermer.connect_clicked(move |_| {
+                if let Some(e) = &b.ecran {
+                    e.fermer(xid, temps());
+                }
+                b.fermer_apercu();
+            });
+            tete.pack_end(&fermer, false, false, 0);
+            carte.pack_start(&tete, false, false, 0);
+
+            // L'image : celle de la fenêtre, ou son icône si elle est réduite
+            // (une fenêtre cachée n'a rien à l'écran).
+            let image = if f.reduite { None } else { ecran.apercu(f.xid, (L * 2) as u32) }.map(|(rgba, l, h)| {
+                gdk_pixbuf::Pixbuf::from_bytes(
+                    &glib::Bytes::from_owned(rgba), gdk_pixbuf::Colorspace::Rgb, true, 8, l as i32, h as i32, (l * 4) as i32,
+                )
+            });
+            let icone = natif::pixbuf_de(&[&t.icone, "application-x-executable"], 48);
+            let zone = gtk::DrawingArea::new();
+            zone.set_size_request(L, H);
+            zone.connect_draw(move |z, cr| {
+                let (w, h) = (z.allocated_width() as f64, z.allocated_height() as f64);
+                // LES COINS : on découpe NOUS-MÊMES l'image en arrondi, sur le
+                // fond de la bulle. Rien hors du chemin n'est peint — pas de
+                // carré noir aux angles (la demande du 19 novembre).
+                chemin_arrondi(cr, 0.0, 0.0, w, h, 10.0);
+                cr.clip();
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.05);
+                let _ = cr.paint();
+                if let Some(pb) = &image {
+                    // « Couvrir » : l'image remplit le cadre, centrée.
+                    let (pw, ph) = (pb.width() as f64, pb.height() as f64);
+                    let echelle = (w / pw).max(h / ph);
+                    let (sw, sh) = ((pw * echelle).ceil() as i32, (ph * echelle).ceil() as i32);
+                    if let Some(petite) = pb.scale_simple(sw.max(1), sh.max(1), gdk_pixbuf::InterpType::Bilinear) {
+                        cr.set_source_pixbuf(&petite, (w - sw as f64) / 2.0, (h - sh as f64) / 2.0);
+                        let _ = cr.paint();
+                    }
+                } else if let Some(ic) = &icone {
+                    cr.set_source_pixbuf(ic, (w - ic.width() as f64) / 2.0, (h - ic.height() as f64) / 2.0);
+                    let _ = cr.paint();
+                }
+                glib::Propagation::Stop
+            });
+            carte.pack_start(&zone, false, false, 0);
+
+            // Un clic sur la carte (hors du ✕) affiche cette fenêtre.
+            let boite = gtk::EventBox::new();
+            boite.add(&carte);
+            let b = self.clone();
+            boite.connect_button_release_event(move |_, ev| {
+                if ev.button() == 1 {
+                    if let Some(e) = &b.ecran {
+                        e.activer(xid, temps());
+                    }
+                    b.fermer_apercu();
+                }
+                glib::Propagation::Stop
+            });
+            rangee.pack_start(&boite, false, false, 0);
+        }
+
+        // Le pointeur sur la bulle la garde ouverte ; le quitter la ferme.
+        let b = self.clone();
+        fenetre.connect_enter_notify_event(move |_, _| {
+            b.survol_apercu.set(true);
+            b.annuler_minuteur_apercu();
+            glib::Propagation::Proceed
+        });
+        let b = self.clone();
+        fenetre.connect_leave_notify_event(move |_, ev| {
+            // Passer de la bulle à l'un de ses enfants n'est pas la quitter.
+            if ev.detail() != gdk::NotifyType::Inferior {
+                b.survol_apercu.set(false);
+                b.cacher_apercu_bientot();
+            }
+            glib::Propagation::Proceed
+        });
+
+        // Au-dessus de la tuile, centrée sur elle, sans sortir de l'écran.
+        let zone_tuile = bouton.allocation();
+        let (px, py) = self.panneau.position();
+        let centre = px + zone_tuile.x() + zone_tuile.width() / 2;
+        let largeur_ecran = self.largeur;
+        fenetre.connect_size_allocate(move |f, _| {
+            let (l, h) = f.size();
+            let x = (centre - l / 2).clamp(8, (largeur_ecran - l - 8).max(8));
+            let y = (py - h - 10).max(8);
+            if f.position() != (x, y) {
+                f.move_(x, y);
+            }
+        });
+        natif::arrondir(&fenetre);
+        fenetre.show_all();
+        *self.apercu.borrow_mut() = Some(fenetre);
     }
 
     fn activer(&self, t: &Tuile) {
@@ -1029,6 +1241,18 @@ impl Barre {
             dire(&format!("bouton {nom} en {x},{y}"));
         }
     }
+}
+
+/// Un rectangle aux coins arrondis, en chemin cairo (pour découper).
+fn chemin_arrondi(cr: &gtk::cairo::Context, x: f64, y: f64, w: f64, h: f64, r: f64) {
+    use std::f64::consts::PI;
+    let r = r.min(w / 2.0).min(h / 2.0);
+    cr.new_sub_path();
+    cr.arc(x + w - r, y + r, r, -PI / 2.0, 0.0);
+    cr.arc(x + w - r, y + h - r, r, 0.0, PI / 2.0);
+    cr.arc(x + r, y + h - r, r, PI / 2.0, PI);
+    cr.arc(x + r, y + r, r, PI, 1.5 * PI);
+    cr.close_path();
 }
 
 fn pactl(args: &[&str]) -> Option<String> {
