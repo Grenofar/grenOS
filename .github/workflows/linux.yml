@@ -234,9 +234,14 @@ jobs:
         # apt qui abandonne une requete morte en 30 s, et au deuxieme echec
         # on quitte le miroir Azure du runner pour celui d'Ubuntu. Et l'etape
         # dit l'heure a chaque pas : la prochaine panne nommera son appel.
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: |
-          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          # DPkg::Lock::Timeout : le 19 novembre (run 44476781057), trois
+          # installations ont echoue en quelques secondes, sans un mot (-qq).
+          # Un echec si rapide, c'est le verrou de dpkg que les mises a jour
+          # automatiques du runner tiennent a son demarrage : on l'attend
+          # jusqu'a 3 minutes au lieu d'echouer tout de suite.
+          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o DPkg::Lock::Timeout=180"
           miroir_ubuntu() {
             echo "$(date +%T) le miroir du runner ne repond pas : archive.ubuntu.com"
             sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list 2>/dev/null || true
@@ -253,7 +258,8 @@ jobs:
           # branchee a chaud pendant la session (todo J6, F5 — 18 novembre).
           for essai in 1 2 3; do
             echo "$(date +%T) apt-get install, essai $essai"
-            if timeout 240 sudo apt-get $APT install -y -qq qemu-system-x86 qemu-utils zip python3 gdisk e2fsprogs dosfstools mtools; then break; fi
+            # -q et non -qq : une installation qui echoue doit dire pourquoi.
+            if timeout 300 sudo apt-get $APT install -y -q qemu-system-x86 qemu-utils zip python3 gdisk e2fsprogs dosfstools mtools; then break; fi
             [ "$essai" = 3 ] && { echo "::error::Les outils de l'hote ne s'installent pas (trois essais)."; exit 1; }
             [ "$essai" = 1 ] && { miroir_ubuntu; timeout 120 sudo apt-get $APT update -qq || true; }
             sleep 5
