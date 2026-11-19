@@ -170,6 +170,37 @@ if [ "$(systemd-detect-virt 2>/dev/null || echo none)" != none ]; then
     grenos-dire "souris : machine virtuelle, molette lue en evenements X classiques"
 fi
 
+# LA CARTE SON NE S'ENDORT PLUS DANS UNE MACHINE VIRTUELLE (19 novembre).
+# Grenofar : « le son fonctionne pas, ça fait bip bip ». Le journal de
+# VirtualBox l'a dit : le flux vers la carte s'ouvrait et se refermait sans
+# cesse (0:59.0, 0:59.8, 1:00.4…). WirePlumber endort la carte dès qu'elle
+# se tait ; chaque réveil d'une carte VIRTUELLE claque, et le son hache. En
+# VM seulement, la carte reste ouverte (suspend 0) avec une marge plus large
+# (période 1024, réserve 8192). Écrit AVANT que la session lance le son ; une
+# session déjà lancée le relit en redémarrant WirePlumber une fois.
+if [ "$(systemd-detect-virt 2>/dev/null || echo none)" != none ]; then
+    WP="${XDG_CONFIG_HOME:-$HOME/.config}/wireplumber/wireplumber.conf.d"
+    WPF="$WP/50-grenos-machine-virtuelle.conf"
+    WPN='monitor.alsa.rules = [
+  {
+    matches = [ { node.name = "~alsa_output.*" } ]
+    actions = {
+      update-props = {
+        session.suspend-timeout-seconds = 0
+        api.alsa.period-size = 1024
+        api.alsa.headroom = 8192
+      }
+    }
+  }
+]'
+    if [ "$(cat "$WPF" 2>/dev/null)" != "$WPN" ]; then
+        mkdir -p "$WP" && printf '%s
+' "$WPN" > "$WPF"
+        systemctl --user try-restart wireplumber.service 2>/dev/null || true
+        grenos-dire "son : machine virtuelle, la carte ne s endort plus (WirePlumber)"
+    fi
+fi
+
 (
     virt=$(systemd-detect-virt 2>/dev/null || echo none)
     if [ "$virt" != none ] && command -v pw-metadata >/dev/null 2>&1; then

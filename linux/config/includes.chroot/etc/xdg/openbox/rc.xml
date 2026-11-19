@@ -329,21 +329,12 @@
       </mousebind>
     </context>
 
-    <!-- Le fond d'écran : un clic droit ouvre le menu des applications. -->
-    <context name="Desktop">
-      <mousebind button="Right" action="Press">
-        <action name="Execute">
-          <command>grenos-menu</command>
-        </action>
-      </mousebind>
-    </context>
-    <context name="Root">
-      <mousebind button="Right" action="Press">
-        <action name="Execute">
-          <command>grenos-menu</command>
-        </action>
-      </mousebind>
-    </context>
+    <!-- LE CLIC DROIT SUR LE BUREAU (19 novembre) : Openbox ouvrait ici le
+         menu des applications (le panneau de recherche), PAR-DESSUS le menu
+         du bureau natif (Nouveau dossier, Changer le fond…) — « quand je clic
+         droit ça ouvre le panel de recherche ». Le bureau a son menu, comme
+         Windows ; le menu des applications reste à la touche Windows et au
+         bouton du dock. Plus aucune liaison du clic droit ici. -->
   </mouse>
 
   <applications>
