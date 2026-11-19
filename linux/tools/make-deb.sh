@@ -220,6 +220,12 @@ install -m 0644 "$DEDANS/usr/share/mime/packages/grenos-francais.xml" \
 
 install -m 0644 "$DEDANS/usr/share/themes/grenOS/openbox-3/themerc" \
     "$BUILD/usr/share/themes/grenOS/openbox-3/"
+# LES DESSINS DES BOUTONS AUSSI (19 novembre). Le paquet ne livrait que les
+# couleurs du themerc : une machine MISE A JOUR gardait les anciens dessins
+# (des ronds pleins), que le nouveau themerc peignait en clair — trois ronds
+# blancs a la place des boutons de Windows, vus dans la VM de Grenofar. Les
+# XBM sont generes a la construction de l'image ; on les genere ici aussi.
+python3 "$HERE/tools/boutons-fenetre.py" "$BUILD/usr/share/themes/grenOS/openbox-3" >/dev/null
 
 # Les fonds d'écran, calculés ici comme à la construction de l'image.
 python3 "$HERE/tools/wallpaper.py" "$BUILD/usr/share/grenos" 2560 1440
