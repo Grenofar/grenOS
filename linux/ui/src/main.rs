@@ -226,8 +226,12 @@ pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
             .inner_size(largeur, hauteur)
             .resizable(false)
             .always_on_top(true)
-            .center()
-            .visible(false);
+            .center();
+        // PAS cachée, elle (19 novembre) : née cachée puis montrée, cette
+        // fenêtre fixe et toujours au-dessus ressortait étirée à toute la
+        // hauteur utile (440x660 au lieu de 440x560, « DEBORDE » en 720p,
+        // run 44396230022). Elle est petite et s'ouvre vite : on la garde
+        // visible dès sa création, comme avant.
     } else {
         constructeur = constructeur
             .inner_size(largeur, hauteur)
@@ -241,7 +245,7 @@ pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
     // (`fenetre_prete`) ; on ne voit plus un cadre vide 200 ms avant le
     // contenu. LE FILET : une page qui ne dirait jamais « prête » (erreur JS)
     // laisserait une application invisible — elle se montre seule à 1,5 s.
-    if page != "premier" {
+    if page != "premier" && page != "arret" {
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(1500));
             if !fenetre.is_visible().unwrap_or(true) {
