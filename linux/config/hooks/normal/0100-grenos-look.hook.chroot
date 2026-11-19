@@ -179,6 +179,18 @@ if [ ! -e /usr/lib/firmware/nvidia/gb206 ] && [ ! -e /lib/firmware/nvidia/gb206 
     exit 1
 fi
 echo "grenos: noyau $noyau et firmware NVIDIA Blackwell presents"
+# Et ces firmwares restent HORS de l'initrd (crochet
+# zz-grenos-sans-pilotes-graphiques) : dedans, ils faisaient passer l'ISO
+# au-dela de 2 Go et la cle USB mettait deux minutes a le lire.
+for initrd in /boot/initrd.img-*; do
+    [ -f "$initrd" ] || continue
+    taille=$(( $(stat -c %s "$initrd") / 1048576 ))
+    if lsinitramfs "$initrd" 2>/dev/null | grep -qE 'firmware/(nvidia|amdgpu)/'; then
+        echo "grenos: $initrd ($taille Mo) contient encore des firmwares graphiques" >&2
+        exit 1
+    fi
+    echo "grenos: initrd $taille Mo, sans pilote ni firmware graphique"
+done
 
 echo "--- grenOS : le magasin ---"
 

@@ -1,0 +1,42 @@
+#!/bin/sh
+# Les pilotes de cartes graphiques n'ont rien à faire dans l'initrd
+# (19 novembre).
+#
+# `nouveau` et `amdgpu` déclarent TOUS leurs firmwares (MODULE_FIRMWARE), et
+# initramfs-tools copie tout ce qu'un module déclare. L'initrd de l'image
+# 1801 pesait 158 Mo, en DEUX exemplaires sur l'ISO et un dans le système.
+# Avec le firmware NVIDIA de backports (152 Mo au lieu de 63, pour les RTX 50),
+# l'ISO est passée à 2,17 Go et la CI l'a refusée — une Release GitHub
+# s'arrête à 2 Go (run 44588740729).
+#
+# Et c'est aussi du temps : Grenofar voyait DEUX MINUTES d'écran noir au
+# démarrage sur une clé USB 2.0, le temps que le firmware lise l'initrd.
+#
+# Rien n'en a besoin si tôt : l'écran de chargement s'affiche sur le tampon
+# du firmware (simpledrm, à la définition que GRUB a choisie), le disque
+# chiffré se déverrouille au clavier sur ce même écran, et le vrai pilote se
+# charge une fois le système monté, avec son firmware, depuis /usr/lib/firmware.
+# Les pilotes des machines virtuelles (bochs, virtio, vmwgfx, qxl) restent :
+# ils sont petits et sans firmware.
+#
+# « zz » : après les crochets qui ajoutent des modules. mkinitramfs refait
+# `depmod` après tous les crochets, donc les modules retirés ne sont plus
+# cherchés.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in prereqs) prereqs; exit 0 ;; esac
+
+[ -n "$DESTDIR" ] || exit 0
+for racine in "$DESTDIR/usr/lib/modules" "$DESTDIR/lib/modules"; do
+    [ -d "$racine" ] || continue
+    for pilote in nouveau amd/amdgpu radeon i915 xe; do
+        rm -rf "$racine"/*/kernel/drivers/gpu/drm/"$pilote"
+    done
+done
+for racine in "$DESTDIR/usr/lib/firmware" "$DESTDIR/lib/firmware"; do
+    [ -d "$racine" ] || continue
+    for dossier in nvidia amdgpu radeon i915 xe; do
+        rm -rf "$racine/$dossier"
+    done
+done
+exit 0
