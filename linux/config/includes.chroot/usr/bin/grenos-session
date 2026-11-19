@@ -263,6 +263,36 @@ if command -v grenos-coins >/dev/null 2>&1; then
     grenos-veilleur grenos-coins &
 fi
 
+# LE COMPOSITEUR (19 novembre), pour que l'interface suive un écran rapide.
+# Grenofar : « j'ai un écran 300 Hz ». Sans compositeur, les fenêtres
+# s'animent à ~60 images par seconde ; avec picom, à la fréquence de
+# l'écran. Trois conditions, et chacune a sa raison :
+#   - pas en machine virtuelle : l'hyperviseur recopie l'écran à sa propre
+#     cadence, et un compositeur y coûterait sans rien donner ;
+#   - une VRAIE carte graphique (pilote i915, amdgpu, radeon, nouveau,
+#     nvidia) : sur un rendu logiciel (llvmpipe), picom ralentirait tout ;
+#   - pas en effets « Performance » : ce réglage promet le minimum.
+# picom ne change pas l'apparence (etc/xdg/picom/grenos.conf). La ligne
+# série dit pourquoi il tourne, ou pourquoi pas.
+compositeur_raison() {
+    [ "$(systemd-detect-virt 2>/dev/null || echo none)" = none ] || { echo "machine virtuelle"; return; }
+    [ "$(cat "$CONFIG/effets" 2>/dev/null)" != performance ] || { echo "effets Performance"; return; }
+    command -v picom >/dev/null 2>&1 || { echo "picom absent"; return; }
+    for pilote in /sys/class/drm/card*/device/driver; do
+        case "$(basename "$(readlink -f "$pilote" 2>/dev/null)")" in
+            i915|xe|amdgpu|radeon|nouveau|nvidia) return 0 ;;
+        esac
+    done
+    echo "pas de carte graphique reconnue"
+}
+RAISON=$(compositeur_raison)
+if [ -z "$RAISON" ]; then
+    grenos-veilleur picom --config /etc/xdg/picom/grenos.conf &
+    grenos-dire "compositeur : picom lance (vsync a la frequence de l ecran)"
+else
+    grenos-dire "compositeur : non ($RAISON)"
+fi
+
 # Le son, une fois PipeWire debout : combien de sorties, et laquelle. Sans
 # cette ligne, « aucune sortie détectée » dans les Réglages ne permet pas de
 # distinguer une panne d'un ordinateur sans carte son.
