@@ -19,14 +19,38 @@
 # Les pilotes des machines virtuelles (bochs, virtio, vmwgfx, qxl) restent :
 # ils sont petits et sans firmware.
 #
-# « zz » : après les crochets qui ajoutent des modules. mkinitramfs refait
-# `depmod` après tous les crochets, donc les modules retirés ne sont plus
-# cherchés.
+# COMMENT. Les crochets ne copient pas les modules : `manual_add_modules` les
+# INSCRIT dans le fichier "$__MODULES_TO_ADD", et mkinitramfs ne les copie
+# — firmwares compris, par dracut-install — qu'APRÈS tous les crochets
+# (`apply_add_modules`, lu dans mkinitramfs 0.148.4). Supprimer les fichiers
+# ici ne servait donc à rien : la première version de ce crochet l'a fait,
+# et la construction l'a refusé (initrd de 252 Mo, run 44598026241). On raye
+# ces pilotes de la liste avant qu'elle soit lue. C'est plymouth qui les y
+# met (`copy_modules_dir kernel/drivers/gpu/drm`), par leur nom court.
+#
+# « zz » : nos crochets passent après ceux de /usr/share/initramfs-tools.
 PREREQ=""
 prereqs() { echo "$PREREQ"; }
 case "$1" in prereqs) prereqs; exit 0 ;; esac
 
 [ -n "$DESTDIR" ] || exit 0
+MODULES_NOYAU="${MODULESDIR:-/lib/modules/${version:-}}"
+if [ -n "${__MODULES_TO_ADD:-}" ] && [ -f "$__MODULES_TO_ADD" ] && [ -d "$MODULES_NOYAU" ]; then
+    # Chaque module de ces dossiers, par son nom court (comme plymouth l'écrit).
+    noms=$(find "$MODULES_NOYAU/kernel/drivers/gpu/drm/nouveau" \
+                "$MODULES_NOYAU/kernel/drivers/gpu/drm/amd" \
+                "$MODULES_NOYAU/kernel/drivers/gpu/drm/radeon" \
+                "$MODULES_NOYAU/kernel/drivers/gpu/drm/i915" \
+                "$MODULES_NOYAU/kernel/drivers/gpu/drm/xe" \
+                -name '*.ko*' -printf '%f\n' 2>/dev/null | sed 's/\.ko.*$//' | sort -u)
+    if [ -n "$noms" ]; then
+        printf '%s\n' "$noms" > "$DESTDIR/.grenos-sans-graphique"
+        grep -vxF -f "$DESTDIR/.grenos-sans-graphique" "$__MODULES_TO_ADD" > "$__MODULES_TO_ADD.grenos" || true
+        cat "$__MODULES_TO_ADD.grenos" > "$__MODULES_TO_ADD"
+        rm -f "$__MODULES_TO_ADD.grenos" "$DESTDIR/.grenos-sans-graphique"
+    fi
+fi
+# Et ceux qu'un premier passage aurait déjà copiés.
 for racine in "$DESTDIR/usr/lib/modules" "$DESTDIR/lib/modules"; do
     [ -d "$racine" ] || continue
     for pilote in nouveau amd/amdgpu radeon i915 xe; do
