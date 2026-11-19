@@ -43,8 +43,10 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// La hauteur de notre barre et d'une barre de titre d'Openbox : les mêmes
 /// nombres que `grenosui.py` (BARRE, TITRE), pour juger le 720p pareil.
-// 52 de barre + 8 d air dessous : la barre flotte depuis le 19 novembre.
-const BARRE: f64 = 60.0;
+// La place du dock en bas, air compris (64 + 8) : le dock est la disposition
+// par défaut depuis le 19 novembre. La barre n'en prend que 60 ; on garde la
+// plus grande, pour qu'aucune fenêtre ne passe sous l'une ou l'autre.
+const BARRE: f64 = 72.0;
 const TITRE: f64 = 30.0;
 
 /// Quand chaque fenêtre a été demandée : pour dire « ouverture : X en N ms ».
@@ -477,9 +479,9 @@ mod essais {
 
     #[test]
     fn la_taille_tient_en_720p() {
-        // 1280×720 : 660 au-dessus de la barre flottante (52 + 8 d'air),
-        // 630 sans la barre de titre.
-        assert_eq!(taille_tenable(1220.0, 800.0, Some((1280.0, 720.0))), (1220.0, 630.0));
+        // 1280×720 : 648 au-dessus du dock (64 + 8 d'air), 618 sans la barre
+        // de titre.
+        assert_eq!(taille_tenable(1220.0, 800.0, Some((1280.0, 720.0))), (1220.0, 618.0));
         assert_eq!(taille_tenable(1400.0, 600.0, Some((1280.0, 720.0))), (1264.0, 600.0));
         assert_eq!(taille_tenable(760.0, 620.0, Some((1920.0, 1080.0))), (760.0, 620.0));
         assert_eq!(taille_tenable(760.0, 620.0, None), (760.0, 620.0));

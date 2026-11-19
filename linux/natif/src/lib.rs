@@ -325,9 +325,16 @@ pub fn sur_signal(numero: i32, mut action: impl FnMut() + 'static) {
 // programme : deux barres qui montrent les mêmes applications se
 // contrediraient, et ce qui tourne toute la session doit rester UN processus.
 
-/// La disposition choisie : `~/.config/grenos/barre` vaut « dock », ou rien.
+/// La disposition choisie. LE DOCK PAR DÉFAUT (19 novembre, Grenofar :
+/// « fais que de base ça soit un dock ») : seule la valeur « barre », posée
+/// par Réglages › Apparence, ramène la barre pleine largeur.
 pub fn disposition_dock() -> bool {
-    theme::reglage("barre") == "dock"
+    dock_selon(&theme::reglage("barre"))
+}
+
+/// Le réglage lu → dock ou non ; rien, ou une valeur inconnue, donne le dock.
+pub fn dock_selon(reglage: &str) -> bool {
+    reglage.trim() != "barre"
 }
 
 /// Où poser le dock : centré, à `marge` pixels au-dessus du bord bas. Un
@@ -340,6 +347,13 @@ pub fn place_dock(ecran: (i32, i32), dock: (i32, i32), marge: i32) -> (i32, i32)
 /// la barre, plus l'air dessous (sans quoi une fenêtre agrandie passerait
 /// SOUS elle). Depuis le 19 novembre la barre flotte aussi : les deux
 /// dispositions passent `flottante = true`.
+/// La place que la barre prend en bas de l'écran, AIR COMPRIS, selon la
+/// disposition : 72 px pour le dock (64 + 8), 60 pour la barre (52 + 8).
+/// Le bureau, le panneau du son et le presse-papier s'arrêtent au-dessus.
+pub fn bande_basse() -> i32 {
+    if disposition_dock() { 72 } else { 60 }
+}
+
 pub fn bande_reservee(hauteur: i32, marge: i32, dock: bool) -> i32 {
     if dock { hauteur + marge } else { hauteur }
 }
@@ -360,6 +374,16 @@ mod tests {
         // Toutes les lignes sont couvertes, une seule fois.
         let total: i32 = r.iter().map(|x| x.3).sum();
         assert_eq!(total, 60);
+    }
+
+    #[test]
+    fn le_dock_est_la_disposition_par_defaut() {
+        assert!(dock_selon(""));
+        assert!(dock_selon("dock"));
+        assert!(dock_selon("n'importe quoi"));
+        assert!(!dock_selon("barre"));
+        assert!(!dock_selon("barre
+"));
     }
 
     #[test]

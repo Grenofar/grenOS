@@ -26,8 +26,10 @@ use natif::{classe, dire};
 
 const LARGEUR: i32 = 420;
 const HAUTEUR: i32 = 460;
-// 52 de barre + 8 d air dessous : la barre flotte depuis le 19 novembre.
-const HAUTEUR_BARRE: i32 = 60;
+// La place de la barre (ou du dock), air compris : natif::bande_basse.
+fn hauteur_barre() -> i32 {
+    natif::bande_basse()
+}
 
 const STYLE: &str = r#"
 #presse { background-color: @fond; border: 1px solid @bord-clair; border-radius: 14px; }
@@ -197,7 +199,7 @@ impl Presse {
         let (l, h) = natif::taille_ecran();
         // Au-dessus de la barre, au centre : là où le regard est quand on
         // vient de taper Win+V.
-        self.fenetre.move_(((l - LARGEUR) / 2).max(8), (h - HAUTEUR_BARRE - HAUTEUR - 12).max(8));
+        self.fenetre.move_(((l - LARGEUR) / 2).max(8), (h - hauteur_barre() - HAUTEUR - 12).max(8));
         self.fenetre.show_all();
         self.vide.set_visible(self.historique.borrow().elements().is_empty());
         self.fenetre.present();

@@ -316,8 +316,10 @@ pub fn reglages_dpi(dpi: u32) -> Result<String, String> {
 // ---------------------------------------------------------- G12 : le dock
 
 /// La disposition de la barre : « barre » (pleine largeur) ou « dock ».
+/// Le dock par défaut (19 novembre) : seul « barre » ramène la barre
+/// pleine largeur — la même règle que natif::dock_selon.
 fn disposition_de(texte: &str) -> &'static str {
-    if texte.trim() == "dock" { "dock" } else { "barre" }
+    if texte.trim() == "barre" { "barre" } else { "dock" }
 }
 
 #[tauri::command]
@@ -354,8 +356,10 @@ mod essais {
     fn la_disposition_ne_connait_que_deux_mots() {
         assert_eq!(disposition_de("dock
 "), "dock");
-        assert_eq!(disposition_de(""), "barre");
-        assert_eq!(disposition_de("n'importe quoi"), "barre");
+        assert_eq!(disposition_de(""), "dock");
+        assert_eq!(disposition_de("n'importe quoi"), "dock");
+        assert_eq!(disposition_de("barre
+"), "barre");
     }
 
     #[test]

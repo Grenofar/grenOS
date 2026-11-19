@@ -23,8 +23,10 @@ use gtk::{gdk, glib};
 use natif::{classe, dire};
 
 const LARGEUR: i32 = 380;
-// 52 de barre + 8 d air dessous : la barre flotte depuis le 19 novembre.
-const HAUTEUR_BARRE: i32 = 60;
+// La place de la barre (ou du dock), air compris : natif::bande_basse.
+fn hauteur_barre() -> i32 {
+    natif::bande_basse()
+}
 
 const STYLE: &str = r#"
 #panneau-son {
@@ -406,7 +408,7 @@ impl Panneau {
         // En bas à DROITE, juste au-dessus de la barre : là où est l'icône qui
         // l'ouvre. Un panneau loin du bouton cliqué se lit comme une fenêtre
         // apparue toute seule.
-        let place = ((l - largeur - 10).max(10), h - HAUTEUR_BARRE - hauteur - 8);
+        let place = ((l - largeur - 10).max(10), h - hauteur_barre() - hauteur - 8);
         self.fenetre.move_(place.0, place.1);
         self.fenetre.present();
         natif::arrondir(&self.fenetre);

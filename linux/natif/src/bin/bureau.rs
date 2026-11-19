@@ -23,8 +23,10 @@ const TAILLE_ICONE: i32 = 56;
 const LARGEUR_CASE: i32 = 118;
 const HAUTEUR_CASE: i32 = 116;
 const MARGE: i32 = 24;
-// 52 de barre + 8 d air dessous : la barre flotte depuis le 19 novembre.
-const BARRE: i32 = 60;
+// La place de la barre (ou du dock), air compris : natif::bande_basse.
+fn barre() -> i32 {
+    natif::bande_basse()
+}
 
 const STYLE: &str = r#"
 #bureau { background-color: @fond; }
@@ -47,7 +49,7 @@ const STYLE: &str = r#"
 // ---- La grille : une seule fonction pour poser ET pour caler ---------------
 
 fn derniere_case(l: i32, h: i32) -> (i32, i32) {
-    (((l - MARGE - LARGEUR_CASE) / LARGEUR_CASE).max(0), ((h - BARRE - MARGE - HAUTEUR_CASE) / HAUTEUR_CASE).max(0))
+    (((l - MARGE - LARGEUR_CASE) / LARGEUR_CASE).max(0), ((h - barre() - MARGE - HAUTEUR_CASE) / HAUTEUR_CASE).max(0))
 }
 
 fn coin_de(c: i32, l: i32) -> (i32, i32) {
@@ -398,7 +400,7 @@ impl Bureau {
         }
         let (rx, ry) = ev.root();
         let x = ((*x0 as f64 + rx - dx) as i32).clamp(0, self.largeur - LARGEUR_CASE);
-        let y = ((*y0 as f64 + ry - dy) as i32).clamp(0, self.hauteur - HAUTEUR_CASE - BARRE);
+        let y = ((*y0 as f64 + ry - dy) as i32).clamp(0, self.hauteur - HAUTEUR_CASE - barre());
         self.plan.move_(w, x, y);
         glib::Propagation::Stop
     }
@@ -678,6 +680,6 @@ mod tests {
         let (cmax, lmax) = derniere_case(l, h);
         assert_eq!(case_de(10_000, 10_000, l, h), (cmax, lmax));
         let (x, y) = coin_de(cmax, lmax);
-        assert!(x + LARGEUR_CASE <= l && y + HAUTEUR_CASE <= h - BARRE);
+        assert!(x + LARGEUR_CASE <= l && y + HAUTEUR_CASE <= h - barre());
     }
 }
