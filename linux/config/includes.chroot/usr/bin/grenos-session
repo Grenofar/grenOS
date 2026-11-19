@@ -181,21 +181,13 @@ fi
 if [ "$(systemd-detect-virt 2>/dev/null || echo none)" != none ]; then
     WP="${XDG_CONFIG_HOME:-$HOME/.config}/wireplumber/wireplumber.conf.d"
     WPF="$WP/50-grenos-machine-virtuelle.conf"
-    WPN='monitor.alsa.rules = [
-  {
-    matches = [ { node.name = "~alsa_output.*" } ]
-    actions = {
-      update-props = {
-        session.suspend-timeout-seconds = 0
-        api.alsa.period-size = 1024
-        api.alsa.headroom = 8192
-      }
-    }
-  }
-]'
+    # Sur UNE ligne (le format de WirePlumber l'accepte) : la garde des
+    # commandes (verif-commandes) lit chaque ligne d'un script comme une
+    # commande possible, et la version sur plusieurs lignes a arrêté la
+    # construction du 19 novembre (« matches n'est pas dans l'image »).
+    WPN='monitor.alsa.rules = [ { matches = [ { node.name = "~alsa_output.*" } ], actions = { update-props = { session.suspend-timeout-seconds = 0, api.alsa.period-size = 1024, api.alsa.headroom = 8192 } } } ]'
     if [ "$(cat "$WPF" 2>/dev/null)" != "$WPN" ]; then
-        mkdir -p "$WP" && printf '%s
-' "$WPN" > "$WPF"
+        mkdir -p "$WP" && printf '%s\n' "$WPN" > "$WPF"
         systemctl --user try-restart wireplumber.service 2>/dev/null || true
         grenos-dire "son : machine virtuelle, la carte ne s endort plus (WirePlumber)"
     fi
