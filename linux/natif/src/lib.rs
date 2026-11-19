@@ -245,6 +245,25 @@ pub fn rectangles_arrondis(largeur: i32, hauteur: i32, rayon: i32) -> Vec<(i32, 
 }
 
 /// Retire les coins d'une fenêtre, et les reretire à chaque taille neuve.
+/// Découper MAINTENANT la fenêtre à sa taille actuelle, coins arrondis.
+///
+/// `arrondir` attend l'événement « map » ; une fenêtre popup (hors du
+/// gestionnaire de fenêtres) ne le reçoit pas toujours, et la bulle d'aperçus
+/// gardait ses quatre coins NOIRS (capture de Grenofar, 19 novembre). On
+/// découpe donc aussi à la main, juste après l'avoir montrée.
+pub fn decouper_maintenant(fenetre: &gtk::Window) {
+    let Some(cadre) = fenetre.window() else { return };
+    let (l, h) = fenetre.size();
+    if l <= 0 || h <= 0 {
+        return;
+    }
+    let region = gtk::cairo::Region::create();
+    for (x, y, w, hh) in rectangles_arrondis(l, h, RAYON_COINS) {
+        let _ = region.union_rectangle(&gtk::cairo::RectangleInt::new(x, y, w, hh));
+    }
+    cadre.shape_combine_region(Some(&region), 0, 0);
+}
+
 pub fn arrondir(fenetre: &gtk::Window) {
     let derniere = Rc::new(Cell::new((0, 0)));
     let decouper = {

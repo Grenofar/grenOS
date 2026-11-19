@@ -120,15 +120,33 @@ const STYLE: &str = r#"
 /* Le dock : la même barre, flottante. Le rayon est celui de la découpe
    (natif::RAYON_COINS) : un coin dessiné plus rond que la fenêtre laisserait
    un liseré dans l'angle. */
+/* LE DOCK, DEUXIÈME DESSIN (19 novembre) : « améliore et redessine le dock ».
+   Un verre sombre aux reflets du haut, des icônes sans cadre qui grossissent
+   au survol, un POINT sous l'application ouverte (une pastille sous celle au
+   premier plan) au lieu du trait de la barre, et un séparateur fin entre les
+   applications et la zone d'état. */
 #panneau.dock {
-    background-image: none;
-    background-color: alpha(@fond, 0.94);
-    border: 1px solid @bord-clair;
+    background-image: linear-gradient(to bottom, alpha(@texte, 0.07), alpha(@texte, 0.02));
+    background-color: alpha(@fond, 0.96);
+    border: 1px solid alpha(@texte, 0.12);
     border-radius: 14px;
 }
-#panneau.dock button { padding: 4px 8px; margin: 6px 2px 2px 2px; border-radius: 12px; }
-#panneau.dock button image { transition: -gtk-icon-transform 140ms ease; }
-#panneau.dock button:hover image { -gtk-icon-transform: scale(1.16); }
+#panneau.dock button {
+    padding: 5px 7px; margin: 6px 1px 1px 1px; border-radius: 12px;
+    border-color: transparent; background-color: transparent;
+}
+#panneau.dock button:hover { background-color: alpha(@texte, 0.07); border-color: transparent; }
+#panneau.dock button image { transition: -gtk-icon-transform 160ms ease; }
+#panneau.dock button:hover image { -gtk-icon-transform: scale(1.14) translateY(-2px); }
+#panneau.dock #bouton-menu { padding: 5px 9px; }
+#panneau.dock #bouton-menu:checked { background-image: linear-gradient(135deg, @accent, @second); }
+#panneau.dock .trait { min-height: 4px; margin: 0 24px 3px 24px; }
+#panneau.dock .trait-ouverte { background-color: alpha(@texte, 0.55); margin: 0 25px 3px 25px; }
+#panneau.dock .trait-reduite { background-color: alpha(@texte, 0.28); margin: 0 25px 3px 25px; }
+#panneau.dock .trait-active { background-color: @accent-clair; margin: 0 18px 3px 18px; }
+#panneau.dock separator { background-color: alpha(@texte, 0.12); min-width: 1px; margin: 12px 6px; }
+#panneau.dock #zone-etat { background-color: transparent; border-color: transparent; }
+#panneau.dock #horloge { padding: 0 12px 0 6px; }
 "#;
 
 /// Une case de la barre : l'icône d'une application, et son trait.
@@ -357,6 +375,10 @@ impl Barre {
         zone_etat.pack_start(&bouton_reseau, false, false, 0);
         zone_etat.pack_start(&bouton_son, false, false, 0);
         boite.pack_end(&zone_etat, false, false, 4);
+        // Dans le dock, un trait fin sépare les applications de la zone d'état.
+        if dock {
+            boite.pack_end(&gtk::Separator::new(gtk::Orientation::Vertical), false, false, 0);
+        }
 
         let bouton_maj = gtk::Button::with_label("");
         bouton_maj.set_no_show_all(true);
@@ -775,9 +797,13 @@ impl Barre {
                 b.programmer_apercu(tt.clone(), w.clone());
                 glib::Propagation::Proceed
             });
+            // Quitter la tuile AVANT que la bulle s'ouvre annule son ouverture ;
+            // une fois ouverte, c'est l'observation du pointeur qui la ferme.
             let b = self.clone();
             bouton.connect_leave_notify_event(move |_, _| {
-                b.cacher_apercu_bientot();
+                if b.apercu.borrow().is_none() {
+                    b.annuler_minuteur_apercu();
+                }
                 glib::Propagation::Proceed
             });
         }
@@ -805,19 +831,6 @@ impl Barre {
         let id = glib::timeout_add_local_once(Duration::from_millis(450), move || {
             *b.minuteur_apercu.borrow_mut() = None;
             b.montrer_apercu(&t, &bouton);
-        });
-        *self.minuteur_apercu.borrow_mut() = Some(id);
-    }
-
-    /// Fermer la bulle dans 280 ms — le temps d'y amener le pointeur.
-    fn cacher_apercu_bientot(self: &Rc<Self>) {
-        self.annuler_minuteur_apercu();
-        let b = self.clone();
-        let id = glib::timeout_add_local_once(Duration::from_millis(280), move || {
-            *b.minuteur_apercu.borrow_mut() = None;
-            if !b.survol_apercu.get() {
-                b.fermer_apercu();
-            }
         });
         *self.minuteur_apercu.borrow_mut() = Some(id);
     }
@@ -925,21 +938,52 @@ impl Barre {
             rangee.pack_start(&boite, false, false, 0);
         }
 
-        // Le pointeur sur la bulle la garde ouverte ; le quitter la ferme.
+        // LA BULLE SE FERME D'ELLE-MÊME (19 novembre). Grenofar : « il reste
+        // même quand il n'est pas sélectionné et quand il n'y a plus l'app ».
+        // Les événements « entrer / sortir » se perdaient (une fenêtre qui
+        // apparaît sous le pointeur trouble ces événements) : on REGARDE où
+        // est le pointeur, toutes les 120 ms. Hors de la bulle ET de sa tuile
+        // deux fois de suite → fermée. Tuile retirée de la barre (application
+        // fermée), ou fenêtre de la bulle disparue → fermée aussi.
+        let xids: Vec<u32> = t.fenetres.iter().map(|f| f.xid).collect();
         let b = self.clone();
-        fenetre.connect_enter_notify_event(move |_, _| {
-            b.survol_apercu.set(true);
-            b.annuler_minuteur_apercu();
-            glib::Propagation::Proceed
-        });
-        let b = self.clone();
-        fenetre.connect_leave_notify_event(move |_, ev| {
-            // Passer de la bulle à l'un de ses enfants n'est pas la quitter.
-            if ev.detail() != gdk::NotifyType::Inferior {
-                b.survol_apercu.set(false);
-                b.cacher_apercu_bientot();
+        let bulle = fenetre.clone();
+        let tuile = bouton.clone();
+        let absences = std::rc::Rc::new(std::cell::Cell::new(0u8));
+        glib::timeout_add_local(Duration::from_millis(120), move || {
+            let ouverte = b.apercu.borrow().as_ref().map(|f| f == &bulle).unwrap_or(false);
+            if !ouverte {
+                return glib::ControlFlow::Break;
             }
-            glib::Propagation::Proceed
+            // L'application n'est plus là : sa tuile a quitté la barre, ou
+            // aucune de ses fenêtres n'est encore ouverte.
+            let encore = b.ecran.as_ref().map(|e| e.fenetres().iter().any(|f| xids.contains(&f.xid))).unwrap_or(false);
+            if tuile.parent().is_none() || !encore {
+                b.fermer_apercu();
+                return glib::ControlFlow::Break;
+            }
+            let pointeur = gdk::Display::default()
+                .and_then(|d| d.default_seat())
+                .and_then(|s| s.pointer())
+                .map(|p| { let (_, x, y) = p.position(); (x, y) });
+            let Some((x, y)) = pointeur else { return glib::ControlFlow::Continue };
+            let dans = |(ox, oy): (i32, i32), (l, h): (i32, i32)| x >= ox && x < ox + l && y >= oy && y < oy + h;
+            let sur_bulle = dans(bulle.position(), bulle.size());
+            let zone = tuile.allocation();
+            let (px, py) = b.panneau.position();
+            // La tuile, et le petit couloir entre elle et la bulle.
+            let sur_tuile = dans((px + zone.x(), py + zone.y() - 14), (zone.width(), zone.height() + 14));
+            b.survol_apercu.set(sur_bulle);
+            if sur_bulle || sur_tuile {
+                absences.set(0);
+                return glib::ControlFlow::Continue;
+            }
+            absences.set(absences.get() + 1);
+            if absences.get() >= 2 {
+                b.fermer_apercu();
+                return glib::ControlFlow::Break;
+            }
+            glib::ControlFlow::Continue
         });
 
         // Au-dessus de la tuile, centrée sur elle, sans sortir de l'écran.
@@ -954,9 +998,13 @@ impl Barre {
             if f.position() != (x, y) {
                 f.move_(x, y);
             }
+            natif::decouper_maintenant(f);
         });
         natif::arrondir(&fenetre);
         fenetre.show_all();
+        // Les coins : découpés tout de suite, sans attendre un « map » qu'une
+        // popup ne reçoit pas toujours.
+        natif::decouper_maintenant(&fenetre);
         *self.apercu.borrow_mut() = Some(fenetre);
     }
 
