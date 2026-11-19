@@ -1,0 +1,18 @@
+# Ouvrir Windows en lecture seule pour l'explorateur (voir
+# /usr/lib/grenos/grenos-windows). Demandé le 19 novembre.
+#
+# `After=local-fs.target` et rien de plus, comme grenos-video : personne
+# n'attend ce service, il ne doit retenir ni le bureau ni lightdm.
+[Unit]
+Description=grenOS : ouvrir les fichiers de Windows en lecture seule
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/grenos/grenos-windows
+# Un disque malade peut faire attendre `mount` : on borne.
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

@@ -122,11 +122,14 @@ pub async fn fichiers_lister(dossier: String, caches: bool) -> Result<Liste, Str
     Ok(Liste { dossier, elements, caches: masques })
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct Rapide {
-    nom: &'static str,
+    nom: String,
     chemin: String,
     icone: &'static str,
+    /// « » pour les dossiers de grenOS, « windows » pour ceux de Windows :
+    /// le volet les range sous deux titres.
+    groupe: &'static str,
 }
 
 /// « Accès rapide » : les dossiers de la personne qui existent vraiment.
@@ -140,7 +143,7 @@ pub fn fichiers_rapides() -> Vec<Rapide> {
 #[tauri::command]
 pub fn fichiers_rapides() -> Vec<Rapide> {
     use glib::UserDirectory as U;
-    [
+    let mut liste: Vec<Rapide> = [
         ("Bureau", U::Desktop, "bureau"),
         ("Téléchargements", U::Downloads, "telechargement"),
         ("Documents", U::Documents, "texte"),
@@ -151,9 +154,57 @@ pub fn fichiers_rapides() -> Vec<Rapide> {
     .into_iter()
     .filter_map(|(nom, cle, icone)| {
         let chemin = glib::user_special_dir(cle)?;
-        chemin.is_dir().then(|| Rapide { nom, chemin: chemin.to_string_lossy().into_owned(), icone })
+        chemin.is_dir().then(|| Rapide { nom: nom.to_string(), chemin: chemin.to_string_lossy().into_owned(), icone, groupe: "" })
     })
-    .collect()
+    .collect();
+    // Windows, ouvert en lecture seule au démarrage par `grenos-windows`, qui
+    // écrit où dans /run/grenos/windows. Pas de fichier : pas de Windows.
+    if let Ok(racine) = fs::read_to_string("/run/grenos/windows") {
+        liste.extend(dossiers_windows(Path::new(racine.trim())));
+    }
+    liste
+}
+
+/// Les dossiers de chaque compte de Windows, sous `racine/Users`.
+///
+/// Grenofar, le 19 novembre : « garde la base comme Windows — download,
+/// images, vidéos ». Les comptes techniques de Windows (Public, Default…) ne
+/// sont pas des personnes. OneDrive déplace souvent Bureau, Documents et
+/// Images dans `OneDrive\…`, sous leur nom anglais OU français : on prend le
+/// premier qui existe. Un seul compte : « Téléchargements » ; plusieurs : le
+/// nom du compte suit, pour qu'on sache à qui est quoi.
+pub fn dossiers_windows(racine: &Path) -> Vec<Rapide> {
+    const TECHNIQUES: [&str; 5] = ["public", "default", "default user", "all users", "wdagutilityaccount"];
+    let Ok(entrees) = fs::read_dir(racine.join("Users")) else { return Vec::new() };
+    let mut comptes: Vec<PathBuf> = entrees
+        .flatten()
+        .filter(|e| {
+            let nom = e.file_name().to_string_lossy().to_lowercase();
+            // `file_type` ne suit pas les liens : « All Users » en est un.
+            !TECHNIQUES.contains(&nom.as_str()) && e.file_type().map(|t| t.is_dir()).unwrap_or(false)
+        })
+        .map(|e| e.path())
+        .filter(|p| p.join("Downloads").is_dir() || p.join("Desktop").is_dir())
+        .collect();
+    comptes.sort();
+    let plusieurs = comptes.len() > 1;
+    let mut liste = Vec::new();
+    for compte in &comptes {
+        let qui = compte.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        for (nom, icone, candidats) in [
+            ("Bureau", "bureau", &["Desktop", "OneDrive/Desktop", "OneDrive/Bureau"][..]),
+            ("Téléchargements", "telechargement", &["Downloads"][..]),
+            ("Documents", "texte", &["Documents", "OneDrive/Documents"][..]),
+            ("Images", "image", &["Pictures", "OneDrive/Pictures", "OneDrive/Images"][..]),
+            ("Musique", "audio", &["Music"][..]),
+            ("Vidéos", "video", &["Videos"][..]),
+        ] {
+            let Some(chemin) = candidats.iter().map(|c| compte.join(c)).find(|p| p.is_dir()) else { continue };
+            let nom = if plusieurs { format!("{nom} · {qui}") } else { nom.to_string() };
+            liste.push(Rapide { nom, chemin: chemin.to_string_lossy().into_owned(), icone, groupe: "windows" });
+        }
+    }
+    liste
 }
 
 /// « Ce PC » : le dossier personnel, la racine, puis les volumes que GIO
@@ -731,6 +782,30 @@ mod essais {
     }
 
     use super::*;
+
+    #[test]
+    fn les_dossiers_de_windows() {
+        let racine = std::env::temp_dir().join(format!("grenos-windows-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&racine);
+        for d in ["Users/rayan/Downloads", "Users/rayan/Videos", "Users/rayan/OneDrive/Images", "Users/Public/Downloads", "Users/Default/Desktop"] {
+            fs::create_dir_all(racine.join(d)).unwrap();
+        }
+        fs::create_dir_all(racine.join("Windows/System32")).unwrap();
+        let un = dossiers_windows(&racine);
+        let noms: Vec<&str> = un.iter().map(|r| r.nom.as_str()).collect();
+        // Public et Default ne sont pas des personnes ; Images vient d'OneDrive.
+        assert_eq!(noms, ["Téléchargements", "Images", "Vidéos"]);
+        assert!(un[1].chemin.ends_with("Images"));
+        assert!(un.iter().all(|r| r.groupe == "windows"));
+        // Deux comptes : le nom du compte suit.
+        fs::create_dir_all(racine.join("Users/lea/Downloads")).unwrap();
+        let deux = dossiers_windows(&racine);
+        assert!(deux.iter().any(|r| r.nom == "Téléchargements · lea"));
+        assert!(deux.iter().any(|r| r.nom == "Téléchargements · rayan"));
+        // Pas de Windows : rien.
+        assert!(dossiers_windows(&racine.join("rien")).is_empty());
+        let _ = fs::remove_dir_all(&racine);
+    }
 
     #[test]
     fn base64_comme_la_norme() {

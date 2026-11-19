@@ -34,7 +34,8 @@ for service in grenos-premier.service grenos-preuve.service grenos-maj-verif.tim
                grenos-console-propre.service grenos-sonde-arret.service \
                grenos-splash-arret.service grenos-performances.service \
                grenos-surveiller-demarrage.service \
-               grenos-video.service grenos-sonde-session.service; do
+               grenos-video.service grenos-sonde-session.service \
+               grenos-windows.service; do
     systemctl enable "$service" >/dev/null 2>&1 || true
 done
 

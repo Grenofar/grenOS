@@ -1,0 +1,76 @@
+#!/bin/sh
+# Ouvrir la partition de Windows, EN LECTURE SEULE, pour que l'explorateur
+# montre les dossiers de la personne (Téléchargements, Images, Vidéos…).
+#
+# Demandé par Grenofar le 19 novembre, avant d'essayer grenOS sur son PC :
+# « fais en sorte qu'il y ait installer grenOS si on veut que ça devienne
+# notre OS primaire et garde la base comme Windows — download, images,
+# vidéos ». L'installateur garde Windows (rien de destructeur n'y est
+# préchoisi) ; ce service rend ses fichiers visibles depuis grenOS.
+#
+# POURQUOI LECTURE SEULE
+#
+# Un Windows mis en veille prolongée, ou arrêté avec le « démarrage rapide »,
+# croit que son disque est encore à lui. Écrire dedans depuis Linux peut le
+# lui abîmer : Windows rejoue son état au réveil, par-dessus. Lire ne risque
+# rien. Pour garder un fichier dans grenOS, on le copie (glisser, Ctrl+C).
+#
+# Le point de montage est écrit dans /run/grenos/windows : l'explorateur lit
+# ce fichier, il ne devine rien.
+
+set -u
+
+POINT=/media/windows
+TRACE=/run/grenos/windows
+ESSAI=/run/grenos/windows-essai
+
+mkdir -p /run/grenos
+rm -f "$TRACE"
+
+# Une racine est celle de Windows si elle a son système ET des comptes.
+est_windows() {
+    [ -d "$1/Windows/System32" ] && [ -d "$1/Users" ]
+}
+
+monter_ro() {
+    # ntfs3 (dans le noyau) d'abord, ntfs-3g ensuite. `umask=022` : lisible
+    # par la session, sans être root.
+    mount -t ntfs3 -o ro,umask=022 "$1" "$2" 2>/dev/null ||
+        mount -t ntfs-3g -o ro,umask=022 "$1" "$2" 2>/dev/null
+}
+
+for ligne in $(lsblk -rno PATH,FSTYPE 2>/dev/null | awk '$2 == "ntfs" { print $1 }'); do
+    dev=$ligne
+    # Déjà ouvert ailleurs (par l'explorateur, par exemple) : on s'en sert.
+    deja=$(findmnt -rno TARGET -S "$dev" 2>/dev/null | head -n 1)
+    if [ -n "$deja" ]; then
+        if est_windows "$deja"; then
+            echo "$deja" > "$TRACE"
+            echo "grenos: windows deja ouvert : $dev sur $deja"
+            exit 0
+        fi
+        continue
+    fi
+    mkdir -p "$ESSAI"
+    monter_ro "$dev" "$ESSAI" || continue
+    if est_windows "$ESSAI"; then
+        umount "$ESSAI" 2>/dev/null
+        mkdir -p "$POINT"
+        if monter_ro "$dev" "$POINT"; then
+            echo "$POINT" > "$TRACE"
+            echo "grenos: windows ouvert en lecture seule : $dev sur $POINT"
+            rmdir "$ESSAI" 2>/dev/null
+            exit 0
+        fi
+    else
+        umount "$ESSAI" 2>/dev/null
+    fi
+done
+rmdir "$ESSAI" 2>/dev/null
+# Une partition chiffrée par BitLocker n'est pas lisible sans sa clé : le dire.
+if lsblk -rno FSTYPE 2>/dev/null | grep -qi bitlocker; then
+    echo "grenos: windows chiffre par BitLocker, ses fichiers restent fermes"
+else
+    echo "grenos: pas de windows sur cette machine"
+fi
+exit 0

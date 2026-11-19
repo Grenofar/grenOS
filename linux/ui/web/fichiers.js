@@ -234,7 +234,14 @@
     const ligne = (nom, icone, action) => el("button.fx-entree", { onclick: action }, svg(icone), el("span", nom));
     D.volet.replaceChildren(
       el("div.etiquette", "Accès rapide"),
-      ...rapides.map((r) => ligne(r.nom, r.icone === "telechargement" ? "fleche" : (ICONES[r.icone] || r.icone), () => aller(r.chemin))),
+      ...rapides.filter((r) => r.groupe !== "windows").map((r) => ligne(r.nom, r.icone === "telechargement" ? "fleche" : (ICONES[r.icone] || r.icone), () => aller(r.chemin))),
+      // Les dossiers de Windows (lecture seule, voir grenos-windows) sous leur titre.
+      ...(rapides.some((r) => r.groupe === "windows") ? [el("div.etiquette", "Windows · lecture seule")] : []),
+      ...rapides.filter((r) => r.groupe === "windows").map((r) => {
+        const b = ligne(r.nom, r.icone === "telechargement" ? "fleche" : (ICONES[r.icone] || r.icone), () => aller(r.chemin));
+        b.title = "Fichiers de Windows, en lecture seule : copie-les dans grenOS pour les modifier.";
+        return b;
+      }),
       el("div.etiquette", "Ce PC"),
       ...S.cePc.map((d) => {
         const b = ligne(d.nom, d.icone, async () => {
