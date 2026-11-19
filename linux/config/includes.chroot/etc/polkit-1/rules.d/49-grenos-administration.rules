@@ -110,7 +110,10 @@ polkit.addRule(function (action, subject) {
         "org.freedesktop.udisks2.power-off-drive-system",
         "in.teejeetech.pkexec.timeshift-gtk",
         "in.teejeetech.pkexec.timeshift",
-        "com.ubuntu.pkexec.gufw"
+        "com.ubuntu.pkexec.gufw",
+        // GParted (19 novembre) : sans mot de passe sur la machine, son
+        // bouton serait mort comme l'étaient ceux de Disques.
+        "org.gnome.gparted"
     ];
     // Les disques (gnome-disk-utility, 18 novembre) : formater, partitionner,
     // lire l'état SMART. Destructeur, donc SEULEMENT pour la session locale

@@ -615,6 +615,12 @@ aria2
 ## par notre règle polkit (49-grenos-administration.rules), sinon ses boutons
 ## seraient morts sur une machine sans mot de passe.
 gnome-disk-utility
+## Le gestionnaire de partitions complet, demandé le 19 novembre : « ajoute le
+## truc où on peut tout supprimer, gérer les partitions ». Disques formate et
+## supprime, mais ne DÉPLACE pas une partition et ne réduit pas un NTFS ;
+## GParted le fait (avec ntfs-3g, déjà là, pour ntfsresize). Son action polkit
+## `org.gnome.gparted` est ouverte par 49-grenos-administration.rules.
+gparted
 ## G27 le pare-feu en fenêtre (D1 a posé ufw). Son action polkit
 ## `com.ubuntu.pkexec.gufw` est en auth_admin, lue dans le .deb 24.04.0-3 :
 ## ouverte par la même règle.

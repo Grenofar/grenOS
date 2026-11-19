@@ -222,6 +222,15 @@ if [ "$VIRTUELLE" = "none" ]; then
         chmod +x "$HOME/Bureau/grenos-installer.desktop" 2>/dev/null || true
         touch "$CONFIG/installer-pose"
     fi
+    # Sur la clé (session live), GParted à côté de l'installateur : préparer
+    # le disque (tout effacer, réduire Windows) avant d'installer. Demandé le
+    # 19 novembre. Pas sur une machine installée : le menu suffit.
+    if grep -q 'boot=live' /proc/cmdline 2>/dev/null && \
+       [ -f /usr/share/applications/gparted.desktop ] && \
+       [ ! -e "$HOME/Bureau/gparted.desktop" ]; then
+        cp /usr/share/applications/gparted.desktop "$HOME/Bureau/" 2>/dev/null || true
+        chmod +x "$HOME/Bureau/gparted.desktop" 2>/dev/null || true
+    fi
 else
     rm -f "$HOME/Bureau/grenos-installer.desktop"
     printf '[Desktop Entry]\nType=Application\nName=Installer grenOS\nNoDisplay=true\nExec=pkexec calamares\n' \
