@@ -160,6 +160,26 @@ for fabricant in AuthenticAMD GenuineIntel; do
     fi
 done
 
+echo "--- grenOS : les cartes NVIDIA RTX 50 ---"
+# Le 19 novembre, sur le PC de Grenofar (RTX 5060) : 800×600 pixelisé puis
+# écran noir. `nouveau` ne connaît Blackwell qu'à partir de 6.15, et seulement
+# avec le firmware GSP de nvidia/gb20x. Les deux viennent de trixie-backports
+# (config/archives/grenos-noyau.pref.chroot). Si l'épinglage cesse d'agir —
+# backports retiré, nom de suite changé — l'image retomberait en 6.12 sans
+# rien dire : on refuse de la construire.
+noyau=$(ls /lib/modules | sort -V | tail -n 1)
+majeur=${noyau%%.*}
+mineur=${noyau#*.}; mineur=${mineur%%.*}
+if [ "$majeur" -lt 6 ] || { [ "$majeur" -eq 6 ] && [ "$mineur" -lt 15 ]; }; then
+    echo "grenos: noyau $noyau : trop ancien pour les RTX 50 (6.15 au moins)" >&2
+    exit 1
+fi
+if [ ! -e /usr/lib/firmware/nvidia/gb206 ] && [ ! -e /lib/firmware/nvidia/gb206 ]; then
+    echo "grenos: firmware nvidia/gb206 absent : une RTX 5060 resterait en ecran noir" >&2
+    exit 1
+fi
+echo "grenos: noyau $noyau et firmware NVIDIA Blackwell presents"
+
 echo "--- grenOS : le magasin ---"
 
 # Flathub, branché d'avance : le magasin installe Steam sans rien configurer.

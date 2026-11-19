@@ -39,6 +39,7 @@ fi
 
 lb config noauto \
     --distribution trixie \
+    --backports true \
     --archive-areas "main contrib non-free non-free-firmware" \
     --architectures amd64 \
     --linux-flavours amd64 \

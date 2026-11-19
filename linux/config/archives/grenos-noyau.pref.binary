@@ -1,0 +1,20 @@
+# Le noyau et les firmwares viennent de trixie-backports.
+#
+# Grenofar, le 19 novembre, sur son propre PC (RTX 5060, i5-14400F sans
+# puce graphique) : « l'écran de chargement extrêmement pixelisé apparaît
+# après 2 min d'écran noir, puis 20 s plus tard écran noir ». Les cartes
+# NVIDIA Blackwell (RTX 50) ne sont connues de `nouveau` qu'à partir du
+# noyau 6.15, avec le firmware GSP 570.144 : trixie livre 6.12 et un
+# firmware d'avril 2025 SANS `nvidia/gb20x` (lu dans Contents-all le
+# 19 novembre). trixie-backports a les deux (noyau 7.2, firmware 20260916).
+# Le pilote NVIDIA propriétaire de Debian (550) ne connaît pas non plus les
+# RTX 50 : le pilote libre est la seule voie.
+#
+# Tous les paquets `linux-*` : depuis 7.x le noyau est découpé en
+# linux-image, linux-base, linux-binary, linux-modules — épingler le seul
+# méta-paquet laisserait apt sans candidat pour ses dépendances. Et
+# `libcpupower1` : linux-cpupower de backports en exige la version >= 6.14
+# (lu dans son Depends le 19 novembre), que trixie n'a pas.
+Package: linux-* firmware-* libcpupower*
+Pin: release n=trixie-backports
+Pin-Priority: 990
