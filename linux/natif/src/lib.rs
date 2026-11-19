@@ -133,6 +133,31 @@ impl Style {
 /// La taille de tout l'écran, lue sur la fenêtre racine. (`Screen::width`
 /// est retiré de gtk-rs 0.18 ; la racine couvre tous les moniteurs, comme
 /// l'ancienne valeur que lisait la version Python.)
+/// L'ÉCRAN PRINCIPAL (19 novembre) : « y a la compatibilité avec plusieurs
+/// écrans ? ». La barre se calait sur la racine X, qui couvre TOUS les écrans
+/// réunis : avec deux écrans côte à côte, le dock se centrait à cheval sur la
+/// jointure. Elle vit maintenant sur l'écran principal (xrandr --primary,
+/// sinon le premier) : (x, y, largeur, hauteur), dans le repère de la racine.
+pub fn ecran_principal() -> (i32, i32, i32, i32) {
+    gdk::Display::default()
+        .and_then(|d| d.primary_monitor().or_else(|| d.monitor(0)))
+        .map(|m| {
+            let g = m.geometry();
+            (g.x(), g.y(), g.width(), g.height())
+        })
+        .unwrap_or_else(|| {
+            let (l, h) = taille_ecran();
+            (0, 0, l, h)
+        })
+}
+
+/// La bande à réserver en bas de la RACINE pour une barre posée en bas d'un
+/// écran : la hauteur de la barre, plus ce qui sépare le bas de cet écran du
+/// bas de la racine (un écran plus petit que son voisin n'atteint pas le bas).
+pub fn bande_racine(hauteur_racine: i32, y_ecran: i32, hauteur_ecran: i32, bande: i32) -> u32 {
+    (hauteur_racine - (y_ecran + hauteur_ecran) + bande).max(0) as u32
+}
+
 pub fn taille_ecran() -> (i32, i32) {
     gdk::Screen::default()
         .and_then(|e| e.root_window())
@@ -374,6 +399,15 @@ mod tests {
         // Toutes les lignes sont couvertes, une seule fois.
         let total: i32 = r.iter().map(|x| x.3).sum();
         assert_eq!(total, 60);
+    }
+
+    #[test]
+    fn la_bande_reservee_suit_l_ecran_principal() {
+        // Un seul écran 1920×1080 : la bande est celle de la barre.
+        assert_eq!(bande_racine(1080, 0, 1080, 72), 72);
+        // Deux écrans, le principal (1080 de haut) à côté d'un 1440 : la
+        // racine fait 1440, il faut réserver les 360 du dessous en plus.
+        assert_eq!(bande_racine(1440, 0, 1080, 72), 432);
     }
 
     #[test]

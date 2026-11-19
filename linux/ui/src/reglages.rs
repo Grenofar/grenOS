@@ -348,9 +348,127 @@ pub fn reglages_barre(disposition: String) -> Result<String, String> {
     })
 }
 
+// ------------------------------------------- la clé de sécurité (FIDO2/U2F)
+//
+// 19 novembre, Grenofar : « ajoute un système de clé d'accès » (une clé de
+// sécurité, pour la connexion). pam_u2f la lit dans ~/.config/Yubico/u2f_keys,
+// une ligne par compte : « compte:clé1:clé2… ». Le profil PAM
+// (usr/share/pam-configs/grenos-cle-securite) la rend SUFFISANTE, pas
+// obligatoire : toucher la clé, ou à défaut taper le mot de passe. Personne
+// ne s'enferme dehors en perdant sa clé.
+
+fn fichier_cles() -> std::path::PathBuf {
+    let maison = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+    std::path::PathBuf::from(maison).join(".config/Yubico/u2f_keys")
+}
+
+fn utilisateur() -> String {
+    std::env::var("USER").unwrap_or_default()
+}
+
+/// Combien de clés ce compte a enregistrées.
+fn nombre_cles(contenu: &str, compte: &str) -> usize {
+    contenu.lines()
+        .find(|l| l.split(':').next() == Some(compte))
+        .map(|l| l.split(':').skip(1).filter(|c| !c.trim().is_empty()).count())
+        .unwrap_or(0)
+}
+
+/// Ajouter ce que pamu2fcfg a rendu : une ligne neuve (« compte:clé ») si le
+/// compte n'en avait pas, sinon la clé au bout de sa ligne (« :clé », rendu
+/// par `pamu2fcfg -n`). Les autres comptes ne sont pas touchés.
+fn ajouter_cle(contenu: &str, compte: &str, rendu: &str) -> String {
+    let rendu = rendu.trim();
+    let mut lignes: Vec<String> = contenu.lines().filter(|l| !l.trim().is_empty()).map(String::from).collect();
+    // Ce que pamu2fcfg a rendu, ramené à la clé seule (sans « compte: »).
+    let prefixe = format!("{compte}:");
+    let cle = rendu.strip_prefix(prefixe.as_str()).or_else(|| rendu.strip_prefix(':')).unwrap_or(rendu);
+    match lignes.iter_mut().find(|l| l.split(':').next() == Some(compte)) {
+        Some(l) => {
+            l.push(':');
+            l.push_str(cle);
+        }
+        None => lignes.push(format!("{compte}:{cle}")),
+    }
+    lignes.join("\n") + "\n"
+}
+
+/// Retirer toutes les clés de ce compte (et seulement les siennes).
+fn retirer_cles(contenu: &str, compte: &str) -> String {
+    let reste: Vec<&str> = contenu.lines().filter(|l| !l.trim().is_empty() && l.split(':').next() != Some(compte)).collect();
+    if reste.is_empty() { String::new() } else { reste.join("\n") + "\n" }
+}
+
+fn ecrire_cles(contenu: &str) -> Result<(), String> {
+    let chemin = fichier_cles();
+    if let Some(d) = chemin.parent() {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&chemin, contenu).map_err(|e| e.to_string())?;
+    // Lisible par la personne seule : pam_u2f refuse un fichier ouvert aux autres.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&chemin, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reglages_cle_etat() -> Value {
+    let contenu = std::fs::read_to_string(fichier_cles()).unwrap_or_default();
+    let outil = Command::new("sh").args(["-c", "command -v pamu2fcfg"]).output().map(|o| o.status.success()).unwrap_or(false);
+    json!({ "outil": outil, "cles": nombre_cles(&contenu, &utilisateur()) })
+}
+
+/// Enregistrer une clé : pamu2fcfg attend qu'on la TOUCHE (30 s au plus).
+#[tauri::command]
+pub async fn reglages_cle_ajouter() -> Result<String, String> {
+    let compte = utilisateur();
+    if compte.is_empty() {
+        return Err("Compte inconnu.".into());
+    }
+    let contenu = std::fs::read_to_string(fichier_cles()).unwrap_or_default();
+    let deja = nombre_cles(&contenu, &compte) > 0;
+    let mut c = Command::new("timeout");
+    c.args(["30", "pamu2fcfg"]);
+    if deja { c.arg("-n"); } else { c.args(["-u", &compte]); }
+    let sortie = c.output().map_err(|_| "pamu2fcfg n'est pas installé.".to_string())?;
+    let rendu = String::from_utf8_lossy(&sortie.stdout).trim().to_string();
+    if !sortie.status.success() || rendu.is_empty() {
+        return Err("Aucune clé touchée dans les 30 secondes, ou clé non reconnue. Branche-la, puis touche-la quand elle clignote.".into());
+    }
+    ecrire_cles(&ajouter_cle(&contenu, &compte, &rendu))?;
+    dire(&format!("reglages : cle de securite enregistree ({} au total)", nombre_cles(&std::fs::read_to_string(fichier_cles()).unwrap_or_default(), &compte)));
+    Ok("Clé enregistrée. À l'ouverture de session et pour les gestes d'administrateur, toucher la clé suffit ; le mot de passe marche toujours.".into())
+}
+
+#[tauri::command]
+pub fn reglages_cle_retirer() -> Result<String, String> {
+    let contenu = std::fs::read_to_string(fichier_cles()).unwrap_or_default();
+    ecrire_cles(&retirer_cles(&contenu, &utilisateur()))?;
+    dire("reglages : cles de securite retirees");
+    Ok("Clés retirées. Le mot de passe reste le seul moyen.".into())
+}
+
 #[cfg(test)]
 mod essais {
     use super::*;
+
+    #[test]
+    fn les_cles_s_ajoutent_au_bon_compte_et_se_retirent() {
+        let a = ajouter_cle("", "lea", "lea:K1,P1,es256,+presence");
+        assert_eq!(a, "lea:K1,P1,es256,+presence\n");
+        assert_eq!(nombre_cles(&a, "lea"), 1);
+        // Une deuxième clé : pamu2fcfg -n rend « :clé », au bout de la ligne.
+        let b = ajouter_cle(&format!("tom:T1\n{a}"), "lea", ":K2,P2,es256,+presence");
+        assert_eq!(nombre_cles(&b, "lea"), 2);
+        assert_eq!(nombre_cles(&b, "tom"), 1, "les autres comptes ne bougent pas");
+        let c = retirer_cles(&b, "lea");
+        assert_eq!(nombre_cles(&c, "lea"), 0);
+        assert_eq!(c, "tom:T1\n");
+        assert_eq!(retirer_cles("lea:K1\n", "lea"), "");
+    }
 
     #[test]
     fn la_disposition_ne_connait_que_deux_mots() {

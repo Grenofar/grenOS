@@ -196,10 +196,11 @@ impl Presse {
             return;
         }
         self.remplir();
-        let (l, h) = natif::taille_ecran();
+        // Sur l'écran principal, là où est la barre (plusieurs écrans).
+        let (ox, oy, l, h) = natif::ecran_principal();
         // Au-dessus de la barre, au centre : là où le regard est quand on
         // vient de taper Win+V.
-        self.fenetre.move_(((l - LARGEUR) / 2).max(8), (h - hauteur_barre() - HAUTEUR - 12).max(8));
+        self.fenetre.move_(ox + ((l - LARGEUR) / 2).max(8), oy + (h - hauteur_barre() - HAUTEUR - 12).max(8));
         self.fenetre.show_all();
         self.vide.set_visible(self.historique.borrow().elements().is_empty());
         self.fenetre.present();

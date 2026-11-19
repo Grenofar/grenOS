@@ -451,6 +451,10 @@ breeze-cursor-theme
 ## (300 Hz compris) sur un vrai PC ; lancé par grenos-session, jamais en VM
 ## ni sans carte graphique. Ne change pas l'apparence (etc/xdg/picom/grenos.conf).
 picom
+## La clé de sécurité (19 novembre) : une clé FIDO2/U2F, facultative, qu'on
+## touche au lieu de taper son mot de passe (Réglages › Compte).
+libpam-u2f
+pamu2fcfg
 ## Le lecteur d'images SVG. Papirus est un theme **en SVG** : sans lui,
 ## GdkPixbuf ne sait pas ouvrir ses fichiers, et ces icones ne s'affichent pas
 ## du tout. On reglait le theme et on ne pouvait pas le dessiner.

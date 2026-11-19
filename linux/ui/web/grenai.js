@@ -71,7 +71,7 @@
       cle.hidden = x.local;
       note.textContent = x.local
         ? "Ollama tourne sur ta machine : aucun compte, aucune clé, rien ne sort. GrenPlace propose Alpaca, qui l'installe avec ses modèles."
-        : `${x.a_une_cle ? "Une clé est enregistrée (elle ne s'affiche jamais). " : ""}La clé reste dans un fichier que toi seul peux lire.`;
+        : `${x.cle === "anthropic" ? "Ta clé API se crée sur console.anthropic.com. " : ""}${x.a_une_cle ? "Une clé est enregistrée (elle ne s'affiche jamais). " : ""}La clé reste dans un fichier que toi seul peux lire.`;
     };
     choix.addEventListener("change", majNote);
     majNote();
@@ -103,6 +103,7 @@
     document.body.append(el("div.page-grenai",
       el("header.tete", el("div.logo", svg("etoile")), el("div", el("h1", "GrenAI"), el("small.note", "Ton assistant, avec le modèle que tu choisis")),
         el("div.gi-outils",
+          el("button.bouton.petit", { onclick: () => api.appeler("grenai_claude_code").catch((e) => toast(String(e))), title: "Ouvre Claude Code dans une console (l'installe la première fois, par l'installateur officiel d'Anthropic)" }, svg("terminal"), "Claude Code"),
           el("button.bouton.petit", { onclick: resumer }, "Résumer un document"),
           el("button.bouton.petit", { onclick: () => { messages = []; dessiner(); } }, "Nouvelle conversation"),
           el("button.bouton.petit", { onclick: reglages }, svg("reglages"), "Réglages"))),

@@ -144,6 +144,9 @@ struct Barre {
     panneau: gtk::Window,
     largeur: i32,
     hauteur_ecran: i32,
+    /// Le coin de l'écran principal dans la racine (0,0 avec un seul écran).
+    ox: i32,
+    oy: i32,
     /// G12 : la disposition dock, lue au démarrage (Réglages relance la barre).
     dock: bool,
     bouton_menu: gtk::ToggleButton,
@@ -183,7 +186,7 @@ struct Barre {
 }
 
 fn taille_menu() -> (i32, i32) {
-    let (l, h) = natif::taille_ecran();
+    let (_, _, l, h) = natif::ecran_principal();
     let bande = natif::bande_reservee(if natif::disposition_dock() { HAUTEUR_DOCK } else { HAUTEUR }, MARGE_DOCK, true);
     ((l - 24).min(MENU_LARGEUR).max(420), (h - bande - 24).min(MENU_HAUTEUR).max(360))
 }
@@ -252,7 +255,8 @@ fn menu_de(gestes: Vec<(&'static str, Box<dyn Fn()>)>, ev: &gdk::EventButton) ->
 
 impl Barre {
     fn nouvelle() -> Rc<Barre> {
-        let (largeur, hauteur_ecran) = natif::taille_ecran();
+        // L'écran principal, et où il est dans la racine (plusieurs écrans).
+        let (ox, oy, largeur, hauteur_ecran) = natif::ecran_principal();
 
         let panneau = gtk::Window::new(gtk::WindowType::Toplevel);
         panneau.set_widget_name("panneau");
@@ -271,15 +275,16 @@ impl Barre {
             natif::arrondir(&panneau);
             panneau.connect_size_allocate(move |f, _| {
                 let (x, y) = natif::place_dock((largeur, hauteur_ecran), f.size(), MARGE_DOCK);
+                let (x, y) = (ox + x, oy + y);
                 if f.position() != (x, y) {
                     f.move_(x, y);
                 }
             });
-            panneau.move_((largeur - 600).max(0) / 2, hauteur_ecran - HAUTEUR_DOCK - MARGE_DOCK);
+            panneau.move_(ox + (largeur - 600).max(0) / 2, oy + hauteur_ecran - HAUTEUR_DOCK - MARGE_DOCK);
         } else {
             // Pleine largeur MOINS l'air des deux côtés, et décollée du bas.
             panneau.set_default_size(largeur - 2 * MARGE_DOCK, HAUTEUR);
-            panneau.move_(MARGE_DOCK, hauteur_ecran - HAUTEUR - MARGE_DOCK);
+            panneau.move_(ox + MARGE_DOCK, oy + hauteur_ecran - HAUTEUR - MARGE_DOCK);
             classe(&panneau, "flottante");
             natif::arrondir(&panneau);
         }
@@ -386,6 +391,8 @@ impl Barre {
             panneau,
             largeur,
             hauteur_ecran,
+            ox,
+            oy,
             dock,
             bouton_menu,
             poignee: RefCell::new(None),
@@ -482,7 +489,9 @@ impl Barre {
         self.panneau.connect_realize(move |p| {
             if let (Some(ecran), Some(f)) = (&b.ecran, p.window()) {
                 if let Ok(x) = f.downcast::<gdkx11::X11Window>() {
-                    ecran.reserver(x.xid() as u32, b.bande() as u32, b.largeur as u32);
+                    let hauteur_racine = natif::taille_ecran().1;
+                    let bande = natif::bande_racine(hauteur_racine, b.oy, b.hauteur_ecran, b.bande());
+                    ecran.reserver(x.xid() as u32, bande, b.ox.max(0) as u32, (b.ox + b.largeur - 1).max(0) as u32);
                 }
             }
         });
@@ -937,10 +946,10 @@ impl Barre {
         let zone_tuile = bouton.allocation();
         let (px, py) = self.panneau.position();
         let centre = px + zone_tuile.x() + zone_tuile.width() / 2;
-        let largeur_ecran = self.largeur;
+        let (bord_g, largeur_ecran) = (self.ox, self.largeur);
         fenetre.connect_size_allocate(move |f, _| {
             let (l, h) = f.size();
-            let x = (centre - l / 2).clamp(8, (largeur_ecran - l - 8).max(8));
+            let x = (centre - l / 2).clamp(bord_g + 8, (bord_g + largeur_ecran - l - 8).max(bord_g + 8));
             let y = (py - h - 10).max(8);
             if f.position() != (x, y) {
                 f.move_(x, y);
@@ -1025,7 +1034,7 @@ impl Barre {
         let (l, h) = taille_menu();
         self.menu.set_size_request(l, h);
         let (mx, my) = (((self.largeur - l) / 2).max(8), (self.hauteur_ecran - self.bande() - h - 8).max(8));
-        self.menu.move_(mx, my);
+        self.menu.move_(self.ox + mx, self.oy + my);
         *self.applications.borrow_mut() = apps::applications();
         self.recherche.set_text("");
         self.remplir();
@@ -1236,7 +1245,11 @@ impl Barre {
             let x = zone.x() + zone.width() / 2;
             // Dans le dock, la barre n'est ni à x = 0 ni collée au bord : on
             // part de là où elle est vraiment.
-            let (px, py) = if self.dock { self.panneau.position() } else { (MARGE_DOCK, self.hauteur_ecran - HAUTEUR - MARGE_DOCK) };
+            let (px, py) = if self.dock {
+                self.panneau.position()
+            } else {
+                (self.ox + MARGE_DOCK, self.oy + self.hauteur_ecran - HAUTEUR - MARGE_DOCK)
+            };
             let (x, y) = (px + x, py + zone.y() + zone.height() / 2);
             dire(&format!("bouton {nom} en {x},{y}"));
         }

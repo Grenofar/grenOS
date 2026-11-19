@@ -1,0 +1,8 @@
+Name: grenOS - cle de securite FIDO2/U2F (facultative, en plus du mot de passe)
+Default: yes
+Priority: 900
+Auth-Type: Primary
+Auth:
+	[success=end default=ignore]	pam_u2f.so nouserok cue [cue_prompt=Touche ta cle de securite (ou tape ton mot de passe)]
+Auth-Initial:
+	[success=end default=ignore]	pam_u2f.so nouserok cue [cue_prompt=Touche ta cle de securite (ou tape ton mot de passe)]

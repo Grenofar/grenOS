@@ -203,6 +203,12 @@ done || exit 1
 # gamemoded(8) designe, et aucun paquet ne le possede.
 install -m 0644 "$DEDANS/etc/gamemode.ini" "$BUILD/etc/"
 
+# Le profil PAM de la clé de sécurité (19 novembre) : il vit dans
+# /usr/share/pam-configs, que la règle des « *.conf » d'etc ne voit pas.
+# appliquer-systeme l'active, et seulement si pam_u2f est installé.
+install -d "$BUILD/usr/share/pam-configs"
+install -m 0644 "$DEDANS/usr/share/pam-configs/grenos-cle-securite" "$BUILD/usr/share/pam-configs/"
+
 # Les six descriptions de types de fichiers que shared-mime-info ne traduit pas
 # en francais — dont celle d un dossier, qui se repete a chaque ligne de
 # l explorateur. `appliquer-systeme` rejoue `update-mime-database` ensuite,
@@ -401,7 +407,7 @@ Section: x11
 Priority: optional
 Architecture: all
 Maintainer: grenOS <grenos@grenos-dev.vercel.app>
-Depends: grenos-systeme (= $VERSION), libwebkit2gtk-4.1-0, libxdo3, python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, xcvt, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils, dbus-user-session, pipewire-audio, wireplumber, xdg-user-dirs, dunst, libnotify-bin, atril, ristretto, celluloid, gnome-disk-utility, gufw, seahorse, arandr, systemd-coredump
+Depends: grenos-systeme (= $VERSION), libwebkit2gtk-4.1-0, libxdo3, python3, python3-gi, gir1.2-gtk-3.0, gir1.2-wnck-3.0, openbox, feh, x11-utils, x11-xserver-utils, xdg-utils, xcvt, adwaita-icon-theme-legacy, pulseaudio-utils, pciutils, dbus-user-session, pipewire-audio, wireplumber, xdg-user-dirs, dunst, libnotify-bin, atril, ristretto, celluloid, gnome-disk-utility, gufw, seahorse, arandr, systemd-coredump, libpam-u2f, pamu2fcfg
 Recommends: flatpak, lightdm, pcmanfm, xfce4-terminal, xfce4-taskmanager, papirus-icon-theme
 Installed-Size: $SIZE
 Homepage: https://grenos-dev.vercel.app

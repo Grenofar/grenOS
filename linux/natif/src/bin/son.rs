@@ -404,12 +404,13 @@ impl Panneau {
     fn ouvrir(self: &Rc<Self>) -> (i32, i32) {
         self.fenetre.show_all();
         let (largeur, hauteur) = self.fenetre.size();
-        let (l, h) = natif::taille_ecran();
+        // Sur l'écran principal, là où est la barre (plusieurs écrans).
+        let (ox, oy, l, h) = natif::ecran_principal();
         // En bas à DROITE, juste au-dessus de la barre : là où est l'icône qui
         // l'ouvre. Un panneau loin du bouton cliqué se lit comme une fenêtre
         // apparue toute seule.
         let place = ((l - largeur - 10).max(10), h - hauteur_barre() - hauteur - 8);
-        self.fenetre.move_(place.0, place.1);
+        self.fenetre.move_(ox + place.0, oy + place.1);
         self.fenetre.present();
         natif::arrondir(&self.fenetre);
 

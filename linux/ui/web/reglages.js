@@ -137,7 +137,8 @@
           el("div.rg-rangee", bouton("Enregistrer", "principal", () => faire("reglages_mot_de_passe", { premier: m1.value, second: m2.value })),
             c.protege ? bouton("Retirer le mot de passe", "discret", () => faire("reglages_retirer_mot_de_passe")) : null),
           dire,
-          note("Un mot de passe protège aussi l'installation de logiciels et les réglages du système."))];
+          note("Un mot de passe protège aussi l'installation de logiciels et les réglages du système.")),
+        await carteCle()];
     },
 
     async heure() {
@@ -271,6 +272,38 @@
   }
 
   window.grenosOnglet = (cle) => { if (D.pages[cle]) montrer(cle); };
+
+  // LA CLÉ DE SÉCURITÉ (19 novembre) : une clé FIDO2/U2F (YubiKey…) qu'on
+  // touche au lieu de taper son mot de passe. Facultative, jamais
+  // obligatoire : le mot de passe marche toujours.
+  async function carteCle() {
+    const etat = await api.appeler("reglages_cle_etat");
+    const dire = el("p.note");
+    const zone = el("div.rg-rangee");
+    const redessiner = async () => {
+      const e = await api.appeler("reglages_cle_etat");
+      statut.textContent = e.cles ? `${e.cles} clé${e.cles > 1 ? "s" : ""} enregistrée${e.cles > 1 ? "s" : ""}.` : "Aucune clé enregistrée.";
+      retirer.hidden = !e.cles;
+    };
+    const statut = el("span");
+    const ajouter = bouton("Ajouter une clé", "principal", async () => {
+      ajouter.disabled = true;
+      dire.textContent = "Branche ta clé, puis touche-la quand elle clignote (30 secondes)…";
+      try { dire.textContent = await api.appeler("reglages_cle_ajouter"); } catch (e) { dire.textContent = String(e); }
+      ajouter.disabled = false;
+      redessiner();
+    });
+    const retirer = bouton("Retirer mes clés", "discret", async () => {
+      try { dire.textContent = await api.appeler("reglages_cle_retirer"); } catch (e) { dire.textContent = String(e); }
+      redessiner();
+    });
+    zone.append(ajouter, retirer);
+    await redessiner();
+    return carte(ligne("Clé de sécurité", statut),
+      etat.outil ? zone : note("L'outil des clés de sécurité n'est pas encore installé : il arrive avec la prochaine mise à jour."),
+      dire,
+      note("Une clé FIDO2 ou U2F (YubiKey, SoloKey, Titan…) : la toucher ouvre ta session et valide les gestes d'administrateur. Le mot de passe marche toujours — perdre la clé ne t'enferme pas dehors."));
+  }
 
   (async function () {
     habiller(await api.appeler("apparence"));

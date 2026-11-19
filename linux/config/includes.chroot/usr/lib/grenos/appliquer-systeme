@@ -315,4 +315,15 @@ update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 # cache compilé, pas dans le XML.
 update-mime-database /usr/share/mime >/dev/null 2>&1 || true
 
+# ---- La clé de sécurité (19 novembre) ---------------------------------------
+# Le profil PAM grenos-cle-securite rend une clé FIDO2/U2F SUFFISANTE (la
+# toucher, ou à défaut taper le mot de passe). On ne l'active que si le module
+# est vraiment là : une ligne PAM qui nomme un module absent ferait échouer
+# toute authentification — la connexion, sudo, polkit. pam-auth-update
+# --package n'active que les profils « Default: yes » que l'administrateur
+# n'a pas désactivés lui-même.
+if [ -f /usr/share/pam-configs/grenos-cle-securite ] &&    ls /lib/*/security/pam_u2f.so /usr/lib/*/security/pam_u2f.so >/dev/null 2>&1; then
+    pam-auth-update --package >/dev/null 2>&1         && echo "grenos: cle de securite proposee a l'authentification (pam_u2f, facultative)"
+fi
+
 echo "grenos: systeme branche"

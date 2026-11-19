@@ -35,6 +35,9 @@ pub const FOURNISSEURS: &[(&str, &str, &str)] = &[
     ("openai", "OpenAI (GPT)", "gpt-4o-mini"),
     ("gemini", "Google (Gemini)", "gemini-2.0-flash"),
     ("grok", "xAI (Grok)", "grok-2-latest"),
+    // Claude (19 novembre, Grenofar : « ajoute Claude »). Le modèle le plus
+    // récent d'Anthropic par défaut ; la personne peut en écrire un autre.
+    ("anthropic", "Anthropic (Claude)", "claude-opus-5-5"),
 ];
 
 fn fichier() -> PathBuf {
@@ -123,6 +126,28 @@ pub fn requete(fournisseur: &str, modele: &str, cle: &str, messages: &[Message])
         "ollama" => ("http://127.0.0.1:11434/api/chat".into(), vec![], json!({ "model": modele, "messages": oai, "stream": false })),
         "openai" => ("https://api.openai.com/v1/chat/completions".into(), vec![format!("Authorization: Bearer {cle}")], json!({ "model": modele, "messages": oai })),
         "grok" => ("https://api.x.ai/v1/chat/completions".into(), vec![format!("Authorization: Bearer {cle}")], json!({ "model": modele, "messages": oai })),
+        // L'API Messages d'Anthropic, en HTTP direct (Rust n'a pas de SDK
+        // officiel ; curl, comme les autres). Les consignes « system » vont
+        // dans le champ `system`, pas dans la liste. `fallbacks: "default"`
+        // (bêta server-side-fallback-2026-07-01) : si le modèle décline une
+        // demande, l'API la refait elle-même sur un modèle de repli adapté.
+        "anthropic" => {
+            let systeme: Vec<&str> = messages.iter().filter(|m| m.role == "system").map(|m| m.contenu.as_str()).collect();
+            let fil: Vec<Value> = messages
+                .iter()
+                .filter(|m| m.role == "user" || m.role == "assistant")
+                .map(|m| json!({ "role": m.role, "content": m.contenu }))
+                .collect();
+            let mut corps = json!({ "model": modele, "max_tokens": 16000, "messages": fil, "fallbacks": "default" });
+            if !systeme.is_empty() {
+                corps["system"] = json!(systeme.join("
+
+"));
+            }
+            ("https://api.anthropic.com/v1/messages".into(),
+             vec![format!("x-api-key: {cle}"), "anthropic-version: 2026-10-21".into(), "anthropic-beta: server-side-fallback-2026-07-01".into()],
+             corps)
+        }
         "gemini" => {
             let contenus: Vec<Value> = messages
                 .iter()
@@ -140,6 +165,19 @@ pub fn lire_reponse(fournisseur: &str, v: &Value) -> Result<String, String> {
     if let Some(e) = v.get("error") {
         let m = e.get("message").and_then(Value::as_str).or_else(|| e.as_str()).unwrap_or("erreur inconnue");
         return Err(format!("Le fournisseur a refusé : {m}"));
+    }
+    if fournisseur == "anthropic" {
+        // Le refus se lit dans stop_reason, AVANT le contenu (réponse 200).
+        if v.get("stop_reason").and_then(Value::as_str) == Some("refusal") {
+            return Err("Claude a décliné cette demande.".into());
+        }
+        // Le texte est réparti en blocs ; on ne garde que les blocs « text »
+        // (les blocs de réflexion, vides par défaut, ne s'affichent pas).
+        let texte: String = v.get("content").and_then(Value::as_array).map(|blocs| {
+            blocs.iter().filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))
+                .filter_map(|b| b.get("text").and_then(Value::as_str)).collect::<Vec<_>>().join("")
+        }).unwrap_or_default();
+        return if texte.is_empty() { Err("Réponse illisible.".into()) } else { Ok(texte) };
     }
     let t = match fournisseur {
         "ollama" => v.pointer("/message/content"),
@@ -170,7 +208,9 @@ pub async fn grenai_demander(messages: Vec<Message>) -> Result<String, String> {
     ecrire_prive(&fichier_entetes, &lignes.join("\n"))?;
     let resultat = (|| {
         let mut enfant = std::process::Command::new("curl")
-            .args(["--silent", "--show-error", "--max-time", "120", "--header"])
+            // 300 s : un modèle qui réfléchit (Claude, entre autres) peut
+            // mettre plus de deux minutes sur une longue demande.
+            .args(["--silent", "--show-error", "--max-time", "300", "--header"])
             .arg(format!("@{}", fichier_entetes.to_string_lossy()))
             .args(["--data-binary", "@-", &adresse])
             .stdin(std::process::Stdio::piped())
@@ -233,6 +273,39 @@ pub fn grenai_lire_document(_fenetre: tauri::WebviewWindow) -> Result<Option<Val
     Err("Seulement sous Linux.".into())
 }
 
+/// CLAUDE CODE (19 novembre). Grenofar : « dans GrenAI, et ça ouvre une
+/// console, et aussi Claude Code ». Il n'existe pas dans Flathub ni dans
+/// Debian : Anthropic le distribue par son propre installateur. Le bouton
+/// ouvre donc un terminal qui, la première fois, lance CET installateur
+/// officiel sous les yeux de la personne (rien ne s'installe en cachette),
+/// puis démarre `claude` dans son dossier personnel. La connexion au compte
+/// Claude se fait dans la console, par Claude Code lui-même.
+pub const SCRIPT_CLAUDE_CODE: &str = r#"export PATH="$HOME/.local/bin:$PATH"
+if ! command -v claude >/dev/null 2>&1; then
+  printf '[1mClaude Code n est pas encore installe.[0m
+'
+  printf 'Installation par l installateur officiel d Anthropic (https://claude.ai/install.sh)...
+
+'
+  if ! curl -fsSL https://claude.ai/install.sh | bash; then
+    printf '
+L installation a echoue (reseau ?). Appuie sur Entree pour fermer.'
+    read -r _
+    exit 1
+  fi
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+cd "$HOME" && claude
+exec bash"#;
+
+#[tauri::command]
+pub fn grenai_claude_code() -> Result<(), String> {
+    crate::systeme::detacher("xfce4-terminal", &["--title=Claude Code", "-x", "bash", "-lc", SCRIPT_CLAUDE_CODE])
+        .map_err(|e| format!("Le terminal ne s'ouvre pas : {e}"))?;
+    crate::systeme::dire("grenai : Claude Code ouvert dans un terminal");
+    Ok(())
+}
+
 #[cfg(test)]
 mod essais {
     use super::*;
@@ -254,6 +327,34 @@ mod essais {
                 assert!(adresse.starts_with("https://"), "{f}");
             }
         }
+    }
+
+    #[test]
+    fn claude_code_n_installe_que_par_l_installateur_officiel() {
+        assert!(SCRIPT_CLAUDE_CODE.contains("https://claude.ai/install.sh"));
+        assert!(SCRIPT_CLAUDE_CODE.contains("command -v claude"));
+        // Toute adresse du script est celle de l'installateur d'Anthropic.
+        for (i, _) in SCRIPT_CLAUDE_CODE.match_indices("https://") {
+            assert!(SCRIPT_CLAUDE_CODE[i..].starts_with("https://claude.ai/install.sh"));
+        }
+    }
+
+    #[test]
+    fn claude_recoit_le_systeme_a_part_et_rend_le_texte_seul() {
+        let (adresse, entetes, corps) = requete("anthropic", "claude-opus-5-5", "k",
+            &[m("system", "sois bref"), m("user", "a"), m("assistant", "b"), m("user", "c")]).unwrap();
+        assert_eq!(adresse, "https://api.anthropic.com/v1/messages");
+        assert!(entetes.iter().any(|e| e == "anthropic-version: 2026-10-21"));
+        assert_eq!(corps["system"], "sois bref");
+        assert_eq!(corps["messages"].as_array().unwrap().len(), 3);
+        assert_eq!(corps["messages"][0]["role"], "user");
+        assert!(corps.get("temperature").is_none());
+        let rep = json!({"stop_reason":"end_turn","content":[{"type":"thinking","thinking":""},{"type":"text","text":"ok"}]});
+        assert_eq!(lire_reponse("anthropic", &rep).unwrap(), "ok");
+        let refus = json!({"stop_reason":"refusal","content":[]});
+        assert!(lire_reponse("anthropic", &refus).unwrap_err().contains("décliné"));
+        let erreur = json!({"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}});
+        assert!(lire_reponse("anthropic", &erreur).unwrap_err().contains("invalid x-api-key"));
     }
 
     #[test]

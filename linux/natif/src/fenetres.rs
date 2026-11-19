@@ -209,7 +209,9 @@ impl Ecran {
     }
 
     /// Réserve la bande du bas : une fenêtre agrandie s'arrête au-dessus.
-    pub fn reserver(&self, xid: u32, hauteur: u32, largeur: u32) {
+    /// `debut`..`fin` : les colonnes de la racine que la bande couvre — celles
+    /// de l'écran principal seulement ; les autres écrans gardent tout leur bas.
+    pub fn reserver(&self, xid: u32, hauteur: u32, debut: u32, fin: u32) {
         let _ = self.conn.change_property32(
             PropMode::REPLACE, xid, self.a("_NET_WM_STRUT"), AtomEnum::CARDINAL, &[0, 0, 0, hauteur],
         );
@@ -218,7 +220,7 @@ impl Ecran {
             xid,
             self.a("_NET_WM_STRUT_PARTIAL"),
             AtomEnum::CARDINAL,
-            &[0, 0, 0, hauteur, 0, 0, 0, 0, 0, 0, 0, largeur.saturating_sub(1)],
+            &[0, 0, 0, hauteur, 0, 0, 0, 0, 0, 0, debut, fin],
         );
         let _ = self.conn.flush();
     }

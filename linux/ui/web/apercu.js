@@ -170,6 +170,10 @@
       case "reglages_parcourir_fond": return "/usr/share/backgrounds/aurore.png";
       case "maj_mode": case "maj_verifier": await attendre(300); return null;
       case "reglages_dpi_lire": return 96;
+      case "reglages_cle_etat": return { outil: true, cles: window.APERCU_CLES || 0 };
+      case "reglages_cle_ajouter": await attendre(900); window.APERCU_CLES = (window.APERCU_CLES || 0) + 1; return "Clé enregistrée. À l'ouverture de session et pour les gestes d'administrateur, toucher la clé suffit ; le mot de passe marche toujours.";
+      case "reglages_cle_retirer": window.APERCU_CLES = 0; return "Clés retirées. Le mot de passe reste le seul moyen.";
+      case "grenai_claude_code": return null;
       case "reglages_barre_lire": return window.APERCU_BARRE || "dock";
       case "reglages_barre": window.APERCU_BARRE = a.disposition; return a.disposition === "dock" ? "Dock : la barre flotte, centrée, et ne prend que la place de ce qu'elle porte." : "Barre : pleine largeur, collée en bas de l'écran.";
       case "reglages_dpi": return `Taille ${Math.round(a.dpi * 100 / 96)} %.`;
@@ -197,7 +201,7 @@
       case "agenda_lire": return [{ id: "1", date: new Date().toISOString().slice(0, 10), heure: "14:30", titre: "Dentiste", note: "Apporter la carte" }, { id: "2", date: new Date().toISOString().slice(0, 10), heure: "", titre: "Anniversaire de Léa", note: "" }];
       case "agenda_poser": return [...(await window.APERCU("agenda_lire")), a.evenement];
       case "agenda_retirer": return (await window.APERCU("agenda_lire")).filter((e) => e.id !== a.id);
-      case "grenai_reglages": return { fournisseur: "ollama", fournisseurs: [{ cle: "ollama", nom: "Ollama (sur cette machine)", modele: "llama3.2", a_une_cle: false, local: true }, { cle: "openai", nom: "OpenAI (GPT)", modele: "gpt-4o-mini", a_une_cle: true, local: false }] };
+      case "grenai_reglages": return { fournisseur: "ollama", fournisseurs: [{ cle: "ollama", nom: "Ollama (sur cette machine)", modele: "llama3.2", a_une_cle: false, local: true }, { cle: "openai", nom: "OpenAI (GPT)", modele: "gpt-4o-mini", a_une_cle: true, local: false }, { cle: "anthropic", nom: "Anthropic (Claude)", modele: "claude-opus-5-5", a_une_cle: false, local: false }] };
       case "grenai_demander": await attendre(700); return "Voici une réponse d'exemple, écrite par l'aperçu : aucun modèle n'a été appelé.";
       case "recuperation_lister": await attendre(500); return [{ dev: "/dev/nvme0n1p2", fs: "ext4", taille: "476,4G", etiquette: "", grenos: true, machine: "grenos-lea", comptes: ["lea"], montee: "" }, { dev: "/dev/sda1", fs: "ext4", taille: "20G", etiquette: "DONNEES", grenos: false, machine: "", comptes: [], montee: "" }];
       case "recuperation_faire": await attendre(600); return a.geste === "ouvrir" ? "/run/grenos-recup/nvme0n1p2" : "Le système de fichiers est sain.";
