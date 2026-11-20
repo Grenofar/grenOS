@@ -493,6 +493,8 @@ fournis = set(sys.builtin_module_names) | {
     "collections", "functools", "itertools", "tempfile", "signal", "errno",
     "random", "hashlib", "textwrap", "unicodedata", "locale", "configparser",
     "gi", "cairo", "numpy",
+    # grenos-mcp (20 novembre) : les captures partent en base64.
+    "base64",
 }
 
 modules = {n[:-3] for n in os.listdir(os.path.join(racine, "usr/lib/grenos"))
