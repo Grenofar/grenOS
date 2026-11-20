@@ -135,7 +135,15 @@ pub fn installer(app: tauri::AppHandle, cle: String, nom: String, source: String
         };
         emettre(avance(Some(2), None, Some(if mise_a_jour { "Téléchargement et mise à jour…" } else { "Téléchargement et installation…" }.into())));
         let mut faits = 0u32;
+        // Ce qu'un script demande de faire ensuite (grenos-a-faire: …) : le
+        // code d'inscription de la clé des pilotes, avec le Secure Boot. Il
+        // finit dans la phrase de fin, pas perdu dans le détail.
+        let a_faire = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
+        let a_faire_note = a_faire.clone();
         let mut suivre = |l: &str| {
+            if let Some(reste) = l.trim().strip_prefix("grenos-a-faire:") {
+                *a_faire_note.borrow_mut() = reste.trim().to_string();
+            }
             let part = if let Some(p) = pour_cent(l) {
                 Some(p)
             } else if etape(l) {
@@ -187,7 +195,9 @@ pub fn installer(app: tauri::AppHandle, cle: String, nom: String, source: String
                 }
             }
         };
+        let ensuite = a_faire.borrow().clone();
         let texte = match (bien, mise_a_jour) {
+            (true, _) if !ensuite.is_empty() => format!("{nom} est installé. {ensuite}"),
             (true, true) => format!("{nom} est à jour."),
             (true, false) => format!("{nom} est installé. Il est dans le menu."),
             (false, true) => "La mise à jour s'est arrêtée. Le détail est ci-dessous.".into(),

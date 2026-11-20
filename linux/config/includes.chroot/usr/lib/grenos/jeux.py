@@ -157,8 +157,9 @@ def pilote_propose():
                 "Cette carte est une NVIDIA, et le pilote libre en cours la fait mal "
                 "tourner (curseur lent, pas de jeux exigeants). Le pilote officiel de "
                 "NVIDIA, pris dans son dépôt, la gère entièrement, RTX 50 comprises. "
-                "Il s'installe sur grenOS installé sur le disque, Secure Boot coupé, "
-                "et demande de redémarrer après.")
+                "Il s'installe sur grenOS installé sur le disque et demande de "
+                "redémarrer après ; avec le Secure Boot, un écran bleu demandera un "
+                "code, donné à la fin de l'installation.")
     if "amd" in minuscules or "radeon" in minuscules:
         return ("", "Le pilote libre d'AMD fait tourner les jeux sans rien installer.")
     if "intel" in minuscules:

@@ -23,8 +23,8 @@
 #   <paquet>.avec         des paquets à installer avec (lus par GrenPlace)
 #   <paquet>.pref         sa règle de priorité apt (preferences.d)
 #   <paquet>.dkms         un MODULE DU NOYAU (pilote) : installable seulement
-#                         sur un système installé, sans Secure Boot, et
-#                         vérifié après coup (--apres)
+#                         sur un système installé, signé si le Secure Boot
+#                         est actif, et vérifié après coup (--apres)
 #
 # Usage, en root :
 #   grenos-depot-editeur <paquet>          avant l'installation
@@ -44,6 +44,9 @@ esac
 
 DEPOTS=/usr/share/grenos/depots
 [ -f "$DEPOTS/$paquet.list" ] || exit 0
+# La clé qui signe les modules DKMS : les chemins par défaut de DKMS.
+MOK_CLE=/var/lib/dkms/mok.key
+MOK_CERT=/var/lib/dkms/mok.pub
 
 # Le Secure Boot est-il actif ? Le 5e octet de la variable EFI vaut 1.
 secure_boot() {
@@ -63,6 +66,24 @@ if [ -n "$apres" ]; then
     # par le paquet de NVIDIA).
     if dkms status -m "$module" -k "$noyau" 2>/dev/null | grep -q "installed"; then
         echo "grenos: module $module compile pour le noyau $noyau"
+        # SECURE BOOT ACTIF (20 novembre, « je ne veux pas désactiver Secure
+        # Boot ») : le module est signé par NOTRE clé (mok.key, ci-dessous),
+        # que le firmware ne connaît pas encore. On demande à shim de
+        # l'inscrire au prochain démarrage (MOK). Le firmware demandera alors
+        # un code : on en tire un au hasard et on le donne à la personne —
+        # ce n'est pas un mot de passe à elle, c'est un code d'un seul usage.
+        if secure_boot && [ -f "$MOK_CERT" ]; then
+            if mokutil --test-key "$MOK_CERT" 2>&1 | grep -qi "already enrolled"; then
+                echo "grenos: cle de signature des modules deja inscrite"
+            else
+                code=$(printf '%08d' $(( $(od -An -N4 -tu4 /dev/urandom | tr -d ' ') % 100000000 )))
+                empreinte=$(mktemp)
+                mokutil --generate-hash="$code" > "$empreinte"
+                mokutil --import "$MOK_CERT" --hash-file "$empreinte"
+                rm -f "$empreinte"
+                echo "grenos-a-faire: Au redemarrage, un ecran bleu « Perform MOK management » s'affiche : choisis « Enroll MOK », puis « Continue », puis « Yes », tape le code $code (chiffres de la rangee du haut, SANS Maj), puis « Reboot ». C'est ce qui autorise le pilote NVIDIA avec le Secure Boot."
+            fi
+        fi
         exit 0
     fi
     echo "Le module $module n'a pas pu etre compile pour le noyau $noyau." >&2
@@ -78,9 +99,15 @@ if [ -f "$DEPOTS/$paquet.dkms" ]; then
         echo "Le pilote s'installe sur grenOS INSTALLE sur le disque : sur la cle USB, il disparaitrait au redemarrage." >&2
         exit 3
     fi
-    if secure_boot; then
-        echo "Le Secure Boot est actif : le pilote ne serait pas charge (il n'est pas signe). Coupe-le dans le BIOS, puis recommence." >&2
-        exit 3
+    # Avec le Secure Boot, le module doit être SIGNÉ. DKMS signe avec
+    # /var/lib/dkms/mok.key et mok.pub s'ils existent (ses chemins par
+    # défaut) : on les crée avant que le pilote ne se compile.
+    if secure_boot && [ ! -f "$MOK_CLE" ]; then
+        install -d -m 0700 /var/lib/dkms
+        openssl req -new -x509 -nodes -days 36500 -subj "/CN=grenOS - signature des modules/" \
+            -newkey rsa:2048 -keyout "$MOK_CLE" -outform DER -out "$MOK_CERT" 2>/dev/null
+        chmod 0600 "$MOK_CLE"
+        echo "grenos: cle de signature des modules creee (Secure Boot actif)"
     fi
 fi
 
