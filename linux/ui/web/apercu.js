@@ -6,8 +6,8 @@
   if (window.__TAURI__) return;
   const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
   const DONNEES = {
-    ecrans: ["bienvenue", "langue", "clavier", "compte", "parcours", "reseau", "apparence", "usage", "confidentialite", "securite", "majs", "applications", "sauvegardes", "optimisation", "systeme", "pare-feu", "journaux", "final"]
-      .map((cle) => ({ cle, titre: cle, parcours: ["bienvenue", "langue", "clavier", "compte", "parcours", "final"].includes(cle) ? ["rapide", "personnalise", "dev"] : ["systeme", "pare-feu", "journaux"].includes(cle) ? ["dev"] : ["personnalise", "dev"] })),
+    ecrans: ["bienvenue", "langue", "clavier", "compte", "parcours", "reseau", "apparence", "usage", "confidentialite", "securite", "majs", "applications", "sauvegardes", "optimisation", "systeme", "pare-feu", "journaux", "pilotes", "final"]
+      .map((cle) => ({ cle, titre: cle, parcours: ["bienvenue", "langue", "clavier", "compte", "parcours", "pilotes", "final"].includes(cle) ? ["rapide", "personnalise", "dev"] : ["systeme", "pare-feu", "journaux"].includes(cle) ? ["dev"] : ["personnalise", "dev"] })),
     usages: [
       { cle: "bureautique", titre: "Bureautique et Internet", note: "Écrire, naviguer, regarder des vidéos.", paquets: [] },
       { cle: "developpement", titre: "Développement", note: "Visual Studio Code, Git, Python et Node.", paquets: ["vscode"] },
@@ -23,7 +23,7 @@
   };
   window.APERCU = async function (commande, a) {
     switch (commande) {
-      case "premier_infos": return { donnees: DONNEES, machine: "grenos", virtuelle: "kvm", secure_boot: "inactif",
+      case "premier_infos": return { donnees: DONNEES, machine: "grenos", virtuelle: "", secure_boot: "actif", pilote_nvidia: true,
         secure_boot_phrase: "Secure Boot est désactivé, ce qu'il faut aujourd'hui pour démarrer grenOS.",
         materiel: [
           { icone: "cpu", nom: "Processeur", valeur: "8 cœur(s)", detail: "AMD Ryzen 7 5800X" },

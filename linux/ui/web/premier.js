@@ -8,24 +8,24 @@
 // paraît, et chaque écran s'annonce avec la même phrase qu'en Python.
 "use strict";
 (function () {
-  const { api, el, svg, habiller, aurore, mesurerFluidite } = window.grenos;
+  const { api, el, svg, habiller, aurore, mesurerFluidite, installer } = window.grenos;
 
   // Les écrans qu'on sait dessiner. `premier.json` en décrit vingt et un ; les
   // autres sont sautés plutôt que montrés vides — une page vide serait une
   // promesse à l'écran sans rien derrière.
   const CONSTRUITS = ["bienvenue", "langue", "clavier", "compte", "parcours", "reseau",
     "apparence", "usage", "confidentialite", "securite", "majs", "applications",
-    "sauvegardes", "optimisation", "systeme", "pare-feu", "journaux", "final"];
+    "sauvegardes", "optimisation", "systeme", "pare-feu", "journaux", "pilotes", "final"];
   const ICONES = { bienvenue: "etoile", langue: "langue", clavier: "clavier", compte: "compte",
     parcours: "fusee", reseau: "wifi", apparence: "palette", usage: "bureau",
     confidentialite: "oeil", securite: "bouclier", majs: "maj", applications: "paquet",
     optimisation: "eclair", sauvegardes: "paquet", systeme: "reglages", "pare-feu": "bouclier",
-    journaux: "oeil", final: "coche" };
+    journaux: "oeil", pilotes: "eclair", final: "coche" };
   const COURTS = { bienvenue: "Bienvenue", langue: "Langue", clavier: "Clavier", compte: "Compte",
     parcours: "Parcours", reseau: "Internet", apparence: "Apparence", usage: "Usage",
     confidentialite: "Confidentialité", securite: "Sécurité", majs: "Mises à jour",
     applications: "Applications", optimisation: "Matériel", sauvegardes: "Sauvegardes",
-    systeme: "Système", "pare-feu": "Pare-feu", journaux: "Journaux", final: "Terminé" };
+    systeme: "Système", "pare-feu": "Pare-feu", journaux: "Journaux", pilotes: "Pilote", final: "Terminé" };
 
   const R = {
     langue: "fr_FR", clavier: "fr", clavier_index: "0", parcours: "personnalise",
@@ -46,6 +46,9 @@
     const p = R.parcours;
     return infos.donnees.ecrans
       .filter((e) => e.parcours.includes(p) && CONSTRUITS.includes(e.cle))
+      // « Pilotes » : seulement sur grenOS installé, avec une carte NVIDIA
+      // sans le pilote officiel (premier.rs le décide).
+      .filter((e) => e.cle !== "pilotes" || infos.pilote_nvidia)
       .map((e) => e.cle);
   }
   const titreDe = (c) => (infos.donnees.ecrans.find((e) => e.cle === c) || {}).titre || "";
@@ -109,7 +112,9 @@
       }
       R.compte = r.login;
       if (mdp.actif && mdp.mot) {
-        if (mdp.mot.length < 4) return "Le mot de passe doit faire au moins 4 caractères.";
+        // Plus de longueur minimale (20 novembre, Grenofar : « que le nombre
+        // de caractères soit autant qu'on veut, et que le seul message qui
+        // dit non soit l'incohérence entre les deux »).
         if (mdp.mot !== mdp.confirme) return "Les deux mots de passe ne sont pas identiques.";
       }
     }
@@ -490,6 +495,37 @@
       el("div.carte.verre.lignes.materiel", ...infos.materiel.map((m) =>
         el("div.ligne", el("span.icone", svg(m.icone)), el("div", el("div.nom", m.nom), m.detail ? el("div.detail", m.detail) : null), el("span.valeur", m.valeur)))),
       el("div.carte.verre.ligne-option", el("div", el("b", "Régler la machine pour la performance"), el("small.note", " — au prochain démarrage, pas pendant que tu réponds.")), bascule)];
+  };
+
+  // LE PILOTE NVIDIA AU PREMIER DÉMARRAGE (20 novembre). Grenofar : « quand
+  // on installe, il redémarre sur le SSD et affiche une page pour mettre /
+  // activer les pilotes ». La même installation que Jeux et GrenPlace (dépôt
+  // de NVIDIA, module compilé puis vérifié, signé si le Secure Boot est actif).
+  let piloteEtat = "";
+  ecrans.pilotes = () => {
+    const carte = (infos.materiel[2] || {}).valeur || "ta carte NVIDIA";
+    const dire = el("p.note", piloteEtat);
+    const bouton = el("button.bouton.principal", {
+      type: "button",
+      onclick: async () => {
+        bouton.disabled = true;
+        D.suite.disabled = true;
+        const bien = await installer({ nom: "Pilote NVIDIA", source: "apt", identifiant: "nvidia-driver", depuis: "le dépôt de NVIDIA" });
+        piloteEtat = bien
+          ? "C'est installé. Il prendra effet au redémarrage, à la fin de l'assistant."
+          : "L'installation n'a pas abouti : le pilote libre reste en place. Tu pourras réessayer depuis Jeux.";
+        dire.textContent = piloteEtat;
+        api.appeler("premier_dire", { texte: `premier : pilote nvidia ${bien ? "installe" : "echec"}` });
+        D.suite.disabled = false;
+        bouton.disabled = bien;
+      },
+    }, svg("eclair"), "Installer le pilote NVIDIA (recommandé)");
+    return [entete("Matériel", "Le pilote de ta carte graphique",
+      `${carte} tourne pour l'instant avec le pilote libre, qui la gère mal : une seule image, 60 Hz, pas de jeux exigeants. Le pilote officiel de NVIDIA la gère entièrement — fréquence de ton écran, plusieurs écrans, jeux.`),
+      el("div.carte.verre.ligne-option", el("div", el("b", "Pilote officiel NVIDIA"),
+        el("small.note", " — depuis le dépôt de NVIDIA. Avec le Secure Boot, un écran bleu demandera au redémarrage un code, donné à la fin de l'installation.")), bouton),
+      dire,
+      el("p.note", "Tu peux aussi passer : il reste dans Jeux › Installer le pilote NVIDIA.")];
   };
 
   ecrans.final = () => {

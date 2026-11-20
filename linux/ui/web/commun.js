@@ -175,7 +175,7 @@ function toast(texte) {
 // Rend une promesse tenue à la fin : vrai si c'est installé.
 const INSTALLATIONS = {};
 let ecouteInstallation = false;
-function installer({ nom, source, identifiant, miseAJour = false }) {
+function installer({ nom, source, identifiant, miseAJour = false, depuis: d = "" }) {
   if (!ecouteInstallation) {
     ecouteInstallation = true;
     api.ecouter("installation", (a) => INSTALLATIONS[a.cle] && INSTALLATIONS[a.cle](a));
@@ -187,7 +187,9 @@ function installer({ nom, source, identifiant, miseAJour = false }) {
   const details = el("details", el("summary", "Voir le détail"), journal);
   const fermer = el("button.bouton", { disabled: true }, "Fermer");
   const fond = el("div.cx-fond");
-  const depuis = source === "flatpak" ? "Flathub" : "les dépôts Debian";
+  // D'où ça vient, dit vrai : un dépôt d'éditeur (NVIDIA, 20 novembre)
+  // n'est pas « les dépôts Debian ».
+  const depuis = d || (source === "flatpak" ? "Flathub" : "les dépôts Debian");
   fond.append(el("div.cx-dialogue.carte.installation",
     el("h2", `${miseAJour ? "Mise à jour" : "Installation"} de ${nom}`),
     el("p.note", `Téléchargement depuis ${depuis}.`),

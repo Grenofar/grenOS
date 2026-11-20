@@ -359,9 +359,32 @@ pub fn mot_sur_secure_boot(etat: &str) -> &'static str {
 
 // --------------------------------------------------------------- commandes
 
+/// LE PILOTE DE LA CARTE GRAPHIQUE (20 novembre). Grenofar : « quand on
+/// installe, il demande de redémarrer, boote sur le SSD, et affiche une page
+/// pour mettre / activer les pilotes ». Vrai sur un grenOS INSTALLÉ (pas la
+/// clé : le pilote y disparaîtrait au redémarrage) dont une carte NVIDIA
+/// n'a pas le pilote officiel (`nvidia`).
+pub fn pilote_nvidia_a_proposer(sysfs: &std::path::Path, ligne_noyau: &str) -> bool {
+    if ligne_noyau.split_whitespace().any(|m| m == "boot=live") {
+        return false;
+    }
+    let Ok(entrees) = std::fs::read_dir(sysfs.join("bus/pci/devices")) else { return false };
+    entrees.flatten().any(|e| {
+        let d = e.path();
+        let lire = |n: &str| std::fs::read_to_string(d.join(n)).unwrap_or_default().trim().to_string();
+        let pilote = std::fs::read_link(d.join("driver"))
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_default();
+        lire("vendor") == "0x10de" && lire("class").starts_with("0x03") && pilote != "nvidia"
+    })
+}
+
 #[derive(Serialize)]
 pub struct Infos {
     donnees: Donnees,
+    /// Proposer le pilote NVIDIA officiel (écran « pilotes »).
+    pilote_nvidia: bool,
     materiel: Vec<materiel::Ligne>,
     virtuelle: String,
     secure_boot: String,
@@ -377,8 +400,14 @@ pub async fn premier_infos() -> Infos {
     if let (Some(cpu), Some(ram), Some(gpu)) = (materiel.first(), materiel.get(1), materiel.get(2)) {
         dire(&format!("premier : optimisation — {}, {}, carte {}", cpu.valeur, ram.valeur, gpu.valeur));
     }
+    let ligne = std::fs::read_to_string("/proc/cmdline").unwrap_or_default();
+    let pilote_nvidia = pilote_nvidia_a_proposer(std::path::Path::new("/sys"), &ligne);
+    if pilote_nvidia {
+        dire("premier : pilotes — carte NVIDIA sans le pilote officiel, il sera propose");
+    }
     Infos {
         donnees: donnees(),
+        pilote_nvidia,
         materiel,
         virtuelle: materiel::virtuelle(),
         secure_boot: etat.into(),
@@ -581,6 +610,24 @@ pub async fn reseau_connecter(nom: String, mot_de_passe: Option<String>) -> Resu
 #[cfg(test)]
 mod essais {
     use super::*;
+
+    #[test]
+    fn le_pilote_nvidia_se_propose_sur_un_systeme_installe() {
+        let r = std::env::temp_dir().join(format!("grenos-pilote-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&r);
+        let carte = |nom: &str, vendeur: &str, classe: &str| {
+            let d = r.join("bus/pci/devices").join(nom);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("vendor"), format!("{vendeur}\n")).unwrap();
+            std::fs::write(d.join("class"), format!("{classe}\n")).unwrap();
+        };
+        carte("intel", "0x8086", "0x030000");
+        assert!(!pilote_nvidia_a_proposer(&r, "quiet splash"), "Intel seule : rien");
+        carte("nvidia", "0x10de", "0x030000");
+        assert!(pilote_nvidia_a_proposer(&r, "BOOT_IMAGE=/vmlinuz quiet"), "NVIDIA installee : propose");
+        assert!(!pilote_nvidia_a_proposer(&r, "boot=live components quiet"), "sur la cle : jamais");
+        let _ = std::fs::remove_dir_all(&r);
+    }
 
     #[test]
     fn noms() {

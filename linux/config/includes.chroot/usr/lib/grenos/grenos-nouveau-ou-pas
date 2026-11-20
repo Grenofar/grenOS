@@ -1,0 +1,46 @@
+#!/bin/sh
+# Charger `nouveau`, sauf sur une carte NVIDIA RTX 50 (Blackwell).
+#
+# 20 novembre, sur la RTX 5060 de Grenofar (10de:2d05) : un écran VERT à la
+# place de l'écran de chargement, une fois sur deux, avant même le bureau —
+# c'est-à-dire au moment précis où `nouveau` prend l'écran au firmware. Son
+# support des RTX 50 date du noyau 6.15 et n'est pas encore sûr : les
+# réglages du serveur d'affichage n'y pouvaient rien, il était trop tôt.
+#
+# Sur ces cartes, on NE CHARGE PAS `nouveau` : l'écran reste sur l'image du
+# firmware (simpledrm), à la définition de l'écran, 60 Hz, l'écran principal
+# seulement. C'est une image fiable. Le 300 Hz, le second écran et les jeux
+# viennent avec le pilote officiel de NVIDIA, proposé au premier démarrage
+# de grenOS installé (et dans Jeux) — il écarte `nouveau` de lui-même.
+#
+# `grenos.nouveau=1` sur la ligne du noyau le recharge quand même, pour
+# essayer le jour où son support aura mûri.
+#
+# Appelé par modprobe (etc/modprobe.d/grenos-rtx50.conf, `install nouveau`).
+# SYSFS et LIGNE ne servent qu'aux essais (linux/tools/essai-nouveau-ou-pas.sh).
+
+SYSFS="${GRENOS_SYSFS:-/sys}"
+LIGNE="${GRENOS_LIGNE:-/proc/cmdline}"
+
+# Une RTX 50 dans la machine ? Identifiants PCI 0x2B00 à 0x2FFF chez NVIDIA
+# (GB202 à GB207 ; la génération Ada s'arrête avant 0x2900).
+rtx50() {
+    for d in "$SYSFS"/bus/pci/devices/*; do
+        [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
+        case "$(cat "$d/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
+        id=$(cat "$d/device" 2>/dev/null) || continue
+        id=$((id))
+        if [ "$id" -ge $((0x2b00)) ] && [ "$id" -le $((0x2fff)) ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! grep -qw 'grenos.nouveau=1' "$LIGNE" 2>/dev/null && rtx50; then
+    { echo "grenos: nouveau non charge (carte RTX 50) : image du firmware, pilote NVIDIA conseille" > /dev/kmsg; } 2>/dev/null || true
+    [ -n "${GRENOS_SYSFS:-}" ] && echo "pas charge"
+    exit 0
+fi
+[ -n "${GRENOS_SYSFS:-}" ] && { echo "charge"; exit 0; }
+exec /sbin/modprobe --ignore-install nouveau "$@"

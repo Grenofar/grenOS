@@ -21,6 +21,7 @@
     {"cle": "pare-feu", "titre": "Réseau et pare-feu", "parcours": ["dev"]},
     {"cle": "journaux", "titre": "Télémétrie et journaux", "parcours": ["dev"]},
     {"cle": "bac-a-sable", "titre": "Bac à sable et paramètres du noyau", "parcours": ["dev"]},
+    {"cle": "pilotes", "titre": "Le pilote de ta carte graphique", "parcours": ["rapide", "personnalise", "dev"]},
     {"cle": "final", "titre": "grenOS est prêt", "parcours": ["rapide", "personnalise", "dev"]}
   ],
   "usages": [
