@@ -239,7 +239,13 @@ for initrd in /boot/initrd.img-*; do
         echo "grenos: $initrd ($taille Mo) contient encore des firmwares graphiques" >&2
         exit 1
     fi
-    echo "grenos: initrd $taille Mo, sans pilote ni firmware graphique"
+    # Et les firmwares des cartes réseau de serveur (20 novembre : 35 Mo de
+    # Netronome dans l'initrd de 2059, mesuré par cle.yml).
+    if lsinitramfs "$initrd" 2>/dev/null | grep -qE 'firmware/(netronome|liquidio|bnx2x|qed)/'; then
+        echo "grenos: $initrd ($taille Mo) contient encore des firmwares de cartes reseau" >&2
+        exit 1
+    fi
+    echo "grenos: initrd $taille Mo, sans pilote graphique ni carte reseau"
 done
 
 echo "--- grenOS : le magasin ---"

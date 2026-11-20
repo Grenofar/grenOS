@@ -52,6 +52,17 @@ nvidia_drm
 nvidia_modeset
 nvidia_uvm
 nvidia_peermem' "$noms")
+    # LES CARTES RÉSEAU NON PLUS (20 novembre, « rends le boot plus
+    # rapide »). Mesuré par cle.yml dans l'initrd de 2059 (88 Mo) : `MODULES=
+    # most` y met TOUS les pilotes réseau, et chacun ses firmwares — Netronome
+    # 35 Mo, LiquidIO 5 Mo, QLogic, Broadcom (bnx2x, qed), Chelsio, Myricom…
+    # des cartes de serveur. Personne ne démarre grenOS par le réseau : la
+    # clé et le disque se lisent sans réseau, et le réseau arrive avec le
+    # système, depuis /usr/lib/modules. Moins à lire avant l'écran de
+    # chargement, sur la clé comme sur le système installé.
+    reseau=$(find "$MODULES_NOYAU/kernel/drivers/net" -name '*.ko*' -printf '%f\n' 2>/dev/null \
+             | sed 's/\.ko.*$//' | sort -u)
+    noms=$(printf '%s\n%s' "$noms" "$reseau")
     if [ -n "$noms" ]; then
         printf '%s\n' "$noms" > "$DESTDIR/.grenos-sans-graphique"
         grep -vxF -f "$DESTDIR/.grenos-sans-graphique" "$__MODULES_TO_ADD" > "$__MODULES_TO_ADD.grenos" || true
@@ -71,5 +82,9 @@ for racine in "$DESTDIR/usr/lib/firmware" "$DESTDIR/lib/firmware"; do
     for dossier in nvidia amdgpu radeon i915 xe; do
         rm -rf "$racine/$dossier"
     done
+done
+for racine in "$DESTDIR/usr/lib/modules" "$DESTDIR/lib/modules"; do
+    [ -d "$racine" ] || continue
+    rm -rf "$racine"/*/kernel/drivers/net
 done
 exit 0
