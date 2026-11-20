@@ -314,6 +314,17 @@ def reglages_ecran_revenir(nom, taille, brut):
     return {"souci": ecran.appliquer(nom, taille, brut, garder=False) or ""}
 
 
+def reglages_ecran_proposition():
+    """La fréquence maximale de l'écran, proposée UNE fois (ecran.py)."""
+    import ecran
+    if ecran.deja_propose() or _virtuelle():
+        return {"proposition": None}
+    proposition = ecran.meilleure_frequence()
+    if proposition:
+        ecran.noter_proposition(proposition)
+    return {"proposition": proposition}
+
+
 # QUEL AFFICHAGE TOURNE (20 novembre). Sur une RTX 50, grenOS essaie le
 # pilote libre `nouveau` et se replie sur l'image du firmware (60 Hz, un
 # écran) si l'écran est jugé illisible (grenos-affichage-garde). La page
@@ -576,6 +587,7 @@ FONCTIONS = {
     "reglages_ecran_garder": reglages_ecran_garder,
     "reglages_ecran_revenir": reglages_ecran_revenir,
     "reglages_affichage": reglages_affichage,
+    "reglages_ecran_proposition": reglages_ecran_proposition,
     "reglages_affichage_reessayer": reglages_affichage_reessayer,
     "reglages_affichage_confirmer": reglages_affichage_confirmer,
     "reglages_composants": reglages_composants,

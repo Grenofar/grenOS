@@ -144,6 +144,49 @@ def essayer_mode(nom, largeur, hauteur, taux, garder=True):
     return "", etiquette
 
 
+PROPOSE = os.path.expanduser("~/.config/grenos/ecran-propose")
+
+
+def meilleure_frequence():
+    """La plus haute fréquence ANNONCÉE par l'écran principal à sa
+    définition actuelle, si elle dépasse l'actuelle — sinon None.
+
+    Grenofar (20 novembre) : « mon écran est à 300 Hz », et grenOS démarrait
+    à 60. Windows propose la fréquence maximale d'un écran neuf ; grenOS la
+    PROPOSE aussi, une fois par écran, avec le « Garder ? » de 15 secondes
+    des Réglages : si l'écran n'affiche rien à cette fréquence (360 Hz
+    coupait son signal), l'ancien réglage revient seul. Seulement ce que le
+    pilote liste (validé par lui), jamais une fréquence calculée.
+    """
+    liste = sorties()
+    if not liste:
+        return None
+    ecran = liste[0]
+    if not ecran["actuelle"]:
+        return None
+    mode = next((m for m in ecran["modes"] if m["taille"] == ecran["actuelle"]), None)
+    if not mode or not mode["taux"]:
+        return None
+    meilleur = max(mode["taux"], key=float)
+    try:
+        if float(meilleur) <= float(ecran["taux"] or 0) + 5:
+            return None
+    except ValueError:
+        return None
+    return {"nom": ecran["nom"], "taille": ecran["actuelle"], "brut": meilleur,
+            "arrondi": int(round(float(meilleur)))}
+
+
+def deja_propose():
+    return os.path.exists(PROPOSE)
+
+
+def noter_proposition(proposition):
+    os.makedirs(os.path.dirname(PROPOSE), exist_ok=True)
+    with open(PROPOSE, "w", encoding="utf-8") as fichier:
+        fichier.write("%s %s %s\n" % (proposition["nom"], proposition["taille"], proposition["brut"]))
+
+
 def restaurer():
     """Réapplique le choix noté, à l'ouverture de la session."""
     try:

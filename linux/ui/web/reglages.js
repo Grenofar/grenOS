@@ -12,6 +12,8 @@
     ["securite", "Sécurité", "bouclier"], ["materiel", "Matériel", "ram"],
   ];
   const D = { pages: {} };
+  // Ouverte par la session pour proposer la fréquence maximale de l'écran.
+  const PROPOSER_MAX = window.GRENOS_ONGLET === "ecran-max";
   const R = (fonction, arguments_) => api.appeler("reglages", { fonction, arguments: arguments_ || {} });
   const note = (t) => el("p.note.rg-note", t);
   const ligne = (t, w) => el("div.rg-ligne", el("span", t), w);
@@ -158,6 +160,25 @@
           if (reste <= 0) revenir("Pas de réponse en 15 secondes : l'ancien réglage est revenu. L'écran n'a sans doute pas accepté cette fréquence.");
         }, 1000);
       };
+      // LA FRÉQUENCE MAXIMALE, PROPOSÉE (20 novembre). Grenofar : « mon
+      // écran est à 300 Hz » — grenOS démarrait à 60. La session ouvre cette
+      // page (« ecran-max ») une fois par écran : on y essaie la plus haute
+      // fréquence que l'écran annonce, avec le même « Garder ? » de 15 s ;
+      // un écran qui n'affiche rien revient seul à l'ancien réglage.
+      if (PROPOSER_MAX && !D.propose) {
+        D.propose = true;
+        setTimeout(async () => {
+          const p = (await R("reglages_ecran_proposition").catch(() => ({}))).proposition;
+          if (!p || p.nom !== e.nom) return;
+          const m = v.modes.findIndex((x) => x.taille === p.taille);
+          if (m < 0) return;
+          mode = m; tailles.value = String(m); remplirTaux();
+          const i = v.modes[m].taux.findIndex((t) => t.brut === p.brut);
+          if (i < 0) return;
+          taux.value = String(i);
+          await appliquer();
+        }, 900);
+      }
       return [titre("Écran", `Écran ${e.nom}, actuellement ${e.actuelle.replace("x", " × ") || "inconnu"} à ${e.taux || "?"} images par seconde.`),
         affichage,
         carte(ligne("Définition", tailles), ligne("Images par seconde", taux), bouton("Appliquer", "principal", appliquer), confirmer, dire,
@@ -388,7 +409,8 @@
       D.contenu.append(D.pages[cle]);
     }
     document.body.append(el("div.page-reglages", volet, D.contenu));
-    const depart = PAGES.some((p) => p[0] === window.GRENOS_ONGLET) ? window.GRENOS_ONGLET : "apparence";
+    const depart = PROPOSER_MAX ? "ecran"
+      : PAGES.some((p) => p[0] === window.GRENOS_ONGLET) ? window.GRENOS_ONGLET : "apparence";
     montrer(depart);
     pret();
     api.appeler("reglages_ouvert");

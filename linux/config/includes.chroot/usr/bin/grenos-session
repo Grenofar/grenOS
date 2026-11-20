@@ -208,6 +208,19 @@ xsetroot -cursor_name left_ptr 2>/dev/null || true
 # La définition choisie dans les Réglages est réappliquée.
 grenos-parametres --restaurer-ecran 2>/dev/null || true
 
+# LA FRÉQUENCE MAXIMALE DE L'ÉCRAN, PROPOSÉE UNE FOIS (20 novembre).
+# Grenofar : « mon écran est à 300 Hz », et grenOS démarrait à 60. Si rien
+# n'a été choisi et que l'écran annonce plus haut (ecran.meilleure_frequence),
+# Réglages › Écran s'ouvre et l'essaie, avec « Garder ? » 15 secondes : un
+# écran noir revient seul à l'ancien réglage. Une fois par écran ; jamais en
+# machine virtuelle (l'hyperviseur recopie à sa propre cadence).
+if [ ! -e "$CONFIG/ecran" ] && [ ! -e "$CONFIG/ecran-propose" ] \
+        && [ "$(systemd-detect-virt 2>/dev/null || echo none)" = none ] \
+        && python3 -c 'import sys; sys.path.insert(0, "/usr/lib/grenos"); import ecran; sys.exit(0 if ecran.meilleure_frequence() else 1)' 2>/dev/null; then
+    (sleep 5; grenos-parametres ecran-max) >/dev/null 2>&1 &
+    grenos-dire "ecran : une frequence plus haute est annoncee, elle est proposee (Reglages, Garder ? 15 s)"
+fi
+
 # L'installation sur le disque n'a de sens que sur une vraie machine. Dans une
 # machine virtuelle, le disque garde déjà tout, et proposer d'installer
 # par-dessus ne ferait qu'inquiéter : on retire l'entrée du menu pour ce

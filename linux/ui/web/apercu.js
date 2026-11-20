@@ -160,6 +160,7 @@
         case "reglages_ecran_garder": case "reglages_ecran_revenir": return { souci: "" };
         case "reglages_affichage": return { mode: "firmware", rtx50: true, choix: "firmware", essai: false, peut_reessayer: true };
         case "reglages_affichage_reessayer": case "reglages_affichage_confirmer": return { souci: "" };
+        case "reglages_ecran_proposition": return { proposition: { nom: "HDMI-1", taille: "1920x1080", brut: "144.00", arrondi: 144 } };
         case "reglages_ecran": return { ecran: { nom: "HDMI-1", actuelle: "1920x1080", taux: "60.00" }, modes: [{ taille: "2560x1440", taux: [{ arrondi: 60, brut: "60.00", annoncee: true }] }, { taille: "1920x1080", taux: [{ arrondi: 144, brut: "144.00", annoncee: true }, { arrondi: 60, brut: "60.00", annoncee: true }, { arrondi: 75, brut: "75", annoncee: false }] }] };
         case "reglages_son": return { sorties: [["a", "Stéréo analogique"], ["b", "Stéréo numérique (HDMI)"]], courante: "a", volume: 62, muet: false, diagnostic: "La sortie par défaut est branchée et ouverte.\nLe mélangeur de la carte est ouvert (Master 80 %).\nPipeWire tourne en temps réel : le son tiendra quand la machine peine.\nCarte son : HDA Intel PCH, pilotée par snd_hda_intel." };
         case "reglages_heure": return { fuseau: "Europe/Paris", automatique: true, fuseaux: ["Europe/Brussels", "Europe/Paris", "America/Montreal"] };
