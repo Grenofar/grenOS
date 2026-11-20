@@ -188,6 +188,23 @@ if [ -z "$mesa" ] || dpkg --compare-versions "$mesa" lt 25.1; then
     exit 1
 fi
 echo "grenos: Mesa $mesa (NVK pour les RTX 50)"
+
+echo "--- grenOS : les cles des depots d'editeurs ---"
+# Claude Desktop (20 novembre) s'installe depuis le dépôt d'Anthropic, branché
+# au clic par grenos-depot-editeur avec la clé LIVRÉE ici. Une clé remplacée
+# par erreur — ou par malveillance — ferait accepter les paquets de
+# quelqu'un d'autre : on refuse l'image si l'empreinte n'est pas celle que
+# l'éditeur publie (notée à côté, dans <paquet>.empreinte).
+for cle in /usr/share/grenos/depots/*.asc; do
+    [ -f "$cle" ] || continue
+    attendue=$(tr -d ' \n' < "${cle%.asc}.empreinte" 2>/dev/null)
+    lues=$(gpg --show-keys --with-colons "$cle" 2>/dev/null | awk -F: '/^fpr/ {print $10; exit}')
+    if [ -z "$attendue" ] || [ "$lues" != "$attendue" ]; then
+        echo "grenos: cle $cle : empreinte ${lues:-illisible}, attendue ${attendue:-absente}" >&2
+        exit 1
+    fi
+    echo "grenos: cle $(basename "$cle") verifiee ($attendue)"
+done
 # Et ces firmwares restent HORS de l'initrd (crochet
 # zz-grenos-sans-pilotes-graphiques) : dedans, ils faisaient passer l'ISO
 # au-dela de 2 Go et la cle USB mettait deux minutes a le lire.

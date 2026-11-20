@@ -35,6 +35,10 @@ OBJET = "magasin.json"
 APPSTREAM = "https://flathub.org/api/v2/appstream/%s"
 ICI = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.join(ICI, "..", "data", "catalogue.json")
+# Les dépôts d'ÉDITEURS (Claude Desktop, 20 novembre) : un paquet qui a ici
+# son `<paquet>.list` ne vient pas de Debian, et c'est dans CE dépôt qu'on le
+# cherche — sinon la publication refuserait une fiche juste.
+DEPOTS = os.path.join(ICI, "..", "config", "includes.chroot", "usr", "share", "grenos", "depots")
 
 # Les applications qu'on a retirées exprès. Sans cette liste, le contrôle
 # ci-dessous refuserait à jamais toute suppression volontaire — il doit
@@ -213,9 +217,35 @@ def rien_n_a_disparu(applications, url):
     print(f"aucune application perdue ({len(avant)} en ligne, {len(apres)} ici)")
 
 
+def paquet_chez_l_editeur(paquet):
+    """Le dépôt d'éditeur de ce paquet le publie-t-il ? True, False, ou None (muet)."""
+    with open(os.path.join(DEPOTS, paquet + ".list"), encoding="utf-8") as f:
+        ligne = f.read().split("]", 1)[-1].split()
+    adresse, suite, composant = ligne[0].rstrip("/"), ligne[1], ligne[2]
+    index = f"{adresse}/dists/{suite}/{composant}/binary-amd64/Packages"
+    for essai in range(3):
+        try:
+            with urllib.request.urlopen(index, timeout=60) as reponse:
+                texte = reponse.read().decode("utf-8", "replace")
+            return re.search(r"^Package: %s$" % re.escape(paquet), texte, re.M) is not None
+        except (urllib.error.URLError, OSError, TimeoutError) as souci:
+            print(f"  {index} : {souci} (essai {essai + 1}/3)")
+    return None
+
+
 def verifier_aux_sources(applications):
     """Chaque fiche tient-elle devant la source qu'elle designe ?"""
-    voulus = sorted({a["identifiant"] for a in applications if a["source"] == "apt"})
+    editeurs = sorted({a["identifiant"] for a in applications if a["source"] == "apt"
+                       and os.path.isfile(os.path.join(DEPOTS, a["identifiant"] + ".list"))})
+    for paquet in editeurs:
+        verdict = paquet_chez_l_editeur(paquet)
+        if verdict is None:
+            print(f"depot d'editeur de {paquet} : injoignable, controle saute")
+        elif not verdict:
+            sys.exit(f"Le depot de l'editeur ne publie pas {paquet} : le bouton Installer echouerait")
+        else:
+            print(f"depot d'editeur : {paquet} existe")
+    voulus = sorted({a["identifiant"] for a in applications if a["source"] == "apt"} - set(editeurs))
     if voulus:
         reels = paquets_de_trixie()
         if reels is None:

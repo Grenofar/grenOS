@@ -487,6 +487,17 @@
       "site": "https://jeffser.com/alpaca/"
     },
     {
+      "slug": "claude",
+      "nom": "Claude",
+      "rayon": "Intelligence artificielle",
+      "editeur": "Anthropic",
+      "description": "L'application officielle de Claude, l'assistant d'Anthropic (version Linux en bêta) : discuter, travailler sur des fichiers, et Claude Code. Il faut un compte Claude. Elle s'installe depuis le dépôt d'Anthropic, branché seulement au moment d'installer, et se met à jour avec le système.",
+      "logo": "https://claude.ai/images/claude_app_icon.png",
+      "source": "apt",
+      "identifiant": "claude-desktop",
+      "site": "https://claude.com/download"
+    },
+    {
       "slug": "jan",
       "nom": "Jan",
       "rayon": "Intelligence artificielle",

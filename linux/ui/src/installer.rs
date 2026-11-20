@@ -34,6 +34,11 @@ struct Avance {
     bien: bool,
 }
 
+/// Ce paquet vient-il du dépôt de son éditeur (usr/share/grenos/depots) ?
+pub fn depot_editeur(identifiant: &str) -> bool {
+    identifiant_sain(identifiant) && std::path::Path::new(&format!("/usr/share/grenos/depots/{identifiant}.list")).is_file()
+}
+
 /// Le premier « NN% » d'une ligne.
 pub(crate) fn pour_cent(texte: &str) -> Option<u32> {
     let i = texte.find('%')?;
@@ -140,11 +145,24 @@ pub fn installer(app: tauri::AppHandle, cle: String, nom: String, source: String
         } else {
             let p = privilegie();
             let (programme, debut) = (p[0].as_str(), p[1..].iter().map(String::as_str).collect::<Vec<_>>());
-            courir(programme, &avec(&debut, &["apt-get", "update"]), &mut suivre);
-            if mise_a_jour {
-                courir(programme, &avec(&debut, &["apt-get", "install", "-y", "--only-upgrade", &identifiant]), &mut suivre)
+            // Une application publiée dans le dépôt de son ÉDITEUR (Claude
+            // Desktop, 20 novembre) : le dépôt n'est branché qu'ici, au clic
+            // (voir grenos-depot-editeur), et ses paquets recommandés viennent
+            // avec — pour Claude, le trousseau sans lequel on ne se connecte pas.
+            let editeur = depot_editeur(&identifiant);
+            if editeur && !courir(programme, &avec(&debut, &["/usr/lib/grenos/grenos-depot-editeur", &identifiant]), &mut suivre) {
+                false
             } else {
-                courir(programme, &avec(&debut, &["apt-get", "install", "-y", &identifiant]), &mut suivre)
+                courir(programme, &avec(&debut, &["apt-get", "update"]), &mut suivre);
+                let mut commande = vec!["apt-get", "install", "-y"];
+                if mise_a_jour {
+                    commande.push("--only-upgrade");
+                }
+                if editeur {
+                    commande.push("--install-recommends");
+                }
+                commande.push(&identifiant);
+                courir(programme, &avec(&debut, &commande), &mut suivre)
             }
         };
         let texte = match (bien, mise_a_jour) {

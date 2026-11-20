@@ -1,0 +1,37 @@
+#!/bin/sh
+# Brancher le dépôt d'un ÉDITEUR, au moment où l'on installe son application.
+#
+# Demandé le 20 novembre : « ajoute Claude Desktop à GrenPlace ». Anthropic
+# publie Claude Desktop pour Linux dans SON dépôt apt (downloads.claude.ai),
+# pas dans Debian ni sur Flathub — lu dans sa documentation
+# (code.claude.com/docs/en/desktop-linux) le 20 novembre.
+#
+# POURQUOI AU CLIC, ET PAS DANS L'IMAGE. Un dépôt branché d'avance serait
+# interrogé à CHAQUE vérification de mise à jour, sur toutes les machines,
+# même celles où personne n'a voulu Claude — et Grenofar venait justement de
+# demander qu'on coupe ce qui part sur le réseau sans raison.
+#
+# POURQUOI LA CLÉ EST DANS L'IMAGE. La documentation fait télécharger la clé
+# puis demande de vérifier son empreinte à l'œil. Ici, la clé est livrée et
+# la construction refuse l'image si son empreinte n'est pas celle publiée
+# (usr/share/grenos/depots/<paquet>.empreinte) : rien n'est téléchargé de
+# confiance au moment d'installer.
+#
+# Usage, en root : grenos-depot-editeur <paquet>
+# Un paquet sans dépôt d'éditeur ne fait RIEN (code 0) : on peut l'appeler
+# avant n'importe quelle installation apt.
+set -eu
+
+paquet="${1:-}"
+case "$paquet" in
+    ""|*[!a-z0-9.+-]*) echo "grenos-depot-editeur : nom de paquet refuse" >&2; exit 2 ;;
+esac
+
+DEPOTS=/usr/share/grenos/depots
+[ -f "$DEPOTS/$paquet.list" ] || exit 0
+
+# Les noms qu'Anthropic emploie lui-même : son paquet réécrit ce fichier à
+# l'installation, et les deux doivent désigner la même chose.
+install -D -m 0644 "$DEPOTS/$paquet.asc" "/usr/share/keyrings/$paquet-archive-keyring.asc"
+install -D -m 0644 "$DEPOTS/$paquet.list" "/etc/apt/sources.list.d/$paquet.list"
+echo "grenos: depot de l editeur branche pour $paquet"

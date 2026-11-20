@@ -210,8 +210,17 @@ def installer(args):
                             "https://dl.flathub.org/repo/flathub.flatpakrepo"], capture_output=True)
             code = subprocess.run(["flatpak", "install", "-y", "--noninteractive", "flathub", a["identifiant"]]).returncode
         else:
-            subprocess.run(lanceur() + ["apt-get", "update", "-qq"])
-            code = subprocess.run(lanceur() + ["apt-get", "install", "-y", a["identifiant"]]).returncode
+            # Le dépôt de l'éditeur (Claude Desktop…), branché seulement ici,
+            # comme dans GrenPlace : voir /usr/lib/grenos/grenos-depot-editeur.
+            editeur = os.path.isfile(f"/usr/share/grenos/depots/{a['identifiant']}.list")
+            code = 0
+            if editeur:
+                code = subprocess.run(lanceur() + ["/usr/lib/grenos/grenos-depot-editeur", a["identifiant"]]).returncode
+            if code == 0:
+                subprocess.run(lanceur() + ["apt-get", "update", "-qq"])
+                code = subprocess.run(lanceur() + ["apt-get", "install", "-y"]
+                                      + (["--install-recommends"] if editeur else [])
+                                      + [a["identifiant"]]).returncode
         if code == 0:
             ok(_(f"{a['nom']} is installed. It's in the menu, and opens with ", f"{a['nom']} est installé. Il est dans le menu, et s'ouvre par ")
                + c(BLEU, _(f"gren open {a['slug']}", f"gren ouvrir {a['slug']}")))

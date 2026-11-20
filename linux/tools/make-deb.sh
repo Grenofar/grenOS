@@ -238,6 +238,12 @@ python3 "$HERE/tools/wallpaper.py" "$BUILD/usr/share/grenos" 2560 1440
 
 # Le catalogue de secours de GrenPlace : celui du réseau l'emporte toujours.
 install -m 0644 "$HERE/data/catalogue.json" "$BUILD/usr/share/grenos/catalogue.json"
+# Les dépôts d'éditeurs (Claude Desktop, 20 novembre) : sans eux, une machine
+# mise à jour verrait la fiche Claude et son bouton Installer échouerait.
+install -d "$BUILD/usr/share/grenos/depots"
+for f in "$DEDANS"/usr/share/grenos/depots/*; do
+    [ -f "$f" ] && install -m 0644 "$f" "$BUILD/usr/share/grenos/depots/"
+done
 # Les écrans, les profils d'usage et les claviers de l'assistant : la source
 # unique que lisent grenos-ui ET le secours Python (premier.py, clavier.py).
 # Sans elle, clavier.py ne s'importerait plus — et les Réglages avec.
