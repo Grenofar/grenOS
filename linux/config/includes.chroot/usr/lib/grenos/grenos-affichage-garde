@@ -12,7 +12,9 @@
 #      Une coupure au bouton le laisse en place, et le démarrage suivant
 #      prend alors l'image du firmware ;
 #   2. l'assistant (grenos-premier-lanceur) l'efface dès que la personne
-#      quitte l'écran de bienvenue : elle le voit, « nouveau » est gardé ;
+#      quitte l'écran de bienvenue : elle le voit, « nouveau » est gardé.
+#      Sur un grenOS déjà installé (réessai depuis les Réglages), c'est la
+#      session qui demande « Tu vois bien cet écran ? » (Réglages › Écran) ;
 #   3. trois minutes sans cela — X qui ne démarre pas, écran vert, noir —
 #      et la machine garde « firmware » puis redémarre d'elle-même.
 #
@@ -77,7 +79,15 @@ choix() {
 }
 
 grep -qw 'grenos.nouveau=1' /proc/cmdline 2>/dev/null && exit 0
-[ -e /etc/grenos/identite ] && exit 0
+# Une machine déjà nommée n'ouvre plus l'assistant : on ne s'arme alors que
+# sur un RÉESSAI demandé dans les Réglages (la session posera la question).
+reessai=0
+"$ETAT" existe affichage-reessai 2>/dev/null && reessai=1
+if [ "$reessai" = 1 ]; then
+    "$ETAT" effacer affichage-reessai 2>/dev/null
+elif [ -e /etc/grenos/identite ]; then
+    exit 0
+fi
 carte_rtx50 "" || exit 0
 # `nouveau` se charge pendant que udev parcourt les cartes : on lui laisse
 # le temps d'arriver (dix secondes au plus, seulement sur ces machines).

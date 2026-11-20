@@ -20,6 +20,7 @@ use std::process::{Command, Stdio};
 /// Les fonctions du pont que la page Réglages a le droit d'appeler.
 const PERMISES: &[&str] = &[
     "reglages_ecran", "reglages_ecran_appliquer", "reglages_ecran_garder", "reglages_ecran_revenir", "reglages_composants", "reglages_composants_chercher",
+    "reglages_affichage", "reglages_affichage_reessayer", "reglages_affichage_confirmer",
     "reglages_securite", "reglages_son", "reglages_son_regler", "reglages_heure", "reglages_heure_regler",
     "reglages_materiel", "reglages_maj",
 ];

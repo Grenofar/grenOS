@@ -1,0 +1,13 @@
+# « Oui, je vois bien cet écran » (Réglages › Écran, 20 novembre) : la
+# personne confirme l'affichage complet après un réessai. Le témoin d'essai
+# disparaît — le filet (grenos-affichage-garde) le voit et ne redémarre pas —
+# et le choix « nouveau » est gardé pour cette machine.
+#
+# Lancé par la session (`systemctl start`, règle polkit 49). Pas de [Install].
+[Unit]
+Description=grenOS : affichage complet confirme par la personne
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-affichage-etat effacer affichage-essai
+ExecStart=/usr/lib/grenos/grenos-affichage-etat ecrire affichage nouveau

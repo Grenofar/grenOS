@@ -24,7 +24,7 @@ nom=${2:-}
 valeur=${3:-}
 
 case "$nom" in
-    affichage|affichage-essai) ;;
+    affichage|affichage-essai|affichage-reessai) ;;
     *) echo "grenos-affichage-etat : nom refusé « $nom »" >&2; exit 2 ;;
 esac
 

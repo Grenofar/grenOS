@@ -30,6 +30,40 @@
     return s;
   }
 
+  // QUEL AFFICHAGE TOURNE (20 novembre), pour les RTX 50 : le pilote libre
+  // `nouveau`, ou l'image du firmware sur laquelle grenOS s'est replié quand
+  // l'écran n'était pas lisible (grenos-affichage-garde). On le DIT, et on
+  // permet de réessayer — sinon une machine repliée une fois le resterait
+  // sans que personne sache pourquoi. Pendant un réessai, c'est ici que la
+  // personne confirme qu'elle voit l'écran.
+  function carteAffichage(a) {
+    if (!a || !a.rtx50) return null;
+    const dire = el("p.note");
+    if (a.essai) {
+      const oui = bouton("Oui, garder l'affichage complet", "principal", async () => {
+        const r = await R("reglages_affichage_confirmer");
+        dire.textContent = r.souci ? `Pas gardé : ${r.souci}` : "Gardé : ta carte reste sur l'affichage complet.";
+        oui.disabled = !r.souci;
+      });
+      return carte(el("p", el("b", "Tu vois bien cet écran ? "),
+        "grenOS essaie l'affichage complet de ta carte. Sans réponse dans les trois minutes qui suivent le démarrage, il revient tout seul à l'image sûre."), oui, dire);
+    }
+    if (a.mode === "firmware" && a.peut_reessayer) {
+      const essayer = bouton("Réessayer l'affichage complet", "principal", async () => {
+        const r = await R("reglages_affichage_reessayer");
+        if (r.souci) { dire.textContent = `Impossible : ${r.souci}`; return; }
+        essayer.disabled = true;
+        dire.replaceChildren("Noté pour le prochain démarrage. ", bouton("Redémarrer maintenant", "", () => ouvrirProgramme("grenos-arret")));
+      });
+      return carte(ligne("Affichage", el("span.note", "image sûre du firmware — un écran, 60 Hz")),
+        note("grenOS s'y est replié parce que l'écran n'était pas lisible avec le pilote libre de ta carte. Tu peux réessayer : si l'image n'est pas bonne, il reviendra tout seul ici trois minutes après le démarrage."),
+        essayer, dire);
+    }
+    if (a.mode === "nouveau") return carte(ligne("Affichage", el("span.note", "pilote libre de ta carte — plusieurs écrans, haute fréquence")));
+    if (a.mode === "nvidia") return carte(ligne("Affichage", el("span.note", "pilote officiel NVIDIA")));
+    return null;
+  }
+
   // ---- Les pages ---------------------------------------------------------------
   const CONSTRUIRE = {
     async apparence() {
@@ -72,8 +106,9 @@
     },
 
     async ecran() {
+      const affichage = carteAffichage(await R("reglages_affichage").catch(() => null));
       const v = await R("reglages_ecran");
-      if (!v.ecran) return [titre("Écran"), carte(note("Aucun écran interrogeable ici."))];
+      if (!v.ecran) return [titre("Écran"), affichage, carte(note("Aucun écran interrogeable ici."))].filter(Boolean);
       const e = v.ecran;
       const dire = el("p.note");
       let mode = Math.max(0, v.modes.findIndex((m) => m.taille === e.actuelle));
@@ -124,11 +159,12 @@
         }, 1000);
       };
       return [titre("Écran", `Écran ${e.nom}, actuellement ${e.actuelle.replace("x", " × ") || "inconnu"} à ${e.taux || "?"} images par seconde.`),
+        affichage,
         carte(ligne("Définition", tailles), ligne("Images par seconde", taux), bouton("Appliquer", "principal", appliquer), confirmer, dire,
           ligne("Plusieurs écrans", bouton("Disposer les écrans", "", () => ouvrirProgramme("arandr"))),
           v.virtuelle
             ? note(`grenOS tourne dans une machine virtuelle (${v.virtuelle}) : son écran est virtuel, et c'est ${v.virtuelle === "oracle" ? "VirtualBox" : "l'hyperviseur"} qui le recopie sur ton vrai écran, à sa propre cadence. Choisir une fréquence plus haute ici n'y changerait rien ; sur un vrai PC, toutes celles de ton écran sont proposées.`)
-            : note("Les fréquences marquées « à essayer » ne sont pas annoncées par l'écran, mais restent sous son maximum. Après « Appliquer », rien n'est gardé tant que tu n'as pas cliqué « Garder » : si l'image disparaît, attends 15 secondes, l'ancien réglage revient tout seul."))];
+            : note("Les fréquences marquées « à essayer » ne sont pas annoncées par l'écran, mais restent sous son maximum. Après « Appliquer », rien n'est gardé tant que tu n'as pas cliqué « Garder » : si l'image disparaît, attends 15 secondes, l'ancien réglage revient tout seul."))].filter(Boolean);
     },
 
     async son() {

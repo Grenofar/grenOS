@@ -1,0 +1,18 @@
+# Réglages › Écran › « Réessayer l'affichage complet » (20 novembre).
+#
+# Une RTX 50 repliée sur l'image du firmware (écran jugé illisible sous
+# `nouveau`) peut réessayer : le choix « firmware » est effacé, et un
+# RÉESSAI est noté pour que le filet (grenos-affichage-garde) s'arme au
+# prochain démarrage même sur un grenOS déjà installé — la session demandera
+# alors « Tu vois bien cet écran ? », et sans réponse en trois minutes la
+# machine revient seule à l'image du firmware.
+#
+# Lancé par la session (`systemctl start`, permis par la règle polkit 49 aux
+# comptes du groupe sudo) : rien d'autre à autoriser. Pas de [Install].
+[Unit]
+Description=grenOS : reessayer l'affichage complet au prochain demarrage
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-affichage-etat effacer affichage
+ExecStart=/usr/lib/grenos/grenos-affichage-etat ecrire affichage-reessai oui

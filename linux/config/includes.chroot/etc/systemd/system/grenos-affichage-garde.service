@@ -8,7 +8,6 @@
 Description=grenOS : ecran des RTX 50 sous nouveau, sous surveillance
 After=systemd-udev-trigger.service local-fs.target grenos-affichage-firmware.service
 Before=grenos-premier.service lightdm.service display-manager.service
-ConditionPathExists=!/etc/grenos/identite
 
 [Service]
 Type=oneshot

@@ -946,6 +946,15 @@ print('%d disque(s), %d volume(s) : %s' % (
     fi
 ) &
 
+# UN ESSAI DE L'AFFICHAGE COMPLET EN COURS (20 novembre, RTX 50) : la
+# question « Tu vois bien cet écran ? » s'ouvre d'elle-même dans Réglages ›
+# Écran. Sans réponse en trois minutes, grenos-affichage-garde revient seul à
+# l'image sûre du firmware — personne ne reste devant un écran illisible.
+if [ -e /etc/grenos/affichage-essai ] || [ -e /run/live/medium/grenos/affichage-essai ]; then
+    (sleep 4; grenos-parametres ecran) >/dev/null 2>&1 &
+    grenos-dire "ecran : essai de l affichage complet, la question est posee dans Reglages"
+fi
+
 # L'accueil, une seule fois, à la première ouverture.
 if [ ! -e "$CONFIG/accueil-vu" ]; then
     touch "$CONFIG/accueil-vu"

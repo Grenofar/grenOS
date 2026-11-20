@@ -19,7 +19,9 @@ RÈGLES DU PONT :
 - une erreur rend `{"erreur": "..."}` et le code 1, jamais une trace Python
   à l'écran.
 """
+import glob
 import json
+import os
 import sys
 
 sys.path.insert(0, "/usr/lib/grenos")
@@ -312,6 +314,83 @@ def reglages_ecran_revenir(nom, taille, brut):
     return {"souci": ecran.appliquer(nom, taille, brut, garder=False) or ""}
 
 
+# QUEL AFFICHAGE TOURNE (20 novembre). Sur une RTX 50, grenOS essaie le
+# pilote libre `nouveau` et se replie sur l'image du firmware (60 Hz, un
+# écran) si l'écran est jugé illisible (grenos-affichage-garde). La page
+# Écran doit le DIRE, et permettre de réessayer : sinon une machine repliée
+# une fois le resterait sans que personne sache pourquoi.
+_ETATS_AFFICHAGE = ("/run/live/medium/grenos", "/etc/grenos")
+
+
+def _etat_affichage(nom):
+    for dossier in _ETATS_AFFICHAGE:
+        chemin = os.path.join(dossier, nom)
+        if os.path.exists(chemin):
+            try:
+                with open(chemin, encoding="utf-8") as f:
+                    return f.read().strip() or "oui"
+            except OSError:
+                return "oui"
+    return ""
+
+
+def _lire(chemin):
+    try:
+        with open(chemin, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def reglages_affichage():
+    rtx50 = False
+    pilotes = []
+    for d in sorted(glob.glob("/sys/bus/pci/devices/*")):
+        if not _lire(os.path.join(d, "class")).startswith("0x03"):
+            continue
+        lien = os.path.join(d, "driver")
+        pilote = os.path.basename(os.path.realpath(lien)) if os.path.exists(lien) else ""
+        pilotes.append(pilote)
+        try:
+            ident = int(_lire(os.path.join(d, "device")) or "0", 16)
+        except ValueError:
+            ident = 0
+        if _lire(os.path.join(d, "vendor")) == "0x10de" and 0x2B00 <= ident <= 0x2FFF:
+            rtx50 = True
+    cartes_drm = [c for c in glob.glob("/sys/class/drm/card[0-9]*") if "-" not in os.path.basename(c)]
+    if "nvidia" in pilotes:
+        mode = "nvidia"
+    elif "nouveau" in pilotes:
+        mode = "nouveau"
+    elif not cartes_drm and os.path.exists("/dev/fb0"):
+        mode = "firmware"
+    else:
+        mode = "autre"
+    choix = _etat_affichage("affichage")
+    essai = bool(_etat_affichage("affichage-essai"))
+    return {"mode": mode, "rtx50": rtx50, "choix": choix, "essai": essai,
+            "peut_reessayer": rtx50 and mode == "firmware"}
+
+
+def _demarrer_unite(unite):
+    import subprocess
+    try:
+        r = subprocess.run(["systemctl", "start", unite], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        return str(e)
+    return "" if r.returncode == 0 else (r.stderr.strip() or "refusé")
+
+
+def reglages_affichage_reessayer():
+    souci = _demarrer_unite("grenos-affichage-reessayer.service")
+    return {"souci": souci}
+
+
+def reglages_affichage_confirmer():
+    souci = _demarrer_unite("grenos-affichage-confirmer.service")
+    return {"souci": souci}
+
+
 def reglages_composants():
     import composants
     if not composants.present():
@@ -496,6 +575,9 @@ FONCTIONS = {
     "reglages_ecran_appliquer": reglages_ecran_appliquer,
     "reglages_ecran_garder": reglages_ecran_garder,
     "reglages_ecran_revenir": reglages_ecran_revenir,
+    "reglages_affichage": reglages_affichage,
+    "reglages_affichage_reessayer": reglages_affichage_reessayer,
+    "reglages_affichage_confirmer": reglages_affichage_confirmer,
     "reglages_composants": reglages_composants,
     "reglages_composants_chercher": reglages_composants_chercher,
     "reglages_securite": reglages_securite,
