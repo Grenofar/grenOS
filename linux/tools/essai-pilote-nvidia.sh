@@ -31,8 +31,9 @@ echo "cle verifiee : $lue"
 echo "--- le depot de NVIDIA, branche comme grenos-depot-editeur le fait"
 install -D -m 0644 "$D/nvidia-driver.gpg" /usr/share/keyrings/nvidia-driver-archive-keyring.gpg
 install -D -m 0644 "$D/nvidia-driver.list" /etc/apt/sources.list.d/nvidia-driver.list
+install -D -m 0644 "$D/nvidia-driver.pref" /etc/apt/preferences.d/nvidia-driver.pref
 apt-get update -q
-apt-cache policy nvidia-driver nvidia-kernel-open-dkms | sed -n '1,4p;7,9p'
+apt-cache policy nvidia-driver firmware-nvidia-gsp | grep -E '^[a-z]|Candidate'
 
 noyau=$(ls /usr/src | sed -n 's/^linux-headers-\(.*-amd64\)$/\1/p' | sort -V | tail -n 1)
 [ -n "$noyau" ] || { echo "::error::pas d'en-tetes de noyau"; exit 1; }

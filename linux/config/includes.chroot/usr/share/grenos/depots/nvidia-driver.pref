@@ -1,0 +1,12 @@
+# Le firmware du pilote NVIDIA vient de NVIDIA (20 novembre).
+#
+# grenOS épingle tous les `firmware-*` sur trixie-backports (priorité 990,
+# config/archives/grenos-noyau.pref) pour les RTX 50 sous le pilote libre.
+# Debian y a aussi un `firmware-nvidia-gsp`, plus ancien : il passait avant
+# celui de NVIDIA, et `nvidia-kernel-open-dkms` 620, qui exige le sien à la
+# version exacte, ne s'installait plus. Trouvé par l'essai de compilation
+# (linux/tools/essai-pilote-nvidia.sh, run 44734258439), avant que le bouton
+# n'échoue chez quelqu'un.
+Package: firmware-nvidia-gsp
+Pin: origin "developer.download.nvidia.com"
+Pin-Priority: 995

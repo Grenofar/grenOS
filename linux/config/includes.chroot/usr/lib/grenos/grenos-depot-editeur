@@ -21,6 +21,7 @@
 #   <paquet>.list         la ligne apt (obligatoire)
 #   <paquet>.asc / .gpg   sa clé, texte ou binaire
 #   <paquet>.avec         des paquets à installer avec (lus par GrenPlace)
+#   <paquet>.pref         sa règle de priorité apt (preferences.d)
 #   <paquet>.dkms         un MODULE DU NOYAU (pilote) : installable seulement
 #                         sur un système installé, sans Secure Boot, et
 #                         vérifié après coup (--apres)
@@ -68,7 +69,7 @@ if [ -n "$apres" ]; then
     echo "Retour au pilote libre : on retire ce qui vient d'etre installe." >&2
     apt-get purge -y $(cat "$DEPOTS/$paquet.avec" 2>/dev/null | sed 's/linux-headers-amd64//') "$paquet" >&2 || true
     apt-get autoremove -y >&2 || true
-    rm -f "/etc/apt/sources.list.d/$paquet.list"
+    rm -f "/etc/apt/sources.list.d/$paquet.list" "/etc/apt/preferences.d/$paquet.pref"
     exit 1
 fi
 
@@ -91,4 +92,9 @@ else
     install -D -m 0644 "$DEPOTS/$paquet.asc" "/usr/share/keyrings/$paquet-archive-keyring.asc"
 fi
 install -D -m 0644 "$DEPOTS/$paquet.list" "/etc/apt/sources.list.d/$paquet.list"
+# Sa règle de priorité, s'il en a une (NVIDIA : son firmware avant celui de
+# Debian, que notre épinglage de backports ferait passer devant).
+if [ -f "$DEPOTS/$paquet.pref" ]; then
+    install -D -m 0644 "$DEPOTS/$paquet.pref" "/etc/apt/preferences.d/$paquet.pref"
+fi
 echo "grenos: depot de l editeur branche pour $paquet"
