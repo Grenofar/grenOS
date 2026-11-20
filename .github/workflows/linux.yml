@@ -562,16 +562,22 @@ jobs:
             -drive if=pflash,format=raw,readonly=on,file="$CODE" -drive if=pflash,format=raw,file="$RUNNER_TEMP/sb-vars.fd" \
             -cdrom "$ISO_SB" -boot d -display none -vga std -serial file:"$RUNNER_TEMP/serial-sb.log" -no-reboot &
           QEMU=$!
+          # Une cle neuve s'arrete au PREMIER ECRAN (l'assistant), qui dit
+          # « premier : securite  secure boot actif » ; la session, qui dit
+          # « secure boot : actif », ne vient qu'apres lui. Le premier passage
+          # attendait la seconde phrase seulement, et a crie a l'echec alors que
+          # l'assistant etait affiche, Secure Boot actif (run 44767959631,
+          # serial-sb.log). Les deux phrases prouvent la meme chose.
           for attente in $(seq 1 72); do
-            grep -aq 'secure boot :' "$RUNNER_TEMP/serial-sb.log" 2>/dev/null && break
+            grep -aqE 'secure boot :|secure boot actif|secure boot inactif' "$RUNNER_TEMP/serial-sb.log" 2>/dev/null && break
             kill -0 "$QEMU" 2>/dev/null || break
             sleep 5
           done
           kill $QEMU 2>/dev/null || true
-          ligne=$(grep -a 'secure boot :' "$RUNNER_TEMP/serial-sb.log" 2>/dev/null | sed 's/^.*grenos: //' | tail -n 1)
-          [ -n "$ligne" ] || ligne="la session est restee muette apres $((attente * 5)) s"
+          ligne=$(grep -aE 'secure boot :|secure boot actif|secure boot inactif' "$RUNNER_TEMP/serial-sb.log" 2>/dev/null | sed 's/^.*grenos: //' | tail -n 1)
+          [ -n "$ligne" ] || ligne="la machine est restee muette apres $((attente * 5)) s"
           echo "secure boot : $ligne"
-          if ! echo "$ligne" | grep -q "secure boot : actif"; then
+          if ! echo "$ligne" | grep -qE "secure boot : actif|secure boot actif"; then
             echo "::error::Avec le Secure Boot actif, l'image n'est pas allee jusqu'a la session."
             exit 1
           fi
