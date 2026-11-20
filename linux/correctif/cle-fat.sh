@@ -34,6 +34,11 @@ if [ -n "$PLUS" ]; then
     sed -i "0,/findiso=\${iso_path}/s//& $PLUS/" "$T/plat/boot/grub/grub.cfg"
     grep -m1 'findiso' "$T/plat/boot/grub/grub.cfg" | sed 's/^[[:space:]]*/grub : /'
 fi
+if [ -n "${GRUB_CONFIG:-}" ]; then
+    # Un autre config.cfg de GRUB (essai du mode vidéo laissé au firmware).
+    cp "$GRUB_CONFIG" "$T/plat/boot/grub/config.cfg"
+    echo "grub : config.cfg remplacé par $GRUB_CONFIG"
+fi
 
 for f in "$T/plat"/* "$T/plat"/.disk; do
     [ -e "$f" ] || continue

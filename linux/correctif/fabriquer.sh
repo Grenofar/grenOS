@@ -39,6 +39,10 @@ while read -r genre a b; do
             mkdir -p "$ARBRE/$(dirname "$a")"
             ln -sfn "$b" "$ARBRE/$a"
             ;;
+        seul)
+            [ -f "$ICI/seul/$a" ] || { echo "correctif : seul/$a introuvable"; exit 1; }
+            install -D -m 0644 "$ICI/seul/$a" "$ARBRE/$a"
+            ;;
         paquet)
             # Un fichier d'un paquet Debian trixie qui manque à l'image
             # publiée : le même que la construction suivante installera.

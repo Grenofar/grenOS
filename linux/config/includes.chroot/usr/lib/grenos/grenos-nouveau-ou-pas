@@ -1,26 +1,46 @@
 #!/bin/sh
-# Charger `nouveau`, sauf sur une carte NVIDIA RTX 50 (Blackwell).
+# Charger `nouveau` — et, sur une carte NVIDIA RTX 50, seulement tant que
+# l'écran n'a pas été jugé illisible sur cette machine.
 #
-# 20 novembre, sur la RTX 5060 de Grenofar (10de:2d05) : un écran VERT à la
-# place de l'écran de chargement, une fois sur deux, avant même le bureau —
-# c'est-à-dire au moment précis où `nouveau` prend l'écran au firmware. Son
-# support des RTX 50 date du noyau 6.15 et n'est pas encore sûr : les
-# réglages du serveur d'affichage n'y pouvaient rien, il était trop tôt.
+# L'HISTOIRE, PARCE QU'ELLE DÉCIDE DU CHOIX (RTX 5060 de Grenofar) :
+#   - 20 nov. au matin (version 2124, Mesa 25) : `nouveau` chargé, le bureau
+#     s'affiche — deux écrans, 300 Hz réglable ; seul le curseur ramait
+#     (picom sur un rendu logiciel) ;
+#   - versions suivantes (Mesa 26.1 ajouté : NVK + zink, l'accélération 3D
+#     des RTX 50) : ÉCRAN VERT, souvent, au moment où X démarre. Xorg
+#     dessine alors par Mesa (glamor) et l'écran lit mal ses tampons ;
+#   - version 2059 : `nouveau` écarté sur les RTX 50 — plus de vert, mais
+#     un écran NOIR (le noyau n'offrait que /dev/fb0 et X n'avait pas son
+#     pilote fbdev ; réparé, voir grenos-affichage-firmware).
+# Donc : on charge `nouveau` (deux écrans, haute fréquence, curseur matériel)
+# avec X SANS glamor (etc/X11/xorg.conf.d/20-grenos-nouveau.conf) — la
+# configuration qui ressemble au bureau qui marchait. Et un filet, pour que
+# rien ne repose sur un pari :
 #
-# Sur ces cartes, on NE CHARGE PAS `nouveau` : l'écran reste sur l'image du
-# firmware (simpledrm), à la définition de l'écran, 60 Hz, l'écran principal
-# seulement. C'est une image fiable. Le 300 Hz, le second écran et les jeux
-# viennent avec le pilote officiel de NVIDIA, proposé au premier démarrage
-# de grenOS installé (et dans Jeux) — il écarte `nouveau` de lui-même.
+#   - grenos-premier-lanceur pose un TÉMOIN d'essai au début de l'assistant
+#     et attend que la personne passe le premier écran (150 s) ;
+#   - passé : l'écran est lisible, le choix « nouveau » est gardé ;
+#   - pas passé (personne ne voit rien) : le choix devient « firmware » et la
+#     machine redémarre d'elle-même sur l'image du firmware (60 Hz, un
+#     écran, toujours lisible) ;
+#   - coupée au bouton avant : le témoin est resté — ce script le voit au
+#     démarrage suivant et prend l'image du firmware.
 #
-# `grenos.nouveau=1` sur la ligne du noyau le recharge quand même, pour
-# essayer le jour où son support aura mûri.
+# Le choix vit sur la clé (/run/live/medium/grenos/affichage) quand on
+# démarre d'une clé, sinon dans /etc/grenos/affichage. `grenos.nouveau=1` ou
+# `=0` sur la ligne du noyau passe outre (essais).
 #
 # Appelé par modprobe (etc/modprobe.d/grenos-rtx50.conf, `install nouveau`).
-# SYSFS et LIGNE ne servent qu'aux essais (linux/tools/essai-nouveau-ou-pas.sh).
+# GRENOS_SYSFS, GRENOS_LIGNE, GRENOS_ETAT ne servent qu'aux essais
+# (linux/tools/essai-nouveau-ou-pas.sh).
 
 SYSFS="${GRENOS_SYSFS:-/sys}"
 LIGNE="${GRENOS_LIGNE:-/proc/cmdline}"
+if [ -n "${GRENOS_ETAT:-}" ]; then
+    ETATS="$GRENOS_ETAT"
+else
+    ETATS="/run/live/medium/grenos /etc/grenos"
+fi
 
 # Une RTX 50 dans la machine ? Identifiants PCI 0x2B00 à 0x2FFF chez NVIDIA
 # (GB202 à GB207 ; la génération Ada s'arrête avant 0x2900).
@@ -37,10 +57,33 @@ rtx50() {
     return 1
 }
 
-if ! grep -qw 'grenos.nouveau=1' "$LIGNE" 2>/dev/null && rtx50; then
-    { echo "grenos: nouveau non charge (carte RTX 50) : image du firmware, pilote NVIDIA conseille" > /dev/kmsg; } 2>/dev/null || true
+# Le premier dossier d'état qui existe : la clé d'abord, sinon le système.
+etat_lu() { # fichier
+    for dossier in $ETATS; do
+        if [ -r "$dossier/$1" ]; then
+            head -c 64 "$dossier/$1" 2>/dev/null | tr -dc 'a-z-'
+            return 0
+        fi
+    done
+    return 1
+}
+
+pas_nouveau() { # raison
+    { echo "grenos: nouveau non charge (carte RTX 50) : $1 — image du firmware" > /dev/kmsg; } 2>/dev/null || true
     [ -n "${GRENOS_SYSFS:-}" ] && echo "pas charge"
     exit 0
+}
+
+charger() {
+    [ -n "${GRENOS_SYSFS:-}" ] && { echo "charge"; exit 0; }
+    exec /sbin/modprobe --ignore-install nouveau "$@"
+}
+
+grep -qw 'grenos.nouveau=1' "$LIGNE" 2>/dev/null && charger "$@"
+if rtx50; then
+    grep -qw 'grenos.nouveau=0' "$LIGNE" 2>/dev/null && pas_nouveau "grenos.nouveau=0"
+    [ "$(etat_lu affichage)" = firmware ] && pas_nouveau "choix garde (ecran juge illisible ici)"
+    # Un essai d'un démarrage précédent jamais confirmé : on ne recommence pas.
+    etat_lu affichage-essai >/dev/null && pas_nouveau "le dernier essai n a pas ete confirme"
 fi
-[ -n "${GRENOS_SYSFS:-}" ] && { echo "charge"; exit 0; }
-exec /sbin/modprobe --ignore-install nouveau "$@"
+charger "$@"

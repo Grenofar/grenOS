@@ -7,6 +7,8 @@
 #   lien <chemin du lien> <cible>
 #   paquet <paquet Debian trixie> <chemin dans le paquet>
 #     (un fichier d'un paquet ajouté à package-lists, absent de l'image publiée)
+#   seul <chemin>
+#     (un fichier propre au correctif, pris dans linux/correctif/seul)
 
 # Le rapport de démarrage écrit sur la clé (20 novembre).
 fichier usr/lib/grenos/grenos-rapport-cle
@@ -20,3 +22,16 @@ paquet xserver-xorg-video-fbdev usr/lib/xorg/modules/drivers/fbdev_drv.so
 fichier usr/lib/grenos/grenos-affichage-firmware
 fichier etc/systemd/system/grenos-affichage-firmware.service
 lien etc/systemd/system/multi-user.target.wants/grenos-affichage-firmware.service /etc/systemd/system/grenos-affichage-firmware.service
+
+# Les RTX 50 essaient de nouveau `nouveau` (X sans glamor), sous un filet :
+# premier écran non passé en 150 s, ou coupure au bouton → image du firmware.
+fichier usr/lib/grenos/grenos-nouveau-ou-pas
+fichier usr/lib/grenos/grenos-affichage-etat
+fichier usr/lib/grenos/grenos-affichage-garde
+fichier etc/systemd/system/grenos-affichage-garde.service
+lien etc/systemd/system/multi-user.target.wants/grenos-affichage-garde.service /etc/systemd/system/grenos-affichage-garde.service
+fichier usr/bin/grenos-premier-lanceur
+
+# L'installateur recopie aussi ce correctif (fichier propre au correctif,
+# dans linux/correctif/seul : il n'a pas de sens dans l'image complète).
+seul etc/calamares/modules/unpackfs.conf

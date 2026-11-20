@@ -8,10 +8,15 @@
 #
 # Trois machines, dans le même passage :
 #   - firmware : la carte PCI n'a PAS de pilote (bochs écarté), l'écran est
-#     l'image du firmware — ce qu'a sa RTX 5060 depuis la version 2059 ;
-#   - firmware-sans-correctif-x : pareil, le correctif d'affichage coupé —
-#     pour VOIR la panne, pas seulement sa réparation ;
+#     l'image du firmware — ce qu'a sa RTX 5060 quand `nouveau` est écarté —
+#     avec le GRUB de la clé corrigée (il ne change plus le mode vidéo) ;
+#   - firmware-grub-ancien : pareil avec le GRUB de l'image publiée — pour
+#     VOIR la panne (image rayée et verte), pas seulement sa réparation ;
 #   - normal : la carte a son pilote — rien ne doit avoir changé.
+#
+# Le juge de ci-screen.py dit PASS dès trois couleurs : une image rayée et
+# verte le trompe (20 novembre). On regarde donc aussi la TAILLE de la
+# capture, qui doit être celle que le noyau annonce.
 #
 # Branches `cle/**` seulement : ni linux.yml ni natif.yml ne partent, donc
 # aucune construction en cours n'est annulée.
@@ -43,10 +48,13 @@ jobs:
         include:
           - nom: firmware
             plus: "modprobe.blacklist=bochs"
-          - nom: firmware-sans-correctif-x
-            plus: "modprobe.blacklist=bochs grenos.firmware-x=0"
+            grub: linux/correctif/cle/boot/grub/config.cfg
+          - nom: firmware-grub-ancien
+            plus: "modprobe.blacklist=bochs"
+            grub: ""
           - nom: normal
             plus: ""
+            grub: linux/correctif/cle/boot/grub/config.cfg
     steps:
       - uses: actions/checkout@v4
 
@@ -85,6 +93,7 @@ jobs:
       - name: La cle FAT32 (${{ matrix.nom }})
         env:
           PLUS: ${{ matrix.plus }}
+          GRUB_CONFIG: ${{ matrix.grub }}
         run: |
           ISO=$(ls "$RUNNER_TEMP"/iso/*.iso | head -1)
           bash linux/correctif/cle-fat.sh "$ISO" "$RUNNER_TEMP/grenos-correctif.squashfs" "$RUNNER_TEMP/cle.img" "$PLUS"
@@ -103,6 +112,13 @@ jobs:
             exit 0
           fi
           echo "rapport : $D"
+          # La taille de l'écran que le noyau croit, contre celle des captures.
+          NOYAU=$(grep -ohE 'efifb: mode is [0-9]+x[0-9]+' "$D/30-noyau.txt" | head -1 | sed 's/.* //')
+          CAPTURE=$(head -1 "$RUNNER_TEMP"/sortie/ecran-110s.txt 2>/dev/null | cut -d, -f1)
+          echo "geometrie : noyau ${NOYAU:-(pas d efifb)}, capture ${CAPTURE:-?}"
+          if [ -n "$NOYAU" ] && [ -n "$CAPTURE" ] && [ "$NOYAU" != "$CAPTURE" ]; then
+            echo "::warning::L'ecran affiche ${CAPTURE} mais le noyau peint en ${NOYAU} : image rayee."
+          fi
           cat "$D/00-resume.txt"
           echo "=================== demarrage"
           head -n 30 "$D/10-demarrage.txt" 2>/dev/null || true

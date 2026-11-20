@@ -1,0 +1,75 @@
+#!/bin/sh
+# Garder le choix d'affichage d'une machine — sur la CLÉ quand on démarre
+# d'une clé (le système de la clé s'efface à chaque démarrage), sinon dans
+# /etc/grenos (20 novembre, RTX 5060 de Grenofar).
+#
+# Lu par grenos-nouveau-ou-pas au démarrage, écrit par le filet de l'écran
+# (grenos-premier-lanceur) et par les Réglages.
+#
+#   grenos-affichage-etat ecrire <nom> <valeur>
+#   grenos-affichage-etat effacer <nom>
+#   grenos-affichage-etat existe <nom>     (rend 0 si le fichier est là)
+#
+# Sur la clé (FAT32), elle n'est ouverte en écriture que le temps d'écrire,
+# puis refermée et vidée sur le disque : une coupure au bouton juste après ne
+# doit rien perdre ni rien abîmer. Le même verrou que le rapport de démarrage
+# (grenos-rapport-cle) : ils ne rouvrent jamais la clé l'un sous l'autre.
+# Une clé gravée en ISO (iso9660) ne s'écrit pas : on le dit, on rend 1.
+
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+CLE=/run/live/medium
+action=${1:-}
+nom=${2:-}
+valeur=${3:-}
+
+case "$nom" in
+    affichage|affichage-essai) ;;
+    *) echo "grenos-affichage-etat : nom refusé « $nom »" >&2; exit 2 ;;
+esac
+
+sur_cle=0
+if grep -qw 'boot=live' /proc/cmdline 2>/dev/null && [ -d "$CLE/live" ]; then
+    case "$(findmnt -no FSTYPE "$CLE" 2>/dev/null | head -1)" in
+        vfat|exfat|ntfs|ntfs3|ext2|ext3|ext4) sur_cle=1 ;;
+        *) echo "grenos: la cle ne s ecrit pas (gravee en ISO) : choix d affichage non garde" > /dev/kmsg 2>/dev/null
+           exit 1 ;;
+    esac
+    DOSSIER="$CLE/grenos"
+else
+    DOSSIER=/etc/grenos
+fi
+
+if [ "$action" = existe ]; then
+    [ -e "$DOSSIER/$nom" ]
+    exit $?
+fi
+
+mkdir -p /run/grenos 2>/dev/null
+(
+    flock -w 20 9 || exit 1
+    etait_ro=0
+    if [ "$sur_cle" = 1 ] && findmnt -no OPTIONS "$CLE" 2>/dev/null | grep -qE '(^|,)ro(,|$)'; then
+        etait_ro=1
+        timeout 15 mount -o remount,rw "$CLE" 2>/dev/null || exit 1
+    fi
+    mkdir -p "$DOSSIER" 2>/dev/null
+    code=0
+    case "$action" in
+        ecrire)
+            printf '%s\n' "$valeur" > "$DOSSIER/$nom.tmp" 2>/dev/null \
+                && mv -f "$DOSSIER/$nom.tmp" "$DOSSIER/$nom" 2>/dev/null || code=1
+            ;;
+        effacer)
+            rm -f "$DOSSIER/$nom" 2>/dev/null
+            ;;
+        *)
+            code=2
+            ;;
+    esac
+    sync
+    if [ "$etait_ro" = 1 ]; then
+        timeout 15 mount -o remount,ro "$CLE" 2>/dev/null || true
+    fi
+    exit "$code"
+) 9>/run/grenos/cle.verrou

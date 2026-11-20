@@ -1,0 +1,94 @@
+#!/bin/sh
+# LE FILET DE L'ÉCRAN DES RTX 50 (20 novembre) — la moitié « garder ».
+#
+# Sur la RTX 5060 de Grenofar, `nouveau` a donné un écran VERT plusieurs
+# fois ; sans lui, l'image du firmware est toujours lisible (60 Hz, un
+# écran). grenos-nouveau-ou-pas réessaie `nouveau` (X sans glamor) tant que
+# cette machine n'a pas été jugée illisible. Ce service s'assure que
+# personne ne reste devant un écran qu'il ne voit pas :
+#
+#   1. AVANT les serveurs X (oneshot : l'assistant attend qu'il ait fini
+#      d'armer), il pose un témoin d'essai, sur la clé ou dans /etc/grenos.
+#      Une coupure au bouton le laisse en place, et le démarrage suivant
+#      prend alors l'image du firmware ;
+#   2. l'assistant (grenos-premier-lanceur) l'efface dès que la personne
+#      quitte l'écran de bienvenue : elle le voit, « nouveau » est gardé ;
+#   3. trois minutes sans cela — X qui ne démarre pas, écran vert, noir —
+#      et la machine garde « firmware » puis redémarre d'elle-même.
+#
+# Armé seulement quand l'assistant va s'ouvrir (machine pas encore nommée)
+# et quand le choix peut être gardé : sans cela, personne ne confirmerait
+# et la machine redémarrerait pour rien.
+#
+#   grenos-affichage-garde          armer (le service)
+#   grenos-affichage-garde attendre (lancé par le premier, en arrière-plan)
+
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+ETAT=/usr/lib/grenos/grenos-affichage-etat
+DELAI=180
+
+dire() {
+    echo "grenos: $*" > /dev/kmsg 2>/dev/null || true
+}
+
+if [ "${1:-}" = attendre ]; then
+    t=0
+    while [ "$t" -lt "$DELAI" ]; do
+        sleep 5
+        t=$((t + 5))
+        if ! "$ETAT" existe affichage-essai; then
+            dire "ecran : confirme apres ${t} s, nouveau garde"
+            exit 0
+        fi
+        if [ -e /run/grenos/affichage-garde-suspendu ]; then
+            dire "ecran : garde suspendue (assistant de secours ouvert), le temoin reste"
+            exit 0
+        fi
+    done
+    dire "ecran : personne n a passe le premier ecran en $DELAI s — image du firmware, redemarrage"
+    "$ETAT" ecrire affichage firmware
+    "$ETAT" effacer affichage-essai
+    sync
+    systemctl reboot
+    exit 0
+fi
+
+# Une RTX 50 (0x2B00 à 0x2FFF chez NVIDIA) dans la machine ?
+carte_rtx50() { # pilote attendu, ou vide pour « n'importe lequel »
+    for d in /sys/bus/pci/devices/*; do
+        [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
+        case "$(cat "$d/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
+        id=$(($(cat "$d/device" 2>/dev/null || echo 0)))
+        [ "$id" -ge $((0x2b00)) ] && [ "$id" -le $((0x2fff)) ] || continue
+        [ -z "$1" ] && return 0
+        [ "$(basename "$(readlink -f "$d/driver" 2>/dev/null)")" = "$1" ] && return 0
+    done
+    return 1
+}
+
+choix() {
+    for f in /run/live/medium/grenos/affichage /etc/grenos/affichage; do
+        if [ -r "$f" ]; then
+            tr -dc 'a-z' < "$f"
+            return 0
+        fi
+    done
+}
+
+grep -qw 'grenos.nouveau=1' /proc/cmdline 2>/dev/null && exit 0
+[ -e /etc/grenos/identite ] && exit 0
+carte_rtx50 "" || exit 0
+# `nouveau` se charge pendant que udev parcourt les cartes : on lui laisse
+# le temps d'arriver (dix secondes au plus, seulement sur ces machines).
+udevadm settle -t 10 >/dev/null 2>&1 || true
+carte_rtx50 nouveau || exit 0
+[ "$(choix)" = nouveau ] && exit 0
+
+if ! "$ETAT" ecrire affichage-essai "$(date +%s)"; then
+    dire "ecran : RTX 50 sous nouveau, mais le choix ne peut pas etre garde ici (cle gravee en ISO ?) — pas de filet"
+    exit 0
+fi
+dire "ecran : RTX 50 sous nouveau, essai sous surveillance ($DELAI s pour passer le premier ecran)"
+"$0" attendre &
+exit 0

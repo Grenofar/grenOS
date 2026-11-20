@@ -1,0 +1,21 @@
+# Le filet de l'écran des RTX 50 (voir /usr/lib/grenos/grenos-affichage-garde).
+#
+# oneshot + RemainAfterExit : l'assistant et lightdm attendent que le témoin
+# d'essai soit POSÉ (sans cela, l'assistant pourrait ne rien voir à
+# confirmer), puis l'attente de trois minutes continue à côté, dans le
+# groupe de ce service resté « actif ».
+[Unit]
+Description=grenOS : ecran des RTX 50 sous nouveau, sous surveillance
+After=systemd-udev-trigger.service local-fs.target grenos-affichage-firmware.service
+Before=grenos-premier.service lightdm.service display-manager.service
+ConditionPathExists=!/etc/grenos/identite
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/grenos/grenos-affichage-garde
+TimeoutStartSec=30
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

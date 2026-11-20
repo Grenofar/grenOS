@@ -237,7 +237,7 @@ ecrire_sur_la_cle() { # dossier
         if [ "$etait_ro" = 1 ]; then
             timeout 15 mount -o remount,ro "$CLE" 2>/dev/null || true
         fi
-    ) 9>/run/grenos/rapport-cle.verrou
+    ) 9>/run/grenos/cle.verrou
     echo "grenos: rapport de demarrage ecrit sur la cle ($DOSSIER/$NOM)" > /dev/kmsg 2>/dev/null || true
     return 0
 }

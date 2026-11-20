@@ -22,7 +22,35 @@ PRET=/run/grenos/premier-ui-pret
 
 dire() {
     echo "grenos: $1" > /dev/ttyS0 2>/dev/null || true
+    echo "grenos-premier: $1" >&2
 }
+
+# L'ÉCRAN EST-IL LISIBLE ? (20 novembre) — la moitié « confirmer » du filet
+# des RTX 50 (voir grenos-affichage-garde et grenos-nouveau-ou-pas). Quand un
+# essai est armé, quitter l'écran de bienvenue prouve qu'on le voit : on
+# garde « nouveau » et le service de garde n'aura rien à faire. Sans essai
+# armé, ce bloc ne fait rien.
+ETAT=/usr/lib/grenos/grenos-affichage-etat
+
+ecran_confirme() {
+    "$ETAT" existe affichage-essai 2>/dev/null || return 0
+    "$ETAT" effacer affichage-essai 2>/dev/null
+    "$ETAT" ecrire affichage nouveau 2>/dev/null
+    dire "ecran : lisible, la personne a passe le premier ecran — nouveau garde sur cette machine"
+}
+
+GARDE=""
+if [ -x "$ETAT" ] && "$ETAT" existe affichage-essai 2>/dev/null; then
+    (
+        while sleep 3; do
+            if journalctl -b -q -o cat -u grenos-premier.service 2>/dev/null | grep -q 'premier : ecran .*(2/'; then
+                ecran_confirme
+                exit 0
+            fi
+        done
+    ) &
+    GARDE=$!
+fi
 
 if [ -x /usr/bin/grenos-ui ]; then
     rm -f "$PRET"
@@ -68,8 +96,23 @@ if [ -x /usr/bin/grenos-ui ]; then
         kill -9 "$UI" 2>/dev/null
     fi
 
-    [ -e /etc/grenos/identite ] && exit 0
+    if [ -e /etc/grenos/identite ]; then
+        # L'assistant est allé au bout : l'écran se lisait.
+        [ -n "$GARDE" ] && kill "$GARDE" 2>/dev/null
+        ecran_confirme
+        exit 0
+    fi
     dire "premier : grenos-ui s est termine sans nommer la machine — secours python"
 fi
 
-exec /usr/bin/grenos-premier
+# Le secours Python n'écrit rien au journal : seul son aboutissement (la
+# machine nommée) confirme l'écran. Le service de garde est SUSPENDU — il ne
+# redémarrera pas la machine au milieu de l'assistant — et le témoin d'essai
+# reste : une coupure au bouton fera prendre l'image du firmware au
+# démarrage suivant.
+[ -n "$GARDE" ] && kill "$GARDE" 2>/dev/null
+mkdir -p /run/grenos && : > /run/grenos/affichage-garde-suspendu
+/usr/bin/grenos-premier
+code=$?
+[ -e /etc/grenos/identite ] && ecran_confirme
+exit "$code"
