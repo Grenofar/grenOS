@@ -108,6 +108,12 @@ done
 
 install -m 0644 "$DEDANS/usr/share/xsessions/grenos.desktop" "$BUILD/usr/share/xsessions/"
 
+# Firefox sans ce qu'il envoie à Mozilla (20 novembre). Le glob de /etc plus
+# haut ne prend que les `*grenos*.conf` : ce .js n'y entre pas, et une machine
+# déjà installée ne l'aurait jamais reçu.
+install -D -m 0644 "$DEDANS/etc/firefox-esr/zz-grenos-vie-privee.js" \
+    "$BUILD/etc/firefox-esr/zz-grenos-vie-privee.js"
+
 # Le tampon de PipeWire, sans lequel le son hoquette sous charge. Fichier a
 # nous dans un dossier de complements : aucun autre paquet ne le possede, donc
 # dpkg ne refusera pas notre paquet — c'est la lecon du 24 septembre avec
