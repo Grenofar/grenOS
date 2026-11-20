@@ -189,6 +189,17 @@ if [ -z "$mesa" ] || dpkg --compare-versions "$mesa" lt 25.1; then
 fi
 echo "grenos: Mesa $mesa (NVK pour les RTX 50)"
 
+# L'IMAGE DU FIRMWARE DOIT SE PEINDRE (20 novembre). Une carte sans pilote
+# (RTX 50 repliée, carte trop neuve) n'a que /dev/fb0 : le noyau de
+# backports n'a pas de pilote DRM pour l'image du firmware. Sans le pilote X
+# fbdev, « no screens found » — l'écran noir de Grenofar après le chargement
+# (prouvé par cle.yml, run 44823344458).
+if [ ! -e /usr/lib/xorg/modules/drivers/fbdev_drv.so ]; then
+    echo "grenos: pilote X fbdev absent : une carte sans pilote finirait en ecran noir" >&2
+    exit 1
+fi
+echo "grenos: pilote X fbdev present (image du firmware)"
+
 # LE SECURE BOOT SUR LE SYSTÈME INSTALLÉ (20 novembre) : sans ces deux
 # fichiers, `grub-install` pose un GRUB non signé, et un PC au Secure Boot
 # actif refuse de démarrer grenOS installé. Grenofar ne veut pas le couper.
