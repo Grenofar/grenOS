@@ -12,6 +12,17 @@ set -eu
 [ -e /etc/grenos/identite ] && exit 0
 command -v Xorg >/dev/null 2>&1 || exit 0
 
+# L'ÉCRAN DE CHARGEMENT LÂCHE LA CARTE D'ABORD (21 novembre). Sur la RTX
+# 5060 de Grenofar (nouveau), le serveur X de l'assistant mourait en une
+# demi-seconde : « drmSetMaster failed: Device or resource busy » — plymouth
+# tenait encore la carte. lightdm, lui, désactive plymouth avant de lancer
+# son X : son bureau s'ouvrait, mais l'assistant ne s'affichait jamais (lu
+# dans le rapport de démarrage écrit sur sa clé). `plymouth deactivate`
+# rend la carte sans effacer l'écran ; lightdm le fermera ensuite.
+if command -v plymouth >/dev/null 2>&1 && plymouth --ping 2>/dev/null; then
+    plymouth deactivate 2>/dev/null || true
+fi
+
 # `-keeptty` : sans terminal de contrôle — c'est le cas sous systemd — Xorg
 # refuse de démarrer sans cette option.
 # Le lanceur essaie grenos-ui, et rebascule sur l'assistant Python s'il ne

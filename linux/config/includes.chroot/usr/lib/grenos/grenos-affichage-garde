@@ -14,9 +14,12 @@
 #   2. l'assistant (grenos-premier-lanceur) l'efface dès que la personne
 #      quitte l'écran de bienvenue : elle le voit, « nouveau » est gardé.
 #      Sur un grenOS déjà installé (réessai depuis les Réglages), c'est la
-#      session qui demande « Tu vois bien cet écran ? » (Réglages › Écran) ;
-#   3. trois minutes sans cela — X qui ne démarre pas, écran vert, noir —
-#      et la machine garde « firmware » puis redémarre d'elle-même.
+#      session qui demande « Tu vois bien cet écran ? » (Réglages › Écran).
+#      Et un BUREAU OUVERT (openbox lancé) vaut confirmation : X marche ;
+#   3. trois minutes SANS assistant affiché NI bureau — X n'a rien pu
+#      montrer — et la machine garde « firmware » puis redémarre d'elle-même.
+#      Jamais pendant qu'un assistant ou un bureau est à l'écran (21
+#      novembre : ce filet a redémarré la session de Grenofar qui marchait).
 #
 # Armé seulement quand l'assistant va s'ouvrir (machine pas encore nommée)
 # et quand le choix peut être gardé : sans cela, personne ne confirmerait
@@ -47,8 +50,32 @@ if [ "${1:-}" = attendre ]; then
             dire "ecran : garde suspendue (assistant de secours ouvert), le temoin reste"
             exit 0
         fi
+        # UN BUREAU OUVERT EST UNE PREUVE (21 novembre). Sur la RTX 5060 de
+        # Grenofar, l'assistant n'a pas pu s'afficher (plymouth tenait la
+        # carte), lightdm a ouvert le bureau — à 300 Hz, curseur fluide — et
+        # ce filet, qui n'attendait QUE l'assistant, a écrit « firmware » et
+        # REDÉMARRÉ sa machine en pleine session au bout de 180 s (rapport de
+        # sa clé, 20261121-002001). Le gestionnaire de fenêtres de la
+        # session tourne : X marche sous `nouveau`, sans glamor — la cause du
+        # vert d'avant. On garde « nouveau », et on ne touche à rien.
+        if pgrep -x openbox >/dev/null 2>&1; then
+            "$ETAT" effacer affichage-essai
+            "$ETAT" ecrire affichage nouveau
+            dire "ecran : bureau ouvert sous nouveau apres ${t} s — affichage garde, rien n est redemarre"
+            exit 0
+        fi
     done
-    dire "ecran : personne n a passe le premier ecran en $DELAI s — image du firmware, redemarrage"
+    # L'assistant est affiché mais personne n'a encore avancé : quelqu'un qui
+    # lit, ou qui est parti boire un café. On ne redémarre JAMAIS sous ses
+    # yeux : le lanceur confirmera quand il avancera, et s'il coupe au bouton
+    # parce qu'il ne voit rien, le témoin resté fera prendre l'image du
+    # firmware au démarrage suivant.
+    if [ -e /run/grenos/premier-ui-pret ]; then
+        dire "ecran : assistant affiche mais pas encore passe apres $DELAI s — on attend, rien n est redemarre"
+        exit 0
+    fi
+    # Ni assistant ni bureau en trois minutes : X n'a rien pu afficher.
+    dire "ecran : ni assistant ni bureau en $DELAI s — image du firmware, redemarrage"
     "$ETAT" ecrire affichage firmware
     "$ETAT" effacer affichage-essai
     sync

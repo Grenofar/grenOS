@@ -33,6 +33,14 @@ fichier usr/lib/grenos/pont.py
 # zramswap ne finit plus « en échec » à chaque arrêt.
 fichier etc/systemd/system/zramswap.service.d/10-grenos-arret.conf
 
+# 21 novembre, rapport de sa clé : l'assistant ne s'affichait pas sous
+# nouveau (plymouth tenait la carte), et le filet a redémarré sa session
+# qui marchait. L'assistant fait lâcher la carte à plymouth ; le filet
+# prend un bureau ouvert pour une preuve et ne redémarre plus sous les yeux.
+fichier usr/bin/grenos-premier-x
+fichier usr/lib/grenos/grenos-affichage-garde
+fichier etc/systemd/system/grenos-affichage-garde.service
+
 # L'installateur recopie aussi ce correctif (fichier propre au correctif,
 # dans linux/correctif/seul : il n'a pas de sens dans l'image complète).
 seul etc/calamares/modules/unpackfs.conf
