@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "La fenêtre du créateur : ses commandes et l'écoute de l'avancée",
+  "windows": ["main"],
+  "permissions": ["core:default", "core:event:default"]
+}

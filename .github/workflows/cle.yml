@@ -75,7 +75,9 @@ jobs:
         run: |
           V="$VERSION"
           if [ -z "$V" ]; then
-            V=$(gh release list -R "$GITHUB_REPOSITORY" -L 1 --json tagName -q '.[0].tagName')
+            # La derniere IMAGE (linux-...) : la version « createur » (le .exe
+            # du createur de cle, 21 novembre) n'en est pas une.
+            V=$(gh release list -R "$GITHUB_REPOSITORY" -L 20 --json tagName -q '[.[] | select(.tagName | startswith("linux-"))][0].tagName')
           fi
           echo "version : $V"
           gh release download "$V" -R "$GITHUB_REPOSITORY" -p '*.iso' -D "$RUNNER_TEMP/iso"

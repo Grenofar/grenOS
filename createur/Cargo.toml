@@ -1,0 +1,28 @@
+[package]
+name = "grenos-createur"
+version = "1.0.0"
+edition = "2021"
+description = "Créateur de clé USB grenOS (Windows) : choisir la clé, et grenOS s'y installe"
+license = "MIT"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# `custom-protocol` : la page est intégrée dans le .exe et servie sans
+# serveur (même raison que grenos-ui).
+tauri = { version = "2", features = ["custom-protocol"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Le téléchargement de l'ISO et la question « quelle est la dernière
+# version ? » à GitHub : un client simple, sans moteur asynchrone.
+ureq = { version = "2", features = ["json"] }
+# L'empreinte SHA-256 : celle que GitHub publie pour l'ISO, puis celles de
+# sha256sum.txt pour chaque fichier copié sur la clé.
+sha2 = "0.10"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

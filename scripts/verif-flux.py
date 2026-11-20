@@ -152,6 +152,13 @@ def fautes_de_shell(arbre):
             script = etape.get("run")
             if not script:
                 continue
+            # Une étape qui DIT son shell (createur.yml, 21 novembre : un
+            # Windows de GitHub, `shell: pwsh`) n'est pas lue par bash :
+            # la juger par bash, ce serait juger un script que personne
+            # n'exécute ainsi — la même règle que pour dash, dans l'autre sens.
+            shell_dit = str(etape.get("shell") or emploi.get("defaults", {}).get("run", {}).get("shell") or "")
+            if shell_dit and not shell_dit.startswith("bash"):
+                continue
             fichier = tempfile.NamedTemporaryFile(
                 "w", suffix=".sh", delete=False, encoding="utf-8", newline="\n")
             fichier.write(script)

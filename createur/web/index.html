@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr" data-theme="nuit">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Créateur de clé grenOS</title>
+  <link rel="stylesheet" href="createur.css">
+</head>
+<body>
+  <div class="aurore" aria-hidden="true"><span class="tache t1"></span><span class="tache t2"></span></div>
+
+  <header class="tete">
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 19.2C6.2 17.6 4.4 12.6 4.9 7.4c4.8 1 7.6 5.3 7.1 11.8z" fill="currentColor"/><path d="M12 19.2c5-1.2 7.2-5.3 6.6-9.6-4 .9-6.6 4.6-6.6 9.6z" fill="currentColor" opacity=".62"/><circle cx="16.3" cy="5.4" r="1.6" fill="currentColor"/></svg>
+    </div>
+    <div>
+      <h1>Créateur de clé grenOS</h1>
+      <p class="sous">Une clé USB qui démarre grenOS — prête en quelques minutes.</p>
+    </div>
+  </header>
+
+  <main id="choix">
+    <section class="carte">
+      <div class="entete-carte">
+        <span class="etiquette">1 · La clé USB</span>
+        <button class="bouton discret" id="actualiser" type="button">Actualiser</button>
+      </div>
+      <div id="cles" class="cles"><p class="note">Recherche des clés USB…</p></div>
+      <p class="note avertissement">Tout ce qui est sur la clé choisie sera effacé. Seules les clés USB sont proposées : jamais le disque de Windows.</p>
+    </section>
+
+    <section class="carte">
+      <span class="etiquette">2 · La version</span>
+      <div id="version" class="version"><p class="note">Recherche de la dernière version…</p></div>
+    </section>
+
+    <div class="actions">
+      <button class="bouton principal" id="creer" type="button" disabled>Créer la clé grenOS</button>
+    </div>
+  </main>
+
+  <main id="travail" hidden>
+    <section class="carte">
+      <span class="etiquette" id="travail-titre">Création de la clé</span>
+      <ol class="etapes" id="etapes">
+        <li data-etape="telecharger"><span class="puce"></span><div><b>Télécharger grenOS</b><small></small><div class="barre"><i></i></div></div></li>
+        <li data-etape="verifier-iso"><span class="puce"></span><div><b>Vérifier le téléchargement</b><small>l'empreinte SHA-256 publiée par grenOS</small><div class="barre"><i></i></div></div></li>
+        <li data-etape="preparer"><span class="puce"></span><div><b>Préparer la clé</b><small>effacement, puis FAT32</small></div></li>
+        <li data-etape="copier"><span class="puce"></span><div><b>Copier grenOS</b><small></small><div class="barre"><i></i></div></div></li>
+        <li data-etape="verifier"><span class="puce"></span><div><b>Vérifier la clé</b><small>chaque fichier relu</small><div class="barre"><i></i></div></div></li>
+      </ol>
+      <div id="fin" hidden></div>
+    </section>
+  </main>
+
+  <div class="voile" id="confirmer" hidden>
+    <div class="carte dialogue" role="dialog" aria-modal="true">
+      <h2>Effacer la clé ?</h2>
+      <p id="confirmer-texte"></p>
+      <div class="actions">
+        <button class="bouton" id="annuler" type="button">Annuler</button>
+        <button class="bouton danger" id="valider" type="button">Effacer et créer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="createur.js"></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+# Le créateur de clé USB grenOS (Windows), 21 novembre.
+#
+# Grenofar : « un créateur de clé USB bootable en Rust Tauri, téléchargeable
+# depuis le site ». Ce flux le compile sur un vrai Windows, puis le PROUVE :
+# une clé virtuelle (VHDX de 8 Go, attachée par diskpart) est effacée,
+# formatée, remplie avec la dernière image publiée et revérifiée fichier par
+# fichier — par le créateur lui-même (`--essai`, le même code que la
+# fenêtre), puis relue ici. Seulement alors, il est publié dans la version
+# « createur » (pré-publication : ce n'est pas une image, le site et nos
+# scripts ne cherchent que les versions linux-…).
+name: Createur de cle (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "createur/**"
+      - ".github/workflows/createur.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: createur-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compiler le createur
+        working-directory: createur
+        run: cargo build --release
+
+      - name: La derniere image publiee
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $t = gh release list -R $env:GITHUB_REPOSITORY -L 20 --json tagName -q '[.[] | select(.tagName | startswith("linux-"))][0].tagName'
+          "version : $t"
+          gh release download $t -R $env:GITHUB_REPOSITORY -p '*.iso' -D "$env:RUNNER_TEMP\iso"
+          Get-ChildItem "$env:RUNNER_TEMP\iso" | Format-Table Name, Length
+
+      - name: Une cle virtuelle, effacee, remplie et verifiee par le createur
+        shell: pwsh
+        run: |
+          $vhd = Join-Path $env:RUNNER_TEMP 'cle.vhdx'
+          $dp = Join-Path $env:RUNNER_TEMP 'diskpart.txt'
+          Set-Content -Path $dp -Encoding ascii -Value @("create vdisk file=`"$vhd`" maximum=8192 type=expandable", "attach vdisk")
+          diskpart /s $dp
+          Start-Sleep -Seconds 3
+          $n = (Get-DiskImage -ImagePath $vhd | Get-Disk).Number
+          "disque virtuel : $n ($((Get-Disk -Number $n).BusType))"
+          $iso = (Get-ChildItem "$env:RUNNER_TEMP\iso\*.iso" | Select-Object -First 1).FullName
+          $journal = Join-Path $env:RUNNER_TEMP 'journal.txt'
+          $exe = Resolve-Path 'createur\target\release\grenos-createur.exe'
+          $debut = Get-Date
+          $p = Start-Process -FilePath $exe -ArgumentList @('--essai', "$n", $iso, $journal, '--virtuel') -Wait -PassThru
+          "duree : $([int]((Get-Date) - $debut).TotalSeconds) s, code : $($p.ExitCode)"
+          Get-Content $journal | Where-Object { $_ -match '^(cles|preparer|fini|erreur) ' -or $_ -match '^(copier|verifier) [0-9]+/[0-9]+ [0-9]+ fichiers' }
+          if ($p.ExitCode -ne 0) { throw "le createur a echoue (journal ci-dessus)" }
+          $fin = Select-String -Path $journal -Pattern '^fini ' | Select-Object -Last 1
+          if (-not $fin) { throw "le createur n a pas dit fini" }
+          $lettre = ($fin.Line -split ' ')[-1].TrimEnd(':')
+          # Et on relit la cle soi-meme : ce qu'un PC UEFI cherchera au demarrage.
+          foreach ($f in 'EFI\boot\bootx64.efi', 'boot\grub\grub.cfg', 'live\filesystem.squashfs', 'live\vmlinuz', 'sha256sum.txt') {
+            if (-not (Test-Path "${lettre}:\$f")) { throw "absent de la cle : $f" }
+          }
+          $v = Get-Volume -DriveLetter $lettre
+          "cle : $($v.FileSystem) « $($v.FileSystemLabel) », $([math]::Round($v.Size / 1GB, 1)) Go, fichiers d amorcage presents"
+          if ($v.FileSystem -ne 'FAT32') { throw "la cle n est pas en FAT32" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: grenos-createur
+          path: createur/target/release/grenos-createur.exe
+          retention-days: 30
+
+      - name: Publier le createur (version « createur »)
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Copy-Item 'createur\target\release\grenos-createur.exe' 'grenos-createur.exe'
+          gh release view createur -R $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create createur -R $env:GITHUB_REPOSITORY --prerelease --title "Createur de cle grenOS (Windows)" --notes "Le createur de cle USB grenOS pour Windows : choisir la cle, et la derniere version de grenOS y est installee et verifiee. Toujours la derniere version du createur."
+          }
+          gh release upload createur grenos-createur.exe -R $env:GITHUB_REPOSITORY --clobber
+          "publie : https://github.com/$env:GITHUB_REPOSITORY/releases/download/createur/grenos-createur.exe"
