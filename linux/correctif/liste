@@ -41,6 +41,10 @@ fichier usr/bin/grenos-premier-x
 fichier usr/lib/grenos/grenos-affichage-garde
 fichier etc/systemd/system/grenos-affichage-garde.service
 
+# Le casque USB de Grenofar (« OW810 » chez Windows, 3206:0861) : sa puce
+# n'a pas de nom de produit, PipeWire le montrait sous un nom illisible.
+fichier etc/wireplumber/wireplumber.conf.d/50-grenos-noms.conf
+
 # L'installateur recopie aussi ce correctif (fichier propre au correctif,
 # dans linux/correctif/seul : il n'a pas de sens dans l'image complète).
 seul etc/calamares/modules/unpackfs.conf
