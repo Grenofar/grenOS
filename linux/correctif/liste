@@ -1,0 +1,17 @@
+# Ce que porte grenos-correctif.squashfs, la couche posée PAR-DESSUS l'image
+# d'une clé déjà faite (voir fabriquer.sh). Chemins relatifs à
+# linux/config/includes.chroot : ce sont LES MÊMES fichiers que la prochaine
+# construction complète, jamais une copie à part qui divergerait.
+#
+#   fichier <chemin>
+#   lien <chemin du lien> <cible>
+
+# Le rapport de démarrage écrit sur la clé (20 novembre).
+fichier usr/lib/grenos/grenos-rapport-cle
+fichier etc/systemd/system/grenos-rapport-cle.service
+lien etc/systemd/system/multi-user.target.wants/grenos-rapport-cle.service /etc/systemd/system/grenos-rapport-cle.service
+
+# L'écran noir après le chargement sur une carte sans pilote (RTX 5060).
+fichier usr/lib/grenos/grenos-affichage-firmware
+fichier etc/systemd/system/grenos-affichage-firmware.service
+lien etc/systemd/system/multi-user.target.wants/grenos-affichage-firmware.service /etc/systemd/system/grenos-affichage-firmware.service

@@ -1,0 +1,124 @@
+# Le correctif de clé et son essai rapide (20 novembre).
+#
+# Une construction complète prend deux heures. Pour la RTX 5060 de Grenofar
+# (écran noir après le chargement), il fallait un chemin court : on prend la
+# DERNIÈRE version publiée, on pose dessus le correctif (linux/correctif,
+# une couche squashfs que live-boot empile au démarrage), on en fait une clé
+# FAT32 comme la sienne, et on la démarre dans QEMU en UEFI Secure Boot.
+#
+# Trois machines, dans le même passage :
+#   - firmware : la carte PCI n'a PAS de pilote (bochs écarté), l'écran est
+#     l'image du firmware — ce qu'a sa RTX 5060 depuis la version 2059 ;
+#   - firmware-sans-correctif-x : pareil, le correctif d'affichage coupé —
+#     pour VOIR la panne, pas seulement sa réparation ;
+#   - normal : la carte a son pilote — rien ne doit avoir changé.
+#
+# Branches `cle/**` seulement : ni linux.yml ni natif.yml ne partent, donc
+# aucune construction en cours n'est annulée.
+name: Cle (correctif et essai rapide)
+
+on:
+  push:
+    branches: ["cle/**"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version publiee a essayer (vide : la derniere)"
+        default: ""
+
+concurrency:
+  group: cle-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  essai:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nom: firmware
+            plus: "modprobe.blacklist=bochs"
+          - nom: firmware-sans-correctif-x
+            plus: "modprobe.blacklist=bochs grenos.firmware-x=0"
+          - nom: normal
+            plus: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Outils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq squashfs-tools xorriso mtools dosfstools fdisk qemu-system-x86 ovmf python3
+          sudo chmod 0666 /dev/kvm 2>/dev/null || true
+          ls -l /dev/kvm || echo "pas de KVM : QEMU emulera, plus lentement"
+
+      - name: Le correctif
+        run: bash linux/correctif/fabriquer.sh "$RUNNER_TEMP/arbre" "$RUNNER_TEMP/grenos-correctif.squashfs"
+
+      - name: La version publiee
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          V="$VERSION"
+          if [ -z "$V" ]; then
+            V=$(gh release list -R "$GITHUB_REPOSITORY" -L 1 --json tagName -q '.[0].tagName')
+          fi
+          echo "version : $V"
+          gh release download "$V" -R "$GITHUB_REPOSITORY" -p '*.iso' -D "$RUNNER_TEMP/iso"
+          ls -la "$RUNNER_TEMP/iso"
+
+      - name: Ce que le noyau de l'image fait de l'ecran du firmware
+        run: |
+          ISO=$(ls "$RUNNER_TEMP"/iso/*.iso | head -1)
+          xorriso -osirrox on -indev "$ISO" -extract /live/filesystem.squashfs "$RUNNER_TEMP/fs.sq" >/dev/null 2>&1
+          unsquashfs -q -n -d "$RUNNER_TEMP/sq" "$RUNNER_TEMP/fs.sq" 'boot/config-*' 'usr/lib/xorg/modules/drivers' >/dev/null 2>&1 || true
+          grep -hE 'CONFIG_(SYSFB|SYSFB_SIMPLEFB|DRM_SIMPLEDRM|DRM_EFIDRM|DRM_VESADRM|FB_EFI|DRM_BOCHS|DRM_NOUVEAU)=' "$RUNNER_TEMP"/sq/boot/config-* || echo "configuration du noyau illisible"
+          echo "pilotes X livres : $(ls "$RUNNER_TEMP/sq/usr/lib/xorg/modules/drivers" 2>/dev/null | tr '\n' ' ')"
+          rm -rf "$RUNNER_TEMP/fs.sq" "$RUNNER_TEMP/sq"
+
+      - name: La cle FAT32 (${{ matrix.nom }})
+        env:
+          PLUS: ${{ matrix.plus }}
+        run: |
+          ISO=$(ls "$RUNNER_TEMP"/iso/*.iso | head -1)
+          bash linux/correctif/cle-fat.sh "$ISO" "$RUNNER_TEMP/grenos-correctif.squashfs" "$RUNNER_TEMP/cle.img" "$PLUS"
+          rm -rf "$RUNNER_TEMP/iso"
+
+      - name: Demarrage (${{ matrix.nom }})
+        run: bash linux/correctif/essai-qemu.sh "$RUNNER_TEMP/cle.img" "$RUNNER_TEMP/sortie" 270
+
+      - name: Ce que la cle a ecrit
+        if: always()
+        run: |
+          D=$(ls -1d "$RUNNER_TEMP"/sortie/grenos-rapports/2*/ 2>/dev/null | tail -1)
+          if [ -z "$D" ]; then
+            echo "::warning::Aucun rapport ecrit sur la cle."
+            tail -n 60 "$RUNNER_TEMP/sortie/serial.log" 2>/dev/null || true
+            exit 0
+          fi
+          echo "rapport : $D"
+          cat "$D/00-resume.txt"
+          echo "=================== demarrage"
+          head -n 30 "$D/10-demarrage.txt" 2>/dev/null || true
+          echo "=================== Xorg"
+          grep -hE '\(EE\)|\(WW\)|Fatal|no screens|Cannot run|modeset\(|VESA|Loading .*drivers|kmsdev' "$D/40-xorg.txt" 2>/dev/null | head -80 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cle-${{ matrix.nom }}
+          path: ${{ runner.temp }}/sortie
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.nom == 'firmware'
+        with:
+          name: grenos-correctif
+          path: ${{ runner.temp }}/grenos-correctif.squashfs
+          retention-days: 30

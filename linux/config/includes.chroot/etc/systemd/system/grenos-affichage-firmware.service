@@ -1,0 +1,16 @@
+# Dire à X quoi prendre quand aucune carte n'a de pilote (voir
+# /usr/lib/grenos/grenos-affichage-firmware). AVANT les deux serveurs X du
+# démarrage : celui de l'assistant (grenos-premier) et celui de lightdm.
+[Unit]
+Description=grenOS : affichage sur l'image du firmware si aucune carte n'a de pilote
+After=systemd-udev-trigger.service systemd-modules-load.service local-fs.target
+Before=grenos-premier.service lightdm.service display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-affichage-firmware
+TimeoutStartSec=20
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+# Le rapport de démarrage, écrit sur la clé (voir /usr/lib/grenos/grenos-rapport-cle).
+#
+# Seulement sur la clé (boot=live) : une machine installée garde déjà son
+# journal sur son disque. Il tourne à côté du démarrage, sans rien retenir
+# (Nice, entrées-sorties au repos), et écrit une dernière fois à l'arrêt —
+# d'où le service qui reste actif et son ExecStop.
+[Unit]
+Description=grenOS : rapport de demarrage ecrit sur la cle
+ConditionKernelCommandLine=boot=live
+After=local-fs.target systemd-journald.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/grenos/grenos-rapport-cle boucle
+ExecStop=/usr/lib/grenos/grenos-rapport-cle arret
+TimeoutStopSec=45
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

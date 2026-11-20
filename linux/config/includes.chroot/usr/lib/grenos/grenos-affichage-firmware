@@ -1,0 +1,88 @@
+#!/bin/sh
+# Le serveur graphique sur l'IMAGE DU FIRMWARE quand aucune carte n'a de pilote.
+#
+# 20 novembre, RTX 5060 de Grenofar, version 20261120-2059 : `nouveau` n'est
+# plus chargé sur les RTX 50 (écran vert), donc l'écran reste sur l'image que
+# le firmware a laissée (efidrm / simpledrm). Le chargement s'affiche, puis :
+# « écran tout noir, pas déconnecté ». La CI ne pouvait pas le voir : dans
+# QEMU, la carte a toujours son pilote (bochs).
+#
+# Lu dans Xorg 21.1.16 (xf86platformBus.c, xf86Bus.c) : sans configuration, X
+# prend pour « principale » la carte PCI du démarrage — la NVIDIA, qui n'a
+# aucun pilote. L'image du firmware n'est acceptée d'office que si son pilote
+# s'appelle exactement « simpledrm » ; sous un autre nom (efidrm, vesadrm du
+# noyau 6.16+), modesetting la prend par l'ancien chemin (« framebuffer »)
+# pendant que `vesa`, qui n'ignore une carte que si elle A un pilote, prend la
+# NVIDIA — et X s'arrête net : « Cannot run in framebuffer mode ».
+#
+# On ne laisse donc pas X deviner : quand TOUTES les cartes du noyau sont des
+# images du firmware, on lui dit d'utiliser modesetting sur celle-ci, et rien
+# d'autre. Le fichier est refait à chaque démarrage, et effacé dès qu'un vrai
+# pilote est là (amdgpu, i915, nouveau, nvidia…) : une machine dont la carte
+# reçoit son pilote retrouve tout de suite l'affichage complet.
+#
+# `grenos.firmware-x=0` sur la ligne du noyau le désactive (essais en CI).
+
+set -u
+CONF=/etc/X11/xorg.conf.d/10-grenos-image-firmware.conf
+
+dire() {
+    echo "grenos: $*" > /dev/kmsg 2>/dev/null || true
+}
+
+if grep -qw 'grenos.firmware-x=0' /proc/cmdline 2>/dev/null; then
+    rm -f "$CONF"
+    dire "affichage : image du firmware laissee a X (grenos.firmware-x=0)"
+    exit 0
+fi
+
+# Un vrai pilote qui arrive tard remplacerait l'image du firmware : on laisse
+# udev finir ce qu'il a en cours (dix secondes au plus, souvent zéro).
+udevadm settle -t 10 >/dev/null 2>&1 || true
+
+firmware=""
+nom_firmware=""
+reel=""
+for c in /sys/class/drm/card*; do
+    n=$(basename "$c")
+    case "$n" in card*-*) continue ;; esac   # les connecteurs (card0-DP-1)
+    [ -e "$c/device" ] || continue
+    pilote=$(basename "$(readlink -f "$c/device/driver" 2>/dev/null)" 2>/dev/null)
+    noyau=$(sed -n 's/^DRIVER=//p' "$c/device/uevent" 2>/dev/null)
+    case "$pilote:$noyau" in
+        simple-framebuffer:*|efi-framebuffer:*|vesa-framebuffer:*|*:simpledrm|*:efidrm|*:vesadrm|*:ofdrm)
+            if [ -z "$firmware" ]; then
+                firmware="/dev/dri/$n"
+                nom_firmware="${pilote:-$noyau}"
+            fi
+            ;;
+        *)
+            reel="$reel ${pilote:-$noyau}"
+            ;;
+    esac
+done
+
+if [ -z "$reel" ] && [ -n "$firmware" ] && [ -e "$firmware" ]; then
+    mkdir -p "$(dirname "$CONF")"
+    cat > "$CONF.tmp" <<EOF
+# Écrit à chaque démarrage par /usr/lib/grenos/grenos-affichage-firmware :
+# aucune carte n'a de pilote, l'écran est l'image du firmware ($nom_firmware).
+# Effacé tout seul dès qu'un vrai pilote est là.
+Section "Device"
+    Identifier "grenOS : image du firmware"
+    Driver "modesetting"
+    Option "kmsdev" "$firmware"
+    Option "AccelMethod" "none"
+EndSection
+EOF
+    mv -f "$CONF.tmp" "$CONF"
+    dire "affichage : aucune carte n a de pilote, X prend l image du firmware ($nom_firmware sur $firmware)"
+else
+    rm -f "$CONF"
+    if [ -n "$reel" ]; then
+        dire "affichage : pilote de carte present ($reel), X choisit seul"
+    else
+        dire "affichage : aucun peripherique d affichage du noyau"
+    fi
+fi
+exit 0
