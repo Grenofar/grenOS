@@ -71,6 +71,10 @@ done < "$ICI/liste"
 # trop tard (sur la clé de Grenofar). On le refuse ici.
 for f in "$ARBRE"/usr/lib/grenos/* "$ARBRE"/usr/bin/*; do
     [ -f "$f" ] || continue
+    # Les modules Python (.py) sont IMPORTÉS ou lancés par `python3 …` :
+    # ils n'ont pas à être exécutables (ecran.py, pont.py sont en 0644 dans
+    # l'image publiée — refusés à tort le 21 novembre, run 44838424517).
+    case "$f" in *.py) continue ;; esac
     [ -x "$f" ] || { echo "correctif : $f n'est pas exécutable (git update-index --chmod=+x)"; exit 1; }
 done
 
