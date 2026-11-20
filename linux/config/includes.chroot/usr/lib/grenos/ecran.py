@@ -64,21 +64,38 @@ def surface(taille):
     return int(largeur) * int(hauteur)
 
 
-def appliquer(nom, taille, taux=""):
-    """Change la définition, et garde le choix pour la prochaine ouverture."""
+def noter(nom, mode, taux=""):
+    """Garde ce choix pour la prochaine ouverture de session."""
+    os.makedirs(os.path.dirname(CHOIX), exist_ok=True)
+    with open(CHOIX, "w", encoding="utf-8") as fichier:
+        fichier.write(f"{nom}\n{mode}\n{taux}\n")
+
+
+def appliquer(nom, taille, taux="", garder=True):
+    """Change la définition ; `garder` la note pour la prochaine ouverture.
+
+    Les Réglages passent `garder=False` (20 novembre) : sur le PC de Grenofar,
+    360 Hz a coupé le signal de l'écran, ET le choix était déjà noté — il
+    serait revenu à chaque ouverture de session. On n'écrit plus qu'après
+    « Garder » (noter), comme Windows.
+    """
     commande = ["xrandr", "--output", nom, "--mode", taille]
     if taux:
         commande += ["--rate", taux]
     resultat = subprocess.run(commande, capture_output=True, text=True)
     if resultat.returncode != 0:
         return resultat.stderr.strip() or "Le pilote a refusé cette définition."
-    os.makedirs(os.path.dirname(CHOIX), exist_ok=True)
-    with open(CHOIX, "w", encoding="utf-8") as fichier:
-        fichier.write(f"{nom}\n{taille}\n{taux}\n")
+    if garder:
+        noter(nom, taille, taux)
     return ""
 
 
-def ajouter_mode(nom, largeur, hauteur, taux):
+def ajouter_mode(nom, largeur, hauteur, taux, garder=True):
+    """Comme `essayer_mode`, sans rendre l'étiquette (l'ancienne interface)."""
+    return essayer_mode(nom, largeur, hauteur, taux, garder)[0]
+
+
+def essayer_mode(nom, largeur, hauteur, taux, garder=True):
     """Crée une définition que le pilote ne proposait pas, et l'applique.
 
     C'est la réponse à « je veux dépasser 60 images par seconde ». Un écran
@@ -87,24 +104,24 @@ def ajouter_mode(nom, largeur, hauteur, taux):
     alors une définition aux normes (`cvt` fait ce calcul depuis toujours), on
     l'ajoute à la sortie, et on l'essaie.
 
-    Rendu : une phrase expliquant le refus, ou une chaîne vide si c'est fait.
+    Rendu : (phrase expliquant le refus ou "", étiquette du mode créé).
     """
     try:
         calcul = subprocess.run(["cvt", str(largeur), str(hauteur), str(int(taux))],
                                 capture_output=True, text=True, check=True).stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
-        return "L'outil de calcul des définitions (cvt) est absent."
+        return "L'outil de calcul des définitions (cvt) est absent.", ""
 
     ligne = ""
     for brut in calcul.splitlines():
         if brut.strip().startswith("Modeline"):
             ligne = brut.strip()[len("Modeline"):].strip()
     if not ligne:
-        return "Cette définition n'a pas pu être calculée."
+        return "Cette définition n'a pas pu être calculée.", ""
 
     morceaux = ligne.replace('"', " ").split()
     if not morceaux:
-        return "Cette définition n'a pas pu être lue."
+        return "Cette définition n'a pas pu être lue.", ""
     etiquette = morceaux[0]
 
     # `--newmode` échoue si la définition existe déjà : ce n'est pas une erreur.
@@ -114,18 +131,17 @@ def ajouter_mode(nom, largeur, hauteur, taux):
                            capture_output=True, text=True)
     if ajout.returncode != 0:
         return (ajout.stderr.strip()
-                or "L'écran a refusé cette définition. Son pilote ne la permet pas.")
+                or "L'écran a refusé cette définition. Son pilote ne la permet pas."), ""
 
     essai = subprocess.run(["xrandr", "--output", nom, "--mode", etiquette],
                            capture_output=True, text=True)
     if essai.returncode != 0:
         return (essai.stderr.strip()
-                or "L'écran a refusé de passer à cette définition.")
+                or "L'écran a refusé de passer à cette définition."), ""
 
-    os.makedirs(os.path.dirname(CHOIX), exist_ok=True)
-    with open(CHOIX, "w", encoding="utf-8") as fichier:
-        fichier.write(f"{nom}\n{etiquette}\n\n")
-    return ""
+    if garder:
+        noter(nom, etiquette)
+    return "", etiquette
 
 
 def restaurer():
@@ -178,8 +194,14 @@ def frequences_proposees(annonces, usuelles=FREQUENCES_USUELLES):
             continue
         deja.add(arrondi)
         trouvees.append((arrondi, brut, True))
+    # PAS AU-DESSUS DE CE QUE L'ÉCRAN ANNONCE (20 novembre). Grenofar a
+    # choisi « 360 Hz — à essayer » sur un écran de 300 Hz : plus de signal,
+    # « comme si j'avais débranché le HDMI ». Un écran qui annonce 300 au plus
+    # ne fera pas 360. On ne propose donc, en plus, que des fréquences
+    # INFÉRIEURES au maximum annoncé — celles qu'un pilote oublie parfois.
+    plafond = max(deja) if deja else None
     for usuelle in usuelles:
-        if usuelle not in deja:
+        if usuelle not in deja and (plafond is None or usuelle < plafond):
             trouvees.append((usuelle, str(usuelle), False))
     trouvees.sort(key=lambda entree: entree[0])
     return trouvees

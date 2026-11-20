@@ -272,13 +272,36 @@ def _virtuelle():
 
 
 def reglages_ecran_appliquer(nom, taille, brut, annoncee):
+    """Essaie une définition SANS la noter, et dit comment revenir.
+
+    La page compte 15 secondes : « Garder » note le choix
+    (reglages_ecran_garder) ; sans réponse — écran noir, plus de signal —
+    elle revient d'elle-même à l'ancien (reglages_ecran_revenir). Comme
+    Windows. Sur le PC de Grenofar, 360 Hz coupait le signal et le choix
+    était déjà noté pour la session suivante (20 novembre).
+    """
     import ecran
+    avant = next((s for s in ecran.sorties() if s["nom"] == nom), None)
+    precedent = {"taille": avant["actuelle"], "brut": avant["taux"]} if avant else None
     if annoncee:
-        souci = ecran.appliquer(nom, taille, brut)
+        souci, mode = ecran.appliquer(nom, taille, brut, garder=False), taille
+        taux = brut
     else:
         largeur, hauteur = taille.split("x")
-        souci = ecran.ajouter_mode(nom, largeur, hauteur, float(brut))
-    return {"souci": souci or ""}
+        souci, mode = ecran.essayer_mode(nom, largeur, hauteur, float(brut), garder=False)
+        taux = ""
+    return {"souci": souci or "", "precedent": precedent, "mode": mode, "taux": taux}
+
+
+def reglages_ecran_garder(nom, mode, taux):
+    import ecran
+    ecran.noter(nom, mode, taux)
+    return {"souci": ""}
+
+
+def reglages_ecran_revenir(nom, taille, brut):
+    import ecran
+    return {"souci": ecran.appliquer(nom, taille, brut, garder=False) or ""}
 
 
 def reglages_composants():
@@ -463,6 +486,8 @@ def reglages_maj():
 FONCTIONS = {
     "reglages_ecran": reglages_ecran,
     "reglages_ecran_appliquer": reglages_ecran_appliquer,
+    "reglages_ecran_garder": reglages_ecran_garder,
+    "reglages_ecran_revenir": reglages_ecran_revenir,
     "reglages_composants": reglages_composants,
     "reglages_composants_chercher": reglages_composants_chercher,
     "reglages_securite": reglages_securite,

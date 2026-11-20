@@ -85,18 +85,50 @@
       };
       const tailles = choix(v.modes.map((m, i) => [String(i), m.taille.replace("x", " × ")]), String(mode), (val) => { mode = Number(val); remplirTaux(); });
       remplirTaux();
+      // GARDER OU REVENIR (20 novembre), comme Windows : rien n'est noté
+      // tant qu'on n'a pas dit « Garder », et sans réponse en 15 s — écran
+      // noir, plus de signal — on revient de soi-même à l'ancien réglage.
+      const confirmer = el("div.rg-confirmer");
+      confirmer.hidden = true;
+      let minuteur = null;
       const appliquer = async () => {
         const t = v.modes[mode].taux[Number(taux.value)];
         if (!t) { dire.textContent = "Choisis une fréquence."; return; }
-        const r = await R("reglages_ecran_appliquer", { nom: e.nom, taille: v.modes[mode].taille, brut: t.brut, annoncee: t.annoncee });
-        dire.textContent = r.souci || `Appliqué : ${v.modes[mode].taille.replace("x", " × ")} à ${t.arrondi} images par seconde.`;
+        const taille = v.modes[mode].taille;
+        const r = await R("reglages_ecran_appliquer", { nom: e.nom, taille, brut: t.brut, annoncee: t.annoncee });
+        if (r.souci) { dire.textContent = r.souci; return; }
+        dire.textContent = "";
+        let reste = 15;
+        const compte = el("strong", String(reste));
+        const finir = () => { clearInterval(minuteur); minuteur = null; confirmer.hidden = true; };
+        const revenir = async (texte) => {
+          finir();
+          if (r.precedent) await R("reglages_ecran_revenir", { nom: e.nom, taille: r.precedent.taille, brut: r.precedent.brut });
+          dire.textContent = texte;
+        };
+        confirmer.replaceChildren(
+          el("p", `${taille.replace("x", " × ")} à ${t.arrondi} images par seconde. Garder ce réglage ? Retour à l'ancien dans `, compte, " s."),
+          el("div.rg-rangee",
+            bouton("Garder", "principal", async () => {
+              finir();
+              await R("reglages_ecran_garder", { nom: e.nom, mode: r.mode, taux: r.taux });
+              dire.textContent = `Gardé : ${taille.replace("x", " × ")} à ${t.arrondi} images par seconde.`;
+            }),
+            bouton("Revenir", "", () => revenir("Ancien réglage remis."))));
+        confirmer.hidden = false;
+        clearInterval(minuteur);
+        minuteur = setInterval(() => {
+          reste -= 1;
+          compte.textContent = String(reste);
+          if (reste <= 0) revenir("Pas de réponse en 15 secondes : l'ancien réglage est revenu. L'écran n'a sans doute pas accepté cette fréquence.");
+        }, 1000);
       };
       return [titre("Écran", `Écran ${e.nom}, actuellement ${e.actuelle.replace("x", " × ") || "inconnu"} à ${e.taux || "?"} images par seconde.`),
-        carte(ligne("Définition", tailles), ligne("Images par seconde", taux), bouton("Appliquer", "principal", appliquer), dire,
+        carte(ligne("Définition", tailles), ligne("Images par seconde", taux), bouton("Appliquer", "principal", appliquer), confirmer, dire,
           ligne("Plusieurs écrans", bouton("Disposer les écrans", "", () => ouvrirProgramme("arandr"))),
           v.virtuelle
             ? note(`grenOS tourne dans une machine virtuelle (${v.virtuelle}) : son écran est virtuel, et c'est ${v.virtuelle === "oracle" ? "VirtualBox" : "l'hyperviseur"} qui le recopie sur ton vrai écran, à sa propre cadence. Choisir une fréquence plus haute ici n'y changerait rien ; sur un vrai PC, toutes celles de ton écran sont proposées.`)
-            : note("Les fréquences marquées « à essayer » ne sont pas annoncées par le pilote : elles sont calculées puis proposées à l'écran. S'il refuse, rien ne change — et s'il accepte mais que l'image reste noire, attends dix secondes, rien n'est enregistré tant que l'essai n'a pas réussi."))];
+            : note("Les fréquences marquées « à essayer » ne sont pas annoncées par l'écran, mais restent sous son maximum. Après « Appliquer », rien n'est gardé tant que tu n'as pas cliqué « Garder » : si l'image disparaît, attends 15 secondes, l'ancien réglage revient tout seul."))];
     },
 
     async son() {
