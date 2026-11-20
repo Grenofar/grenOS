@@ -11,6 +11,9 @@ After=local-fs.target
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/lib/grenos/grenos-windows
+# Refermer à l'arrêt du service : l'installateur l'arrête pour libérer le
+# disque de Windows (grenos-installer).
+ExecStop=/usr/lib/grenos/grenos-windows --fermer
 # Un disque malade peut faire attendre `mount` : on borne.
 TimeoutStartSec=60
 

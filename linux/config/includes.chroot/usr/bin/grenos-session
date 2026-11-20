@@ -214,7 +214,7 @@ grenos-parametres --restaurer-ecran 2>/dev/null || true
 # Réglages › Écran s'ouvre et l'essaie, avec « Garder ? » 15 secondes : un
 # écran noir revient seul à l'ancien réglage. Une fois par écran ; jamais en
 # machine virtuelle (l'hyperviseur recopie à sa propre cadence).
-if [ ! -e "$CONFIG/ecran" ] && [ ! -e "$CONFIG/ecran-propose" ] \
+if [ ! -e "$CONFIG/ecran" ] && [ ! -e "$CONFIG/ecrans" ] && [ ! -e "$CONFIG/ecran-propose" ] \
         && [ "$(systemd-detect-virt 2>/dev/null || echo none)" = none ] \
         && python3 -c 'import sys; sys.path.insert(0, "/usr/lib/grenos"); import ecran; sys.exit(0 if ecran.meilleure_frequence() else 1)' 2>/dev/null; then
     (sleep 5; grenos-parametres ecran-max) >/dev/null 2>&1 &
@@ -246,7 +246,7 @@ if [ "$VIRTUELLE" = "none" ]; then
     fi
 else
     rm -f "$HOME/Bureau/grenos-installer.desktop"
-    printf '[Desktop Entry]\nType=Application\nName=Installer grenOS\nNoDisplay=true\nExec=pkexec calamares\n' \
+    printf '[Desktop Entry]\nType=Application\nName=Installer grenOS\nNoDisplay=true\nExec=grenos-installer\n' \
         > "$HOME/.local/share/applications/grenos-installer.desktop"
 fi
 

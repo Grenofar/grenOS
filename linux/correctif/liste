@@ -9,28 +9,29 @@
 #     (un fichier d'un paquet ajouté à package-lists, absent de l'image publiée)
 #   seul <chemin>
 #     (un fichier propre au correctif, pris dans linux/correctif/seul)
+#
+# 21 novembre — base : linux-20261120-2306 (qui contient déjà l'affichage
+# sur l'image du firmware, le filet des RTX 50 et le premier rapport). Ce
+# correctif n'apporte que ce qui a changé depuis.
 
-# Le rapport de démarrage écrit sur la clé (20 novembre).
+# L'installateur bloquait au partitionnement : une partition MONTÉE ne
+# laisse à Calamares que le manuel. Le lanceur referme les disques d'abord.
+fichier usr/bin/grenos-installer
+fichier usr/share/applications/grenos-installer.desktop
+fichier usr/bin/grenos-bienvenue
+fichier usr/lib/grenos/grenos-windows
+fichier etc/systemd/system/grenos-windows.service
+
+# Le rapport de démarrage : en plus, le son et le journal de l'installateur.
 fichier usr/lib/grenos/grenos-rapport-cle
-fichier etc/systemd/system/grenos-rapport-cle.service
-lien etc/systemd/system/multi-user.target.wants/grenos-rapport-cle.service /etc/systemd/system/grenos-rapport-cle.service
 
-# L'écran noir après le chargement sur une carte sans pilote (RTX 5060) :
-# le pilote X fbdev (xserver-xorg-video-fbdev, ajouté à package-lists) et
-# la configuration écrite à chaque démarrage.
-paquet xserver-xorg-video-fbdev usr/lib/xorg/modules/drivers/fbdev_drv.so
-fichier usr/lib/grenos/grenos-affichage-firmware
-fichier etc/systemd/system/grenos-affichage-firmware.service
-lien etc/systemd/system/multi-user.target.wants/grenos-affichage-firmware.service /etc/systemd/system/grenos-affichage-firmware.service
+# Les écrans : seulement ce que l'écran annonce, et « Garder » note tous les
+# écrans (définition, fréquence, place) pour la session suivante.
+fichier usr/lib/grenos/ecran.py
+fichier usr/lib/grenos/pont.py
 
-# Les RTX 50 essaient de nouveau `nouveau` (X sans glamor), sous un filet :
-# premier écran non passé en 150 s, ou coupure au bouton → image du firmware.
-fichier usr/lib/grenos/grenos-nouveau-ou-pas
-fichier usr/lib/grenos/grenos-affichage-etat
-fichier usr/lib/grenos/grenos-affichage-garde
-fichier etc/systemd/system/grenos-affichage-garde.service
-lien etc/systemd/system/multi-user.target.wants/grenos-affichage-garde.service /etc/systemd/system/grenos-affichage-garde.service
-fichier usr/bin/grenos-premier-lanceur
+# zramswap ne finit plus « en échec » à chaque arrêt.
+fichier etc/systemd/system/zramswap.service.d/10-grenos-arret.conf
 
 # L'installateur recopie aussi ce correctif (fichier propre au correctif,
 # dans linux/correctif/seul : il n'a pas de sens dans l'image complète).

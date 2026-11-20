@@ -1,0 +1,10 @@
+#!/bin/sh
+# « Disposer les écrans » (Réglages › Écran) : arandr, puis la disposition
+# GARDÉE (21 novembre). Grenofar, deux écrans : « j'ai mis [300 Hz] puis
+# j'ai disposé les écrans » — et la disposition se perdait à la session
+# suivante. En sortant d'arandr, l'état de tous les écrans (définition,
+# fréquence, place, principal) est noté, et grenos-session le remet.
+arandr "$@"
+python3 -c 'import sys; sys.path.insert(0, "/usr/lib/grenos"); import ecran; ecran.noter_tout()' 2>/dev/null
+grenos-dire "ecran : disposition gardee en sortant d arandr"
+exit 0

@@ -24,6 +24,18 @@ POINT=/media/windows
 TRACE=/run/grenos/windows
 ESSAI=/run/grenos/windows-essai
 
+# `--fermer` (ExecStop du service, 21 novembre) : l'installateur demande les
+# disques libres — une partition montée ne laisse à Calamares que le
+# partitionnement manuel (grenos-installer). On ne referme que NOTRE
+# point de montage, jamais ce que l'explorateur a ouvert ailleurs.
+if [ "${1:-}" = --fermer ]; then
+    if findmnt -rno TARGET "$POINT" >/dev/null 2>&1; then
+        umount "$POINT" 2>/dev/null && echo "grenos: windows referme ($POINT)"
+    fi
+    rm -f "$TRACE"
+    exit 0
+fi
+
 mkdir -p /run/grenos
 rm -f "$TRACE"
 

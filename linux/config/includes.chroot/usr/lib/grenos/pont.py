@@ -247,12 +247,18 @@ def _nombre(valeur, decimales=1):
     return ("%.*f" % (decimales, valeur)).replace(".", ",")
 
 
-def reglages_ecran():
+def reglages_ecran(nom=""):
+    """L'écran à régler (le principal par défaut) et la liste de TOUS.
+
+    Grenofar, deux écrans dont un 300 Hz (21 novembre) : « fais qu'on puisse
+    choisir l'écran auquel changer les paramètres, ça ne fait que pour un
+    seul ». La page en montre la liste et règle celui qu'on choisit.
+    """
     import ecran
     sorties = ecran.sorties()
     if not sorties:
-        return {"ecran": None, "modes": []}
-    premier = sorties[0]
+        return {"ecran": None, "modes": [], "ecrans": []}
+    premier = next((s for s in sorties if s["nom"] == nom), sorties[0])
     modes = sorted(premier["modes"], key=lambda m: ecran.surface(m["taille"]), reverse=True)
     # EN MACHINE VIRTUELLE, RIEN « À ESSAYER » (19 novembre). Grenofar :
     # « j'ai l'impression que ça change rien que je passe en 360 (j'ai un
@@ -265,9 +271,22 @@ def reglages_ecran():
     for mode in modes:
         rendu.append({"taille": mode["taille"], "taux": [
             {"arrondi": a, "brut": b, "annoncee": bool(n)}
-            for a, b, n in ecran.frequences_proposees(mode["taux"], () if virtuelle else ecran.FREQUENCES_USUELLES)]})
+            # SEULEMENT CE QUE L'ÉCRAN ANNONCE (21 novembre). Grenofar : « donc
+            # pas plus, pas possible » — 360 Hz « à essayer » avait coupé le
+            # signal de son écran. Plus aucune fréquence calculée n'est offerte.
+            for a, b, n in ecran.frequences_proposees(mode["taux"], ())]})
+    edids = ecran._edids()
+    def identite(s):
+        return ecran.decrire_edid(edids.get(s["nom"], b"")).get("reference", "")
+    ecrans = [{"nom": s["nom"], "principal": s["principal"], "actuelle": s["actuelle"] or "",
+               "taux": s["taux"] or "", "allume": s["allume"], "reference": identite(s)}
+              for s in sorties]
+    bornes = ecran.limites(premier)
     return {"ecran": {"nom": premier["nom"], "actuelle": premier["actuelle"] or "",
-                      "taux": premier["taux"] or ""}, "modes": rendu, "virtuelle": virtuelle}
+                      "taux": premier["taux"] or "", "principal": premier["principal"],
+                      "reference": identite(premier),
+                      "max_definition": bornes["definition"], "max_frequence": bornes["frequence"]},
+            "modes": rendu, "virtuelle": virtuelle, "ecrans": ecrans}
 
 
 def _virtuelle():
@@ -304,8 +323,11 @@ def reglages_ecran_appliquer(nom, taille, brut, annoncee):
 
 
 def reglages_ecran_garder(nom, mode, taux):
+    """« Garder » : l'écran réglé ET les autres, avec leur place (noter_tout),
+    pour que la session suivante remette tout le bureau tel quel."""
     import ecran
     ecran.noter(nom, mode, taux)
+    ecran.noter_tout()
     return {"souci": ""}
 
 

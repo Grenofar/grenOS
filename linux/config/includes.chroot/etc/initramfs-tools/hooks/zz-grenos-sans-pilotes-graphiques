@@ -83,8 +83,34 @@ for racine in "$DESTDIR/usr/lib/firmware" "$DESTDIR/lib/firmware"; do
         rm -rf "$racine/$dossier"
     done
 done
+# LES PILOTES RÉSEAU SONT DÉJÀ COPIÉS quand ce crochet tourne (lu dans
+# mkinitramfs 0.148.4 : `auto_add_modules` puis `apply_add_modules` AVANT
+# les crochets, « because some hooks rely on them »). Les rayer de la liste
+# ne suffisait pas — la construction l'a refusé (run 44835521238, initrd de
+# 82 Mo avec Netronome). On les efface donc de l'initrd, puis les firmwares
+# qu'eux seuls demandaient : ceux qu'un module RESTANT réclame encore (un
+# pilote de stockage SAN qui partage le firmware d'une carte) restent.
+# `depmod`, que mkinitramfs passe après les crochets, refait l'index.
+if command -v modinfo >/dev/null 2>&1 && [ -d "$MODULES_NOYAU/kernel/drivers/net" ]; then
+    garder="$DESTDIR/.grenos-firmwares-gardes"
+    find "$DESTDIR/usr/lib/modules" "$DESTDIR/lib/modules" -path '*/kernel/drivers/net' -prune \
+         -o -name '*.ko*' -print 2>/dev/null \
+        | while read -r m; do modinfo -F firmware "$m" 2>/dev/null; done | sort -u > "$garder"
+    find "$MODULES_NOYAU/kernel/drivers/net" -name '*.ko*' 2>/dev/null \
+        | while read -r m; do modinfo -F firmware "$m" 2>/dev/null; done | sort -u \
+        | grep -vxF -f "$garder" \
+        | while read -r fw; do
+            for racine in "$DESTDIR/usr/lib/firmware" "$DESTDIR/lib/firmware"; do
+                rm -f "$racine/$fw" "$racine/$fw.xz" "$racine/$fw.zst"
+            done
+        done
+    rm -f "$garder"
+fi
 for racine in "$DESTDIR/usr/lib/modules" "$DESTDIR/lib/modules"; do
     [ -d "$racine" ] || continue
     rm -rf "$racine"/*/kernel/drivers/net
+done
+for racine in "$DESTDIR/usr/lib/firmware" "$DESTDIR/lib/firmware"; do
+    [ -d "$racine" ] && find "$racine" -type d -empty -delete 2>/dev/null
 done
 exit 0

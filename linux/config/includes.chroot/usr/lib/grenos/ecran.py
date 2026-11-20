@@ -34,8 +34,14 @@ def sorties():
     for ligne in texte.splitlines():
         entete = re.match(r"^(\S+) connected", ligne)
         if entete:
+            # La place de l'écran dans le bureau (« 2560x1440+2560+0 ») : pour
+            # garder la disposition de plusieurs écrans (21 novembre).
+            place = re.search(r" (\d+)x(\d+)\+(\d+)\+(\d+)", ligne)
             courante = {"nom": entete.group(1), "actuelle": "", "taux": "", "modes": [],
-                        "principal": " connected primary" in ligne}
+                        "principal": " connected primary" in ligne,
+                        "x": int(place.group(3)) if place else 0,
+                        "y": int(place.group(4)) if place else 0,
+                        "allume": bool(place)}
             trouvees.append(courante)
             continue
         mode = re.match(r"^\s+(\d+x\d+)\s+(.*)$", ligne)
@@ -56,6 +62,82 @@ def sorties():
     # Grenofar réglait 300 Hz sans savoir sur lequel.
     trouvees.sort(key=lambda s: not s["principal"])
     return trouvees
+
+
+# LA RÉFÉRENCE DE L'ÉCRAN ET SES LIMITES (21 novembre). Grenofar : « qu'il
+# donne la référence de l'écran, son nombre d'images et sa résolution max,
+# donc pas plus, pas possible ». La référence est lue dans l'EDID que l'écran
+# envoie (son nom en clair, sa marque) ; les maximums sont ceux que le pilote
+# a VALIDÉS (la liste de xrandr), pas une promesse calculée.
+MARQUES = {"AOC": "AOC", "GSM": "LG", "SAM": "Samsung", "DEL": "Dell", "ACR": "Acer",
+           "AUS": "ASUS", "BNQ": "BenQ", "MSI": "MSI", "GBT": "Gigabyte", "HPN": "HP",
+           "HWP": "HP", "LEN": "Lenovo", "PHL": "Philips", "VSC": "ViewSonic",
+           "IVM": "iiyama", "SNY": "Sony", "XMI": "Xiaomi", "AOU": "AOC", "CMN": "Innolux",
+           "SHP": "Sharp", "BOE": "BOE", "MEI": "Panasonic", "NEC": "NEC", "EIZ": "EIZO",
+           "PNP": "Pixio", "KTC": "KTC", "HKC": "HKC", "MAG": "MAG", "SKY": "Skyworth"}
+
+
+def _edids():
+    """L'EDID de chaque sortie branchée, lu dans `xrandr --current --verbose`."""
+    try:
+        texte = subprocess.run(["xrandr", "--current", "--verbose"], capture_output=True,
+                               text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    edids, nom, hexa, dedans = {}, None, [], False
+    for ligne in texte.splitlines():
+        entete = re.match(r"^(\S+) (connected|disconnected)", ligne)
+        if entete:
+            if nom and hexa:
+                edids[nom] = bytes.fromhex("".join(hexa))
+            nom, hexa, dedans = entete.group(1), [], False
+            continue
+        if re.match(r"^\s+EDID:\s*$", ligne):
+            dedans = True
+            continue
+        if dedans:
+            morceau = ligne.strip()
+            if re.fullmatch(r"[0-9a-fA-F]{32}", morceau):
+                hexa.append(morceau)
+                continue
+            dedans = False
+    if nom and hexa:
+        edids[nom] = bytes.fromhex("".join(hexa))
+    return edids
+
+
+def decrire_edid(edid):
+    """{'reference': 'AOC Q27G3XMN', 'vmax': 300} — ou {} si illisible."""
+    if len(edid) < 128 or edid[:8] != bytes([0, 255, 255, 255, 255, 255, 255, 0]):
+        return {}
+    code = (edid[8] << 8) | edid[9]
+    sigle = "".join(chr(((code >> d) & 0x1F) + 64) for d in (10, 5, 0))
+    nom, vmax = "", 0
+    for i in range(54, 126, 18):
+        bloc = edid[i:i + 18]
+        if bloc[0] or bloc[1]:
+            continue
+        if bloc[3] == 0xFC:
+            nom = bloc[5:18].split(b"\n")[0].decode("ascii", "replace").strip()
+        elif bloc[3] == 0xFD:
+            # Fréquence verticale maximale ; au-delà de 255 Hz, l'EDID 1.4
+            # ajoute 255 (bit 1 de l'octet 4) — un écran 300 Hz s'écrit 45.
+            vmax = bloc[6] + (255 if bloc[4] & 0x02 else 0)
+    marque = MARQUES.get(sigle, sigle)
+    if nom and nom.lower().startswith(marque.lower()):
+        reference = nom
+    else:
+        reference = ("%s %s" % (marque, nom)).strip()
+    return {"reference": reference, "vmax": vmax}
+
+
+def limites(sortie):
+    """Ce que le pilote a validé pour cet écran : la plus grande définition et
+    la plus haute fréquence (toutes définitions confondues)."""
+    plus_grande = max(sortie["modes"], key=lambda m: surface(m["taille"]), default=None)
+    taux = [float(t) for m in sortie["modes"] for t in m["taux"]]
+    return {"definition": plus_grande["taille"] if plus_grande else "",
+            "frequence": int(round(max(taux))) if taux else 0}
 
 
 def surface(taille):
@@ -187,8 +269,73 @@ def noter_proposition(proposition):
         fichier.write("%s %s %s\n" % (proposition["nom"], proposition["taille"], proposition["brut"]))
 
 
+TOUS = os.path.expanduser("~/.config/grenos/ecrans")
+
+
+def noter_tout():
+    """Garde l'état de TOUS les écrans allumés : définition, fréquence,
+    place dans le bureau, principal (21 novembre).
+
+    Grenofar, avec deux écrans : « fais qu'on puisse choisir l'écran auquel
+    changer les paramètres » — et la disposition faite avec « Disposer les
+    écrans » se perdait à la session suivante. Une ligne par écran :
+    nom définition fréquence x y principal(0/1).
+    """
+    lignes = []
+    for s in sorties():
+        if not s["allume"] or not s["actuelle"]:
+            continue
+        lignes.append("%s %s %s %d %d %d" % (s["nom"], s["actuelle"], s["taux"] or "-",
+                                             s["x"], s["y"], 1 if s["principal"] else 0))
+    if not lignes:
+        return ""
+    os.makedirs(os.path.dirname(TOUS), exist_ok=True)
+    with open(TOUS + ".tmp", "w", encoding="utf-8") as fichier:
+        fichier.write("\n".join(lignes) + "\n")
+    os.replace(TOUS + ".tmp", TOUS)
+    return ""
+
+
+def _commande_disposition(lignes, branches, places=True):
+    commande = ["xrandr"]
+    for ligne in lignes:
+        morceaux = ligne.split()
+        if len(morceaux) < 6 or morceaux[0] not in branches:
+            continue
+        nom, mode, taux, x, y, principal = morceaux[:6]
+        commande += ["--output", nom, "--mode", mode]
+        if taux != "-":
+            commande += ["--rate", taux]
+        if places:
+            commande += ["--pos", "%sx%s" % (x, y)]
+        if principal == "1":
+            commande += ["--primary"]
+    return commande
+
+
 def restaurer():
-    """Réapplique le choix noté, à l'ouverture de la session."""
+    """Réapplique ce qui a été gardé, à l'ouverture de la session.
+
+    D'abord la disposition de tous les écrans (noter_tout) ; un écran
+    débranché depuis est simplement sauté. Si le pilote refuse les places
+    (écrans changés), on garde au moins définitions et fréquences. Sans
+    disposition gardée : l'ancien choix d'un seul écran.
+    """
+    try:
+        with open(TOUS, encoding="utf-8") as fichier:
+            lignes = [l.strip() for l in fichier if l.strip()]
+    except OSError:
+        lignes = []
+    if lignes:
+        branches = {s["nom"] for s in sorties()}
+        for places in (True, False):
+            commande = _commande_disposition(lignes, branches, places)
+            if len(commande) == 1:
+                return ""
+            r = subprocess.run(commande, capture_output=True, text=True)
+            if r.returncode == 0:
+                return ""
+        return "La disposition gardée n'a pas pu être remise."
     try:
         with open(CHOIX, encoding="utf-8") as fichier:
             lignes = [l.strip() for l in fichier.readlines()]

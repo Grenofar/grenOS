@@ -109,9 +109,18 @@
 
     async ecran() {
       const affichage = carteAffichage(await R("reglages_affichage").catch(() => null));
-      const v = await R("reglages_ecran");
+      const v = await R("reglages_ecran", { nom: D.ecranChoisi || "" });
       if (!v.ecran) return [titre("Écran"), affichage, carte(note("Aucun écran interrogeable ici."))].filter(Boolean);
       const e = v.ecran;
+      // PLUSIEURS ÉCRANS (21 novembre). Grenofar : « fais qu'on puisse choisir
+      // l'écran auquel changer les paramètres, ça ne fait que pour un seul ».
+      const nomEcran = (x) => `${x.reference || x.nom}${x.principal ? " (principal)" : ""} — ${x.actuelle ? x.actuelle.replace("x", " × ") : "éteint"}${x.taux ? ` à ${Math.round(parseFloat(x.taux))} Hz` : ""}`;
+      const choixEcran = (v.ecrans || []).length > 1
+        ? ligne("Écran à régler", choix(v.ecrans.map((x) => [x.nom, nomEcran(x)]), e.nom, async (val) => {
+          D.ecranChoisi = val;
+          D.pages.ecran.replaceChildren(...(await CONSTRUIRE.ecran()).filter(Boolean));
+        }))
+        : null;
       const dire = el("p.note");
       let mode = Math.max(0, v.modes.findIndex((m) => m.taille === e.actuelle));
       const taux = el("select.champ.rg-choix");
@@ -179,13 +188,19 @@
           await appliquer();
         }, 900);
       }
-      return [titre("Écran", `Écran ${e.nom}, actuellement ${e.actuelle.replace("x", " × ") || "inconnu"} à ${e.taux || "?"} images par seconde.`),
+      return [titre("Écran", `${e.reference ? e.reference + " (" + e.nom + ")" : "Écran " + e.nom}, actuellement ${e.actuelle.replace("x", " × ") || "inconnu"} à ${e.taux ? Math.round(parseFloat(e.taux)) : "?"} images par seconde.`),
         affichage,
-        carte(ligne("Définition", tailles), ligne("Images par seconde", taux), bouton("Appliquer", "principal", appliquer), confirmer, dire,
-          ligne("Plusieurs écrans", bouton("Disposer les écrans", "", () => ouvrirProgramme("arandr"))),
+        carte(choixEcran,
+          // SES LIMITES (21 novembre) : « la référence de l'écran, son nombre
+          // d'images et sa résolution max, donc pas plus, pas possible ».
+          e.max_frequence ? ligne("Ses limites", el("span.note", `${(e.max_definition || "").replace("x", " × ")} · jusqu'à ${e.max_frequence} images par seconde`)) : null,
+          ligne("Définition", tailles), ligne("Images par seconde", taux), bouton("Appliquer", "principal", appliquer), confirmer, dire,
+          // La disposition faite à la souris est GARDÉE en sortant (21
+          // novembre) : avant, elle se perdait à la session suivante.
+          ligne("Plusieurs écrans", bouton("Disposer les écrans", "", () => ouvrirProgramme("grenos-disposer-ecrans"))),
           v.virtuelle
             ? note(`grenOS tourne dans une machine virtuelle (${v.virtuelle}) : son écran est virtuel, et c'est ${v.virtuelle === "oracle" ? "VirtualBox" : "l'hyperviseur"} qui le recopie sur ton vrai écran, à sa propre cadence. Choisir une fréquence plus haute ici n'y changerait rien ; sur un vrai PC, toutes celles de ton écran sont proposées.`)
-            : note("Les fréquences marquées « à essayer » ne sont pas annoncées par l'écran, mais restent sous son maximum. Après « Appliquer », rien n'est gardé tant que tu n'as pas cliqué « Garder » : si l'image disparaît, attends 15 secondes, l'ancien réglage revient tout seul."))].filter(Boolean);
+            : note("grenOS ne propose que ce que ton écran annonce : rien au-delà de ses limites. Après « Appliquer », rien n'est gardé tant que tu n'as pas cliqué « Garder » : si l'image disparaît, attends 15 secondes, l'ancien réglage revient tout seul."))].filter(Boolean);
     },
 
     async son() {

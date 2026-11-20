@@ -233,7 +233,7 @@ pub const PROGRAMMES: &[&str] = &[
     "grenplace", "grenlaunch", "grenos-jeux", "grenos-connexions", "grenos-parametres",
     "grenos-maj", "grenos-fichiers", "grenos-taches", "grenos-son", "grenos-hub",
     "grenos-perf", "grenos-secours", "grenos-bienvenue", "grenos-arret",
-    "firefox-esr", "x-terminal-emulator", "installer", "pavucontrol", "nm-connection-editor", "arandr", "gnome-disks", "gufw", "grenrecovery",
+    "firefox-esr", "x-terminal-emulator", "installer", "pavucontrol", "nm-connection-editor", "arandr", "grenos-disposer-ecrans", "gnome-disks", "gufw", "grenrecovery",
 ];
 
 #[tauri::command]
@@ -242,7 +242,9 @@ pub fn ouvrir_programme(nom: String) -> Result<(), String> {
         return Err(format!("« {nom} » n'est pas une application de grenOS"));
     }
     if nom == "installer" {
-        return detacher("pkexec", &["calamares"]);
+        // Par le lanceur qui referme les disques ouverts (21 novembre) : un
+        // disque monté ne laisse à Calamares que le partitionnement manuel.
+        return detacher("grenos-installer", &[]);
     }
     detacher(&nom, &[])
 }

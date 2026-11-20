@@ -1,0 +1,56 @@
+#!/bin/sh
+# « Installer grenOS » : l'installateur, avec des disques LIBRES (21 novembre).
+#
+# Grenofar, sur son PC : « pour installer il bloque au partitionnement, on ne
+# peut plus choisir ». Calamares (lu dans son module partition, ChoicePage) :
+# dès qu'une partition d'un disque est MONTÉE, il retire « Effacer le
+# disque », « Remplacer » et « Installer à côté » pour ce disque — il ne
+# reste que le partitionnement manuel. Or la session de la clé en monte :
+#   - grenos-windows ouvre la partition Windows en lecture seule (pour
+#     montrer ses dossiers dans l'explorateur) ;
+#   - l'explorateur monte un disque dès qu'on clique dessus dans « Ce PC » —
+#     son SSD, par exemple, pour voir s'il est vide avant d'installer.
+#
+# On referme donc tout ce qui est ouvert sur les disques de la machine (la
+# clé de grenOS exceptée : le système en tourne) AVANT d'ouvrir l'installateur,
+# et on dit ce qui est refermé. Rien n'est effacé ni modifié : refermer un
+# disque, c'est ce que fait « Éjecter » dans l'explorateur.
+#
+# Le reste ne change pas : `pkexec calamares`, ouvert sans mot de passe par
+# la règle polkit 49 (et vérifié à chaque session par grenos-session).
+
+set -u
+
+dire() {
+    grenos-dire "$*" 2>/dev/null || true
+    echo "grenos-installer: $*" >&2
+}
+
+# La clé d'où grenOS tourne : son disque reste ouvert.
+medium=$(findmnt -rno SOURCE /run/live/medium 2>/dev/null | head -n 1)
+cle=""
+[ -n "$medium" ] && cle=$(lsblk -rno PKNAME "$medium" 2>/dev/null | head -n 1)
+
+# Windows, ouvert en lecture seule par grenos-windows (son ExecStop referme).
+if systemctl is-active --quiet grenos-windows.service 2>/dev/null; then
+    systemctl stop grenos-windows.service 2>/dev/null \
+        && dire "installateur : partition Windows refermee (lecture seule)"
+fi
+
+# Ce que la session a ouvert sur les disques de la machine. MOUNTPOINT en
+# dernier : vide pour une partition fermée, il ne décale aucune colonne.
+lsblk -rno PATH,PKNAME,TYPE,MOUNTPOINT 2>/dev/null | while read -r dev parent type point; do
+    [ "$type" = part ] || continue
+    [ -n "$point" ] || continue
+    [ -n "$cle" ] && [ "$parent" = "$cle" ] && continue
+    case "$point" in
+        /run/live/*|/|/boot*|\[SWAP\]) continue ;;
+    esac
+    if udisksctl unmount -b "$dev" --no-user-interaction >/dev/null 2>&1; then
+        dire "installateur : $dev referme avant l installation ($point)"
+    else
+        dire "installateur : $dev RESTE ouvert ($point) — l installateur ne proposera que le manuel sur ce disque"
+    fi
+done
+
+exec pkexec /usr/bin/calamares "$@"

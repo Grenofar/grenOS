@@ -208,6 +208,37 @@ instantane() { # moment
     { echo "======== /proc/bus/input/devices"; cat /proc/bus/input/devices; } >> "$E" 2>/dev/null
     borne 10 "$E" lspci -nnk
 
+    # ---- 60 : l'installateur et les disques (21 novembre) ----------------
+    # « Il bloque au partitionnement, on ne peut plus choisir » : sans le
+    # journal de Calamares et la liste de ce qui était monté, on devine.
+    I="$T/60-installateur.txt"
+    borne 10 "$I" lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MODEL,MOUNTPOINTS
+    borne 10 "$I" findmnt -rn -t ext4,ext3,ext2,vfat,exfat,ntfs,ntfs3,fuseblk,btrfs,xfs -o TARGET,SOURCE,FSTYPE,OPTIONS
+    for f in /root/.cache/calamares/session.log /home/*/.cache/calamares/session.log; do
+        [ -r "$f" ] || continue
+        { echo "======== $f"; tail -n 4000 "$f"; echo; } >> "$I" 2>/dev/null
+    done
+
+    # ---- 70 : le son (21 novembre) ----------------------------------------
+    # « Sur la clé, il n'a pas trouvé tous mes périphériques audio » : ce que
+    # le noyau voit (cartes ALSA, contrôleurs PCI et leur pilote), ce que
+    # PipeWire en fait (sorties et entrées de la session), et ce qui a échoué.
+    A="$T/70-son.txt"
+    { echo "== /proc/asound/cards"; cat /proc/asound/cards; echo; } >> "$A" 2>/dev/null
+    borne 10 "$A" aplay -l
+    borne 10 "$A" arecord -l
+    borne 10 "$A" sh -c 'lspci -nnk | grep -A3 -iE "audio|0403"'
+    for u in /run/user/[0-9]*; do
+        [ -d "$u" ] || continue
+        qui=$(stat -c %U "$u" 2>/dev/null)
+        [ -n "$qui" ] && [ "$qui" != root ] || continue
+        borne 10 "$A" runuser -u "$qui" -- env XDG_RUNTIME_DIR="$u" pactl list short sinks
+        borne 10 "$A" runuser -u "$qui" -- env XDG_RUNTIME_DIR="$u" pactl list short sources
+        borne 10 "$A" runuser -u "$qui" -- env XDG_RUNTIME_DIR="$u" pactl list cards
+    done
+    { echo "== journal (son)"; timeout 20 journalctl -b --no-pager -o short-monotonic 2>/dev/null \
+        | grep -iE 'snd|hda|sof-|sof_|audio|codec|pipewire|wireplumber|alsa' | tail -n 300; } >> "$A" 2>/dev/null
+
     # ---- La copie sur la clé : ouverte, écrite, refermée ------------------
     ecrire_sur_la_cle "$T"
     rm -rf "$T" 2>/dev/null
