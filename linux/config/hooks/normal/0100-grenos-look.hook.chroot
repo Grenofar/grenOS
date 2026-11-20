@@ -189,6 +189,19 @@ if [ -z "$mesa" ] || dpkg --compare-versions "$mesa" lt 25.1; then
 fi
 echo "grenos: Mesa $mesa (NVK pour les RTX 50)"
 
+# LE SECURE BOOT SUR LE SYSTÈME INSTALLÉ (20 novembre) : sans ces deux
+# fichiers, `grub-install` pose un GRUB non signé, et un PC au Secure Boot
+# actif refuse de démarrer grenOS installé. Grenofar ne veut pas le couper.
+manque=""
+[ -f /usr/lib/shim/shimx64.efi.signed ] || manque="$manque shimx64.efi.signed"
+[ -f /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed ] || manque="$manque grubx64.efi.signed"
+command -v mokutil >/dev/null 2>&1 || manque="$manque mokutil"
+if [ -n "$manque" ]; then
+    echo "grenos: Secure Boot : il manque$manque — grenOS installe ne demarrerait pas" >&2
+    exit 1
+fi
+echo "grenos: Secure Boot : shim et GRUB signes presents pour le systeme installe"
+
 echo "--- grenOS : les cles des depots d'editeurs ---"
 # Claude Desktop (20 novembre) s'installe depuis le dépôt d'Anthropic, branché
 # au clic par grenos-depot-editeur avec la clé LIVRÉE ici. Une clé remplacée

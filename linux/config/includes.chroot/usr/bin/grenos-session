@@ -348,6 +348,20 @@ else
     grenos-dire "compositeur : non ($RAISON)"
 fi
 
+# LE SECURE BOOT, DIT SUR LA LIGNE SÉRIE (20 novembre) : la CI démarre l'image
+# dans un firmware au Secure Boot ACTIF et exige d'arriver jusqu'ici. Le 5e
+# octet de la variable EFI SecureBoot vaut 1 quand il est actif.
+SB=inconnu
+for v in /sys/firmware/efi/efivars/SecureBoot-*; do
+    [ -f "$v" ] || continue
+    case "$(od -An -t u1 -j 4 -N 1 "$v" 2>/dev/null | tr -d ' ')" in
+        1) SB=actif ;;
+        0) SB=inactif ;;
+    esac
+done
+[ -d /sys/firmware/efi ] || SB="sans objet (demarrage BIOS)"
+grenos-dire "secure boot : $SB"
+
 # Le son, une fois PipeWire debout : combien de sorties, et laquelle. Sans
 # cette ligne, « aucune sortie détectée » dans les Réglages ne permet pas de
 # distinguer une panne d'un ordinateur sans carte son.

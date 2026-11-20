@@ -433,6 +433,15 @@ firmware-amd-graphics
 grub2-common
 grub-pc-bin
 grub-efi-amd64-bin
+## LE SECURE BOOT SUR LE SYSTÈME INSTALLÉ (20 novembre). Grenofar : « je ne
+## veux pas désactiver Secure Boot ». L'installateur posait `grub-efi`, qui
+## tire GRUB NON signé : le PC refusait de démarrer grenOS installé. Avec le
+## shim signé par Microsoft et le GRUB signé par Debian dans le système,
+## `grub-install` pose la chaîne signée (le noyau l'est déjà par Debian).
+## mokutil vient avec shim-signed : il inscrit la clé des modules signés
+## (pilote NVIDIA).
+grub-efi-amd64-signed
+shim-signed
 efibootmgr
 os-prober
 

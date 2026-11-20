@@ -532,6 +532,49 @@ jobs:
       # cherche la preuve que le chargeur a pris la main et que le noyau
       # dessine. Un shell UEFI, lui, reste noir avec du texte blanc — deux
       # couleurs, et le noir couvre tout : le juge le refuse.
+      # LE SECURE BOOT ACTIF (20 novembre). Grenofar : « je ne veux pas
+      # désactiver Secure Boot ». On démarre l'image dans le firmware OVMF
+      # « secboot » avec les clés de Microsoft inscrites — ce qu'a un PC du
+      # commerce — et on attend que la session dise « secure boot : actif ».
+      # Arriver jusque-là prouve que toute la chaîne (shim, GRUB, noyau) a
+      # été acceptée. RAPPORTÉ, pas bloquant : deux passages verts avant
+      # d'exiger, règle inchangée.
+      - name: L'image demarre-t-elle avec le Secure Boot actif
+        id: secureboot
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        env:
+          ISO_SB: ${{ steps.build.outputs.iso }}
+        run: |
+          sudo apt-get install -y -qq ovmf
+          CODE=$(ls /usr/share/OVMF/OVMF_CODE_4M.secboot.fd 2>/dev/null | head -1)
+          VARS=$(ls /usr/share/OVMF/OVMF_VARS_4M.ms.fd 2>/dev/null | head -1)
+          if [ -z "$CODE" ] || [ -z "$VARS" ]; then
+            echo "::warning::OVMF secboot introuvable : le Secure Boot n'a pas pu etre essaye."
+            ls /usr/share/OVMF/ || true
+            exit 0
+          fi
+          cp "$VARS" "$RUNNER_TEMP/sb-vars.fd"
+          ACCEL=""
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then ACCEL="-enable-kvm -cpu host"; fi
+          qemu-system-x86_64 $ACCEL -machine q35,smm=on -global driver=cfi.pflash01,property=secure,value=on \
+            -m 2048 -smp 2 \
+            -drive if=pflash,format=raw,readonly=on,file="$CODE" -drive if=pflash,format=raw,file="$RUNNER_TEMP/sb-vars.fd" \
+            -cdrom "$ISO_SB" -boot d -display none -vga std -serial file:"$RUNNER_TEMP/serial-sb.log" -no-reboot &
+          QEMU=$!
+          for attente in $(seq 1 72); do
+            grep -aq 'secure boot :' "$RUNNER_TEMP/serial-sb.log" 2>/dev/null && break
+            kill -0 "$QEMU" 2>/dev/null || break
+            sleep 5
+          done
+          kill $QEMU 2>/dev/null || true
+          ligne=$(grep -a 'secure boot :' "$RUNNER_TEMP/serial-sb.log" 2>/dev/null | sed 's/^.*grenos: //' | tail -n 1)
+          echo "secure boot : ${ligne:-la session n'a rien dit apres $((attente * 5)) s}"
+          if ! echo "$ligne" | grep -q "secure boot : actif"; then
+            echo "::error::Avec le Secure Boot actif, l'image n'est pas allee jusqu'a la session."
+            exit 1
+          fi
+
       - name: L'image demarre-t-elle en UEFI
         id: uefi
         if: steps.build.outcome == 'success'
