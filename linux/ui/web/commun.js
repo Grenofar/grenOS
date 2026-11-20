@@ -18,6 +18,27 @@ const api = {
   },
 };
 
+// Déplacer une fenêtre par l'EN-TÊTE de sa page (20 novembre). Grenofar :
+// « grab une fenêtre pour la déplacer ne fonctionne pas ». Le grand en-tête
+// (logo et titre) ressemble à une barre de titre, comme dans les
+// applications modernes, mais il ne déplaçait rien : seule la fine barre
+// d'Openbox au-dessus le faisait. Un appui gauche sur l'en-tête — hors
+// bouton, champ ou lien — demande à Tauri de déplacer la fenêtre (Openbox
+// reçoit _NET_WM_MOVERESIZE, comme pour sa propre barre). Double-clic :
+// agrandir, comme sur la barre de titre.
+if (!EN_APERCU) {
+  const surEntete = (cible) =>
+    cible instanceof Element &&
+    cible.closest("header.tete, header.bv-tete, header.ag-barre") &&
+    !cible.closest("button, a, input, select, textarea, label, [contenteditable], .no-drag");
+  document.addEventListener("mousedown", (e) => {
+    if (e.button !== 0 || !surEntete(e.target)) return;
+    const fenetre = TAURI.window.getCurrentWindow();
+    if (e.detail === 2) { fenetre.toggleMaximize().catch(() => {}); return; }
+    fenetre.startDragging().catch(() => {});
+  });
+}
+
 // Des icônes dessinées en traits : quelques centaines d'octets, aucune police
 // d'icônes ni thème à charger (Papirus coûtait ~610 ms à chaque lancement).
 const TRACES = {

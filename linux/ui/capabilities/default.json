@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Ce que toutes les fenêtres de grenos-ui peuvent demander : le noyau de Tauri (événements), et nos propres commandes, déclarées en Rust.",
-  "windows": ["*"],
-  "permissions": ["core:default"]
+  "description": "Ce que toutes les fenêtres de grenos-ui peuvent demander : le noyau de Tauri (événements), et nos propres commandes, déclarées en Rust. Et déplacer / agrandir sa propre fenêtre par l'en-tête de la page (20 novembre).",
+  "windows": [
+    "*"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-toggle-maximize"
+  ]
 }
