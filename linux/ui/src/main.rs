@@ -167,6 +167,13 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
 ];
 
 pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
+    // Le résident de la session est arrivé après nous : on le devient.
+    if page == "--resident" {
+        if !RESIDENT.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            systeme::dire("grenos-ui : devenu resident, les applications s ouvriront chaudes");
+        }
+        return Ok(());
+    }
     // « jeu » n'est pas une page : c'est grenPerf ouvert sur son onglet Mode
     // jeu (Ctrl+Alt+Échap, todo I8). Et « reglages:son » ouvre les Réglages
     // sur leur page Son (`grenos-parametres son`). Fenêtre déjà ouverte : on
@@ -340,10 +347,29 @@ fn main() {
     }
     systeme::preparer_webkit();
 
+    // LES APPLICATIONS S'OUVRENT CHAUDES (20 novembre). Grenofar : « toutes
+    // les apps qui s'ouvrent beaucoup plus vite que ça ». Le processus unique
+    // s'arrêtait avec sa dernière fenêtre : chaque ouverture suivante
+    // rechargeait le moteur web (bibliothèques, processus réseau) — une à
+    // trois secondes, davantage depuis la clé USB. `grenos-ui --resident`,
+    // lancé par la session une fois le bureau ouvert, garde ce processus
+    // vivant sans fenêtre : les applications naissent dedans.
+    let resident = page == "--resident";
+
     // L'assistant tourne seul, en root, avant toute session : pas de prise à
     // partager, et surtout aucune chance qu'une autre fenêtre lui vole l'écran.
     let seul = page == "premier";
-    if !seul && systeme::instance::transmettre(&page) {
+    if resident {
+        // Une fenêtre déjà ouverte (l'accueil part 2 s après la session) :
+        // c'est SON processus qui devient résident, on ne double rien.
+        if systeme::instance::transmettre("--resident") {
+            return;
+        }
+        RESIDENT.store(true, std::sync::atomic::Ordering::SeqCst);
+        // Ses fenêtres se chronomètrent depuis leur demande, pas depuis la
+        // naissance du résident (qui peut dater d'une heure).
+        PREMIERE_FAITE.store(true, std::sync::atomic::Ordering::SeqCst);
+    } else if !seul && systeme::instance::transmettre(&page) {
         return;
     }
 
@@ -474,11 +500,48 @@ fn main() {
             if !seul {
                 systeme::instance::ecouter(app.handle().clone());
             }
-            ouvrir(app.handle(), &page_de_depart)?;
+            if resident {
+                prechauffer(app.handle());
+                systeme::dire("grenos-ui : resident pret, les applications s ouvriront chaudes");
+            } else {
+                ouvrir(app.handle(), &page_de_depart)?;
+            }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("grenos-ui n'a pas pu démarrer");
+        .build(tauri::generate_context!())
+        .expect("grenos-ui n'a pas pu démarrer")
+        .run(move |_app, evenement| {
+            // La dernière fenêtre fermée par la personne (code absent) ne
+            // termine pas le résident ; un `exit()` demandé, si.
+            if let tauri::RunEvent::ExitRequested { api, code: None, .. } = evenement {
+                if RESIDENT.load(std::sync::atomic::Ordering::SeqCst) {
+                    api.prevent_exit();
+                }
+            }
+        });
+}
+
+/// Vrai quand ce processus doit survivre à sa dernière fenêtre : lancé par
+/// `--resident`, ou devenu résident à sa demande (voir `ouvrir`).
+static RESIDENT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Le moteur web chargé UNE fois, au repos : une vue invisible sur une page
+/// vide lève le processus réseau et met les bibliothèques en mémoire, puis
+/// disparaît. La première application ouverte ensuite n'attend plus rien de
+/// tout cela. Jamais montrée, jamais dans la barre.
+fn prechauffer(app: &AppHandle) {
+    let Ok(adresse) = "about:blank".parse() else { return };
+    let vue = WebviewWindowBuilder::new(app, "prechauffe", WebviewUrl::External(adresse))
+        .visible(false)
+        .skip_taskbar(true)
+        .inner_size(64.0, 64.0)
+        .build();
+    if let Ok(vue) = vue {
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(4));
+            let _ = vue.destroy();
+        });
+    }
 }
 
 #[cfg(test)]

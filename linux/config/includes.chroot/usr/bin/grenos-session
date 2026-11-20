@@ -287,6 +287,23 @@ if [ -x /usr/lib/grenos/grenos-presse-natif ]; then
     grenos-veilleur /usr/lib/grenos/grenos-presse-natif &
 fi
 
+# LES APPLICATIONS S'OUVRENT CHAUDES (20 novembre). Grenofar : « toutes les
+# apps qui s'ouvrent beaucoup plus vite que ça ». Deux gestes, tous deux
+# après le bureau et au repos, pour ne rien lui prendre :
+#   - grenos-ui reste résident (sans fenêtre) : Réglages, Fichiers, GrenPlace
+#     et les autres s'ouvrent dans un moteur web déjà chargé, au lieu de le
+#     recharger à chaque fois (une à trois secondes). Pas sous 3,5 Go de
+#     mémoire : il y coûterait plus qu'il ne rend ;
+#   - grenos-prechauffer lit en mémoire, à la priorité la plus basse, les
+#     bibliothèques que Firefox et nos fenêtres liront en s'ouvrant.
+MEMOIRE_KO=$(sed -n 's/^MemTotal: *\([0-9]*\) kB/\1/p' /proc/meminfo 2>/dev/null)
+if [ -x /usr/bin/grenos-ui ] && [ "${MEMOIRE_KO:-0}" -ge 3500000 ]; then
+    (sleep 8; exec nice -n 5 /usr/bin/grenos-ui --resident) >/dev/null 2>&1 &
+fi
+if [ -x /usr/lib/grenos/grenos-prechauffer ]; then
+    /usr/lib/grenos/grenos-prechauffer >/dev/null 2>&1 &
+fi
+
 # Les coins arrondis des fenetres (barre de titre comprise). Sans compositeur,
 # un coin ne s'arrondit qu'en retirant ses pixels a la fenetre : grenos-coins
 # pose ce masque sur chaque cadre d'openbox. Lance avant openbox, il attend

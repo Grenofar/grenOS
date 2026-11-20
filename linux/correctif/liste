@@ -5,13 +5,18 @@
 #
 #   fichier <chemin>
 #   lien <chemin du lien> <cible>
+#   paquet <paquet Debian trixie> <chemin dans le paquet>
+#     (un fichier d'un paquet ajouté à package-lists, absent de l'image publiée)
 
 # Le rapport de démarrage écrit sur la clé (20 novembre).
 fichier usr/lib/grenos/grenos-rapport-cle
 fichier etc/systemd/system/grenos-rapport-cle.service
 lien etc/systemd/system/multi-user.target.wants/grenos-rapport-cle.service /etc/systemd/system/grenos-rapport-cle.service
 
-# L'écran noir après le chargement sur une carte sans pilote (RTX 5060).
+# L'écran noir après le chargement sur une carte sans pilote (RTX 5060) :
+# le pilote X fbdev (xserver-xorg-video-fbdev, ajouté à package-lists) et
+# la configuration écrite à chaque démarrage.
+paquet xserver-xorg-video-fbdev usr/lib/xorg/modules/drivers/fbdev_drv.so
 fichier usr/lib/grenos/grenos-affichage-firmware
 fichier etc/systemd/system/grenos-affichage-firmware.service
 lien etc/systemd/system/multi-user.target.wants/grenos-affichage-firmware.service /etc/systemd/system/grenos-affichage-firmware.service

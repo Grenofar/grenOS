@@ -1,0 +1,56 @@
+#!/bin/sh
+# Mettre en mémoire, AU REPOS, ce que les applications liront en s'ouvrant
+# (20 novembre).
+#
+# Grenofar : « toutes les apps qui s'ouvrent beaucoup plus vite que ça ». La
+# PREMIÈRE ouverture d'une application lit ses bibliothèques sur le disque —
+# Firefox ~250 Mo, le moteur web de nos fenêtres ~150 Mo. Depuis la clé USB
+# (squashfs compressé), ce sont plusieurs secondes, une fois par démarrage :
+# exactement l'attente qu'on voit. On les lit nous-mêmes, une fois le bureau
+# ouvert, à la priorité d'entrées-sorties la plus basse (idle : le disque ne
+# sert ce script que quand personne d'autre n'attend) ; le noyau les garde en
+# mémoire et l'ouverture n'a plus rien à lire.
+#
+# Seulement si la mémoire le permet : 6 Go et plus pour tout, 3 Go pour nos
+# fenêtres seulement, rien en dessous — sur une petite machine, ce cache
+# chasserait ce qui sert vraiment. Rien n'est écrit, rien n'est lancé.
+set -u
+
+if [ "${1:-}" != --au-repos ]; then
+    exec ionice -c 3 nice -n 19 "$0" --au-repos
+fi
+
+sleep 25
+
+ko=$(sed -n 's/^MemTotal: *\([0-9]*\) kB/\1/p' /proc/meminfo 2>/dev/null)
+ko=${ko:-0}
+[ "$ko" -ge 3000000 ] || exit 0
+
+lire() {
+    for f in "$@"; do
+        [ -f "$f" ] && [ -r "$f" ] && cat "$f" > /dev/null 2>&1
+    done
+}
+
+L=/usr/lib/x86_64-linux-gnu
+debut=$(cut -d' ' -f1 /proc/uptime)
+
+# Nos fenêtres (grenos-ui) : le moteur web et ce qu'il charge.
+lire /usr/bin/grenos-ui \
+     "$L"/libwebkit2gtk-4.1.so.0* "$L"/libjavascriptcoregtk-4.1.so.0* \
+     "$L"/webkit2gtk-4.1/WebKitWebProcess "$L"/webkit2gtk-4.1/WebKitNetworkProcess \
+     "$L"/webkit2gtk-4.1/injected-bundle/*.so \
+     "$L"/libicudata.so.* "$L"/libgtk-3.so.0* "$L"/libgstreamer-1.0.so.0*
+
+if [ "$ko" -ge 6000000 ]; then
+    # Firefox, le plus lourd à ouvrir.
+    lire /usr/lib/firefox-esr/libxul.so /usr/lib/firefox-esr/omni.ja \
+         /usr/lib/firefox-esr/browser/omni.ja /usr/lib/firefox-esr/firefox-esr \
+         /usr/lib/firefox-esr/*.so
+    # L'explorateur, le terminal et le rendu 3D (Mesa) qu'ouvrent les jeux.
+    lire "$L"/libgallium-*.so "$L"/libvulkan_*.so /usr/bin/xfce4-terminal
+fi
+
+fin=$(cut -d' ' -f1 /proc/uptime)
+grenos-dire "prechauffage : bibliotheques des applications en memoire (de ${debut%.*} s a ${fin%.*} s)"
+exit 0

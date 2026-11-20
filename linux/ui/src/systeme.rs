@@ -193,6 +193,9 @@ pub mod instance {
                 let mut page = String::new();
                 if prise.read_to_string(&mut page).is_ok() {
                     let page = page.trim().to_string();
+                    if page.is_empty() {
+                        continue;
+                    }
                     let poignee = app.clone();
                     let _ = app.run_on_main_thread(move || {
                         let _ = crate::ouvrir(&poignee, &page);

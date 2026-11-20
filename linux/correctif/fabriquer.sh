@@ -39,6 +39,22 @@ while read -r genre a b; do
             mkdir -p "$ARBRE/$(dirname "$a")"
             ln -sfn "$b" "$ARBRE/$a"
             ;;
+        paquet)
+            # Un fichier d'un paquet Debian trixie qui manque à l'image
+            # publiée : le même que la construction suivante installera.
+            CACHE="${CACHE_PAQUETS:-$ARBRE.paquets}"
+            mkdir -p "$CACHE"
+            if ! ls "$CACHE/${a}_"*.deb >/dev/null 2>&1; then
+                docker run --rm -v "$CACHE:/sortie" debian:trixie sh -c \
+                    "apt-get update -qq >/dev/null && cd /sortie && apt-get download -q $a >/dev/null && chmod a+r /sortie/*.deb" < /dev/null
+            fi
+            deb=$(ls "$CACHE/${a}_"*.deb | head -1)
+            rm -rf "$CACHE/x"
+            dpkg-deb -x "$deb" "$CACHE/x"
+            [ -e "$CACHE/x/$b" ] || { echo "correctif : $b absent de $(basename "$deb")"; exit 1; }
+            install -D -m 0644 "$CACHE/x/$b" "$ARBRE/$b"
+            echo "correctif : $b pris dans $(basename "$deb")"
+            ;;
         *)
             echo "correctif : ligne inconnue « $genre $a $b »"
             exit 1

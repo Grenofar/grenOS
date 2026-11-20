@@ -3,23 +3,28 @@
 #
 # 20 novembre, RTX 5060 de Grenofar, version 20261120-2059 : `nouveau` n'est
 # plus chargé sur les RTX 50 (écran vert), donc l'écran reste sur l'image que
-# le firmware a laissée (efidrm / simpledrm). Le chargement s'affiche, puis :
-# « écran tout noir, pas déconnecté ». La CI ne pouvait pas le voir : dans
-# QEMU, la carte a toujours son pilote (bochs).
+# le firmware a laissée. Le chargement s'affiche, puis : « écran tout noir,
+# pas déconnecté ». La CI ne pouvait pas le voir : dans QEMU, la carte a
+# toujours son pilote (bochs).
 #
-# Lu dans Xorg 21.1.16 (xf86platformBus.c, xf86Bus.c) : sans configuration, X
-# prend pour « principale » la carte PCI du démarrage — la NVIDIA, qui n'a
-# aucun pilote. L'image du firmware n'est acceptée d'office que si son pilote
-# s'appelle exactement « simpledrm » ; sous un autre nom (efidrm, vesadrm du
-# noyau 6.16+), modesetting la prend par l'ancien chemin (« framebuffer »)
-# pendant que `vesa`, qui n'ignore une carte que si elle A un pilote, prend la
-# NVIDIA — et X s'arrête net : « Cannot run in framebuffer mode ».
+# PROUVÉ le même soir par cle.yml (run 44823344458, carte PCI sans pilote,
+# UEFI Secure Boot, rapport relu sur la clé) : le noyau 7.3.4 de backports
+# n'a AUCUN pilote DRM pour l'image du firmware (ni simpledrm ni efidrm,
+# seulement efifb : CONFIG_FB_EFI=y), donc aucun /dev/dri/card0 ; et le
+# pilote X `fbdev`, le seul qui sache peindre sur /dev/fb0, n'était pas dans
+# l'image. Xorg : « Failed to load module "fbdev" », « open /dev/dri/card0:
+# No such file or directory », « vesa: Refusing to run, Framebuffer
+# present », « no screens found ». Plymouth, lui, sait peindre sur efifb :
+# d'où le chargement, puis le noir.
 #
-# On ne laisse donc pas X deviner : quand TOUTES les cartes du noyau sont des
-# images du firmware, on lui dit d'utiliser modesetting sur celle-ci, et rien
-# d'autre. Le fichier est refait à chaque démarrage, et effacé dès qu'un vrai
-# pilote est là (amdgpu, i915, nouveau, nvidia…) : une machine dont la carte
-# reçoit son pilote retrouve tout de suite l'affichage complet.
+# On ne laisse donc pas X deviner. Deux cas, refaits à CHAQUE démarrage, et
+# le fichier est effacé dès qu'un vrai pilote est là (amdgpu, i915, nouveau,
+# nvidia…), pour qu'une carte qui reçoit son pilote retrouve tout de suite
+# l'affichage complet :
+#   - aucun périphérique DRM, seulement /dev/fb0 : X prend `fbdev` dessus ;
+#   - seulement des images du firmware en DRM (simpledrm, efidrm, vesadrm,
+#     selon le noyau) : X prend modesetting sur celle-ci — Xorg 21.1.16
+#     n'accepte d'office que le nom « simpledrm ».
 #
 # `grenos.firmware-x=0` sur la ligne du noyau le désactive (essais en CI).
 
@@ -77,10 +82,28 @@ EndSection
 EOF
     mv -f "$CONF.tmp" "$CONF"
     dire "affichage : aucune carte n a de pilote, X prend l image du firmware ($nom_firmware sur $firmware)"
+elif [ -z "$reel" ] && [ -z "$firmware" ] && [ -c /dev/fb0 ] \
+        && [ -f /usr/lib/xorg/modules/drivers/fbdev_drv.so ]; then
+    nom_fb=$(cat /sys/class/graphics/fb0/name 2>/dev/null)
+    mkdir -p "$(dirname "$CONF")"
+    cat > "$CONF.tmp" <<EOF
+# Écrit à chaque démarrage par /usr/lib/grenos/grenos-affichage-firmware :
+# aucune carte n'a de pilote et le noyau n'offre que /dev/fb0 (${nom_fb:-?}).
+# Effacé tout seul dès qu'un vrai pilote est là.
+Section "Device"
+    Identifier "grenOS : image du firmware"
+    Driver "fbdev"
+    Option "fbdev" "/dev/fb0"
+EndSection
+EOF
+    mv -f "$CONF.tmp" "$CONF"
+    dire "affichage : aucune carte n a de pilote, X peint sur /dev/fb0 (${nom_fb:-?}) par fbdev"
 else
     rm -f "$CONF"
     if [ -n "$reel" ]; then
         dire "affichage : pilote de carte present ($reel), X choisit seul"
+    elif [ -c /dev/fb0 ]; then
+        dire "affichage : seulement /dev/fb0 et pas de pilote X fbdev — l ecran restera noir"
     else
         dire "affichage : aucun peripherique d affichage du noyau"
     fi
