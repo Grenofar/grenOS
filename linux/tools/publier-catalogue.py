@@ -221,12 +221,22 @@ def paquet_chez_l_editeur(paquet):
     """Le dépôt d'éditeur de ce paquet le publie-t-il ? True, False, ou None (muet)."""
     with open(os.path.join(DEPOTS, paquet + ".list"), encoding="utf-8") as f:
         ligne = f.read().split("]", 1)[-1].split()
-    adresse, suite, composant = ligne[0].rstrip("/"), ligne[1], ligne[2]
-    index = f"{adresse}/dists/{suite}/{composant}/binary-amd64/Packages"
+    adresse, suite = ligne[0].rstrip("/"), ligne[1]
+    if suite.endswith("/"):
+        # Un dépôt « plat » (`deb URL /`, celui de NVIDIA, 20 novembre) : pas
+        # de dists/ ni de composant, l'index est à côté. La première version
+        # de cette fonction l'ignorait et a planté la construction
+        # (run 44736878111).
+        index = f"{adresse}/{suite.strip('/')}/Packages.gz".replace("//Packages", "/Packages")
+    else:
+        index = f"{adresse}/dists/{suite}/{ligne[2]}/binary-amd64/Packages"
     for essai in range(3):
         try:
             with urllib.request.urlopen(index, timeout=60) as reponse:
-                texte = reponse.read().decode("utf-8", "replace")
+                brut = reponse.read()
+            if index.endswith(".gz"):
+                brut = gzip.decompress(brut)
+            texte = brut.decode("utf-8", "replace")
             return re.search(r"^Package: %s$" % re.escape(paquet), texte, re.M) is not None
         except (urllib.error.URLError, OSError, TimeoutError) as souci:
             print(f"  {index} : {souci} (essai {essai + 1}/3)")
