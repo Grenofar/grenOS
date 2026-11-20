@@ -90,6 +90,23 @@ jobs:
           echo "pilotes X livres : $(ls "$RUNNER_TEMP/sq/usr/lib/xorg/modules/drivers" 2>/dev/null | tr '\n' ' ')"
           rm -rf "$RUNNER_TEMP/fs.sq" "$RUNNER_TEMP/sq"
 
+      - name: Ce qui pese dans l'initrd (lu par le firmware avant l'ecran de chargement)
+        if: matrix.nom == 'normal'
+        run: |
+          sudo apt-get install -y -qq initramfs-tools-core zstd >/dev/null 2>&1 || true
+          ISO=$(ls "$RUNNER_TEMP"/iso/*.iso | head -1)
+          xorriso -osirrox on -indev "$ISO" -extract /live/initrd.img "$RUNNER_TEMP/initrd.img" >/dev/null 2>&1
+          ls -la "$RUNNER_TEMP/initrd.img"
+          mkdir -p "$RUNNER_TEMP/initrd"
+          unmkinitramfs "$RUNNER_TEMP/initrd.img" "$RUNNER_TEMP/initrd" || true
+          cd "$RUNNER_TEMP/initrd"
+          echo "== total par partie"; du -sh ./* 2>/dev/null
+          M=$(find . -type d -path '*/lib/modules/*/kernel' | head -1)
+          echo "== modules ($M)"; du -s "$M"/*/ "$M"/drivers/*/ "$M"/drivers/net/*/ 2>/dev/null | sort -rn | head -25
+          F=$(find . -type d -path '*/lib/firmware' | head -1)
+          echo "== firmware ($F)"; du -s "$F"/*/ "$F"/* 2>/dev/null | sort -rn | head -25
+          rm -rf "$RUNNER_TEMP/initrd" "$RUNNER_TEMP/initrd.img"
+
       - name: La cle FAT32 (${{ matrix.nom }})
         env:
           PLUS: ${{ matrix.plus }}

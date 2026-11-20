@@ -348,10 +348,15 @@ pub fn secure_boot(racine: &str) -> &'static str {
     "inconnu"
 }
 
+// La phrase disait encore « grenOS n'est pas encore signé : il faut le
+// désactiver » le 20 novembre, alors que la CI venait de démarrer l'image
+// Secure Boot ACTIF (shim signé Microsoft, GRUB et noyau signés Debian) — et
+// que Grenofar refuse de le couper. Une phrase fausse à l'écran est une
+// promesse sans rien derrière : elle dit maintenant ce qui est.
 pub fn mot_sur_secure_boot(etat: &str) -> &'static str {
     match etat {
-        "actif" => "Secure Boot est actif. grenOS n'est pas encore signé : il faut le désactiver dans le BIOS pour démarrer cette machine sur grenOS.",
-        "inactif" => "Secure Boot est désactivé, ce qu'il faut aujourd'hui pour démarrer grenOS. Le noyau signé est en chantier.",
+        "actif" => "Secure Boot est actif, et grenOS démarre avec : chaque étape du démarrage est signée et vérifiée. Rien à changer dans le BIOS.",
+        "inactif" => "Secure Boot est désactivé. grenOS démarre aussi bien avec : tu peux l'activer dans le BIOS quand tu veux, rien ne cassera.",
         "pas en UEFI" => "Cette machine a démarré sans UEFI, donc Secure Boot ne s'applique pas.",
         _ => "L'état de Secure Boot n'a pas pu être lu sur cette machine.",
     }

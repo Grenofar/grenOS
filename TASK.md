@@ -1,7 +1,44 @@
 # TASK.md — ce qui est planifié, dans l'ordre
 
-> Tenu par Claude. Mis à jour le 2026-11-17 au soir. Une session qui reprend
-> le travail lit d'abord ce fichier, puis `CLAUDE.md` (local).
+> Tenu par Claude. Mis à jour le 2026-11-20 au soir. Une session qui reprend
+> le travail lit d'abord ce fichier, puis `CLAUDE.md` (local, RÈGLE N°1 :
+> plug and play pour un non-développeur).
+
+## 00. EN COURS — 20 novembre au soir : « termine l'OS, une bêta, pas une pré-alpha »
+
+Grenofar teste sur SON PC (RTX 5060, Secure Boot actif, clé USB FAT32 G:).
+Version publiée : `linux-20261120-2059`. Ce qu'il a vu et où on en est :
+
+1. **Écran noir après le chargement (2059)** — CAUSE PROUVÉE (cle.yml, run
+   44823344458) : noyau 7.3.4 sans pilote DRM pour l'image du firmware
+   (CONFIG_FB_EFI=y seulement), et `xserver-xorg-video-fbdev` absent →
+   « no screens found ». Corrigé (paquet + `grenos-affichage-firmware`) et
+   VU dans QEMU : l'assistant s'affiche sur la carte sans pilote.
+2. **Écran vert** — vu AUSSI dans QEMU sur l'image du firmware : GRUB
+   (`gfxmode=auto` + gfxterm) change le mode, le noyau peint en 1280×800 et
+   l'écran affiche 800×600 → rayures vertes. Essai d'un config.cfg qui ne
+   touche plus au mode (linux/correctif/cle/boot/grub/config.cfg) en cours.
+   Sur `nouveau`, le vert est apparu avec Mesa 26.1 (glamor) : X tourne
+   désormais sans glamor sur nouveau, jamais vu sur sa machine.
+3. **RTX 50 : nouveau réessayé sous un filet** (grenos-affichage-garde) :
+   premier écran de l'assistant non passé en 180 s, ou coupure au bouton
+   → image du firmware et redémarrage tout seul. Choix gardé sur la clé.
+4. **Rapport de démarrage écrit sur la clé** (grenos-rapports/) : le lire
+   dès qu'il rebranche la clé sur Windows (G:\grenos-rapports).
+5. **Correctif de clé** (linux/correctif, cle.yml) : une couche squashfs que
+   live-boot empile ; se copie sur la clé en G:\live\grenos-correctif.squashfs
+   sans regraver. Calamares la recopie aussi (unpackfs.conf du correctif).
+6. Applications plus rapides : `grenos-ui --resident` + `grenos-prechauffer`
+   [écrit] — dans la prochaine construction complète seulement.
+7. MokManager retiré du parcours normal (écran Pilotes : Dev ou sans
+   Secure Boot seulement) ; la phrase fausse « il faut désactiver le Secure
+   Boot » corrigée dans les deux assistants.
+
+RESTE (dans l'ordre) : construction complète sur `main` avec tout ce qui
+précède ; 300 Hz choisi tout seul (avec « Garder ? » 15 s) ; GRUB du système
+INSTALLÉ (menu caché, entrée Windows par os-prober, pas de gfxterm) ;
+initrd plus léger (mesuré par cle.yml) ; Réglages › Écran : dire quel
+affichage tourne et « réessayer l'affichage complet ».
 
 ## 0. En cours — le 18 novembre au soir (« termine tout, dans cet ordre »)
 

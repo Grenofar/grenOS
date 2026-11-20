@@ -24,7 +24,7 @@
   window.APERCU = async function (commande, a) {
     switch (commande) {
       case "premier_infos": return { donnees: DONNEES, machine: "grenos", virtuelle: "", secure_boot: "actif", pilote_nvidia: true,
-        secure_boot_phrase: "Secure Boot est désactivé, ce qu'il faut aujourd'hui pour démarrer grenOS.",
+        secure_boot_phrase: "Secure Boot est désactivé. grenOS démarre aussi bien avec : tu peux l'activer dans le BIOS quand tu veux, rien ne cassera.",
         materiel: [
           { icone: "cpu", nom: "Processeur", valeur: "8 cœur(s)", detail: "AMD Ryzen 7 5800X" },
           { icone: "ram", nom: "Mémoire", valeur: "15,6 Go", detail: "" },

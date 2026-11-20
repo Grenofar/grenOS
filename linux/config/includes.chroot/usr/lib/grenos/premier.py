@@ -165,19 +165,20 @@ def secure_boot(racine="/sys/firmware/efi/efivars"):
 def mot_sur_secure_boot(etat):
     """Ce qu'on en dit à quelqu'un qui installe grenOS pour la première fois.
 
-    AUCUNE DE CES PHRASES NE PROMET SECURE BOOT. grenOS livre
-    `grub-efi-amd64-bin` sans `shim-signed` ni `grub-efi-amd64-signed` : un
-    micrologiciel qui vérifie les signatures refuse donc de démarrer cette
-    image. C'est la case D8 de la liste, et elle est à faire. Le dire en face
-    vaut mieux que le laisser découvrir devant un écran noir.
+    Le 20 novembre, la CI a démarré l'image Secure Boot ACTIF (shim signé
+    Microsoft, GRUB et noyau signés Debian), et `shim-signed` et
+    `grub-efi-amd64-signed` sont dans l'image pour le système installé.
+    L'ancienne phrase (« il faut le désactiver ») était devenue fausse — et
+    Grenofar refuse de le couper. Même texte que premier.rs.
     """
     if etat == "actif":
-        return ("Secure Boot est actif. grenOS n'est pas encore signé : "
-                "il faut le désactiver dans le BIOS pour démarrer cette "
-                "machine sur grenOS.")
+        return ("Secure Boot est actif, et grenOS démarre avec : chaque "
+                "étape du démarrage est signée et vérifiée. Rien à changer "
+                "dans le BIOS.")
     if etat == "inactif":
-        return ("Secure Boot est désactivé, ce qu'il faut aujourd'hui pour "
-                "démarrer grenOS. Le noyau signé est en chantier.")
+        return ("Secure Boot est désactivé. grenOS démarre aussi bien avec : "
+                "tu peux l'activer dans le BIOS quand tu veux, rien ne "
+                "cassera.")
     if etat == "pas en UEFI":
         return ("Cette machine a démarré sans UEFI, donc Secure Boot ne "
                 "s'applique pas.")

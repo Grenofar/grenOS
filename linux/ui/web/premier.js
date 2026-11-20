@@ -47,8 +47,13 @@
     return infos.donnees.ecrans
       .filter((e) => e.parcours.includes(p) && CONSTRUITS.includes(e.cle))
       // « Pilotes » : seulement sur grenOS installé, avec une carte NVIDIA
-      // sans le pilote officiel (premier.rs le décide).
-      .filter((e) => e.cle !== "pilotes" || infos.pilote_nvidia)
+      // sans le pilote officiel (premier.rs le décide). Et PAS de MokManager
+      // hors du parcours Dev (Grenofar, 20 novembre : « pas de réglage
+      // MokManager ») : avec le Secure Boot actif, le pilote NVIDIA exige un
+      // code à taper sur un écran bleu au redémarrage. Ailleurs, la carte
+      // garde le pilote libre, qui s'installe tout seul.
+      .filter((e) => e.cle !== "pilotes" || (infos.pilote_nvidia
+        && (infos.secure_boot !== "actif" || p === "dev")))
       .map((e) => e.cle);
   }
   const titreDe = (c) => (infos.donnees.ecrans.find((e) => e.cle === c) || {}).titre || "";
@@ -206,7 +211,11 @@
   }
 
   // ---------------------------------------------------------------- écrans
-  const SALUTS = ["Welcome", "Bienvenue", "Bienvenido", "Willkommen", "Benvenuto", "Bem-vindo", "مرحبا", "Welkom", "ようこそ", "Witaj"];
+  // Seulement des écritures que les polices de l'image savent dessiner
+  // (DejaVu couvre l'arabe). « ようこそ » s'affichait en quatre carrés « ? »
+  // sur la capture du 20 novembre : aucune police japonaise n'est livrée, et
+  // en livrer une pour un mot coûterait 60 Mo à l'image.
+  const SALUTS = ["Welcome", "Bienvenue", "Bienvenido", "Willkommen", "Benvenuto", "Bem-vindo", "مرحبا", "Welkom", "Välkommen", "Witaj"];
   ecrans.bienvenue = () => {
     // La seule page en anglais : quelqu'un qui ne lit pas le français doit
     // pouvoir atteindre l'écran où l'on choisit la langue.
@@ -521,9 +530,11 @@
       },
     }, svg("eclair"), "Installer le pilote NVIDIA (recommandé)");
     return [entete("Matériel", "Le pilote de ta carte graphique",
-      `${carte} tourne pour l'instant avec le pilote libre, qui la gère mal : une seule image, 60 Hz, pas de jeux exigeants. Le pilote officiel de NVIDIA la gère entièrement — fréquence de ton écran, plusieurs écrans, jeux.`),
+      `${carte} tourne avec le pilote libre. Le pilote officiel de NVIDIA la gère entièrement : la fréquence de ton écran, plusieurs écrans, et les jeux exigeants (3D complète, DLSS).`),
       el("div.carte.verre.ligne-option", el("div", el("b", "Pilote officiel NVIDIA"),
-        el("small.note", " — depuis le dépôt de NVIDIA. Avec le Secure Boot, un écran bleu demandera au redémarrage un code, donné à la fin de l'installation.")), bouton),
+        el("small.note", infos.secure_boot === "actif"
+          ? " — depuis le dépôt de NVIDIA. Secure Boot actif (parcours Dev) : au redémarrage, un écran bleu (MokManager) demandera le code donné à la fin de l'installation."
+          : " — depuis le dépôt de NVIDIA. Rien d'autre à faire : il prend effet au redémarrage.")), bouton),
       dire,
       el("p.note", "Tu peux aussi passer : il reste dans Jeux › Installer le pilote NVIDIA.")];
   };

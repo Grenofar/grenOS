@@ -154,10 +154,21 @@ instantane() { # moment
     } > "$R" 2>&1
 
     # ---- 10 : le temps de démarrage ---------------------------------------
+    # Tant que l'assistant est ouvert, systemd dit « démarrage pas fini » :
+    # on lit donc les JALONS dans le journal (secondes depuis le noyau). Et
+    # la page de l'arrêt ne remplace pas celle du démarrage.
     D="$T/10-demarrage.txt"
-    borne 15 "$D" systemd-analyze
-    borne 15 "$D" systemd-analyze critical-chain
-    borne 15 "$D" sh -c 'systemd-analyze blame | head -70'
+    if [ "$moment" != arret ] || [ ! -s "$CLE/$DOSSIER/$NOM/10-demarrage.txt" ]; then
+        {
+            echo "== jalons (secondes depuis le démarrage du noyau) =="
+            timeout 20 journalctl -b --no-pager -o short-monotonic 2>/dev/null | grep -E \
+                'Run /init as init process|live-boot|Mounted .*medium|Switching root|systemd 2[0-9][0-9] running|efifb: mode|nouveau .*(DRM|fb0|firmware)|plymouth|Started grenos-premier|X.Org X Server|premier : interface grenos-ui affichee|premier : ecran bienvenue|Started lightdm|session : |Reached target (multi-user|graphical)' \
+                | sed 's/^\[ *\([0-9.]*\)\] [^ ]* /\1 s  /' | cut -c1-170 | head -60
+            echo
+        } > "$D" 2>/dev/null
+        borne 15 "$D" systemd-analyze
+        borne 15 "$D" sh -c 'systemd-analyze blame | head -60'
+    fi
 
     # ---- 20, 30 : le journal et le noyau ----------------------------------
     timeout 30 journalctl -b --no-pager -o short-monotonic 2>/dev/null | tail -n 40000 > "$T/20-journal.txt" 2>/dev/null
@@ -221,7 +232,9 @@ ecrire_sur_la_cle() { # dossier
             timeout 15 mount -o remount,rw "$CLE" 2>/dev/null || exit 0
         fi
         mkdir -p "$CLE/$DOSSIER/$NOM" 2>/dev/null
-        cp -f "$src"/*.txt "$CLE/$DOSSIER/$NOM/" 2>/dev/null
+        for f in "$src"/*.txt; do
+            [ -s "$f" ] && cp -f "$f" "$CLE/$DOSSIER/$NOM/" 2>/dev/null
+        done
         if [ ! -e "$CLE/$DOSSIER/LISEZMOI.txt" ]; then
             printf '%s\r\n' \
                 "Ces dossiers sont écrits par grenOS quand il démarre depuis cette clé." \

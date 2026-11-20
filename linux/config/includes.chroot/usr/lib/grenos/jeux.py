@@ -153,13 +153,17 @@ def pilote_propose():
         # Le pilote OFFICIEL de NVIDIA, depuis son dépôt (20 novembre) : celui
         # de Debian (550) ne connaît pas les RTX 50, et le bouton installait
         # donc un pilote qui ne servait à rien sur la carte de Grenofar.
+        # Le Secure Boot actif est DIT avant le clic (20 novembre, « pas de
+        # réglage MokManager ») : le pilote reste possible, mais personne ne
+        # découvre un écran bleu au redémarrage sans l'avoir choisi.
         return ("nvidia-driver",
-                "Cette carte est une NVIDIA, et le pilote libre en cours la fait mal "
-                "tourner (curseur lent, pas de jeux exigeants). Le pilote officiel de "
-                "NVIDIA, pris dans son dépôt, la gère entièrement, RTX 50 comprises. "
-                "Il s'installe sur grenOS installé sur le disque et demande de "
-                "redémarrer après ; avec le Secure Boot, un écran bleu demandera un "
-                "code, donné à la fin de l'installation.")
+                "Le pilote libre fait marcher le bureau. Pour les jeux exigeants, le "
+                "pilote officiel de NVIDIA, pris dans son dépôt, gère la carte "
+                "entièrement, RTX 50 comprises. Il s'installe sur grenOS installé sur "
+                "le disque et demande de redémarrer. Avec le Secure Boot actif, il "
+                "faudra aussi, une seule fois, taper un code sur un écran bleu "
+                "(MokManager) au redémarrage — c'est la règle du Secure Boot pour un "
+                "pilote qui ne vient pas de Debian.")
     if "amd" in minuscules or "radeon" in minuscules:
         return ("", "Le pilote libre d'AMD fait tourner les jeux sans rien installer.")
     if "intel" in minuscules:
