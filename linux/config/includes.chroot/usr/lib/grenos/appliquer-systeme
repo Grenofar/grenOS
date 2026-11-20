@@ -206,6 +206,14 @@ if [ -f /usr/share/grenos/mount.conf ]; then
     cp /usr/share/grenos/mount.conf /etc/calamares/modules/mount.conf || true
 fi
 
+# Et le compte : aucune règle de force du mot de passe (20 novembre — le
+# dictionnaire de libpwquality manquait, et Grenofar veut la longueur qu'il
+# veut ; voir le fichier).
+if [ -f /usr/share/grenos/users.conf ]; then
+    mkdir -p /etc/calamares/modules
+    cp /usr/share/grenos/users.conf /etc/calamares/modules/users.conf || true
+fi
+
 # ---- Les réglages que nous posons chez les autres ---------------------------
 #
 # Ces fichiers appartiennent à openbox, à l'explorateur, à la bibliothèque de

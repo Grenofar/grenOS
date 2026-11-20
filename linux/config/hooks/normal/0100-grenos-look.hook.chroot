@@ -290,6 +290,12 @@ grep -q '^initialPartitioningChoice: none' /etc/calamares/modules/partition.conf
     manque="$manque rien-de-prechoisi"
 grep -q '^allowManualPartitioning: true' /etc/calamares/modules/partition.conf 2>/dev/null || \
     manque="$manque choix-manuel"
+# Le mot de passe du compte (20 novembre) : sans libpwquality, dont le
+# dictionnaire manque et qui refusait des mots de passe courts.
+if grep -q 'libpwquality' /etc/calamares/modules/users.conf 2>/dev/null || \
+   ! grep -q '^allowWeakPasswords: true' /etc/calamares/modules/users.conf 2>/dev/null; then
+    manque="$manque mot-de-passe-libre"
+fi
 if [ -n "$manque" ]; then
     echo "grenos: l'installateur est incomplet :$manque" >&2
     exit 1
