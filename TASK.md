@@ -61,8 +61,26 @@ sur sa RTX 5060). Restaient, et où ça en est :
   annulée par un push qui touchait linux/ — voir la mémoire
   « pousser-main-plage »).
 
+### 21 novembre, 1 h — LU dans le rapport de sa clé (20261121-002001)
+Sa machine : Gigabyte B760M G P WIFI DDR4, i5-14400F, 16 Go, RTX 5060
+(nouveau OK, 2 écrans DP 1920×1080, écran principal « SKG 2509 »/H25Y7),
+casque USB « OW810 » (3206:0861, sans nom de produit), adaptateur Xbox
+(pris pour une carte Wi-Fi par mt76x2u), Bluetooth Realtek 8851BU (marche),
+carte mère ALC897 (marche).
+- L'assistant ne s'affichait JAMAIS sous nouveau : « drmSetMaster failed »
+  (plymouth tenait la carte) → `plymouth deactivate` dans grenos-premier-x.
+- Le filet a REDÉMARRÉ sa session qui marchait (il n'attendait que
+  l'assistant) → un bureau ouvert vaut confirmation, plus jamais de
+  redémarrage sous les yeux. Le choix de sa clé remis à « nouveau ».
+- Casque introuvable = nom illisible → règle WirePlumber « Casque OW810 ».
+  Le son de l'écran H25Y7 (DP) : À VÉRIFIER dans 70-son.txt.
+- Erreurs PCIe « corrigibles » en rafale sur le lien de la RTX (356 en
+  210 s) : elles ont noyé le début de dmesg. Piste : ASPM du lien de la
+  carte (udev, par carte) — pas encore fait, à mesurer d'abord.
+
 RESTE : GRUB du système INSTALLÉ vérifié en vrai (entrée Windows) ;
-installation Secure Boot menée au bout (jamais prouvée) ; le son.
+installation Secure Boot menée au bout (jamais prouvée) ; le son de l'écran ;
+les erreurs PCIe.
 
 ## 0. En cours — le 18 novembre au soir (« termine tout, dans cet ordre »)
 
