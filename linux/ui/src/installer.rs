@@ -39,6 +39,17 @@ pub fn depot_editeur(identifiant: &str) -> bool {
     identifiant_sain(identifiant) && std::path::Path::new(&format!("/usr/share/grenos/depots/{identifiant}.list")).is_file()
 }
 
+/// Les paquets à installer avec celui-ci (usr/share/grenos/depots/<id>.avec),
+/// chacun passé à la même règle de nom que l'identifiant.
+pub fn paquets_avec(identifiant: &str) -> Vec<String> {
+    if !identifiant_sain(identifiant) {
+        return Vec::new();
+    }
+    std::fs::read_to_string(format!("/usr/share/grenos/depots/{identifiant}.avec"))
+        .map(|t| t.split_whitespace().filter(|p| identifiant_sain(p)).map(String::from).collect())
+        .unwrap_or_default()
+}
+
 /// Le premier « NN% » d'une ligne.
 pub(crate) fn pour_cent(texte: &str) -> Option<u32> {
     let i = texte.find('%')?;
@@ -150,6 +161,9 @@ pub fn installer(app: tauri::AppHandle, cle: String, nom: String, source: String
             // (voir grenos-depot-editeur), et ses paquets recommandés viennent
             // avec — pour Claude, le trousseau sans lequel on ne se connecte pas.
             let editeur = depot_editeur(&identifiant);
+            // Ce qui s'installe AVEC (pilote NVIDIA, 20 novembre : les en-têtes
+            // du noyau, sans lesquels son module ne se compile pas).
+            let avec_lui = paquets_avec(&identifiant);
             if editeur && !courir(programme, &avec(&debut, &["/usr/lib/grenos/grenos-depot-editeur", &identifiant]), &mut suivre) {
                 false
             } else {
@@ -161,8 +175,16 @@ pub fn installer(app: tauri::AppHandle, cle: String, nom: String, source: String
                 if editeur {
                     commande.push("--install-recommends");
                 }
+                commande.extend(avec_lui.iter().map(String::as_str));
                 commande.push(&identifiant);
-                courir(programme, &avec(&debut, &commande), &mut suivre)
+                let pose = courir(programme, &avec(&debut, &commande), &mut suivre);
+                // Un pilote : son module est-il compilé pour CE noyau ? Sinon
+                // le script revient au pilote libre, et c'est un échec dit.
+                if pose && editeur {
+                    courir(programme, &avec(&debut, &["/usr/lib/grenos/grenos-depot-editeur", "--apres", &identifiant]), &mut suivre)
+                } else {
+                    pose
+                }
             }
         };
         let texte = match (bien, mise_a_jour) {

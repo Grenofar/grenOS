@@ -317,6 +317,19 @@ compositeur_raison() {
         esac
     done
     [ -n "$reconnue" ] || { echo "pas de carte graphique reconnue"; return; }
+    # PAS DE COMPOSITEUR SUR `nouveau` (20 novembre). Sur la RTX 5060 de
+    # Grenofar, avec Mesa 25 (llvmpipe) le curseur tournait « à 10 Hz », avec
+    # Mesa 26 (zink sur NVK) « à 3 fps » : le rendu 3D de nouveau sur les
+    # cartes récentes est encore trop jeune pour qu'un compositeur redessine
+    # l'écran à chaque mouvement. Sans picom, le curseur est un plan matériel
+    # que rien ne retient. Le pilote officiel (Jeux › pilote NVIDIA) rallume
+    # picom, son rendu étant fait pour ça.
+    for pilote in /sys/class/drm/card*/device/driver; do
+        if [ "$(basename "$(readlink -f "$pilote" 2>/dev/null)")" = nouveau ]; then
+            echo "pilote libre nouveau (le compositeur ralentirait l'ecran)"
+            return
+        fi
+    done
     # Un pilote reconnu ne suffit pas (20 novembre) : la RTX 5060 de Grenofar
     # avait `nouveau`, mais OpenGL tournait sur llvmpipe — picom redessinait
     # alors l'écran AU PROCESSEUR et la souris semblait à « 10 Hz ». On

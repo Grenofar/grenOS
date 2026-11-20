@@ -150,9 +150,15 @@ def pilote_propose():
     carte, pilote = materiel.graphique()
     minuscules = (carte + " " + pilote).lower()
     if "nvidia" in minuscules and "nvidia" not in pilote.lower():
+        # Le pilote OFFICIEL de NVIDIA, depuis son dépôt (20 novembre) : celui
+        # de Debian (550) ne connaît pas les RTX 50, et le bouton installait
+        # donc un pilote qui ne servait à rien sur la carte de Grenofar.
         return ("nvidia-driver",
-                "Cette carte est une NVIDIA, et le pilote libre en cours ne sait pas "
-                "jouer. Le pilote de NVIDIA le sait. Il faut redémarrer après.")
+                "Cette carte est une NVIDIA, et le pilote libre en cours la fait mal "
+                "tourner (curseur lent, pas de jeux exigeants). Le pilote officiel de "
+                "NVIDIA, pris dans son dépôt, la gère entièrement, RTX 50 comprises. "
+                "Il s'installe sur grenOS installé sur le disque, Secure Boot coupé, "
+                "et demande de redémarrer après.")
     if "amd" in minuscules or "radeon" in minuscules:
         return ("", "Le pilote libre d'AMD fait tourner les jeux sans rien installer.")
     if "intel" in minuscules:

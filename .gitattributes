@@ -16,3 +16,6 @@ linux/**/*.wav binary
 linux/**/*.ttf binary
 linux/**/*.otf binary
 linux/**/*.woff2 binary
+# Les cles de depot au format binaire (NVIDIA, 20 novembre) : une conversion
+# de fins de ligne en changerait les octets, et apt refuserait le depot.
+linux/**/*.gpg binary

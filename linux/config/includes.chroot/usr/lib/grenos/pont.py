@@ -204,9 +204,17 @@ def jeux_vue():
 
 
 def jeux_paquet_nvidia():
-    """Le paquet exact que Debian conseille pour cette carte (nvidia-detect)."""
+    """Le paquet exact que Debian conseille pour cette carte (nvidia-detect).
+
+    Le dépôt de NVIDIA branché par grenOS (20 novembre) passe d'abord : son
+    `nvidia-driver` gère toutes les cartes, RTX 50 comprises, quand celui de
+    Debian (550) s'arrête avant.
+    """
+    import os
     import re
     import subprocess
+    if os.path.isfile("/usr/share/grenos/depots/nvidia-driver.list"):
+        return {"paquet": "nvidia-driver"}
     try:
         sortie = subprocess.run(["nvidia-detect"], capture_output=True, text=True, timeout=30).stdout
     except (OSError, subprocess.SubprocessError):

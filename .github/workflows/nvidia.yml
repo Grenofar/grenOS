@@ -1,0 +1,31 @@
+# Le pilote NVIDIA officiel se compile-t-il pour le noyau de grenOS ?
+# (linux/tools/essai-pilote-nvidia.sh, 20 novembre)
+#
+# À part de linux.yml, exprès : il ne doit ni attendre l'image ni annuler sa
+# construction. Et chaque semaine : un noyau neuf de backports ou un pilote
+# neuf de NVIDIA peuvent casser la compilation sans qu'on ait rien changé.
+name: Pilote NVIDIA
+
+on:
+  push:
+    branches: ["claude/**", "natif/**", "nvidia/**"]
+    paths:
+      - "linux/config/includes.chroot/usr/share/grenos/depots/nvidia-*"
+      - "linux/config/archives/**"
+      - "linux/tools/essai-pilote-nvidia.sh"
+      - ".github/workflows/nvidia.yml"
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+jobs:
+  compiler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Le module NVIDIA se compile pour le noyau de grenOS
+        run: |
+          set -o pipefail
+          docker run --rm -v "$PWD:/work" -w /work debian:trixie \
+            sh /work/linux/tools/essai-pilote-nvidia.sh

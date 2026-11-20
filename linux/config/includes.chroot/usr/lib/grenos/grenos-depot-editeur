@@ -4,24 +4,38 @@
 # Demandé le 20 novembre : « ajoute Claude Desktop à GrenPlace ». Anthropic
 # publie Claude Desktop pour Linux dans SON dépôt apt (downloads.claude.ai),
 # pas dans Debian ni sur Flathub — lu dans sa documentation
-# (code.claude.com/docs/en/desktop-linux) le 20 novembre.
+# (code.claude.com/docs/en/desktop-linux) le 20 novembre. Puis, le même jour,
+# le pilote NVIDIA officiel : Debian n'a que la version 550, qui ne connaît
+# pas les RTX 50 ; NVIDIA publie la 620 dans son dépôt Debian 13.
 #
 # POURQUOI AU CLIC, ET PAS DANS L'IMAGE. Un dépôt branché d'avance serait
 # interrogé à CHAQUE vérification de mise à jour, sur toutes les machines,
-# même celles où personne n'a voulu Claude — et Grenofar venait justement de
-# demander qu'on coupe ce qui part sur le réseau sans raison.
+# même celles où personne ne l'a voulu.
 #
 # POURQUOI LA CLÉ EST DANS L'IMAGE. La documentation fait télécharger la clé
-# puis demande de vérifier son empreinte à l'œil. Ici, la clé est livrée et
-# la construction refuse l'image si son empreinte n'est pas celle publiée
-# (usr/share/grenos/depots/<paquet>.empreinte) : rien n'est téléchargé de
-# confiance au moment d'installer.
+# puis vérifier son empreinte à l'œil. Ici, la clé est livrée, et la
+# construction refuse l'image si son empreinte n'est pas celle publiée
+# (usr/share/grenos/depots/<paquet>.empreinte).
 #
-# Usage, en root : grenos-depot-editeur <paquet>
-# Un paquet sans dépôt d'éditeur ne fait RIEN (code 0) : on peut l'appeler
-# avant n'importe quelle installation apt.
+# LES FICHIERS D'UN DÉPÔT, dans /usr/share/grenos/depots :
+#   <paquet>.list         la ligne apt (obligatoire)
+#   <paquet>.asc / .gpg   sa clé, texte ou binaire
+#   <paquet>.avec         des paquets à installer avec (lus par GrenPlace)
+#   <paquet>.dkms         un MODULE DU NOYAU (pilote) : installable seulement
+#                         sur un système installé, sans Secure Boot, et
+#                         vérifié après coup (--apres)
+#
+# Usage, en root :
+#   grenos-depot-editeur <paquet>          avant l'installation
+#   grenos-depot-editeur --apres <paquet>  après : le module est-il là ?
+# Un paquet sans dépôt d'éditeur ne fait RIEN (code 0).
 set -eu
 
+apres=
+if [ "${1:-}" = "--apres" ]; then
+    apres=1
+    shift
+fi
 paquet="${1:-}"
 case "$paquet" in
     ""|*[!a-z0-9.+-]*) echo "grenos-depot-editeur : nom de paquet refuse" >&2; exit 2 ;;
@@ -30,8 +44,51 @@ esac
 DEPOTS=/usr/share/grenos/depots
 [ -f "$DEPOTS/$paquet.list" ] || exit 0
 
-# Les noms qu'Anthropic emploie lui-même : son paquet réécrit ce fichier à
-# l'installation, et les deux doivent désigner la même chose.
-install -D -m 0644 "$DEPOTS/$paquet.asc" "/usr/share/keyrings/$paquet-archive-keyring.asc"
+# Le Secure Boot est-il actif ? Le 5e octet de la variable EFI vaut 1.
+secure_boot() {
+    for v in /sys/firmware/efi/efivars/SecureBoot-*; do
+        [ -f "$v" ] || continue
+        [ "$(od -An -t u1 -j 4 -N 1 "$v" 2>/dev/null | tr -d ' ')" = 1 ] && return 0
+    done
+    return 1
+}
+
+if [ -n "$apres" ]; then
+    [ -f "$DEPOTS/$paquet.dkms" ] || exit 0
+    module=$(tr -d ' \n' < "$DEPOTS/$paquet.dkms")
+    noyau=$(uname -r)
+    # Le module a-t-il été compilé POUR CE NOYAU ? Sans lui, au redémarrage,
+    # l'écran retomberait sur l'image du BIOS (le pilote libre est écarté
+    # par le paquet de NVIDIA).
+    if dkms status -m "$module" -k "$noyau" 2>/dev/null | grep -q "installed"; then
+        echo "grenos: module $module compile pour le noyau $noyau"
+        exit 0
+    fi
+    echo "Le module $module n'a pas pu etre compile pour le noyau $noyau." >&2
+    echo "Retour au pilote libre : on retire ce qui vient d'etre installe." >&2
+    apt-get purge -y $(cat "$DEPOTS/$paquet.avec" 2>/dev/null | sed 's/linux-headers-amd64//') "$paquet" >&2 || true
+    apt-get autoremove -y >&2 || true
+    rm -f "/etc/apt/sources.list.d/$paquet.list"
+    exit 1
+fi
+
+if [ -f "$DEPOTS/$paquet.dkms" ]; then
+    if grep -q 'boot=live' /proc/cmdline 2>/dev/null; then
+        echo "Le pilote s'installe sur grenOS INSTALLE sur le disque : sur la cle USB, il disparaitrait au redemarrage." >&2
+        exit 3
+    fi
+    if secure_boot; then
+        echo "Le Secure Boot est actif : le pilote ne serait pas charge (il n'est pas signe). Coupe-le dans le BIOS, puis recommence." >&2
+        exit 3
+    fi
+fi
+
+# Les noms qu'emploie l'éditeur lui-même : son paquet réécrit parfois ce
+# fichier à l'installation, et les deux doivent désigner la même chose.
+if [ -f "$DEPOTS/$paquet.gpg" ]; then
+    install -D -m 0644 "$DEPOTS/$paquet.gpg" "/usr/share/keyrings/$paquet-archive-keyring.gpg"
+else
+    install -D -m 0644 "$DEPOTS/$paquet.asc" "/usr/share/keyrings/$paquet-archive-keyring.asc"
+fi
 install -D -m 0644 "$DEPOTS/$paquet.list" "/etc/apt/sources.list.d/$paquet.list"
 echo "grenos: depot de l editeur branche pour $paquet"
