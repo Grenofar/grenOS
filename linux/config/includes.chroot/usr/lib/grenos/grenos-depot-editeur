@@ -98,3 +98,13 @@ if [ -f "$DEPOTS/$paquet.pref" ]; then
     install -D -m 0644 "$DEPOTS/$paquet.pref" "/etc/apt/preferences.d/$paquet.pref"
 fi
 echo "grenos: depot de l editeur branche pour $paquet"
+
+# Un module du noyau se compile pour le noyau EN COURS. `linux-headers-amd64`
+# (dans <paquet>.avec) suit le plus récent : si un noyau plus neuf attend le
+# prochain redémarrage, ses en-têtes seuls ne suffiraient pas, et la
+# vérification d'après échouerait. On pose aussi ceux du noyau en cours.
+if [ -f "$DEPOTS/$paquet.dkms" ]; then
+    apt-get update -q >/dev/null 2>&1 || true
+    apt-get install -y "linux-headers-$(uname -r)" || \
+        echo "grenos: en-tetes de $(uname -r) introuvables, ceux du dernier noyau suffiront peut-etre" >&2
+fi
