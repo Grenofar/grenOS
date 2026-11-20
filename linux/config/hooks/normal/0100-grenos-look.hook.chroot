@@ -240,8 +240,10 @@ for initrd in /boot/initrd.img-*; do
         exit 1
     fi
     # Et les firmwares des cartes réseau de serveur (20 novembre : 35 Mo de
-    # Netronome dans l'initrd de 2059, mesuré par cle.yml).
-    if lsinitramfs "$initrd" 2>/dev/null | grep -qE 'firmware/(netronome|liquidio|bnx2x|qed)/'; then
+    # Netronome dans l'initrd de 2059, mesuré par cle.yml). Seulement ceux
+    # que SEUL un pilote réseau demande : qed et bnx2x servent aussi aux
+    # pilotes de stockage SAN (qedf, bnx2fc), qui restent et les tirent.
+    if lsinitramfs "$initrd" 2>/dev/null | grep -qE 'firmware/(netronome|liquidio)/'; then
         echo "grenos: $initrd ($taille Mo) contient encore des firmwares de cartes reseau" >&2
         exit 1
     fi
