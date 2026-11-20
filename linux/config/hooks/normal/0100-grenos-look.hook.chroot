@@ -292,7 +292,9 @@ grep -q '^allowManualPartitioning: true' /etc/calamares/modules/partition.conf 2
     manque="$manque choix-manuel"
 # Le mot de passe du compte (20 novembre) : sans libpwquality, dont le
 # dictionnaire manque et qui refusait des mots de passe courts.
-if grep -q 'libpwquality' /etc/calamares/modules/users.conf 2>/dev/null || \
+# (la CLÉ `libpwquality:`, pas le mot : le fichier le cite dans ses
+# commentaires, et la première version de ce garde s'y est prise.)
+if grep -q '^[[:space:]]*libpwquality:' /etc/calamares/modules/users.conf 2>/dev/null || \
    ! grep -q '^allowWeakPasswords: true' /etc/calamares/modules/users.conf 2>/dev/null; then
     manque="$manque mot-de-passe-libre"
 fi
