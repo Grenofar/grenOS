@@ -34,11 +34,35 @@ Version publiée : `linux-20261120-2059`. Ce qu'il a vu et où on en est :
    Secure Boot seulement) ; la phrase fausse « il faut désactiver le Secure
    Boot » corrigée dans les deux assistants.
 
-RESTE (dans l'ordre) : construction complète sur `main` avec tout ce qui
-précède ; 300 Hz choisi tout seul (avec « Garder ? » 15 s) ; GRUB du système
-INSTALLÉ (menu caché, entrée Windows par os-prober, pas de gfxterm) ;
-initrd plus léger (mesuré par cle.yml) ; Réglages › Écran : dire quel
-affichage tourne et « réessayer l'affichage complet ».
+### 21 novembre, nuit — retour de Grenofar sur la 2306 (son PC)
+« Un peu mieux » : **300 Hz et curseur marchent** (nouveau, sans glamor,
+sur sa RTX 5060). Restaient, et où ça en est :
+- **L'installateur bloquait au partitionnement** (« on ne peut plus
+  choisir ») : Calamares retire Effacer/Remplacer/À côté sur un disque dont
+  une partition est MONTÉE (Windows par grenos-windows, son SSD ouvert dans
+  « Ce PC »). `grenos-installer` referme tout avant `pkexec calamares`
+  [écrit, 7 cas exercés — pas encore vu sur sa machine]. Le journal de
+  Calamares va maintenant dans le rapport de la clé (60-installateur.txt).
+- **Réglages › Écran** : choisir l'écran, sa référence (EDID), ses limites,
+  plus aucune fréquence « à essayer », « Garder » et « Disposer » notent
+  TOUS les écrans [écrit, vu dans l'aperçu].
+- **Son** : « il n'a pas trouvé tous mes périphériques audio » — cause
+  INCONNUE ; le rapport de la clé dit désormais tout du son (70-son.txt).
+  À LIRE dès qu'il rebranche la clé sur Windows.
+- **Créateur de clé USB** (`createur/`, Rust/Tauri, Windows) : liste les
+  seules clés USB, télécharge et vérifie la dernière ISO, FAT32, copie,
+  revérifie [écrit, vu dans l'aperçu ; createur.yml le prouve sur une clé
+  virtuelle puis le publie dans la version « createur »]. Site : carte
+  « Créateur de clé USB » (cachée tant que le .exe n'existe pas), et les
+  phrases fausses « Secure Boot doit être désactivé » retirées.
+- Correctif de clé (delta depuis la 2306) prêt : à copier en
+  G:\live\grenos-correctif.squashfs quand la clé est branchée.
+- Construction complète relancée : run 44839968086 (la précédente a été
+  annulée par un push qui touchait linux/ — voir la mémoire
+  « pousser-main-plage »).
+
+RESTE : GRUB du système INSTALLÉ vérifié en vrai (entrée Windows) ;
+installation Secure Boot menée au bout (jamais prouvée) ; le son.
 
 ## 0. En cours — le 18 novembre au soir (« termine tout, dans cet ordre »)
 
