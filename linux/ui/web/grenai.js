@@ -95,6 +95,21 @@
     habiller(await api.appeler("apparence"));
     document.body.append(aurore());
     R = await api.appeler("grenai_reglages");
+    // grenOS branché à Claude (MCP, 20 novembre) : un bouton, rien d'autre à
+    // faire. Il dit ce qu'il fera, et ce qu'il a fait.
+    async function etatMcp() {
+      const e = (await api.appeler("grenai_mcp_etat")) || {};
+      D.mcpBranche = !!e.branche;
+      D.mcp.replaceChildren(svg(e.branche ? "coche" : "eclair"), e.branche ? "grenOS branché à Claude" : "Brancher grenOS à Claude");
+      D.mcp.title = e.branche
+        ? "Claude (Desktop et Code) peut voir l'écran, utiliser la souris, le clavier et le terminal de cette machine. Clique pour débrancher."
+        : "Un clic : Claude Desktop et Claude Code pourront voir l'écran, utiliser la souris, le clavier et le terminal de cette machine (serveur MCP local, sans réseau). Arrêt d'urgence : le pointeur dans le coin en haut à gauche.";
+    }
+    async function basculerMcp() {
+      try { toast(await api.appeler("grenai_mcp", { brancher: !D.mcpBranche })); }
+      catch (e) { toast(String(e)); }
+      etatMcp();
+    }
     D.bandeau = el("div.gi-bandeau");
     D.fil = el("div.gi-fil");
     D.champ = el("textarea.champ.gi-champ", { rows: 3, placeholder: "Écris ta question… (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)" });
@@ -104,6 +119,7 @@
       el("header.tete", el("div.logo", svg("etoile")), el("div", el("h1", "GrenAI"), el("small.note", "Ton assistant, avec le modèle que tu choisis")),
         el("div.gi-outils",
           el("button.bouton.petit", { onclick: () => api.appeler("grenai_claude_code").catch((e) => toast(String(e))), title: "Ouvre Claude Code dans une console (l'installe la première fois, par l'installateur officiel d'Anthropic)" }, svg("terminal"), "Claude Code"),
+          D.mcp = el("button.bouton.petit", { onclick: basculerMcp }, "…"),
           el("button.bouton.petit", { onclick: resumer }, "Résumer un document"),
           el("button.bouton.petit", { onclick: () => { messages = []; dessiner(); } }, "Nouvelle conversation"),
           el("button.bouton.petit", { onclick: reglages }, svg("reglages"), "Réglages"))),
@@ -111,6 +127,7 @@
       el("div.gi-saisie", D.champ, D.envoyer)));
     bandeau();
     dessiner();
+    etatMcp();
     pret();
     D.champ.focus();
   })();

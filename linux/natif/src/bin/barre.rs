@@ -204,7 +204,7 @@ struct Barre {
 }
 
 fn taille_menu() -> (i32, i32) {
-    let (_, _, l, h) = natif::ecran_principal();
+    let (_, _, l, h) = natif::ecran_de_la_barre();
     let bande = natif::bande_reservee(if natif::disposition_dock() { HAUTEUR_DOCK } else { HAUTEUR }, MARGE_DOCK, true);
     ((l - 24).min(MENU_LARGEUR).max(420), (h - bande - 24).min(MENU_HAUTEUR).max(360))
 }
@@ -273,8 +273,9 @@ fn menu_de(gestes: Vec<(&'static str, Box<dyn Fn()>)>, ev: &gdk::EventButton) ->
 
 impl Barre {
     fn nouvelle() -> Rc<Barre> {
-        // L'écran principal, et où il est dans la racine (plusieurs écrans).
-        let (ox, oy, largeur, hauteur_ecran) = natif::ecran_principal();
+        // L'écran de cette barre (le principal, ou celui d'une copie
+        // secondaire), et où il est dans la racine (plusieurs écrans).
+        let (ox, oy, largeur, hauteur_ecran) = natif::ecran_de_la_barre();
 
         let panneau = gtk::Window::new(gtk::WindowType::Toplevel);
         panneau.set_widget_name("panneau");
@@ -624,6 +625,10 @@ impl Barre {
     /// seuil critique, une seule, réarmée quand tout est redescendu.
     fn relire_chaleur(&self) {
         use natif::thermique;
+        // Une seule alerte pour toute la machine : celle de la barre principale.
+        if natif::ecran_secondaire().is_some() {
+            return;
+        }
         let mut zones = thermique::lire_zones(std::path::Path::new("/sys/class/thermal"));
         zones.extend(thermique::lire_sondes(std::path::Path::new("/sys/class/hwmon")));
         if self.chaleur_prevenue.get() {
@@ -657,7 +662,7 @@ impl Barre {
         self.texte_batterie.set_text(&format!("{} %", b.pour_cent));
         poser_infobulle(&self.bouton_batterie, &phrase);
         self.bouton_batterie.show();
-        if batterie::prevenir(b, self.batterie_prevenue.get()) {
+        if natif::ecran_secondaire().is_none() && batterie::prevenir(b, self.batterie_prevenue.get()) {
             self.batterie_prevenue.set(true);
             lancer(
                 &format!(
@@ -1306,6 +1311,203 @@ impl Barre {
 }
 
 /// Un rectangle aux coins arrondis, en chemin cairo (pour découper).
+// ---- Les dispositions en glissant une fenêtre (20 novembre) -----------------
+//
+// Grenofar, avec une capture de Windows 11 : en haut, pendant qu'on fait
+// glisser une fenêtre, une barre arrondie presque aussi large que l'écran
+// propose des dispositions ; lâcher la fenêtre sur une case l'y range.
+// Désactivable dans Réglages › Apparence (~/.config/grenos/dispositions).
+//
+// COMMENT ON SAIT QU'UNE FENÊTRE GLISSE. Openbox déplace la fenêtre en tenant
+// le pointeur (une « attrape ») : aucune autre fenêtre ne reçoit d'événement
+// pendant ce temps. On REGARDE donc, toutes les 40 ms : le bouton gauche est-il
+// tenu, et la fenêtre active a-t-elle changé de place sans changer de taille ?
+// C'est une question au serveur X (XQueryPointer), rien de plus. Le même
+// moyen que la bulle d'aperçus, et pour la même raison.
+
+/// Ce qu'on sait du glissement en cours.
+struct Glisse {
+    /// Faux : réglage coupé, ou rien à ranger — on attend juste le lâcher.
+    actif: bool,
+    xid: u32,
+    depart: (i32, i32),
+    taille: (u32, u32),
+    /// La fenêtre a vraiment bougé : la barre est montrée.
+    bouge: bool,
+    ecran: (i32, i32, i32, i32),
+    deplie: bool,
+    survol: Option<(usize, usize)>,
+}
+
+/// La barre repliée (un trait arrondi), puis déployée quand on s'approche.
+const DISPO_REPLIEE: i32 = 14;
+const DISPO_DEPLIEE: i32 = 108;
+/// À moins de tant de pixels du haut de l'écran, la barre se déploie.
+const DISPO_ZONE_HAUTE: i32 = 96;
+const DISPO_AIR: i32 = 8;
+
+fn pointeur_et_boutons() -> Option<(i32, i32, gdk::ModifierType)> {
+    let d = gdk::Display::default()?;
+    let p = d.default_seat()?.pointer()?;
+    let racine = gdk::Screen::default()?.root_window()?;
+    let (_, x, y, masque) = racine.device_position(&p);
+    Some((x, y, masque))
+}
+
+fn dispositions_en_glissant(b: Rc<Barre>) {
+    let fenetre = gtk::Window::new(gtk::WindowType::Popup);
+    fenetre.set_widget_name("dispositions");
+    fenetre.set_app_paintable(true);
+    let dessin = gtk::DrawingArea::new();
+    fenetre.add(&dessin);
+    // Coins arrondis à chaque nouvelle taille (pas de compositeur partout).
+    fenetre.connect_size_allocate(|f, _| natif::decouper_maintenant(f));
+    let etat: Rc<RefCell<Option<Glisse>>> = Rc::new(RefCell::new(None));
+    let e = etat.clone();
+    dessin.connect_draw(move |zone, cr| {
+        if let Some(g) = e.borrow().as_ref() {
+            dessiner_dispositions(cr, zone.allocated_width() as f64, zone.allocated_height() as f64, g);
+        }
+        glib::Propagation::Stop
+    });
+    glib::timeout_add_local(Duration::from_millis(40), move || {
+        suivre_glisse(&b, &fenetre, &dessin, &etat);
+        glib::ControlFlow::Continue
+    });
+}
+
+fn suivre_glisse(b: &Rc<Barre>, fenetre: &gtk::Window, dessin: &gtk::DrawingArea, etat: &Rc<RefCell<Option<Glisse>>>) {
+    use natif::dispositions as dispo;
+    let Some(ecran) = b.ecran.as_ref() else { return };
+    let Some((x, y, masque)) = pointeur_et_boutons() else { return };
+    let tenu = masque.contains(gdk::ModifierType::BUTTON1_MASK);
+    let mut e = etat.borrow_mut();
+
+    if !tenu {
+        // Lâché : si c'était sur une case, la fenêtre y va.
+        if let Some(g) = e.take() {
+            fenetre.hide();
+            if let (true, Some((d, c))) = (g.bouge, g.survol) {
+                let (mx, my, ml, mh) = g.ecran;
+                let travail = (mx, my, ml, mh - natif::bande_basse());
+                let (rx, ry, rl, rh) = dispo::en_pixels(dispo::dispositions()[d][c], travail, DISPO_AIR);
+                let xid = g.xid;
+                let b = b.clone();
+                // Après qu'openbox a fini SON déplacement (il reçoit le lâcher aussi).
+                glib::timeout_add_local_once(Duration::from_millis(60), move || {
+                    if let Some(ecran) = b.ecran.as_ref() {
+                        ecran.ranger(xid, rx, ry, rl, rh);
+                    }
+                });
+                dire(&format!("dispositions : fenetre rangee (disposition {d}, case {c})"));
+            }
+        }
+        return;
+    }
+
+    // Le bouton vient d'être enfoncé : on note la fenêtre active et sa place.
+    if e.is_none() {
+        let coupees = dispo::coupees(&std::fs::read_to_string(natif::reglages().join("dispositions")).unwrap_or_default());
+        let active = ecran.active();
+        let lieu = active.and_then(|xid| Some((xid, ecran.position(xid)?, ecran.taille(xid)?)));
+        *e = Some(match (coupees, lieu) {
+            (false, Some((xid, depart, taille))) => Glisse {
+                actif: true, xid, depart, taille, bouge: false, ecran: natif::ecran_sous(x, y), deplie: false, survol: None,
+            },
+            _ => Glisse {
+                actif: false, xid: 0, depart: (0, 0), taille: (0, 0), bouge: false, ecran: (0, 0, 0, 0), deplie: false, survol: None,
+            },
+        });
+        return;
+    }
+    let Some(g) = e.as_mut() else { return };
+    if !g.actif {
+        return;
+    }
+
+    if !g.bouge {
+        // Openbox donne le focus à l'appui : la fenêtre active peut changer
+        // juste après. On suit la nouvelle.
+        if let Some(active) = ecran.active() {
+            if active != g.xid {
+                if let (Some(p), Some(t)) = (ecran.position(active), ecran.taille(active)) {
+                    g.xid = active;
+                    g.depart = p;
+                    g.taille = t;
+                }
+                return;
+            }
+        }
+        let (Some(p), Some(t)) = (ecran.position(g.xid), ecran.taille(g.xid)) else { return };
+        if p == g.depart || t != g.taille {
+            return; // immobile, ou redimensionnée par un bord : pas un glissement
+        }
+        g.bouge = true;
+    }
+
+    // Elle glisse : la barre suit l'écran sous le pointeur.
+    let mon = natif::ecran_sous(x, y);
+    let deplie = y - mon.1 < DISPO_ZONE_HAUTE;
+    let largeur = (mon.2 as f64 * 0.86) as i32;
+    let hauteur = if deplie { DISPO_DEPLIEE } else { DISPO_REPLIEE };
+    let (fx, fy) = (mon.0 + (mon.2 - largeur) / 2, mon.1 + 10);
+    let survol = if deplie {
+        dispo::case_sous(&dispo::plan(largeur as f64, hauteur as f64), (x - fx) as f64, (y - fy) as f64)
+    } else {
+        None
+    };
+    let change = !fenetre.is_visible() || mon != g.ecran || deplie != g.deplie || survol != g.survol;
+    g.ecran = mon;
+    g.deplie = deplie;
+    g.survol = survol;
+    drop(e);
+    if change {
+        fenetre.set_size_request(largeur, hauteur);
+        fenetre.resize(largeur, hauteur);
+        fenetre.move_(fx, fy);
+        if !fenetre.is_visible() {
+            fenetre.show_all();
+        }
+        natif::decouper_maintenant(fenetre);
+        dessin.queue_draw();
+    }
+}
+
+fn dessiner_dispositions(cr: &gtk::cairo::Context, l: f64, h: f64, g: &Glisse) {
+    use natif::dispositions as dispo;
+    // Le fond : verre sombre, liseré clair — la famille du dock.
+    cr.set_source_rgba(0.07, 0.08, 0.11, 0.96);
+    cr.paint().ok();
+    chemin_arrondi(cr, 0.5, 0.5, l - 1.0, h - 1.0, 14.0);
+    cr.set_source_rgba(1.0, 1.0, 1.0, 0.14);
+    cr.set_line_width(1.0);
+    cr.stroke().ok();
+    if !g.deplie {
+        // Replié : un trait, comme la poignée de Windows.
+        chemin_arrondi(cr, l / 2.0 - 40.0, h / 2.0 - 2.0, 80.0, 4.0, 2.0);
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.45);
+        cr.fill().ok();
+        return;
+    }
+    let p = dispo::plan(l, h);
+    for (d, (mini, cases)) in p.miniatures.iter().zip(&p.cases).enumerate() {
+        let (x, y, w, hh) = *mini;
+        chemin_arrondi(cr, x, y, w, hh, 8.0);
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.04);
+        cr.fill().ok();
+        for (c, &(cx, cy, cw, ch)) in cases.iter().enumerate() {
+            chemin_arrondi(cr, cx, cy, cw, ch, 5.0);
+            match g.survol {
+                // La case visée, à la couleur de grenOS.
+                Some((sd, sc)) if sd == d && sc == c => cr.set_source_rgba(0.49, 0.36, 1.0, 0.92),
+                Some((sd, _)) if sd == d => cr.set_source_rgba(1.0, 1.0, 1.0, 0.20),
+                _ => cr.set_source_rgba(1.0, 1.0, 1.0, 0.11),
+            }
+            cr.fill().ok();
+        }
+    }
+}
+
 fn chemin_arrondi(cr: &gtk::cairo::Context, x: f64, y: f64, w: f64, h: f64, r: f64) {
     use std::f64::consts::PI;
     let r = r.min(w / 2.0).min(h / 2.0);
@@ -1373,17 +1575,88 @@ fn main() {
     let style = natif::Style::poser(STYLE);
     let barre = Barre::nouvelle();
     barre.panneau.show_all();
-    dire(&format!("barre prete, {} epinglees (native{})", barre.epingles.borrow().len(), if barre.dock { ", dock" } else { "" }));
+    // grenos-theme : le thème ou l'accent a changé (toutes les barres).
+    natif::sur_signal(natif::SIGUSR1, move || style.repeindre());
 
+    if let Some(n) = natif::ecran_secondaire() {
+        // UNE COPIE SECONDAIRE (dock sur chaque écran, 20 novembre).
+        // `pkill -USR2 -f grenos-shell` (la touche Windows) la touche aussi :
+        // sans gestionnaire, SIGUSR2 la TUERAIT. Elle l'ignore — le menu
+        // s'ouvre sur l'écran principal, comme sous Windows.
+        natif::sur_signal(natif::SIGUSR2, || {});
+        dire(&format!("barre secondaire prete, ecran {n}"));
+        // Si la barre principale disparaît (relancée par son veilleur, ou
+        // tuée par les Réglages), ses copies partent avec elle : la nouvelle
+        // en relancera, sans doublons.
+        let parent = std::os::unix::process::parent_id();
+        glib::timeout_add_seconds_local(3, move || {
+            if std::os::unix::process::parent_id() != parent {
+                gtk::main_quit();
+                return glib::ControlFlow::Break;
+            }
+            glib::ControlFlow::Continue
+        });
+        gtk::main();
+        return;
+    }
+
+    dire(&format!("barre prete, {} epinglees (native{})", barre.epingles.borrow().len(), if barre.dock { ", dock" } else { "" }));
     let b = barre.clone();
     glib::timeout_add_seconds_local_once(3, move || b.dire_les_boutons());
-
-    // grenos-theme : le thème ou l'accent a changé.
-    natif::sur_signal(natif::SIGUSR1, move || style.repeindre());
     // grenos-menu (Ctrl+Échap, touche Windows) : ouvrir le menu.
     let b = barre.clone();
     natif::sur_signal(natif::SIGUSR2, move || b.ouvrir_menu());
+    copies_secondaires();
+    // Les dispositions en glissant une fenêtre : la barre principale seule.
+    dispositions_en_glissant(barre.clone());
     gtk::main();
+}
+
+/// Une barre par AUTRE écran (20 novembre), relancées quand on branche ou
+/// débranche un écran. Chaque copie est ce même programme avec GRENOS_ECRAN.
+fn copies_secondaires() {
+    use std::process::{Child, Command};
+    let enfants: Rc<RefCell<Vec<Child>>> = Rc::new(RefCell::new(Vec::new()));
+    let relancer = {
+        let enfants = enfants.clone();
+        move || {
+            for mut e in enfants.borrow_mut().drain(..) {
+                let _ = e.kill();
+                let _ = e.wait();
+            }
+            let Ok(moi) = std::env::current_exe() else { return };
+            for n in natif::autres_ecrans() {
+                if let Ok(e) = Command::new(&moi).env("GRENOS_ECRAN", n.to_string()).spawn() {
+                    enfants.borrow_mut().push(e);
+                }
+            }
+            dire(&format!("barre : {} ecran(s) de plus, un dock sur chacun", enfants.borrow().len()));
+        }
+    };
+    relancer();
+    if let Some(d) = gdk::Display::default() {
+        // Une rafale d'événements (un écran qui s'allume) : un seul relancement.
+        let minuteur: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+        let relancer = Rc::new(relancer);
+        let changer = {
+            let minuteur = minuteur.clone();
+            let relancer = relancer.clone();
+            move || {
+                if let Some(id) = minuteur.borrow_mut().take() {
+                    id.remove();
+                }
+                let relancer = relancer.clone();
+                let m = minuteur.clone();
+                *minuteur.borrow_mut() = Some(glib::timeout_add_local_once(Duration::from_millis(1500), move || {
+                    m.borrow_mut().take();
+                    relancer();
+                }));
+            }
+        };
+        let c = changer.clone();
+        d.connect_monitor_added(move |_, _| c());
+        d.connect_monitor_removed(move |_, _| changer());
+    }
 }
 
 #[cfg(test)]

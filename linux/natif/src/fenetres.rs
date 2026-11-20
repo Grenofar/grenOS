@@ -50,6 +50,8 @@ const NOMS: &[&str] = &[
     "_NET_WM_NAME", "UTF8_STRING", "_NET_WM_ICON", "_NET_CLOSE_WINDOW", "WM_CHANGE_STATE",
     "_NET_WM_STRUT", "_NET_WM_STRUT_PARTIAL",
     "_NET_CURRENT_DESKTOP", "_NET_WM_DESKTOP",
+    "_NET_FRAME_EXTENTS", "_NET_MOVERESIZE_WINDOW", "_NET_WM_STATE_MAXIMIZED_VERT",
+    "_NET_WM_STATE_MAXIMIZED_HORZ",
 ];
 
 /// Une fenêtre a-t-elle sa tuile sur ce bureau ? Celles « de tous les
@@ -223,6 +225,47 @@ impl Ecran {
             &[0, 0, 0, hauteur, 0, 0, 0, 0, 0, 0, debut, fin],
         );
         let _ = self.conn.flush();
+    }
+
+    /// Où est la fenêtre cliente dans la racine : (x, y) de son coin.
+    /// Sert aux dispositions (20 novembre) : voir qu'une fenêtre BOUGE pendant
+    /// que le bouton est tenu, c'est savoir qu'on la fait glisser.
+    pub fn position(&self, xid: u32) -> Option<(i32, i32)> {
+        let t = self.conn.translate_coordinates(xid, self.racine, 0, 0).ok()?.reply().ok()?;
+        Some((t.dst_x as i32, t.dst_y as i32))
+    }
+
+    /// La taille de la fenêtre cliente : (largeur, hauteur). Une fenêtre qui
+    /// change de place SANS changer de taille est déplacée, pas redimensionnée
+    /// par son bord gauche ou haut.
+    pub fn taille(&self, xid: u32) -> Option<(u32, u32)> {
+        let g = self.conn.get_geometry(xid).ok()?.reply().ok()?;
+        Some((g.width as u32, g.height as u32))
+    }
+
+    /// Les épaisseurs du cadre d'openbox : (gauche, droite, haut, bas).
+    pub fn cadre(&self, xid: u32) -> (u32, u32, u32, u32) {
+        let v = self.propriete32(xid, self.a("_NET_FRAME_EXTENTS"), AtomEnum::CARDINAL.into(), 4);
+        if v.len() == 4 { (v[0], v[1], v[2], v[3]) } else { (0, 0, 0, 0) }
+    }
+
+    /// Ranger la fenêtre dans le rectangle (x, y, l, h) de la racine, CADRE
+    /// COMPRIS : on la désagrandit, puis _NET_MOVERESIZE_WINDOW (EWMH), que
+    /// openbox honore. Gravité nord-ouest : (x, y) est le coin du cadre ; la
+    /// taille demandée est celle du client, donc le rectangle moins le cadre.
+    pub fn ranger(&self, xid: u32, x: i32, y: i32, l: i32, h: i32) {
+        let (cg, cd, ch, cb) = self.cadre(xid);
+        self.message(
+            xid,
+            self.a("_NET_WM_STATE"),
+            [0, self.a("_NET_WM_STATE_MAXIMIZED_VERT"), self.a("_NET_WM_STATE_MAXIMIZED_HORZ"), 2, 0],
+        );
+        let largeur = (l - (cg + cd) as i32).max(80) as u32;
+        let hauteur = (h - (ch + cb) as i32).max(60) as u32;
+        // 1 = nord-ouest ; 0xF00 = x, y, largeur et hauteur fournis ; 2 << 12 =
+        // demande d'un « pagineur », qu'openbox honore toujours.
+        let drapeaux = 1 | 0xF00 | (2 << 12);
+        self.message(xid, self.a("_NET_MOVERESIZE_WINDOW"), [drapeaux, x as u32, y as u32, largeur, hauteur]);
     }
 
     /// Vide la file d'événements ; vrai si l'un d'eux change la barre.

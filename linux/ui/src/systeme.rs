@@ -93,6 +93,11 @@ pub fn privilegie() -> Vec<String> {
     }
 }
 
+/// Le fichier d'un réglage dans ~/.config/grenos.
+pub fn chemin_reglage(nom: &str) -> PathBuf {
+    dossier_reglages().join(nom)
+}
+
 fn dossier_reglages() -> PathBuf {
     let maison = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
     PathBuf::from(maison).join(".config").join("grenos")

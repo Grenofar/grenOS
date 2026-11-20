@@ -4,6 +4,7 @@
 
 pub mod applications;
 pub mod batterie;
+pub mod dispositions;
 pub mod historique;
 pub mod thermique;
 pub mod fenetres;
@@ -149,6 +150,46 @@ pub fn ecran_principal() -> (i32, i32, i32, i32) {
             let (l, h) = taille_ecran();
             (0, 0, l, h)
         })
+}
+
+/// LE DOCK SUR CHAQUE ÉCRAN (20 novembre). Grenofar : « fais que le dock
+/// soit dans tous les écrans ». La barre de l'écran principal lance une copie
+/// d'elle-même par autre écran, avec `GRENOS_ECRAN=<numéro>` ; cette copie se
+/// pose sur cet écran-là et ne fait que la barre (ni alertes, ni menu à la
+/// touche Windows). Absent : la barre principale.
+pub fn ecran_secondaire() -> Option<i32> {
+    std::env::var("GRENOS_ECRAN").ok().and_then(|v| v.trim().parse().ok())
+}
+
+/// L'écran numéro `n` : (x, y, largeur, hauteur) dans la racine.
+pub fn ecran_numero(n: i32) -> Option<(i32, i32, i32, i32)> {
+    gdk::Display::default().and_then(|d| d.monitor(n)).map(|m| {
+        let g = m.geometry();
+        (g.x(), g.y(), g.width(), g.height())
+    })
+}
+
+/// L'écran de CETTE barre : le sien si elle est secondaire, sinon le principal.
+pub fn ecran_de_la_barre() -> (i32, i32, i32, i32) {
+    ecran_secondaire().and_then(ecran_numero).unwrap_or_else(ecran_principal)
+}
+
+/// Les numéros des écrans autres que le principal.
+pub fn autres_ecrans() -> Vec<i32> {
+    let Some(d) = gdk::Display::default() else { return Vec::new() };
+    let principal = d.primary_monitor().or_else(|| d.monitor(0));
+    (0..d.n_monitors()).filter(|&i| d.monitor(i) != principal).collect()
+}
+
+/// L'écran (x, y, largeur, hauteur) qui contient ce point de la racine.
+pub fn ecran_sous(x: i32, y: i32) -> (i32, i32, i32, i32) {
+    gdk::Display::default()
+        .and_then(|d| d.monitor_at_point(x, y))
+        .map(|m| {
+            let g = m.geometry();
+            (g.x(), g.y(), g.width(), g.height())
+        })
+        .unwrap_or_else(ecran_principal)
 }
 
 /// La bande à réserver en bas de la RACINE pour une barre posée en bas d'un

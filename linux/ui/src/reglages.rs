@@ -348,6 +348,26 @@ pub fn reglages_barre(disposition: String) -> Result<String, String> {
     })
 }
 
+/// Les dispositions en glissant une fenêtre (20 novembre) : allumées sauf
+/// « non » dans ~/.config/grenos/dispositions. La barre relit ce fichier à
+/// chaque glissement : pas besoin de la relancer.
+#[tauri::command]
+pub fn reglages_dispositions_lire() -> bool {
+    let maison = std::env::var("HOME").unwrap_or_default();
+    lire(&format!("{maison}/.config/grenos/dispositions")).trim() != "non"
+}
+
+#[tauri::command]
+pub fn reglages_dispositions(actif: bool) -> Result<String, String> {
+    crate::systeme::ecrire_reglage("dispositions", if actif { "oui" } else { "non" })?;
+    dire(&format!("reglages : dispositions {}", if actif { "allumees" } else { "coupees" }));
+    Ok(if actif {
+        "En faisant glisser une fenêtre vers le haut, la barre des dispositions apparaît : lâche la fenêtre sur une case.".into()
+    } else {
+        "Plus de barre des dispositions en faisant glisser une fenêtre.".into()
+    })
+}
+
 // ------------------------------------------- la clé de sécurité (FIDO2/U2F)
 //
 // 19 novembre, Grenofar : « ajoute un système de clé d'accès » (une clé de

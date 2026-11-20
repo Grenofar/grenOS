@@ -63,6 +63,8 @@
             async (v) => { try { dire.textContent = await api.appeler("reglages_dpi", { dpi: Number(v) }); } catch (e) { dire.textContent = String(e); } })),
           ligne("Barre des tâches", choix([["barre", "Barre"], ["dock", "Dock"]], await api.appeler("reglages_barre_lire"),
             async (v) => { try { dire.textContent = await api.appeler("reglages_barre", { disposition: v }); } catch (e) { dire.textContent = String(e); } })),
+          ligne("Dispositions en glissant une fenêtre", interrupteur(await api.appeler("reglages_dispositions_lire"),
+            async (v) => { try { dire.textContent = await api.appeler("reglages_dispositions", { actif: v }); } catch (e) { dire.textContent = String(e); } })),
           dire,
           note("Meta+T fait la bascule sans ouvrir cette fenêtre. Le fond d'écran, la barre, les menus et les applications suivent ensemble.")),
         carte(ligne("Fond d'écran", bouton("Parcourir…", "principal", parcourir)), fonds,

@@ -174,6 +174,10 @@
       case "reglages_cle_ajouter": await attendre(900); window.APERCU_CLES = (window.APERCU_CLES || 0) + 1; return "Clé enregistrée. À l'ouverture de session et pour les gestes d'administrateur, toucher la clé suffit ; le mot de passe marche toujours.";
       case "reglages_cle_retirer": window.APERCU_CLES = 0; return "Clés retirées. Le mot de passe reste le seul moyen.";
       case "grenai_claude_code": return null;
+      case "grenai_mcp_etat": return { branche: !!window.APERCU_MCP, desktop: false, code_installe: false, serveur: true };
+      case "grenai_mcp": window.APERCU_MCP = a && a.brancher; return a && a.brancher ? "C'est branché : Claude peut maintenant voir l'écran, piloter la souris et le clavier, et lancer des commandes sur cette machine." : "grenOS est débranché de Claude.";
+      case "reglages_dispositions_lire": return true;
+      case "reglages_dispositions": return "En faisant glisser une fenêtre vers le haut, la barre des dispositions apparaît.";
       case "reglages_barre_lire": return window.APERCU_BARRE || "dock";
       case "reglages_barre": window.APERCU_BARRE = a.disposition; return a.disposition === "dock" ? "Dock : la barre flotte, centrée, et ne prend que la place de ce qu'elle porte." : "Barre : pleine largeur, collée en bas de l'écran.";
       case "reglages_dpi": return `Taille ${Math.round(a.dpi * 100 / 96)} %.`;

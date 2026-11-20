@@ -295,6 +295,9 @@ L installation a echoue (reseau ?). Appuie sur Entree pour fermer.'
   fi
   export PATH="$HOME/.local/bin:$PATH"
 fi
+if [ "$(cat "$HOME/.config/grenos/mcp" 2>/dev/null)" = oui ] && ! claude mcp get grenos >/dev/null 2>&1; then
+  claude mcp add --scope user grenos -- /usr/lib/grenos/grenos-mcp >/dev/null 2>&1 || true
+fi
 cd "$HOME" && claude
 exec bash"#;
 
@@ -306,9 +309,157 @@ pub fn grenai_claude_code() -> Result<(), String> {
     Ok(())
 }
 
+// ------------------------------------------- grenOS branché à Claude (MCP)
+//
+// Grenofar, le 20 novembre : « l'équivalent de mon MCP powershell local… plug
+// and play, rien à faire, juste cliquer sur un bouton ». Le bouton de GrenAI
+// inscrit /usr/lib/grenos/grenos-mcp :
+//   - dans Claude Desktop : ~/.config/Claude/claude_desktop_config.json,
+//     clé `mcpServers` (chemin Linux lu sur modelcontextprotocol.io, « Connect
+//     to local MCP servers », le 20 novembre) — sans toucher au reste du
+//     fichier, et en refusant d'écrire par-dessus un fichier illisible ;
+//   - dans Claude Code, par SA commande (`claude mcp add --scope user`), plutôt
+//     qu'en écrivant dans ~/.claude.json, dont la forme n'est pas documentée.
+//     Claude Code pas encore installé : le réglage `mcp` le rappelle à
+//     l'installation (SCRIPT_CLAUDE_CODE).
+
+pub const SERVEUR_MCP: &str = "/usr/lib/grenos/grenos-mcp";
+const NOM_MCP: &str = "grenos";
+
+fn config_claude_desktop() -> PathBuf {
+    let maison = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(maison).join(".config/Claude/claude_desktop_config.json")
+}
+
+/// Le fichier de Claude Desktop avec (ou sans) notre serveur, le reste gardé.
+/// `None` : pas de fichier. Erreur : un fichier qu'on ne sait pas lire — on
+/// ne l'écrase jamais.
+pub fn config_avec_grenos(existant: Option<&str>, brancher: bool) -> Result<String, String> {
+    let mut v: Value = match existant.map(str::trim) {
+        None | Some("") => json!({}),
+        Some(t) => serde_json::from_str(t).map_err(|_| {
+            "Le fichier de configuration de Claude Desktop est illisible : grenOS n'y touche pas.".to_string()
+        })?,
+    };
+    let Some(objet) = v.as_object_mut() else {
+        return Err("Le fichier de configuration de Claude Desktop n'a pas la forme attendue.".into());
+    };
+    let serveurs = objet.entry("mcpServers").or_insert_with(|| json!({}));
+    let Some(serveurs) = serveurs.as_object_mut() else {
+        return Err("« mcpServers » n'a pas la forme attendue dans la configuration de Claude Desktop.".into());
+    };
+    if brancher {
+        serveurs.insert(NOM_MCP.into(), json!({ "command": SERVEUR_MCP, "args": [] }));
+    } else {
+        serveurs.remove(NOM_MCP);
+    }
+    serde_json::to_string_pretty(&v).map_err(|e| e.to_string())
+}
+
+fn ecrire_config_desktop(brancher: bool) -> Result<(), String> {
+    let chemin = config_claude_desktop();
+    let existant = std::fs::read_to_string(&chemin).ok();
+    if !brancher && existant.is_none() {
+        return Ok(());
+    }
+    let neuf = config_avec_grenos(existant.as_deref(), brancher)?;
+    if let Some(dossier) = chemin.parent() {
+        std::fs::create_dir_all(dossier).map_err(|e| e.to_string())?;
+    }
+    // Écrit à côté puis renommé : une coupure n'abîme jamais le fichier de Claude.
+    let temporaire = chemin.with_extension("json.grenos");
+    std::fs::write(&temporaire, neuf + "\n").map_err(|e| e.to_string())?;
+    std::fs::rename(&temporaire, &chemin).map_err(|e| e.to_string())
+}
+
+fn desktop_branche() -> bool {
+    std::fs::read_to_string(config_claude_desktop())
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .map(|v| v["mcpServers"][NOM_MCP].is_object())
+        .unwrap_or(false)
+}
+
+/// La commande `claude` (Claude Code), installée dans ~/.local/bin par
+/// l'installateur officiel, ou ailleurs dans le PATH.
+fn claude_code() -> Option<PathBuf> {
+    let maison = std::env::var("HOME").unwrap_or_default();
+    let local = PathBuf::from(&maison).join(".local/bin/claude");
+    if local.is_file() {
+        return Some(local);
+    }
+    std::env::var("PATH").ok()?.split(':').map(|d| PathBuf::from(d).join("claude")).find(|p| p.is_file())
+}
+
+fn brancher_claude_code(brancher: bool) -> Option<bool> {
+    let claude = claude_code()?;
+    let _ = std::process::Command::new(&claude).args(["mcp", "remove", "--scope", "user", NOM_MCP]).output();
+    if !brancher {
+        return Some(true);
+    }
+    let fait = std::process::Command::new(&claude)
+        .args(["mcp", "add", "--scope", "user", NOM_MCP, "--", SERVEUR_MCP])
+        .output()
+        .map(|s| s.status.success())
+        .unwrap_or(false);
+    Some(fait)
+}
+
+#[tauri::command]
+pub fn grenai_mcp_etat() -> Value {
+    let reglage = std::fs::read_to_string(crate::systeme::chemin_reglage("mcp")).unwrap_or_default();
+    json!({
+        "branche": reglage.trim() == "oui",
+        "desktop": desktop_branche(),
+        "desktop_installe": std::path::Path::new("/usr/bin/claude-desktop").exists(),
+        "code_installe": claude_code().is_some(),
+        "serveur": std::path::Path::new(SERVEUR_MCP).exists(),
+    })
+}
+
+#[tauri::command]
+pub fn grenai_mcp(brancher: bool) -> Result<String, String> {
+    if brancher && !std::path::Path::new(SERVEUR_MCP).exists() {
+        return Err("Le serveur grenos-mcp manque : fais la mise à jour de grenOS.".into());
+    }
+    ecrire_config_desktop(brancher)?;
+    let code = brancher_claude_code(brancher);
+    crate::systeme::ecrire_reglage("mcp", if brancher { "oui" } else { "non" })?;
+    crate::systeme::dire(&format!("grenai : mcp {}", if brancher { "branche" } else { "debranche" }));
+    if !brancher {
+        return Ok("grenOS est débranché de Claude. Redémarre Claude pour que ce soit pris en compte.".into());
+    }
+    let suite = match code {
+        Some(true) => "Claude Code aussi.",
+        Some(false) => "Claude Code n'a pas accepté l'ajout : réessaie une fois Claude Code à jour.",
+        None => "Claude Code le sera dès que tu l'installeras (bouton « Claude Code »).",
+    };
+    Ok(format!(
+        "C'est branché : Claude peut maintenant voir l'écran, piloter la souris et le clavier, et lancer des commandes sur cette machine. {suite} Redémarre Claude Desktop s'il est ouvert. Arrêt d'urgence : le pointeur dans le coin en haut à gauche."
+    ))
+}
+
 #[cfg(test)]
 mod essais {
     use super::*;
+
+    #[test]
+    fn le_fichier_de_claude_desktop_garde_le_reste() {
+        let neuf = config_avec_grenos(None, true).unwrap();
+        let v: Value = serde_json::from_str(&neuf).unwrap();
+        assert_eq!(v["mcpServers"]["grenos"]["command"], SERVEUR_MCP);
+        let existant = r#"{"mcpServers":{"autre":{"command":"npx"}},"theme":"dark"}"#;
+        let v: Value = serde_json::from_str(&config_avec_grenos(Some(existant), true).unwrap()).unwrap();
+        assert_eq!(v["mcpServers"]["autre"]["command"], "npx");
+        assert_eq!(v["theme"], "dark");
+        assert!(v["mcpServers"]["grenos"].is_object());
+        let sans: Value = serde_json::from_str(&config_avec_grenos(Some(&v.to_string()), false).unwrap()).unwrap();
+        assert!(sans["mcpServers"]["grenos"].is_null());
+        assert_eq!(sans["mcpServers"]["autre"]["command"], "npx");
+        // Illisible : on refuse, on n'écrase pas.
+        assert!(config_avec_grenos(Some("{pas du json"), true).is_err());
+        assert!(config_avec_grenos(Some("[1,2]"), true).is_err());
+    }
 
     fn m(role: &str, c: &str) -> Message {
         Message { role: role.into(), contenu: c.into() }
