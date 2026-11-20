@@ -624,7 +624,8 @@ impl Barre {
     /// seuil critique, une seule, réarmée quand tout est redescendu.
     fn relire_chaleur(&self) {
         use natif::thermique;
-        let zones = thermique::lire_zones(std::path::Path::new("/sys/class/thermal"));
+        let mut zones = thermique::lire_zones(std::path::Path::new("/sys/class/thermal"));
+        zones.extend(thermique::lire_sondes(std::path::Path::new("/sys/class/hwmon")));
         if self.chaleur_prevenue.get() {
             if thermique::retombe(&zones) {
                 self.chaleur_prevenue.set(false);

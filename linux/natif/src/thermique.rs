@@ -16,9 +16,15 @@ pub struct Zone {
     pub critique: Option<i64>,
 }
 
-/// Faute de seuil déclaré, 95 °C : au-delà, aucun processeur grand public
-/// n'est dans sa zone de confort.
-pub const SANS_SEUIL: i64 = 95_000;
+/// Faute de seuil déclaré (ou d'un seuil vraisemblable), l'arrêt est compté à
+/// 105 °C — la limite que Grenofar a donnée le 20 novembre pour le
+/// processeur et la carte graphique —, donc l'alerte à 100 °C.
+pub const SANS_SEUIL: i64 = 100_000;
+/// Un seuil critique hors de cette plage est faux. La sonde ACPI `acpitz`
+/// d'une carte mère de PC fixe annonce souvent 16,8 °C figés et un seuil
+/// critique de 20,8 °C : la barre prévenait « 16 °C, à 4 °C de l'arrêt de
+/// sécurité » (PC de Grenofar, Gigabyte B760M, 20 novembre).
+const SEUIL_VRAISEMBLABLE: std::ops::RangeInclusive<i64> = 60_000..=130_000;
 /// On prévient à 5 °C du seuil critique.
 pub const MARGE: i64 = 5_000;
 /// On ne prévient de nouveau qu'une fois redescendu de 10 °C de plus.
@@ -45,9 +51,38 @@ pub fn lire_zones(racine: &Path) -> Vec<Zone> {
             (lire(&d.join(format!("trip_point_{i}_type"))) == "critical")
                 .then(|| lire(&d.join(format!("trip_point_{i}_temp"))).parse::<i64>().ok())
                 .flatten()
-                .filter(|c| *c > 0)
+                .filter(|c| SEUIL_VRAISEMBLABLE.contains(c))
         });
         zones.push(Zone { temperature, critique });
+    }
+    zones
+}
+
+/// Les sondes du PROCESSEUR et de la CARTE GRAPHIQUE, lues dans
+/// /sys/class/hwmon. Les zones thermiques ne montrent souvent que l'ACPI de
+/// la carte mère : sur un PC fixe, ni le cœur du processeur ni la carte
+/// graphique n'y sont. `coretemp` (Intel), `k10temp` (AMD), et les pilotes
+/// graphiques `nouveau`, `amdgpu`, `radeon`, `i915`, `xe`.
+pub fn lire_sondes(racine: &Path) -> Vec<Zone> {
+    const UTILES: [&str; 7] = ["coretemp", "k10temp", "nouveau", "amdgpu", "radeon", "i915", "xe"];
+    let Ok(entrees) = fs::read_dir(racine) else { return Vec::new() };
+    let mut zones = Vec::new();
+    for e in entrees.flatten() {
+        let d = e.path();
+        if !UTILES.contains(&lire(&d.join("name")).as_str()) {
+            continue;
+        }
+        let Ok(fichiers) = fs::read_dir(&d) else { continue };
+        for f in fichiers.flatten() {
+            let nom = f.file_name().to_string_lossy().into_owned();
+            let Some(prefixe) = nom.strip_suffix("_input").filter(|p| p.starts_with("temp")) else { continue };
+            let Ok(temperature) = lire(&f.path()).parse::<i64>() else { continue };
+            if !(1_000..=150_000).contains(&temperature) {
+                continue;
+            }
+            let critique = lire(&d.join(format!("{prefixe}_crit"))).parse::<i64>().ok().filter(|c| SEUIL_VRAISEMBLABLE.contains(c));
+            zones.push(Zone { temperature, critique });
+        }
     }
     zones
 }
@@ -107,8 +142,43 @@ mod essais {
         let chaud = [Zone { temperature: 101_000, critique: Some(105_000) }, Zone { temperature: 50_000, critique: None }];
         assert_eq!(alerte(&chaud), Some((101, 105)));
         assert!(!retombe(&chaud));
+        // Sans seuil : arrêt compté à 105 °C, alerte à 100.
         let sans_seuil = [Zone { temperature: 96_000, critique: None }];
-        assert_eq!(alerte(&sans_seuil), Some((96, 100)));
+        assert_eq!(alerte(&sans_seuil), None);
+        let tres_chaud = [Zone { temperature: 101_000, critique: None }];
+        assert_eq!(alerte(&tres_chaud), Some((101, 105)));
+    }
+
+    #[test]
+    fn ignore_le_faux_seuil_de_l_acpi() {
+        // acpitz d'un PC fixe : 16,8 °C figés, « critique » à 20,8 °C.
+        let r = std::env::temp_dir().join(format!("grenos-acpi-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&r);
+        zone(&r, 0, "16800", Some("20800"));
+        let z = lire_zones(&r);
+        assert_eq!(z, vec![Zone { temperature: 16_800, critique: None }]);
+        assert_eq!(alerte(&z), None);
+        let _ = fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn lit_le_processeur_et_la_carte_graphique() {
+        let r = std::env::temp_dir().join(format!("grenos-hwmon-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&r);
+        for (n, nom, temp, crit) in [(0, "coretemp", "45000", Some("100000")), (1, "nouveau", "52000", None), (2, "nvme", "38000", Some("84850")), (3, "acpitz", "16800", Some("20800"))] {
+            let d = r.join(format!("hwmon{n}"));
+            fs::create_dir_all(&d).unwrap();
+            fs::write(d.join("name"), format!("{nom}\n")).unwrap();
+            fs::write(d.join("temp1_input"), format!("{temp}\n")).unwrap();
+            if let Some(c) = crit {
+                fs::write(d.join("temp1_crit"), format!("{c}\n")).unwrap();
+            }
+        }
+        let mut z = lire_sondes(&r);
+        z.sort_by_key(|z| z.temperature);
+        // Le disque NVMe et l'ACPI ne sont pas lus ici.
+        assert_eq!(z, vec![Zone { temperature: 45_000, critique: Some(100_000) }, Zone { temperature: 52_000, critique: None }]);
+        let _ = fs::remove_dir_all(&r);
     }
 
     #[test]

@@ -310,12 +310,22 @@ compositeur_raison() {
     [ "$(systemd-detect-virt 2>/dev/null || echo none)" = none ] || { echo "machine virtuelle"; return; }
     [ "$(cat "$CONFIG/effets" 2>/dev/null)" != performance ] || { echo "effets Performance"; return; }
     command -v picom >/dev/null 2>&1 || { echo "picom absent"; return; }
+    reconnue=
     for pilote in /sys/class/drm/card*/device/driver; do
         case "$(basename "$(readlink -f "$pilote" 2>/dev/null)")" in
-            i915|xe|amdgpu|radeon|nouveau|nvidia) return 0 ;;
+            i915|xe|amdgpu|radeon|nouveau|nvidia) reconnue=1 ;;
         esac
     done
-    echo "pas de carte graphique reconnue"
+    [ -n "$reconnue" ] || { echo "pas de carte graphique reconnue"; return; }
+    # Un pilote reconnu ne suffit pas (20 novembre) : la RTX 5060 de Grenofar
+    # avait `nouveau`, mais OpenGL tournait sur llvmpipe — picom redessinait
+    # alors l'écran AU PROCESSEUR et la souris semblait à « 10 Hz ». On
+    # demande à OpenGL qui rend vraiment, et on renonce si c'est le logiciel.
+    rendu=$(timeout 5 glxinfo -B 2>/dev/null | sed -n 's/^OpenGL renderer string: //p')
+    case "$rendu" in
+        "") echo "OpenGL ne repond pas" ;;
+        *llvmpipe*|*softpipe*|*"Software Rasterizer"*) echo "rendu logiciel ($rendu)" ;;
+    esac
 }
 RAISON=$(compositeur_raison)
 if [ -z "$RAISON" ]; then

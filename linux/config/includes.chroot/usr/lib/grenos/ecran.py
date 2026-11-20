@@ -17,17 +17,25 @@ def sorties():
 
     Rendu : [{'nom', 'actuelle', 'taux', 'modes': [{'taille', 'taux': [...]}]}]
     """
+    # `--current`, pas `--query` (20 novembre). `--query` fait RÉINTERROGER
+    # chaque écran branché par le serveur X (lecture de l'EDID), et le serveur
+    # ne répond à rien d'autre pendant ce temps : sur le PC de Grenofar (RTX
+    # 5060, deux écrans), ouvrir les Réglages laissait la souris sans clic.
+    # `--current` rend la même liste, telle que X la connaît déjà — un écran
+    # branché ensuite y arrive de lui-même par l'événement de branchement.
+    # Et une borne : un serveur qui ne répond plus ne fige pas la page.
     try:
-        texte = subprocess.run(["xrandr", "--query"], capture_output=True, text=True,
-                               check=True).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError):
+        texte = subprocess.run(["xrandr", "--current"], capture_output=True, text=True,
+                               check=True, timeout=10).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         return []
 
     trouvees, courante = [], None
     for ligne in texte.splitlines():
         entete = re.match(r"^(\S+) connected", ligne)
         if entete:
-            courante = {"nom": entete.group(1), "actuelle": "", "taux": "", "modes": []}
+            courante = {"nom": entete.group(1), "actuelle": "", "taux": "", "modes": [],
+                        "principal": " connected primary" in ligne}
             trouvees.append(courante)
             continue
         mode = re.match(r"^\s+(\d+x\d+)\s+(.*)$", ligne)
@@ -43,6 +51,10 @@ def sorties():
                     courante["taux"] = valeur.group(1)
             if taux:
                 courante["modes"].append({"taille": mode.group(1), "taux": taux})
+    # L'écran PRINCIPAL d'abord (20 novembre) : les Réglages ne règlent que le
+    # premier de la liste, et avec deux écrans c'était l'ordre des prises —
+    # Grenofar réglait 300 Hz sans savoir sur lequel.
+    trouvees.sort(key=lambda s: not s["principal"])
     return trouvees
 
 

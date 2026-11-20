@@ -179,6 +179,15 @@ if [ ! -e /usr/lib/firmware/nvidia/gb206 ] && [ ! -e /lib/firmware/nvidia/gb206 
     exit 1
 fi
 echo "grenos: noyau $noyau et firmware NVIDIA Blackwell presents"
+# Et Mesa assez neuf pour les ACCÉLÉRER (NVK pour Blackwell : Mesa 25.1) —
+# sans lui, OpenGL tombe sur llvmpipe et tout est rendu au processeur
+# (souris « à 10 Hz » chez Grenofar, 20 novembre).
+mesa=$(dpkg-query -W -f='${Version}' libgl1-mesa-dri 2>/dev/null || true)
+if [ -z "$mesa" ] || dpkg --compare-versions "$mesa" lt 25.1; then
+    echo "grenos: Mesa ${mesa:-absent} : trop ancien pour accelerer les RTX 50 (25.1 au moins)" >&2
+    exit 1
+fi
+echo "grenos: Mesa $mesa (NVK pour les RTX 50)"
 # Et ces firmwares restent HORS de l'initrd (crochet
 # zz-grenos-sans-pilotes-graphiques) : dedans, ils faisaient passer l'ISO
 # au-dela de 2 Go et la cle USB mettait deux minutes a le lire.

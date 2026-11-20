@@ -18,3 +18,13 @@
 Package: linux-* firmware-* libcpupower*
 Pin: release n=trixie-backports
 Pin-Priority: 990
+
+# Mesa aussi (20 novembre). Avec le noyau 7.2, la RTX 5060 de Grenofar
+# s'affichait, mais Mesa 25.0 de trixie ne l'accélère pas : OpenGL retombait
+# sur llvmpipe (le processeur), picom redessinait l'écran au processeur et
+# la souris semblait tourner « à 10 Hz ». Mesa 26.1 de backports a NVK
+# (Vulkan) pour Blackwell et zink (OpenGL sur Vulkan). Ses dépendances sont
+# toutes satisfaites par trixie (lu dans Packages le 20 novembre).
+Package: mesa-* libgl1-mesa-dri libglx-mesa0 libegl-mesa0 libgbm1
+Pin: release n=trixie-backports
+Pin-Priority: 990
