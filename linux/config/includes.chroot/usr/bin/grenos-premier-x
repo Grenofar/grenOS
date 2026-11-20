@@ -12,22 +12,15 @@ set -eu
 [ -e /etc/grenos/identite ] && exit 0
 command -v Xorg >/dev/null 2>&1 || exit 0
 
-# L'ÉCRAN DE CHARGEMENT LÂCHE LA CARTE D'ABORD (21 novembre). Sur la RTX
-# 5060 de Grenofar (nouveau), le serveur X de l'assistant mourait en une
-# demi-seconde : « drmSetMaster failed: Device or resource busy » — plymouth
-# tenait encore la carte. lightdm, lui, désactive plymouth avant de lancer
-# son X : son bureau s'ouvrait, mais l'assistant ne s'affichait jamais (lu
-# dans le rapport de démarrage écrit sur sa clé).
-#
-# `plymouth quit --retain-splash`, et PAS `deactivate` : désactivé, plymouth
-# garde la main sur le changement de terminal sans plus y répondre — notre X,
-# qui démarre sur vt7, attendait ce changement pour toujours (cle.yml, 21
-# novembre : l'écran de chargement encore là à 110 s, X muet). Fermé, il
-# rend la carte ET le terminal ; son image reste à l'écran jusqu'à ce que X
-# dessine, sans clignotement. lightdm, ensuite, ne trouve plus de plymouth.
-if command -v plymouth >/dev/null 2>&1 && plymouth --ping 2>/dev/null; then
-    plymouth quit --retain-splash 2>/dev/null || true
-fi
+# PLYMOUTH N'EST PAS TOUCHÉ ICI (21 novembre, trois essais en une heure).
+# Sur la RTX 5060 de Grenofar, le serveur X de l'assistant meurt sous nouveau
+# (« drmSetMaster failed » : plymouth tient la carte) — le bureau s'ouvre
+# alors directement, et le filet de l'écran le compte comme une preuve. Mais
+# `plymouth deactivate` puis `plymouth quit --retain-splash` avant xinit ont
+# FIGÉ ce serveur X au changement de terminal, sur toutes les machines
+# d'essai (cle.yml, runs 44842167737 et 44843240153) : plus d'assistant du
+# tout. Le chemin d'origine reste, prouvé partout ; l'assistant sous nouveau
+# se règlera à part, sans risquer la version d'installation.
 
 # `-keeptty` : sans terminal de contrôle — c'est le cas sous systemd — Xorg
 # refuse de démarrer sans cette option.
