@@ -569,7 +569,8 @@ jobs:
           done
           kill $QEMU 2>/dev/null || true
           ligne=$(grep -a 'secure boot :' "$RUNNER_TEMP/serial-sb.log" 2>/dev/null | sed 's/^.*grenos: //' | tail -n 1)
-          echo "secure boot : ${ligne:-la session n'a rien dit apres $((attente * 5)) s}"
+          [ -n "$ligne" ] || ligne="la session est restee muette apres $((attente * 5)) s"
+          echo "secure boot : $ligne"
           if ! echo "$ligne" | grep -q "secure boot : actif"; then
             echo "::error::Avec le Secure Boot actif, l'image n'est pas allee jusqu'a la session."
             exit 1
