@@ -70,6 +70,11 @@ FACULTATIVES = {
     "spice-vdagent", "vmware-user-suid-wrapper", "qemu-ga",
     # Le pilote NVIDIA : la page Jeux s'en sert pour conseiller, pas pour agir.
     "nvidia-detect",
+    # `grenos-depot-editeur --apres` ne l'appelle qu'APRÈS avoir installé le
+    # pilote NVIDIA, dont le paquet dépend de dkms (20 novembre). Absent,
+    # `dkms status` échoue, et le script revient au pilote libre : le bon
+    # comportement. Le mettre dans l'image y poserait un compilateur pour rien.
+    "dkms",
     # Ce que la personne installe elle-même depuis le magasin.
     "steam", "chromium", "chromium-browser", "google-chrome",
     # Nos propres programmes : ils sont dans le même paquet, et le paquet ne
