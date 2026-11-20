@@ -17,10 +17,16 @@ command -v Xorg >/dev/null 2>&1 || exit 0
 # demi-seconde : « drmSetMaster failed: Device or resource busy » — plymouth
 # tenait encore la carte. lightdm, lui, désactive plymouth avant de lancer
 # son X : son bureau s'ouvrait, mais l'assistant ne s'affichait jamais (lu
-# dans le rapport de démarrage écrit sur sa clé). `plymouth deactivate`
-# rend la carte sans effacer l'écran ; lightdm le fermera ensuite.
+# dans le rapport de démarrage écrit sur sa clé).
+#
+# `plymouth quit --retain-splash`, et PAS `deactivate` : désactivé, plymouth
+# garde la main sur le changement de terminal sans plus y répondre — notre X,
+# qui démarre sur vt7, attendait ce changement pour toujours (cle.yml, 21
+# novembre : l'écran de chargement encore là à 110 s, X muet). Fermé, il
+# rend la carte ET le terminal ; son image reste à l'écran jusqu'à ce que X
+# dessine, sans clignotement. lightdm, ensuite, ne trouve plus de plymouth.
 if command -v plymouth >/dev/null 2>&1 && plymouth --ping 2>/dev/null; then
-    plymouth deactivate 2>/dev/null || true
+    plymouth quit --retain-splash 2>/dev/null || true
 fi
 
 # `-keeptty` : sans terminal de contrôle — c'est le cas sous systemd — Xorg
