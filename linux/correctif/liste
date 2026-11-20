@@ -38,6 +38,7 @@ fichier etc/systemd/system/zramswap.service.d/10-grenos-arret.conf
 # qui marchait. L'assistant fait lâcher la carte à plymouth ; le filet
 # prend un bureau ouvert pour une preuve et ne redémarre plus sous les yeux.
 fichier usr/bin/grenos-premier-x
+fichier etc/systemd/system/getty@tty1.service.d/20-grenos-apres-assistant.conf
 fichier usr/lib/grenos/grenos-affichage-garde
 fichier etc/systemd/system/grenos-affichage-garde.service
 
