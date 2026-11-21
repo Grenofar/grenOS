@@ -118,6 +118,21 @@ sur sa RTX 5060). Restaient, et où ça en est :
   - écarté : ne plus marquer la partition de la clé « active » dans le
     Créateur — la clé démarre ainsi chez lui ; changer sans essai sur sa
     carte mère risquerait une clé qui ne démarre plus.
+- **2037 (21 nov., 21 h 40)** : construction 44943231283 et cle.yml
+  44947459584 verts (installation jusqu'à l'assistant, Paris, choix
+  d'affichage suivi). Sa clé F: porte la 2037 (292 fichiers, mode simple).
+  À FAIRE pour la suivante :
+  - `/etc/adjtime` dit **UTC dans l'image** (essai-installation.sh : « dit
+    UTC, temoin present ») alors que la garde du hook 0100 lit LOCAL : un
+    paquet le réécrit APRÈS nos crochets. Le témoin étant posé, une mise à
+    jour ne le corrigera pas seule (nouveau témoin, ou garde au tout dernier
+    moment). C'est l'heure de retard de Windows.
+  - `grenos-revenir-ici` après une INSTALLATION réussie : « Redémarrer
+    maintenant » de Calamares ramènerait sur la CLÉ (BootNext = clé), pas
+    sur le disque installé. Ne rien poser si la session a fini une
+    installation (« completion: succeeded » dans le journal de Calamares).
+    En attendant : à la fin, décocher « Redémarrer maintenant », Éteindre,
+    retirer la clé, rallumer.
   - CAUSE PROBABLE de l'écran vert, NON PROUVÉE : le lien PCIe de la RTX
     5060 (Gen5 x8, port 00:01.0 8086:A70D, BIOS F4 du 27/09/2024). Sous
     Windows : 12 441 « WHEA-Logger 17 » (erreur PCIe corrigée) en 3 min,
