@@ -81,7 +81,13 @@ sur sa RTX 5060). Restaient, et où ça en est :
     [écrit ; essai-rapport-cle.sh, 6 cas, échoue sur l'ancien `borne`].
   - le système installé repartait de zéro (écran vert au premier
     démarrage) : le choix de la clé suit désormais sur le disque
-    (calamares-bootloader-config) [écrit ; vérifié par essai-installation.sh].
+    (calamares-bootloader-config) [prouvé en CI sur la 1908 : cle.yml run
+    44939531360, « le choix d affichage de la cle a suivi sur le disque :
+    firmware », installation jusqu'à l'assistant en Secure Boot].
+  - Les trois réparations sont dans `linux-20261121-1908` (construction
+    44934751490 verte, essais rapport-cle et revenir-ici passés en CI).
+    Sur SA machine : [à voir] — retour sur la clé après le filet (dépend
+    de sa carte mère), rapport du démarrage figé lisible sur la clé.
   - CAUSE PROBABLE de l'écran vert, NON PROUVÉE : le lien PCIe de la RTX
     5060 (Gen5 x8, port 00:01.0 8086:A70D, BIOS F4 du 27/09/2024). Sous
     Windows : 12 441 « WHEA-Logger 17 » (erreur PCIe corrigée) en 3 min,
