@@ -152,9 +152,13 @@ carte mère ALC897 (marche).
      grenos-systeme dépendait de calamares : retirer l'installateur
      emportait grenos-systeme puis grenos-desktop, TOUT grenOS (make-deb
      exclut désormais la liste de packages.conf ; garde à la construction).
-  [Prouvé en QEMU : shim → GRUB → noyau « Secure boot enabled » → écran de
-  connexion. À prouver : l'assistant grenOS sur le disque installé, avec la
-  construction 44914436115.]
+  [PROUVÉ en QEMU sur l'image publiée 20261121-1551 (cle.yml run
+  44921626358) : disque vierge → installation → grenOS reste installé
+  (grenos-systeme, grenos-desktop, 16 services) → démarrage SEUL sous OVMF
+  Secure Boot, clés Microsoft → shim → GRUB → « Secure boot enabled » →
+  l'ASSISTANT grenOS à 4,7 s, curseur au centre. Pas encore vu sur son PC.]
+  La clé G: porte la 1551 (292 fichiers vérifiés), affichage-reessai gardé
+  (il a cliqué « Réessayer » : la clé retentera nouveau, filet compris).
 - Publiées : 20261121-0154 (l'initrd), puis 20261121-0248 (l'horloge). La
   clé G: porte la **0248** (292 fichiers vérifiés contre sha256sum.txt,
   affichage « nouveau » et rapports gardés) : prête pour installer sur son
