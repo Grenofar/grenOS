@@ -788,6 +788,30 @@ if absents:
 print("grenos: tout ce que l installateur propose, il sait le formater")
 FORMATER
 
+echo "--- grenOS : l installateur sait-il copier le systeme ---"
+# 21 NOVEMBRE, SUR LE SSD DE GRENOFAR : « impossible de trouver unsquashfs,
+# impossible de decompresser l image ». Les gardes ci-dessus verifiaient
+# qu on sait formater et poser GRUB — pas qu on sait COPIER : l etape
+# unpackfs de Calamares lit le squashfs avec unsquashfs, puis recopie avec
+# rsync. Aucune installation n avait donc jamais pu aboutir.
+manque=""
+for outil in unsquashfs rsync; do
+    command -v "$outil" >/dev/null 2>&1 || manque="$manque $outil"
+done
+if [ -n "$manque" ]; then
+    echo "grenos: l installateur ne saurait pas copier le systeme, il manque :$manque" >&2
+    exit 1
+fi
+# Et la fin de l installation : le packages.conf de Debian retire en un seul
+# apt-get quatre paquets que grenOS n a pas ; sans listes d apt dans l image,
+# apt sort en erreur et l installation echoue APRES la copie. Le notre retire
+# un paquet a la fois (try_remove).
+if ! grep -q 'try_remove' /etc/calamares/modules/packages.conf 2>/dev/null; then
+    echo "grenos: packages.conf de Debian en place : l installation finirait en erreur (paquets introuvables)" >&2
+    exit 1
+fi
+echo "grenos: l installateur sait copier le systeme (unsquashfs, rsync) et finir sans erreur d apt"
+
 echo "--- grenOS : saurons-nous poser le chargeur de demarrage ---"
 # Le controle ci-dessus verifie qu'on sait FORMATER ce que l'installateur
 # propose. Formater n'est que la moitie du travail : une installation qui

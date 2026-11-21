@@ -434,6 +434,14 @@ firmware-iwlwifi
 firmware-realtek
 firmware-amd-graphics
 
+## LA COPIE DU SYSTÈME PAR L'INSTALLATEUR (21 novembre, sur le SSD de
+## Grenofar : « impossible de trouver unsquashfs, impossible de décompresser
+## l'image »). L'étape unpackfs de Calamares lit filesystem.squashfs avec
+## `unsquashfs` (main.py de Calamares 3.3.14, ligne 482) ; calamares ne fait
+## que le RECOMMANDER, et `--apt-recommends false` l'écartait. Aucune
+## installation n'avait donc jamais pu copier le système.
+squashfs-tools
+
 ## Le chargeur d'amorçage, posé par Calamares selon la machine. Les deux
 ## metapaquets grub-pc et grub-efi-amd64 s'excluent l'un l'autre : les paquets
 ## -bin, eux, cohabitent.

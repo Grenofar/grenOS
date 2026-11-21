@@ -236,6 +236,13 @@ if [ -f /usr/share/grenos/users.conf ]; then
     cp /usr/share/grenos/users.conf /etc/calamares/modules/users.conf || true
 fi
 
+# Et ce qu'il retire du système installé, sans échouer sur un paquet absent
+# (21 novembre ; voir le fichier : celui de Debian finissait en erreur).
+if [ -f /usr/share/grenos/packages.conf ]; then
+    mkdir -p /etc/calamares/modules
+    cp /usr/share/grenos/packages.conf /etc/calamares/modules/packages.conf || true
+fi
+
 # ---- Les réglages que nous posons chez les autres ---------------------------
 #
 # Ces fichiers appartiennent à openbox, à l'explorateur, à la bibliothèque de

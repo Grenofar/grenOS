@@ -227,7 +227,11 @@ fi
 # compte, sans toucher au système.
 VIRTUELLE=$(systemd-detect-virt 2>/dev/null || echo none)
 mkdir -p "$HOME/.local/share/applications"
-if [ "$VIRTUELLE" = "none" ]; then
+# Et seulement sur la CLÉ (21 novembre) : sur une machine déjà installée,
+# l'icône « Installer grenOS » revenait sur le bureau du premier compte —
+# et l'installateur, retiré à l'installation (packages.conf), n'aurait rien
+# ouvert. La même branche que la machine virtuelle : on la cache.
+if [ "$VIRTUELLE" = "none" ] && grep -qw 'boot=live' /proc/cmdline 2>/dev/null; then
     rm -f "$HOME/.local/share/applications/grenos-installer.desktop"
     if [ ! -e "$HOME/Bureau/grenos-installer.desktop" ] && \
        [ ! -e "$CONFIG/installer-pose" ]; then
