@@ -42,7 +42,16 @@
         { nom: "Livebox-4F2A", signal: 86, protege: true, actif: false },
         { nom: "Freebox-Salon", signal: 61, protege: true, actif: false },
         { nom: "Café du coin", signal: 32, protege: false, actif: false }];
-      case "premier_terminer": await attendre(2200); return a.reponses.compte + "@grenos";
+      case "premier_terminer": {
+        // Les annonces « premier-etape » de premier.rs, au rythme d'une
+        // machine lente : le pourcentage de « Mise en place… » se voit monter.
+        const e = window.APERCU_ECOUTE || {};
+        for (const fait of [2, 3, 4, 5]) {
+          await attendre(550);
+          e["premier-etape"] && e["premier-etape"](fait);
+        }
+        return a.reponses.compte + "@grenos";
+      }
       case "apparence": return { theme: "nuit", accent: "violet", effets: "equilibres" };
       case "maj_etat": return { disponibles: 37, flatpak: 3, date: "2026-11-17 08:12", telechargee: true, arme: false, mode: "automatiques", dernier_resultat: "ok 12", en_cours: false,
         paquets: ["linux-image-amd64", "firefox-esr", "libwebkit2gtk-4.1-0", "grenos-desktop", "mesa-vulkan-drivers", "openssl", "systemd", "pipewire"] };

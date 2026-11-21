@@ -199,6 +199,15 @@ if [ ! -e /usr/lib/xorg/modules/drivers/fbdev_drv.so ]; then
     exit 1
 fi
 echo "grenos: pilote X fbdev present (image du firmware)"
+# Et lightdm doit pouvoir s'en servir : sans le titre « master-of-seat » sur
+# /dev/fb0, logind ne déclare jamais seat0 graphique et lightdm attend sans
+# fin — l'écran noir après l'assistant de Grenofar (21 novembre).
+REGLE_FB=/etc/udev/rules.d/72-grenos-image-firmware.rules
+if ! grep -q 'TAG+="master-of-seat"' "$REGLE_FB" 2>/dev/null; then
+    echo "grenos: $REGLE_FB absente : sur l image du firmware, lightdm attendrait sans fin (ecran noir)" >&2
+    exit 1
+fi
+echo "grenos: l image du firmware compte comme un ecran pour logind et lightdm"
 
 # LE SECURE BOOT SUR LE SYSTÈME INSTALLÉ (20 novembre) : sans ces deux
 # fichiers, `grub-install` pose un GRUB non signé, et un PC au Secure Boot

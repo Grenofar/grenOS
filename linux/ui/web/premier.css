@@ -144,6 +144,10 @@
 .gestes li.fait { color: var(--texte); }
 .gestes li.fait .puce { background: var(--reussi); border-color: var(--reussi); }
 .gestes li.fait .puce svg { opacity: 1; }
+.fin-progression { width: min(360px, 80vw); display: grid; gap: 8px; }
+.fin-barre { height: 6px; border-radius: 3px; background: var(--surface-haute); overflow: hidden; }
+.fin-barre i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 300ms var(--courbe); }
+.fin-pourcent { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--texte-2); }
 .embleme.pret .logo.geant { background: linear-gradient(135deg, var(--reussi), var(--accent)); }
 [data-effets="complets"] .embleme.pret, [data-effets="equilibres"] .embleme.pret { animation: rebond 700ms var(--courbe); }
 @keyframes rebond { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: none; } }

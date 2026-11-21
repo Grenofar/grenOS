@@ -41,7 +41,16 @@ fi
 t=0
 for cap in 45 75 110 150 200 260; do
     [ "$cap" -le "$DUREE" ] || break
-    sleep $((cap - t))
+    # La souris BOUGE avant la capture de 75 s (21 novembre) : sur aucune
+    # capture de l'assistant le curseur n'apparaissait — caché tant qu'on ne
+    # bouge pas, ou absent ? La capture de 75 s le dit.
+    if [ "$cap" = 75 ]; then
+        sleep $((cap - t - 5))
+        python3 "$RACINE/scripts/ci-screen.py" send "$OUT/mon.sock" "mouse_move 40 30" || true
+        sleep 5
+    else
+        sleep $((cap - t))
+    fi
     t=$cap
     kill -0 "$QEMU" 2>/dev/null || { echo "QEMU s'est arrêté seul à ~${t}s"; break; }
     python3 "$RACINE/scripts/ci-screen.py" grab "$OUT/mon.sock" "$OUT/ecran-${cap}s.ppm" || true

@@ -10,41 +10,16 @@
 #   seul <chemin>
 #     (un fichier propre au correctif, pris dans linux/correctif/seul)
 #
-# 21 novembre — base : linux-20261120-2306 (qui contient déjà l'affichage
-# sur l'image du firmware, le filet des RTX 50 et le premier rapport). Ce
+# 21 novembre, midi — base : linux-20261121-0935 (qui contient déjà tout le
+# correctif précédent : installateur, écrans, son, filet de l'écran). Ce
 # correctif n'apporte que ce qui a changé depuis.
 
-# L'installateur bloquait au partitionnement : une partition MONTÉE ne
-# laisse à Calamares que le manuel. Le lanceur referme les disques d'abord.
-fichier usr/bin/grenos-installer
-fichier usr/share/applications/grenos-installer.desktop
-fichier usr/bin/grenos-bienvenue
-fichier usr/lib/grenos/grenos-windows
-fichier etc/systemd/system/grenos-windows.service
+# Sur l'image du firmware, lightdm attendait sans fin après l'assistant
+# (écran noir) : logind ne comptait pas /dev/fb0 comme un écran.
+fichier etc/udev/rules.d/72-grenos-image-firmware.rules
 
-# Le rapport de démarrage : en plus, le son et le journal de l'installateur.
-fichier usr/lib/grenos/grenos-rapport-cle
-
-# Les écrans : seulement ce que l'écran annonce, et « Garder » note tous les
-# écrans (définition, fréquence, place) pour la session suivante.
-fichier usr/lib/grenos/ecran.py
-fichier usr/lib/grenos/pont.py
-
-# zramswap ne finit plus « en échec » à chaque arrêt.
-fichier etc/systemd/system/zramswap.service.d/10-grenos-arret.conf
-
-# 21 novembre, rapport de sa clé : l'assistant ne s'affichait pas sous
-# nouveau (plymouth tenait la carte), et le filet a redémarré sa session
-# qui marchait. L'assistant fait lâcher la carte à plymouth ; le filet
-# prend un bureau ouvert pour une preuve et ne redémarre plus sous les yeux.
-fichier usr/bin/grenos-premier-x
-fichier etc/systemd/system/getty@tty1.service.d/20-grenos-apres-assistant.conf
-fichier usr/lib/grenos/grenos-affichage-garde
-fichier etc/systemd/system/grenos-affichage-garde.service
-
-# Le casque USB de Grenofar (« OW810 » chez Windows, 3206:0861) : sa puce
-# n'a pas de nom de produit, PipeWire le montrait sous un nom illisible.
-fichier etc/wireplumber/wireplumber.conf.d/50-grenos-noms.conf
+# Le curseur dans l'assistant : le thème du bureau, et une flèche sur le fond.
+fichier usr/bin/grenos-premier-lanceur
 
 # L'installateur recopie aussi ce correctif (fichier propre au correctif,
 # dans linux/correctif/seul : il n'a pas de sens dans l'image complète).

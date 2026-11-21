@@ -55,6 +55,14 @@ jobs:
           - nom: normal
             plus: ""
             grub: linux/correctif/cle/boot/grub/config.cfg
+          # L'APRÈS-ASSISTANT sur l'image du firmware (21 novembre) : chez
+          # Grenofar, l'assistant fini, lightdm attendait sans fin (écran noir)
+          # — aucun essai n'allait jusque-là, ils s'arrêtaient tous à
+          # l'assistant. Ici l'assistant est sauté : lightdm doit ouvrir la
+          # session tout seul, et le rapport doit le dire.
+          - nom: firmware-bureau
+            plus: "modprobe.blacklist=bochs systemd.mask=grenos-premier.service"
+            grub: linux/correctif/cle/boot/grub/config.cfg
     steps:
       - uses: actions/checkout@v4
 
@@ -143,6 +151,18 @@ jobs:
           head -n 30 "$D/10-demarrage.txt" 2>/dev/null || true
           echo "=================== Xorg"
           grep -hE '\(EE\)|\(WW\)|Fatal|no screens|Cannot run|modeset\(|VESA|Loading .*drivers|kmsdev' "$D/40-xorg.txt" 2>/dev/null | head -80 || true
+          echo "=================== lightdm et la session"
+          sed -n '/lightdm.log/,/^========/p' "$D/40-xorg.txt" 2>/dev/null | head -40 || true
+          grep -hE 'session : |New session|seat0|CanGraphical|souris' "$D/20-journal.txt" 2>/dev/null | head -20 || true
+          # Le verdict de l'après-assistant : une session DOIT s'être ouverte.
+          if [ "${{ matrix.nom }}" = firmware-bureau ]; then
+            if grep -q 'AUCUNE session' "$D/20-journal.txt" 2>/dev/null || \
+               ! grep -q 'New session' "$D/20-journal.txt" 2>/dev/null; then
+              echo "::error::Image du firmware : lightdm n'a ouvert AUCUNE session (l'ecran noir de Grenofar)."
+              exit 1
+            fi
+            echo "image du firmware : la session s'est ouverte"
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()

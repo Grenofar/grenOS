@@ -59,6 +59,11 @@ if [ -x /usr/bin/grenos-ui ]; then
     # Root sous systemd n'a ni dossier d'exécution ni bus d'accessibilité :
     # WebKit attendrait l'un et chercherait l'autre.
     export XDG_RUNTIME_DIR=/run/user/0 HOME=/root NO_AT_BRIDGE=1
+    # Le curseur du bureau, dès l'assistant (21 novembre : « utiliser la
+    # souris dans l'OOBE ») — root n'a pas de thème à lui. grenos-ui le pose
+    # au milieu de sa fenêtre une fois affiché (premier_pret).
+    export XCURSOR_THEME=Breeze_Light XCURSOR_SIZE=24
+    xsetroot -cursor_name left_ptr 2>/dev/null || true
 
     dire "premier ecran : le programme demarre (grenos-ui)"
     /usr/bin/grenos-ui premier &

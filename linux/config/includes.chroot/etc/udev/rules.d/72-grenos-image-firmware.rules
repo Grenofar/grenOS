@@ -1,0 +1,18 @@
+# L'IMAGE DU FIRMWARE EST UN ÉCRAN (21 novembre, rapport de la clé de
+# Grenofar 20261121-104453).
+#
+# Sur sa RTX 5060 en mode « image du firmware » (nouveau écarté), l'assistant
+# s'est affiché, il l'a fini — puis écran noir, plus rien. lightdm attendait :
+# il n'ouvre un écran que quand logind déclare seat0 « graphique »
+# (logind-check-graphical, vrai par défaut dans lightdm 1.32), et logind ne
+# le fait que pour un périphérique « master-of-seat ». Or systemd
+# (71-seat.rules) ne donne ce titre au tampon du firmware (/dev/fb0) QUE
+# quand `nomodeset` est sur la ligne du noyau. grenOS écarte nouveau sans
+# nomodeset : seat0 n'était jamais graphique, et lightdm attendait sans fin.
+#
+# On donne donc ce titre aux tampons des firmwares eux-mêmes — EFI, VESA,
+# simplefb — exactement comme systemd le fait sous nomodeset. Jamais aux
+# tampons des vrais pilotes (« nouveaudrmfb », « amdgpudrmfb »…), qui ont
+# déjà leur carte DRM : quand un pilote arrive, il remplace ce tampon, et la
+# règle ne s'applique plus.
+SUBSYSTEM=="graphics", KERNEL=="fb[0-9]*", ATTR{name}=="EFI VGA|VESA VGA|simple", TAG+="master-of-seat"

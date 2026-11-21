@@ -101,6 +101,24 @@ sed -i 's/^ProgressBarForegroundColor=.*/ProgressBarForegroundColor=0x3b82f6/' \
 sed -i 's/^ProgressBarBackgroundColor=.*/ProgressBarBackgroundColor=0x2a3450/' \
     "$THEME" 2>/dev/null || true
 
+# LA BARRE AU DÉMARRAGE AUSSI (21 novembre, « mets des écrans de chargement
+# qui affichent combien de % »). Le mode `[boot-up]` de Debian n'a que la
+# roulette ; on y ajoute la barre, SOUS la roulette (`UseAnimation` doit être
+# dit : sans lui, deux-étapes cache la roulette dès qu'il y a une barre). Pas
+# le texte « 42% complete » de plymouth : il est en anglais, et dans l'initrd
+# aucune traduction ne le rattrape. La barre se remplit sur la durée du
+# démarrage précédent, que plymouth garde lui-même d'une fois sur l'autre.
+sed -i "/^\[boot-up\]/,/^\[/ { /^UseProgressBar=/d; /^UseAnimation=/d; }" \
+    "$THEME" 2>/dev/null || true
+sed -i "/^\[boot-up\]/a UseAnimation=true" "$THEME" 2>/dev/null || true
+sed -i "/^\[boot-up\]/a UseProgressBar=true" "$THEME" 2>/dev/null || true
+grep -q '^ProgressBarVerticalAlignment=' "$THEME" 2>/dev/null || \
+    sed -i "/^\[two-step\]/a ProgressBarVerticalAlignment=.82" "$THEME" 2>/dev/null || true
+grep -q '^ProgressBarWidth=' "$THEME" 2>/dev/null || \
+    sed -i "/^\[two-step\]/a ProgressBarWidth=320" "$THEME" 2>/dev/null || true
+grep -q '^ProgressBarHeight=' "$THEME" 2>/dev/null || \
+    sed -i "/^\[two-step\]/a ProgressBarHeight=4" "$THEME" 2>/dev/null || true
+
 # Les quatre modes hors démarrage, en français. La plage `/^\[x\]/,/^\[/`
 # s'arrête à l'en-tête suivant : rien ne déborde sur la section d'à côté.
 #

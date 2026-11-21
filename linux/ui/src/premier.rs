@@ -435,6 +435,21 @@ pub fn premier_pret(fenetre: tauri::WebviewWindow) {
     let _ = fs::create_dir_all("/run/grenos");
     let _ = fs::write(PRET, "oui\n");
     let _ = fenetre.set_focus();
+    // LA SOURIS DANS L'ASSISTANT (21 novembre, « ajoute la possibilité
+    // d'utiliser la souris »). Aucun gestionnaire de fenêtres ne tourne
+    // encore : rien ne montre le curseur, et sur l'image du firmware, aucune
+    // capture de l'assistant ne l'a jamais montré. On le rend visible, en
+    // flèche, et on le pose au milieu de la fenêtre : il est là d'emblée, et
+    // le clavier va à la fenêtre sous lui (sans gestionnaire, le focus suit
+    // le pointeur).
+    let _ = fenetre.set_cursor_visible(true);
+    let _ = fenetre.set_cursor_icon(tauri::CursorIcon::Default);
+    if let Ok(taille) = fenetre.inner_size() {
+        let milieu = tauri::PhysicalPosition::new((taille.width / 2) as i32, (taille.height / 2) as i32);
+        let place = fenetre.set_cursor_position(milieu).is_ok();
+        dire(&format!("premier : souris au centre ({}x{}){}", taille.width / 2, taille.height / 2,
+                      if place { "" } else { " — REFUSE" }));
+    }
     dire("premier : interface grenos-ui affichee");
 }
 
@@ -475,17 +490,26 @@ pub async fn premier_terminer(
     let clavier = donnees.claviers.get(index).cloned().unwrap_or_else(|| donnees.claviers[0].clone());
     let affiche = reponses.get("nom_affiche").filter(|s| !s.trim().is_empty()).cloned().unwrap_or_else(|| login.clone());
 
+    // Le pourcentage de « Mise en place… » (21 novembre) : la page coche ses
+    // cinq gestes au fil de CES annonces, pas d'une minuterie.
+    let etape = |fait: u32| {
+        let _ = app.emit("premier-etape", fait);
+    };
     let retenu = appliquer(&login, affiche.trim(), &clavier);
     if let Some(mot) = mot_de_passe.filter(|m| !m.is_empty()) {
         let ok = poser_mot_de_passe(&retenu, &mot);
         dire(&format!("premier : mot de passe {}", if ok { "pose" } else { "PAS pose" }));
     }
+    etape(2); // le compte, le clavier et le fuseau
     poser_apparence(&retenu, &reponses);
+    etape(3);
     regler_majs(reponses.get("majs").map(|s| s.as_str()).unwrap_or("automatiques"));
     regler_sauvegardes(reponses.get("sauvegardes").map(|s| s.as_str()).unwrap_or("non"));
     regler_dev(&reponses);
     garder_choix(&reponses);
+    etape(4);
     deposer_les_travaux(&reponses, &donnees);
+    etape(5);
     dire(&format!("nom choisi, la machine est a {retenu}@{MACHINE}"));
     let v = |c: &str, d: &str| reponses.get(c).cloned().unwrap_or_else(|| d.to_string());
     dire(&format!("premier : choix gardes — apparence {}, telemetrie {}, majs {}",

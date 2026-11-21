@@ -571,14 +571,29 @@
     D.retour.disabled = true;
     const gestes = ["Création de ton compte", "Clavier et fuseau horaire", "Apparence", "Mises à jour", "Applications au prochain démarrage"];
     const items = gestes.map((g) => el("li", el("span.puce", svg("coche")), g));
+    // LE POURCENTAGE (21 novembre, « mets des écrans de chargement qui
+    // affichent combien de % ») : il suit les étapes que premier.rs annonce
+    // une à une (« premier-etape »), jamais une minuterie — une étape qui
+    // traîne se voit, au lieu d'une barre qui ment.
+    const remplissage = el("i");
+    const pourcent = el("div.fin-pourcent", "0 %");
+    const progression = (fait) => {
+      try {
+        const n = Math.max(0, Math.min(gestes.length, Number(fait) || 0));
+        const p = Math.round((n / gestes.length) * 100);
+        remplissage.style.width = `${p}%`;
+        pourcent.textContent = `${p} %`;
+        items.forEach((x, k) => x.classList.toggle("fait", k < n));
+      } catch (e) { /* l'affichage ne doit jamais bloquer la fin */ }
+    };
     const voile = el("div.voile",
       el("div.fin",
         el("div.embleme", el("div.anneau.tourne"), el("div.logo.geant", svg("marque"))),
         el("h1.titre", "Mise en place…"),
-        el("ol.gestes", ...items)));
+        el("ol.gestes", ...items),
+        el("div.fin-progression", el("div.fin-barre", remplissage), pourcent)));
     document.body.append(voile);
-    let i = 0;
-    const pas = setInterval(() => { if (i < items.length - 1) items[i++].classList.add("fait"); }, 420);
+    try { api.ecouter("premier-etape", progression); } catch (e) { /* la fin se fait sans */ }
     let adresse = "";
     try {
       // Le premier arrivé de deux chemins : la réponse de la commande, ou
@@ -589,7 +604,6 @@
         parEvenement,
       ]);
     } catch (e) {
-      clearInterval(pas);
       voile.remove();
       fini = false;
       D.suite.disabled = false;
@@ -598,8 +612,7 @@
       D.erreur.textContent = String(e);
       return;
     }
-    clearInterval(pas);
-    items.forEach((x) => x.classList.add("fait"));
+    progression(gestes.length);
     const prenom = (R.nom_affiche || R.compte).trim().split(/\s+/)[0];
     voile.querySelector(".fin").replaceChildren(
       el("div.embleme.pret", el("div.anneau"), el("div.logo.geant", svg("coche"))),
