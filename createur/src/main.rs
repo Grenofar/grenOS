@@ -113,7 +113,9 @@ fn guillemets(chemin: &Path) -> String {
 }
 
 /// Les clés USB branchées. JAMAIS un disque interne, ni celui de Windows
-/// (IsSystem / IsBoot), même branché en USB.
+/// (IsSystem / IsBoot), même branché en USB. Ni un lecteur de cartes vide :
+/// chez Grenofar, « Generic STORAGE DEVICE » (USB, 0 octet, hors ligne)
+/// était listé à côté de sa clé (21 novembre).
 #[tauri::command]
 fn cles() -> Result<Vec<Cle>, String> {
     lister_cles(false)
@@ -122,7 +124,7 @@ fn cles() -> Result<Vec<Cle>, String> {
 fn lister_cles(virtuel: bool) -> Result<Vec<Cle>, String> {
     let bus = if virtuel { "@('USB', 'File Backed Virtual')" } else { "@('USB')" };
     let json = powershell(&format!(
-        "$r = @(Get-Disk | Where-Object {{ {bus} -contains [string]$_.BusType -and -not $_.IsSystem -and -not $_.IsBoot }} | ForEach-Object {{ \
+        "$r = @(Get-Disk | Where-Object {{ {bus} -contains [string]$_.BusType -and -not $_.IsSystem -and -not $_.IsBoot -and [uint64]$_.Size -gt 0 }} | ForEach-Object {{ \
            $l = @(Get-Partition -DiskNumber $_.Number -ErrorAction SilentlyContinue | Where-Object DriveLetter | ForEach-Object {{ [string]$_.DriveLetter }}); \
            [pscustomobject]@{{ numero = [int]$_.Number; nom = [string]$_.FriendlyName; taille = [uint64]$_.Size; lettres = $l }} }}); \
          ConvertTo-Json -InputObject $r -Depth 3 -Compress"
@@ -256,24 +258,49 @@ fn obtenir_iso(version: &Version, dire: &dyn Dire) -> Result<PathBuf, String> {
 
 /// Efface la clé et y crée une partition FAT32 (MBR, active), au plus
 /// 32 Go (la limite du FAT32 de Windows). Rend sa lettre.
+///
+/// 21 novembre, sa clé « USB DISK 2.0 » : « Initialize-Disk : The disk has
+/// already been initialized ». Une clé USB est un média AMOVIBLE : Windows la
+/// tient toujours pour initialisée, et Clear-Disk la laisse en MBR (vide) au
+/// lieu de la rendre RAW. Le disque virtuel de la CI est un disque FIXE, qui
+/// redevient RAW : l'essai ne pouvait pas le voir. Le style est donc RELU
+/// après l'effacement : RAW → on l'initialise en MBR ; GPT (une clé passée
+/// par un autre outil) → on la convertit ; MBR → elle est prête.
+///
+/// Pendant ces quelques secondes, la « détection matérielle » de Windows
+/// (ShellHWDetection) est mise en pause : une partition neuve, pas encore
+/// formatée, lui fait ouvrir « Vous devez formater le disque… » — et un clic
+/// sur « Formater » lancerait le formatage de Windows pendant notre copie.
+/// Elle est relancée quoi qu'il arrive ; si elle refuse de s'arrêter, on
+/// continue sans.
 fn preparer_cle(numero: u32, virtuel: bool) -> Result<String, String> {
+    powershell(&script_preparer(numero, virtuel)).map(|l| l.trim().to_string())
+}
+
+/// Le script de `preparer_cle`, à part : l'essai `cargo test` le fait LIRE
+/// par PowerShell (sans rien exécuter) avant chaque envoi.
+fn script_preparer(numero: u32, virtuel: bool) -> String {
     let bus = if virtuel { "@('USB', 'File Backed Virtual')" } else { "@('USB')" };
-    powershell(&format!(
+    format!(
         "$n = {numero}; $d = Get-Disk -Number $n; \
          if (-not ({bus} -contains [string]$d.BusType) -or $d.IsSystem -or $d.IsBoot) {{ throw 'Ce disque n''est pas une clé USB : rien n''a été touché.' }}; \
          if ($d.IsOffline) {{ Set-Disk -Number $n -IsOffline $false }}; \
          if ($d.IsReadOnly) {{ Set-Disk -Number $n -IsReadOnly $false }}; \
-         if ([string]$d.PartitionStyle -ne 'RAW') {{ Clear-Disk -Number $n -RemoveData -RemoveOEM -Confirm:$false }}; \
-         Initialize-Disk -Number $n -PartitionStyle MBR; \
-         $taille = [Math]::Min([uint64]$d.Size - 2MB, [uint64](32GB - 4MB)); \
-         $p = New-Partition -DiskNumber $n -Size $taille -IsActive -AssignDriveLetter; \
-         $null = Format-Volume -Partition $p -FileSystem FAT32 -NewFileSystemLabel 'GRENOS' -Confirm:$false -Force; \
+         $shw = Get-Service -Name ShellHWDetection -ErrorAction SilentlyContinue; $pause = $false; \
+         if ($shw -and [string]$shw.Status -eq 'Running') {{ Stop-Service -Name ShellHWDetection -Force -ErrorAction SilentlyContinue; $pause = $true }}; \
+         try {{ \
+           if ([string]$d.PartitionStyle -ne 'RAW') {{ Clear-Disk -Number $n -RemoveData -RemoveOEM -Confirm:$false }}; \
+           Update-Disk -Number $n; $style = [string](Get-Disk -Number $n).PartitionStyle; \
+           if ($style -eq 'RAW') {{ Initialize-Disk -Number $n -PartitionStyle MBR }} elseif ($style -ne 'MBR') {{ Set-Disk -Number $n -PartitionStyle MBR }}; \
+           $taille = [Math]::Min([uint64]$d.Size - 2MB, [uint64](32GB - 4MB)); \
+           $p = New-Partition -DiskNumber $n -Size $taille -IsActive -AssignDriveLetter; \
+           $null = Format-Volume -Partition $p -FileSystem FAT32 -NewFileSystemLabel 'GRENOS' -Confirm:$false -Force \
+         }} finally {{ if ($pause) {{ Start-Service -Name ShellHWDetection -ErrorAction SilentlyContinue }} }}; \
          Start-Sleep -Milliseconds 800; \
          $l = (Get-Partition -DiskNumber $n -PartitionNumber $p.PartitionNumber).DriveLetter; \
          if (-not $l) {{ throw 'La clé est formatée, mais Windows ne lui a pas donné de lettre.' }}; \
          Write-Output $l"
-    ))
-    .map(|l| l.trim().to_string())
+    )
 }
 
 fn monter_iso(iso: &Path) -> Result<String, String> {
@@ -434,4 +461,43 @@ fn main() {
         .invoke_handler(tauri::generate_handler![cles, derniere_version, creer])
         .run(tauri::generate_context!())
         .expect("le créateur n'a pas pu démarrer");
+}
+
+/// `cargo test` sous Windows : le manifeste de l'application (administrateur)
+/// suit aussi l'exécutable des essais, que Windows refuse alors de lancer
+/// (« nécessite une élévation »). Ces essais n'en ont pas besoin :
+/// `$env:__COMPAT_LAYER = 'RunAsInvoker'; cargo test` les lance en simple
+/// utilisateur.
+#[cfg(all(test, windows))]
+mod essais {
+    use super::*;
+
+    /// Le script de préparation doit au moins se LIRE : le parseur de
+    /// PowerShell le décompose sans rien exécuter (rien n'est effacé). Une
+    /// accolade de trop dans le `format!` se voit ici, pas sur la clé de
+    /// quelqu'un.
+    #[test]
+    fn le_script_de_preparation_se_lit() {
+        for virtuel in [false, true] {
+            let script = script_preparer(99, virtuel).replace('\'', "''");
+            let lecture = format!(
+                "$e = $null; $null = [System.Management.Automation.Language.Parser]::ParseInput('{script}', [ref]$null, [ref]$e); \
+                 if ($e.Count) {{ throw ($e | ForEach-Object {{ $_.Message }}) -join ' / ' }}; 'lu'"
+            );
+            assert_eq!(powershell(&lecture), Ok("lu".to_string()), "script : {}", script_preparer(99, virtuel));
+        }
+    }
+
+    /// Et il relit le style APRÈS l'effacement, au lieu d'initialiser à
+    /// l'aveugle (la panne de la clé amovible, 21 novembre).
+    #[test]
+    fn la_cle_amovible_n_est_pas_reinitialisee() {
+        let script = script_preparer(99, false);
+        let effacer = script.find("Clear-Disk").expect("Clear-Disk");
+        let relire = script.find("Update-Disk").expect("Update-Disk");
+        let initialiser = script.find("Initialize-Disk").expect("Initialize-Disk");
+        assert!(effacer < relire && relire < initialiser);
+        assert!(script.contains("if ($style -eq 'RAW') { Initialize-Disk"));
+        assert!(script.contains("Start-Service -Name ShellHWDetection"));
+    }
 }
