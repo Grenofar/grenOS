@@ -436,6 +436,17 @@ echo "--- l'installateur a-t-il tout ce qu'il lui faut ---"
 # On ne peut pas le lancer ici : il faudrait un ecran, un disque et une suite
 # de clics. Mais on peut lire sa configuration et demander au disque si chaque
 # morceau qu'elle nomme existe.
+#
+# Ce conteneur est une machine POSEE : depuis le 21 novembre, grenos-systeme
+# n'y tire plus l'installateur (le retirer a l'installation emportait tout
+# grenOS). On l'installe donc ici pour le verifier, comme l'image l'a, et on
+# rebranche le systeme pour qu'il y pose nos reglages — ce que fait la
+# construction de l'image.
+if [ ! -f /etc/calamares/settings.conf ]; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+        calamares calamares-settings-debian >/dev/null
+    /usr/lib/grenos/appliquer-systeme >/dev/null
+fi
 python3 linux/tools/verif-installateur.py
 
 echo "la mise a jour depuis grenOS fonctionne"
