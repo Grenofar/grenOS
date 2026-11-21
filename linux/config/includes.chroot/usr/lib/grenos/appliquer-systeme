@@ -194,9 +194,17 @@ fi
 # Une seule fois par machine (le témoin) : qui la repasse en UTC
 # (`timedatectl set-local-rtc 0`, parcours dev) la garde en UTC. Posé
 # pendant une session, timesyncd ne relit ce fichier qu'à son redémarrage.
-if [ ! -e /var/lib/grenos/horloge-locale ]; then
+#
+# Le SECOND témoin (21 novembre au soir) : ce réglage ne tenait pas. Le
+# crochet 8000 de live-build réécrivait UTC dans l'image après nous (voir
+# hooks/normal/8000-remove-adjtime-configuration) ; une machine installée
+# depuis ces images porte le premier témoin ET une horloge en UTC. Elle est
+# remise à LOCAL une fois de plus — y compris, une fois, chez qui l'avait
+# repassée en UTC exprès : il la repasse, et ce choix-là tient.
+if [ ! -e /var/lib/grenos/horloge-locale-2 ]; then
     printf '0.0 0 0.0\n0\nLOCAL\n' > /etc/adjtime || true
-    mkdir -p /var/lib/grenos && touch /var/lib/grenos/horloge-locale || true
+    mkdir -p /var/lib/grenos && touch /var/lib/grenos/horloge-locale \
+        /var/lib/grenos/horloge-locale-2 || true
     systemctl try-restart systemd-timesyncd.service > /dev/null 2>&1 || true
 fi
 # Le partitionnement par défaut : tout le disque, le choix manuel restant

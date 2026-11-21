@@ -132,10 +132,13 @@ echo "le choix d affichage de la cle a suivi sur le disque : firmware"
 # Le reste de l'essai démarre une machine sans RTX 50 : le choix y est sans
 # effet, mais on le retire pour que la suite reste celle déjà prouvée.
 rm -f "$T/etc/grenos/affichage"
-# L'horloge que le disque installé héritera (21 novembre : Windows retardait
-# encore d'une heure après une session sur la clé). Dit, pas encore jugé :
-# la session de la clé n'a montré aucun recalage « local » au démarrage.
-echo "horloge de l image : /etc/adjtime dit $(sed -n 3p "$T/etc/adjtime" 2>/dev/null || echo 'rien (donc UTC)'), temoin $( [ -e "$T/var/lib/grenos/horloge-locale" ] && echo present || echo absent), fuseau $(readlink "$T/etc/localtime" 2>/dev/null)"
+# L'horloge que la clé et le disque installé héritent (21 novembre : Windows
+# retardait d'une heure après chaque session grenOS). Cet essai a trouvé la
+# cause — « /etc/adjtime dit UTC, temoin present » : le crochet 8000 de
+# live-build réécrivait UTC après nous. Désormais jugé.
+echo "horloge de l image : /etc/adjtime dit $(sed -n 3p "$T/etc/adjtime" 2>/dev/null || echo 'rien (donc UTC)'), temoins $(ls "$T/var/lib/grenos/" 2>/dev/null | grep horloge | tr '\n' ' '), fuseau $(readlink "$T/etc/localtime" 2>/dev/null)"
+[ "$(sed -n 3p "$T/etc/adjtime" 2>/dev/null)" = LOCAL ] \
+    || faute "l image lit l horloge de la carte mere en UTC (/etc/adjtime) : Windows retarderait d une heure"
 grep -q '^zone:[[:space:]]*"Paris"' "$T/etc/calamares/modules/locale.conf" 2>/dev/null \
     || faute "l installateur de l image n a pas Europe/Paris par defaut (locale.conf)"
 echo "l installateur de l image propose Europe/Paris"

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Le dernier mot sur ce que l'image garde (21 novembre).
+#
+# Nos vérifications vivaient dans le crochet 0100 ; live-build passe ensuite
+# les siens (1000 à 9020) et l'un d'eux, 8000, réécrivait /etc/adjtime en UTC
+# derrière notre dos : la garde lisait LOCAL, l'image partait avec UTC, et
+# Windows retardait d'une heure après chaque session grenOS. Ce qui doit être
+# VRAI DANS L'IMAGE se vérifie donc ici, après tous les autres.
+
+set -e
+
+if [ "$(sed -n 3p /etc/adjtime 2>/dev/null)" != "LOCAL" ]; then
+    echo "grenos: /etc/adjtime ne dit pas LOCAL a la toute fin : Windows retarderait d une heure" >&2
+    echo "grenos: (un crochet de live-build l a-t-il reecrit ? voir 8000-remove-adjtime-configuration)" >&2
+    exit 1
+fi
+echo "grenos: dernier mot : l horloge de la carte mere reste a l heure de Windows (LOCAL)"

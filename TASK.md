@@ -121,18 +121,21 @@ sur sa RTX 5060). Restaient, et où ça en est :
 - **2037 (21 nov., 21 h 40)** : construction 44943231283 et cle.yml
   44947459584 verts (installation jusqu'à l'assistant, Paris, choix
   d'affichage suivi). Sa clé F: porte la 2037 (292 fichiers, mode simple).
-  À FAIRE pour la suivante :
-  - `/etc/adjtime` dit **UTC dans l'image** (essai-installation.sh : « dit
-    UTC, temoin present ») alors que la garde du hook 0100 lit LOCAL : un
-    paquet le réécrit APRÈS nos crochets. Le témoin étant posé, une mise à
-    jour ne le corrigera pas seule (nouveau témoin, ou garde au tout dernier
-    moment). C'est l'heure de retard de Windows.
-  - `grenos-revenir-ici` après une INSTALLATION réussie : « Redémarrer
-    maintenant » de Calamares ramènerait sur la CLÉ (BootNext = clé), pas
-    sur le disque installé. Ne rien poser si la session a fini une
-    installation (« completion: succeeded » dans le journal de Calamares).
-    En attendant : à la fin, décocher « Redémarrer maintenant », Éteindre,
-    retirer la clé, rallumer.
+  Faits ensuite (le soir même) :
+  - `/etc/adjtime` disait **UTC dans l'image** : CAUSE TROUVÉE — le crochet
+    `8000-remove-adjtime-configuration` de live-build (« Reset generated
+    file ») l'écrit en UTC, APRÈS nos crochets 0100/0900 (codesearch.debian
+    .net). `lb config` ne pose le lien vers le sien que si aucun fichier de
+    ce nom n'existe : le nôtre, même nom, pose LOCAL ; `9999-grenos-dernier-
+    mot` refuse l'image si ce n'est pas LOCAL à la toute fin ; second témoin
+    (horloge-locale-2) pour remettre LOCAL une fois sur les machines déjà
+    installées ; essai-installation.sh juge désormais l'horloge [écrit].
+  - après une INSTALLATION réussie, « Redémarrer maintenant » ramenait sur la
+    CLÉ (BootNext = clé). Désormais, si le journal de Calamares dit
+    « completion: succeeded », BootNext vise la première entrée « debian »
+    de l'ordre (celle que grub-install vient de poser) ; installation ratée :
+    retour sur la clé, pour réessayer [écrit ; essai-revenir-ici.sh 9 cas,
+    l'ancienne version échoue sur les deux cas d'après installation].
   - CAUSE PROBABLE de l'écran vert, NON PROUVÉE : le lien PCIe de la RTX
     5060 (Gen5 x8, port 00:01.0 8086:A70D, BIOS F4 du 27/09/2024). Sous
     Windows : 12 441 « WHEA-Logger 17 » (erreur PCIe corrigée) en 3 min,

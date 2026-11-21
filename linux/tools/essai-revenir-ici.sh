@@ -23,12 +23,14 @@ done
 EOF
 chmod +x "$T/efibootmgr"
 
-cas() { # titre, état (fichier), BootNext attendu (- : aucun), efivars (oui/non)
+cas() { # titre, état (fichier), BootNext attendu (- : aucun), efivars (oui/non), [journal de Calamares]
     printf '%b' "$2" > "$T/etat"
-    rm -f "$T/bootnext"
+    rm -f "$T/bootnext" "$T/calamares.log"
+    [ -n "${5:-}" ] && printf '%s\n' "$5" > "$T/calamares.log"
     vars="$T/efivars"
     [ "$4" = non ] && vars="$T/absent"
-    GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$vars" sh "$S" > "$T/sortie" 2>&1
+    GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$vars" GRENOS_CALAMARES_JOURNAL="$T/calamares.log" \
+        sh "$S" > "$T/sortie" 2>&1
     obtenu=$(cat "$T/bootnext" 2>/dev/null || echo -)
     if [ "$obtenu" = "$3" ]; then
         echo "ok   $1"
@@ -49,9 +51,19 @@ cas "un prochain démarrage déjà choisi : on n'y touche pas"          "$DEJA" 
 cas "entrée courante inconnue : rien de forcé"                       "$INCONNU" -    oui
 cas "machine démarrée en BIOS (pas d'efivars) : rien"                "$CLE"     -    non
 
+# Après l'installateur (21 novembre au soir) : la clé démarrée par F12, et
+# grub-install qui vient de poser « debian » (0004) en tête de l'ordre.
+APRES='BootCurrent: 0003\nTimeout: 1 seconds\nBootOrder: 0004,0000,0003\nBoot0000* Windows Boot Manager\tHD(1,GPT)\nBoot0003* UEFI: USB DISK 2.0 PMAP, Partition 1\tPciRoot(0x0)\nBoot0004* debian\tHD(1,GPT,ssd)\n'
+SANS_DEBIAN='BootCurrent: 0003\nBootOrder: 0000,0003\nBoot0000* Windows Boot Manager\nBoot0003* UEFI: USB DISK 2.0 PMAP, Partition 1\n'
+REUSSIE='2026-11-21 - 21:40:00 [6]:     Notification not sent; completion: succeeded'
+RATEE='2026-11-21 - 20:32:17 [6]:     Notification not sent; completion: failed'
+cas "installation réussie : « Redémarrer maintenant » mène au disque installé" "$APRES"       0004 oui "$REUSSIE"
+cas "installation ratée : on revient sur la clé (pour réessayer)"              "$APRES"       0003 oui "$RATEE"
+cas "installation réussie sans entrée debian : rien de forcé"                  "$SANS_DEBIAN" -    oui "$REUSSIE"
+
 # Le nom de l'entrée est dit dans le journal (c'est ce qu'on lira).
 printf '%b' "$CLE" > "$T/etat"; rm -f "$T/bootnext"
-GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$T/efivars" sh "$S" > "$T/sortie" 2>&1
+GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$T/efivars" GRENOS_CALAMARES_JOURNAL="$T/aucun-journal" sh "$S" > "$T/sortie" 2>&1
 if grep -q 'retour a l entree 0003 (UEFI: USB DISK 2.0 PMAP, Partition 1)' "$T/sortie"; then
     echo "ok   le journal nomme l'entrée reprise"
 else
@@ -59,5 +71,5 @@ else
     fautes=$((fautes + 1))
 fi
 
-echo "revenir-ici : $fautes faute(s)"
+echo "revenir-ici : 9 cas, $fautes faute(s)"
 [ "$fautes" = 0 ]

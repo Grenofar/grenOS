@@ -1,0 +1,21 @@
+#!/bin/sh
+# REMPLACE le crochet du même nom que live-build livre (21 novembre).
+#
+# Celui de live-build (share/hooks/normal/8000-remove-adjtime-configuration)
+# « remet à zéro » /etc/adjtime en écrivant UTC — APRÈS nos crochets 0100 et
+# 0900, donc après notre vérification. Toutes les images en sortaient avec
+# une horloge de carte mère lue en UTC : sur le PC de Grenofar, Windows
+# retardait d'une heure après chaque session grenOS (vu le 21 au soir : le
+# noyau lit l'heure de Windows comme de l'UTC, timesyncd recale par le
+# réseau, et le noyau la réécrit en UTC dans la carte mère). Trouvé par
+# essai-installation.sh : « /etc/adjtime dit UTC, temoin present ».
+#
+# live-build copie ses crochets puis les nôtres dans le même dossier : un
+# fichier de même nom ici remplace le sien. On y pose LOCAL — l'heure de
+# Windows, comme Ubuntu quand Windows est là. La vérification finale est dans
+# 9999-grenos-dernier-mot (si live-build renommait le sien un jour).
+
+set -e
+
+printf '0.0 0 0.0\n0\nLOCAL\n' > /etc/adjtime
+echo "grenos: /etc/adjtime reste a LOCAL (le crochet 8000 de live-build l aurait remis a UTC)"

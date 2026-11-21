@@ -141,7 +141,7 @@ jobs:
       # redemarrage revient a l entree UEFI qui a demarre grenOS.
       - name: Le rapport de la cle face a un ecran fige, 6 cas
         run: sh linux/tools/essai-rapport-cle.sh
-      - name: Un redemarrage revient a grenOS, 6 cas
+      - name: Un redemarrage revient a grenOS (et au disque installe apres l installation), 9 cas
         run: sh linux/tools/essai-revenir-ici.sh
       # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
       # rendu la cle au premier Calamares, qui l a prise pour partition EFI.

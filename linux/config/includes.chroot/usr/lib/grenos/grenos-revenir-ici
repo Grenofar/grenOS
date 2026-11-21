@@ -18,13 +18,21 @@
 # Jamais par-dessus un choix déjà posé : si BootNext existe (un « redémarrer
 # sous Windows », par exemple), on n'y touche pas.
 #
-# GRENOS_EFIBOOTMGR, GRENOS_EFIVARS : pour les essais seulement
-# (linux/tools/essai-revenir-ici.sh).
+# Et APRÈS UNE INSTALLATION RÉUSSIE (21 novembre au soir) : « Redémarrer
+# maintenant » de l'installateur doit mener au système INSTALLÉ, pas revenir
+# sur la clé. Calamares écrit « completion: succeeded » dans son journal
+# quand il a fini (« completion: failed » à 20 h 32 chez Grenofar) ; on vise
+# alors la première entrée « debian » de l'ordre de démarrage — celle que
+# grub-install vient de poser en tête.
+#
+# GRENOS_EFIBOOTMGR, GRENOS_EFIVARS, GRENOS_CALAMARES_JOURNAL : pour les
+# essais seulement (linux/tools/essai-revenir-ici.sh).
 
 set -u
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 EFIBOOTMGR=${GRENOS_EFIBOOTMGR:-efibootmgr}
 EFIVARS=${GRENOS_EFIVARS:-/sys/firmware/efi/efivars}
+JOURNAL_CALAMARES=${GRENOS_CALAMARES_JOURNAL:-/root/.cache/calamares/session.log}
 
 dire() {
     echo "grenos: redemarrage : $*"
@@ -42,6 +50,20 @@ if [ -z "$courant" ]; then
 fi
 if printf '%s\n' "$etat" | grep -q '^BootNext:'; then
     dire "un prochain demarrage est deja choisi ($(printf '%s\n' "$etat" | sed -n 's/^BootNext: *//p')), on n y touche pas"
+    exit 0
+fi
+if grep -q 'completion: succeeded' "$JOURNAL_CALAMARES" 2>/dev/null; then
+    for n in $(printf '%s\n' "$etat" | sed -n 's/^BootOrder: *//p' | tr ',' ' '); do
+        nom=$(printf '%s\n' "$etat" | sed -n "s/^Boot$n[* ] *//p" | cut -f1 | head -n 1)
+        [ "$nom" = debian ] || continue
+        if timeout 10 "$EFIBOOTMGR" -q -n "$n" >/dev/null 2>&1; then
+            dire "installation terminee : retour sur le systeme installe (entree $n, debian)"
+        else
+            dire "installation terminee : BootNext refuse, la carte mere suivra son ordre"
+        fi
+        exit 0
+    done
+    dire "installation terminee : aucune entree debian, la carte mere suivra son ordre"
     exit 0
 fi
 nom=$(printf '%s\n' "$etat" | sed -n "s/^Boot$courant[* ] *//p" | cut -f1 | head -n 1)
