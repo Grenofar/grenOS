@@ -816,7 +816,10 @@ echo "grenos: l installateur sait copier le systeme (unsquashfs, rsync) et finir
 # update-grub sans /boot/grub — son echec arretait l installation. La notre
 # ne demande rien au reseau et ne fait jamais echouer l installation.
 AIDE_GRUB=/usr/share/calamares/helpers/calamares-bootloader-config
-if [ ! -x "$AIDE_GRUB" ] || grep -q 'apt-get' "$AIDE_GRUB"; then
+# Les COMMANDES seulement : le notre raconte, en commentaire, l apt-get de
+# celui de Debian — la premiere version de ce garde s y est prise
+# (run 44902093710).
+if [ ! -x "$AIDE_GRUB" ] || grep -v '^[[:space:]]*#' "$AIDE_GRUB" | grep -q 'apt-get'; then
     echo "grenos: $AIDE_GRUB absent ou encore celui de Debian (apt-get) : l installation echouerait a la fin" >&2
     exit 1
 fi
