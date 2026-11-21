@@ -129,13 +129,16 @@ sur sa RTX 5060). Restaient, et où ça en est :
     ce nom n'existe : le nôtre, même nom, pose LOCAL ; `9999-grenos-dernier-
     mot` refuse l'image si ce n'est pas LOCAL à la toute fin ; second témoin
     (horloge-locale-2) pour remettre LOCAL une fois sur les machines déjà
-    installées ; essai-installation.sh juge désormais l'horloge [écrit].
+    installées ; essai-installation.sh juge désormais l'horloge [prouvé
+    sur l'image 2146 : cle.yml 44953502640, « /etc/adjtime dit LOCAL,
+    temoins horloge-locale horloge-locale-2 » ; pas encore vu sur son PC].
   - après une INSTALLATION réussie, « Redémarrer maintenant » ramenait sur la
     CLÉ (BootNext = clé). Désormais, si le journal de Calamares dit
     « completion: succeeded », BootNext vise la première entrée « debian »
     de l'ordre (celle que grub-install vient de poser) ; installation ratée :
     retour sur la clé, pour réessayer [écrit ; essai-revenir-ici.sh 9 cas,
     l'ancienne version échoue sur les deux cas d'après installation].
+  - Sa clé F: porte la 2146 (292 fichiers, mode simple), le 21 à 22 h 55.
   - CAUSE PROBABLE de l'écran vert, NON PROUVÉE : le lien PCIe de la RTX
     5060 (Gen5 x8, port 00:01.0 8086:A70D, BIOS F4 du 27/09/2024). Sous
     Windows : 12 441 « WHEA-Logger 17 » (erreur PCIe corrigée) en 3 min,
