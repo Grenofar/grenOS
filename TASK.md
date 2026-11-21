@@ -92,14 +92,20 @@ carte mère ALC897 (marche).
   live-boot les inscrit par DOSSIER (`auto_add_modules net` →
   « =drivers/net/ethernet »), le filtre par nom les laissait passer, et
   mkinitramfs les recopiait APRÈS les crochets, Netronome (35 Mo) et
-  LiquidIO compris. Corrigé dans zz-grenos-sans-pilotes-graphiques [écrit,
-  essayé sur une fausse arborescence ; à prouver par la construction].
+  LiquidIO compris. Corrigé dans zz-grenos-sans-pilotes-graphiques
+  [prouvé par la construction : « initrd 64 Mo, sans pilote graphique ni
+  carte reseau », runs 44847898227 et 44853254724].
 - **Windows retardait d'une heure après une session grenOS** (vu sur son
   PC) : Debian écrit l'heure en UTC dans la carte mère, Windows la lit à
   l'heure locale — et l'installateur faisait pareil (étape hwclock de
   Calamares). /etc/adjtime à LOCAL (appliquer-systeme, une fois par
-  machine), étape hwclock retirée, fuseau de l'image à Paris [écrit]. Son
-  horloge Windows reste fausse jusqu'à sa prochaine synchronisation.
+  machine), étape hwclock retirée, fuseau de l'image à Paris [écrit ; la
+  garde de construction passe, pas encore vu sur sa machine]. Son horloge
+  Windows reste fausse jusqu'à sa prochaine synchronisation.
+- Publiées : 20261121-0154 (l'initrd), puis 20261121-0248 (l'horloge). La
+  clé G: porte la **0248** (292 fichiers vérifiés contre sha256sum.txt,
+  affichage « nouveau » et rapports gardés) : prête pour installer sur son
+  Samsung 860 EVO.
 
 RESTE : GRUB du système INSTALLÉ vérifié en vrai (entrée Windows) ;
 installation Secure Boot menée au bout (jamais prouvée) ; le son de l'écran ;
