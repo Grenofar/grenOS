@@ -163,6 +163,19 @@ armes "a la fin de l installation"
 if [ "$(find "$T/etc/systemd/system" -path '*.wants/grenos-*' 2>/dev/null | wc -l)" -eq 0 ]; then
     echo "::warning::le systeme installe n a AUCUN service grenOS arme (assistant, affichage, Windows...)"
 fi
+# CE QUE SYSTEMD VERRA (21 novembre) : les liens sont là, et pourtant le
+# système installé n'a démarré AUCUN service grenOS, sans un mot au journal.
+etape "ce que systemd lira sur le disque installe"
+ls -la "$T/etc/systemd/system/graphical.target.wants/" 2>&1 | grep -i grenos || echo "(aucun lien grenos dans graphical.target.wants)"
+ls -la "$T/etc/systemd/system/" 2>&1 | grep -E 'grenos-(premier|windows|affichage-firmware)\.service' || echo "(fichiers d unite grenos absents)"
+stat -c '%A %U:%G %s %n' "$T/etc/systemd/system/grenos-premier.service" 2>&1 || true
+head -n 5 "$T/etc/systemd/system/grenos-premier.service" 2>&1 | cat -A | head -n 5
+systemctl --root="$T" list-unit-files 'grenos-*' --no-pager 2>&1 | head -n 30 || true
+# Le premier démarrage en journal détaillé de systemd, pour cet essai
+# seulement : s'il ignore encore nos services, il dira pourquoi.
+sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 systemd.log_level=debug"/' "$T/etc/default/grub"
+grep '^GRUB_CMDLINE_LINUX_DEFAULT' "$T/etc/default/grub"
+dedans update-grub >/dev/null 2>&1 || true
 
 etape "dpkg-unsafe-io -u, sources-final, demontage"
 bash "$AIDES/calamares-dpkg-unsafe-io" -u
@@ -216,6 +229,8 @@ if [ -d "$OUT/racine/var/log/journal" ]; then
     journalctl -D "$OUT/racine/var/log/journal" -b -o short-monotonic --no-pager > "$OUT/journal-installe.txt" 2>/dev/null || true
     JOURNAL="$OUT/journal-installe.txt"
     grep -E 'Secure boot|secureboot|grenos-ui: premier|Started lightdm|Reached target graphical|Failed to start' "$JOURNAL" | head -30 || true
+    echo "--- ce que systemd a dit de nos services"
+    grep -i -E 'grenos-[a-z-]+\.(service|timer)' "$JOURNAL" | head -40 || echo "(rien)"
 fi
 umount "$OUT/racine"
 losetup -d "$LOOP"
