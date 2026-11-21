@@ -55,6 +55,16 @@ sur sa RTX 5060). Restaient, et où ça en est :
   virtuelle puis le publie dans la version « createur »]. Site : carte
   « Créateur de clé USB » (cachée tant que le .exe n'existe pas), et les
   phrases fausses « Secure Boot doit être désactivé » retirées.
+  21 nov. : sur SA clé (« USB DISK 2.0 », média amovible), échec à
+  « Préparer la clé » — `Initialize-Disk : The disk has already been
+  initialized`. Windows laisse une clé amovible en MBR après Clear-Disk (vu :
+  MBR, zéro partition) ; le disque virtuel de la CI est fixe et redevient RAW,
+  d'où l'angle mort. Corrigé (style relu après l'effacement, dd8f76f) ; la CI
+  fait maintenant deux passages, dont une clé déjà utilisée [prouvé sur
+  disque virtuel : run 44929758992, RAW puis MBR, 292/292 fichiers
+  identiques les deux fois ; .exe republié à 17:30Z]. Le chemin
+  amovible lui-même [écrit] : il refait sa clé avec le nouveau .exe (sa clé
+  est VIDE depuis l'échec, l'ISO 1551 vérifiée attend dans le cache).
 - Correctif de clé (delta depuis la 2306) prêt : à copier en
   G:\live\grenos-correctif.squashfs quand la clé est branchée.
 - Construction complète relancée : run 44839968086 (la précédente a été
