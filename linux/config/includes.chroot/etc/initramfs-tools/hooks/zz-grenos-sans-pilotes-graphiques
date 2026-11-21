@@ -65,7 +65,16 @@ nvidia_peermem' "$noms")
     noms=$(printf '%s\n%s' "$noms" "$reseau")
     if [ -n "$noms" ]; then
         printf '%s\n' "$noms" > "$DESTDIR/.grenos-sans-graphique"
-        grep -vxF -f "$DESTDIR/.grenos-sans-graphique" "$__MODULES_TO_ADD" > "$__MODULES_TO_ADD.grenos" || true
+        # … et les DOSSIERS entiers (21 novembre). Le crochet de live-boot
+        # appelle `auto_add_modules net` (live.hook 1:20250815, ligne 180),
+        # qui inscrit « =drivers/net/ethernet », « =drivers/net/phy » et
+        # « =drivers/net/mdio » : des dossiers, pas des noms. Ils passaient le
+        # filtre par nom, et mkinitramfs les recopiait APRÈS les crochets
+        # (second `apply_add_modules`), Netronome et LiquidIO compris. C'est
+        # pour ça que les deux constructions d'avant restaient à 82 Mo (runs
+        # 44835521238 et 44844273146) : rien de ce crochet n'y pouvait.
+        grep -vxF -f "$DESTDIR/.grenos-sans-graphique" "$__MODULES_TO_ADD" \
+            | grep -vE '^=(kernel/)?drivers/net(/|$)' > "$__MODULES_TO_ADD.grenos" || true
         cat "$__MODULES_TO_ADD.grenos" > "$__MODULES_TO_ADD"
         rm -f "$__MODULES_TO_ADD.grenos" "$DESTDIR/.grenos-sans-graphique"
     fi
@@ -88,29 +97,48 @@ done
 # les crochets, « because some hooks rely on them »). Les rayer de la liste
 # ne suffisait pas — la construction l'a refusé (run 44835521238, initrd de
 # 82 Mo avec Netronome). On les efface donc de l'initrd, puis les firmwares
-# qu'eux seuls demandaient : ceux qu'un module RESTANT réclame encore (un
-# pilote de stockage SAN qui partage le firmware d'une carte) restent.
+# que seuls ces pilotes demandent — et quand ce nom est un LIEN, ce qu'il
+# désigne : dans linux-firmware, netronome/nic_….nffw pointe vers nic/…,
+# et effacer le lien seul laissait les 35 Mo. Ce qu'un module restant
+# déclare reste (la liste « garder »). Et ce qu'on retirerait de trop,
+# mkinitramfs le remet : après les crochets, `hidden_dep_add_modules`
+# repasse chaque module restant, ses dépendances et leurs firmwares (qed
+# pour le stockage qedf, cnic pour bnx2i…) — lu dans hook-functions 0.148.4.
 # `depmod`, que mkinitramfs passe après les crochets, refait l'index.
+for racine in "$DESTDIR/usr/lib/modules" "$DESTDIR/lib/modules"; do
+    [ -d "$racine" ] || continue
+    rm -rf "$racine"/*/kernel/drivers/net
+done
 if command -v modinfo >/dev/null 2>&1 && [ -d "$MODULES_NOYAU/kernel/drivers/net" ]; then
+    reel=$(readlink -f "$DESTDIR")
     garder="$DESTDIR/.grenos-firmwares-gardes"
-    find "$DESTDIR/usr/lib/modules" "$DESTDIR/lib/modules" -path '*/kernel/drivers/net' -prune \
-         -o -name '*.ko*' -print 2>/dev/null \
+    find "$DESTDIR/usr/lib/modules" "$DESTDIR/lib/modules" -name '*.ko*' 2>/dev/null \
         | while read -r m; do modinfo -F firmware "$m" 2>/dev/null; done | sort -u > "$garder"
     find "$MODULES_NOYAU/kernel/drivers/net" -name '*.ko*' 2>/dev/null \
         | while read -r m; do modinfo -F firmware "$m" 2>/dev/null; done | sort -u \
         | grep -vxF -f "$garder" \
         | while read -r fw; do
             for racine in "$DESTDIR/usr/lib/firmware" "$DESTDIR/lib/firmware"; do
-                rm -f "$racine/$fw" "$racine/$fw.xz" "$racine/$fw.zst"
+                for f in "$racine/$fw" "$racine/$fw.xz" "$racine/$fw.zst"; do
+                    if [ -L "$f" ]; then
+                        # Seulement DANS l'initrd : un lien absolu mènerait
+                        # aux firmwares du système lui-même.
+                        cible=$(readlink -f "$f")
+                        case "$cible" in "$reel"/*) rm -f "$cible" ;; esac
+                    fi
+                    rm -f "$f"
+                done
             done
         done
     rm -f "$garder"
 fi
-for racine in "$DESTDIR/usr/lib/modules" "$DESTDIR/lib/modules"; do
-    [ -d "$racine" ] || continue
-    rm -rf "$racine"/*/kernel/drivers/net
-done
+# Netronome et LiquidIO par dossier, quoi qu'il arrive au-dessus : ce sont
+# eux que la garde de l'image vérifie (0100-grenos-look) — 40 Mo pour des
+# cartes de serveur que rien d'autre ne demande.
 for racine in "$DESTDIR/usr/lib/firmware" "$DESTDIR/lib/firmware"; do
-    [ -d "$racine" ] && find "$racine" -type d -empty -delete 2>/dev/null
+    [ -d "$racine" ] || continue
+    rm -rf "$racine/netronome" "$racine/liquidio"
+    find "$racine" -xtype l -delete 2>/dev/null
+    find "$racine" -type d -empty -delete 2>/dev/null
 done
 exit 0

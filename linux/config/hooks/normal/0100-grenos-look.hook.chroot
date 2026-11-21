@@ -245,6 +245,10 @@ for initrd in /boot/initrd.img-*; do
     # pilotes de stockage SAN (qedf, bnx2fc), qui restent et les tirent.
     if lsinitramfs "$initrd" 2>/dev/null | grep -qE 'firmware/(netronome|liquidio)/'; then
         echo "grenos: $initrd ($taille Mo) contient encore des firmwares de cartes reseau" >&2
+        # De quoi corriger du premier coup : deux constructions refusees
+        # sans savoir lesquels restaient (21 novembre).
+        lsinitramfs "$initrd" | grep -E 'firmware/(netronome|liquidio)/' | head -5 | sed 's/^/grenos:   /' >&2
+        echo "grenos:   pilotes reseau restants : $(lsinitramfs "$initrd" | grep -c 'kernel/drivers/net/')" >&2
         exit 1
     fi
     echo "grenos: initrd $taille Mo, sans pilote graphique ni carte reseau"
