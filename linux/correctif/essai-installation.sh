@@ -82,6 +82,15 @@ mount --bind /run/udev "$T/run/udev"
 
 dedans() { chroot "$T" "$@"; }
 
+# Les scripts « process » de calamares-settings-debian tournent depuis la CLÉ
+# sous Calamares (le système en direct), pas depuis le disque installé — où
+# l'étape packages retire justement ce paquet. On les met donc de côté
+# maintenant, comme s'ils restaient sur la clé (premier passage, run
+# 44910579224 : « calamares-dpkg-unsafe-io: No such file or directory »).
+AIDES="$OUT/aides"
+mkdir -p "$AIDES"
+cp "$T"/usr/share/calamares/helpers/calamares-* "$AIDES/"
+
 # ------------------------------------------- machineid, fstab, users (Calamares)
 etape "machineid, fstab, compte"
 rm -f "$T/etc/machine-id"
@@ -98,11 +107,11 @@ echo "grenos-essai" > "$T/etc/hostname"
 
 # ------------------------------------------------------- les étapes « process »
 etape "dpkg-unsafe-io, puis bootloader-config (le nôtre)"
-bash "$T/usr/share/calamares/helpers/calamares-dpkg-unsafe-io"
-if grep -v '^[[:space:]]*#' "$T/usr/share/calamares/helpers/calamares-bootloader-config" | grep -q 'apt-get'; then
+bash "$AIDES/calamares-dpkg-unsafe-io"
+if grep -v '^[[:space:]]*#' "$AIDES/calamares-bootloader-config" | grep -q 'apt-get'; then
     faute "bootloader-config est encore celui de Debian (apt-get)"
 fi
-bash "$T/usr/share/calamares/helpers/calamares-bootloader-config" || faute "bootloader-config sort en erreur"
+bash "$AIDES/calamares-bootloader-config" || faute "bootloader-config sort en erreur"
 
 # ---------------------------------------------------------------- bootloader
 etape "bootloader : grenos-grub-install avec les arguments de Calamares, puis grub-mkconfig"
@@ -123,7 +132,7 @@ echo "chemin de secours : shim signe (comme EFI/grenOS/shimx64.efi)"
 etape "packages : try_remove de notre packages.conf"
 CONF="$T/etc/calamares/modules/packages.conf"
 [ -f "$CONF" ] || faute "packages.conf absent"
-sed -n '/try_remove:/,$p' "$CONF" | sed -n 's/^[[:space:]]*- //p' | while read -r p; do
+sed -n '/try_remove:/,$p' "$CONF" | tail -n +2 | sed -n 's/^[[:space:]]*- //p' | while read -r p; do
     if dedans apt-get --purge -q -y remove "$p" </dev/null >/dev/null 2>&1; then echo "  retire (ou absent) : $p"
     else echo "  refus d apt (sans gravite) : $p"; fi
 done
@@ -134,8 +143,8 @@ dedans update-initramfs -k all -c -t || faute "update-initramfs sort en erreur"
 ls -la "$T"/boot/initrd.img-* "$T"/boot/vmlinuz-*
 
 etape "dpkg-unsafe-io -u, sources-final, demontage"
-bash "$T/usr/share/calamares/helpers/calamares-dpkg-unsafe-io" -u
-bash "$T/usr/share/calamares/helpers/calamares-sources-final"
+bash "$AIDES/calamares-dpkg-unsafe-io" -u
+bash "$AIDES/calamares-sources-final"
 sync
 umount -R "$T"
 losetup -d "$LOOP"
