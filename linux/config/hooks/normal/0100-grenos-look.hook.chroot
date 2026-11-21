@@ -1582,6 +1582,43 @@ else
     echo "grenos: rien n offre la mise a l heure automatique, rien a verifier"
 fi
 
+echo "--- grenOS : l horloge du PC reste a l heure de Windows ---"
+# 21 NOVEMBRE, VU SUR LE PC DE GRENOFAR : apres une session sur la cle,
+# Windows retardait d une heure. Windows garde l horloge de la carte mere a
+# l heure LOCALE, Debian la lit en UTC : timesyncd remettait l heure par le
+# reseau, puis le noyau la recopiait EN UTC dans la carte mere. Et
+# l installateur faisait pareil (etape `hwclock` de Calamares, qui lance
+# `hwclock --systohc --utc`).
+#
+# Comme Ubuntu quand Windows est la, grenOS laisse cette horloge a l heure
+# locale. `appliquer-systeme` (passe plus haut) pose /etc/adjtime a LOCAL et
+# retire l etape hwclock de Calamares ; on le verifie ici. Au demarrage,
+# systemd recale alors l heure lue avec le fuseau, et timesyncd interdit au
+# noyau d ecrire dans la carte mere (STA_UNSYNC).
+# Le fuseau de l IMAGE est Paris, celui que la cle donne deja a live-config
+# (timezone=Europe/Paris, auto/config) : systemd lit /etc/localtime AVANT
+# live-config. Avec UTC, il ne recalerait rien, et le premier
+# `timedatectl set-timezone` de l assistant ecrirait une heure de trop.
+# Une machine installee garde le fuseau choisi dans l installateur.
+# Le prix, sur un PC sans Windows : une heure d ecart, jusqu a la premiere
+# mise a l heure par le reseau, apres un changement d heure passe machine
+# eteinte.
+if [ ! -f /usr/share/zoneinfo/Europe/Paris ]; then
+    echo "grenos: fuseau Europe/Paris absent (tzdata)" >&2
+    exit 1
+fi
+ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
+echo "Europe/Paris" > /etc/timezone
+if [ "$(sed -n 3p /etc/adjtime 2> /dev/null)" != "LOCAL" ]; then
+    echo "grenos: /etc/adjtime ne dit pas LOCAL : Windows retarderait d une heure" >&2
+    exit 1
+fi
+if grep -qE '^[[:space:]]*-[[:space:]]*hwclock[[:space:]]*$' /etc/calamares/settings.conf 2> /dev/null; then
+    echo "grenos: l installateur ecrirait encore l heure UTC dans la carte mere" >&2
+    exit 1
+fi
+echo "grenos: horloge de la carte mere a l heure locale, comme Windows (installateur compris)"
+
 echo "--- grenOS : le Wi-Fi a-t-il de quoi s authentifier ---"
 # NEUVIEME MORSURE DE `--apt-recommends false`, ET LA PLUS COUTEUSE.
 #

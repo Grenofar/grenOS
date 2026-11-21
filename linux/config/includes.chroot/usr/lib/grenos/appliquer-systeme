@@ -176,6 +176,27 @@ if [ -f /etc/calamares/settings.conf ]; then
     sed -i 's/^branding:.*/branding: grenos/' /etc/calamares/settings.conf || true
     grep -q '^branding:' /etc/calamares/settings.conf || \
         echo "branding: grenos" >> /etc/calamares/settings.conf
+    # Et pas d'étape `hwclock` (21 novembre) : elle lance `hwclock --systohc
+    # --utc`, donc écrit l'heure EN UTC dans la carte mère — et Windows, qui
+    # la lit à l'heure locale, retarderait d'une heure dès l'installation.
+    sed -i '/^[[:space:]]*-[[:space:]]*hwclock[[:space:]]*$/d' \
+        /etc/calamares/settings.conf || true
+fi
+
+# ---- L'horloge de la carte mère reste à l'heure de Windows ------------------
+# 21 novembre, sur le PC de Grenofar : après une session sur la clé, Windows
+# retardait d'une heure. Windows garde cette horloge à l'heure LOCALE, Debian
+# la lit en UTC ; timesyncd remettait l'heure par le réseau, et le noyau la
+# recopiait en UTC dans la carte mère. Avec LOCAL, systemd recale au
+# démarrage l'heure lue, et timesyncd interdit au noyau d'y écrire — comme
+# Ubuntu quand Windows est là.
+# Une seule fois par machine (le témoin) : qui la repasse en UTC
+# (`timedatectl set-local-rtc 0`, parcours dev) la garde en UTC. Posé
+# pendant une session, timesyncd ne relit ce fichier qu'à son redémarrage.
+if [ ! -e /var/lib/grenos/horloge-locale ]; then
+    printf '0.0 0 0.0\n0\nLOCAL\n' > /etc/adjtime || true
+    mkdir -p /var/lib/grenos && touch /var/lib/grenos/horloge-locale || true
+    systemctl try-restart systemd-timesyncd.service > /dev/null 2>&1 || true
 fi
 # Le partitionnement par défaut : tout le disque, le choix manuel restant
 # offert.
