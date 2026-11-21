@@ -15,6 +15,14 @@
 #   - quand : 25 s, 60 s, 2 min et 4 min après le démarrage, puis à l'arrêt.
 #     Un écran noir pousse à couper au bouton : les instantanés du début
 #     sont déjà écrits.
+#   - en DEUX TEMPS (21 novembre) : d'abord ce qui ne touche ni la carte
+#     graphique ni X (résumé, journal, noyau…), écrit sur la clé tout de
+#     suite ; ensuite seulement ce qui les interroge. Écran vert du 21 à
+#     18 h 50 : le filet de l'écran a redémarré la machine avant le premier
+#     instantané, et celui de l'arrêt interrogeait l'écran figé — il
+#     attendait, systemd l'a tué au bout de 45 s : AUCUN rapport. Une
+#     commande coincée dans le noyau (état D) ne meurt pas, même tuée ; on
+#     ne l'attend donc plus jamais (voir `borne`).
 #   - quoi : journal et noyau, serveur graphique (Xorg, lightdm), cartes
 #     graphiques et écrans, temps de démarrage. Rien de personnel n'y est
 #     cherché ; c'est le journal de la machine.
@@ -33,56 +41,138 @@
 
 set -u
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
+# Les essais (linux/tools/essai-rapport-cle.sh) posent leurs commandes
+# factices devant, et une fausse clé ; rien de cela n'existe au démarrage.
+[ -n "${GRENOS_CHEMIN_ESSAI:-}" ] && PATH="$GRENOS_CHEMIN_ESSAI:$PATH"
 export PATH LC_ALL=C.UTF-8
 
-CLE=/run/live/medium
+CLE=${GRENOS_CLE:-/run/live/medium}
+RUN=${GRENOS_RUN:-/run/grenos}
 DOSSIER=grenos-rapports
 GARDER=8
 
-grep -qw 'boot=live' /proc/cmdline 2>/dev/null || exit 0
+grep -qw 'boot=live' "${GRENOS_LIGNE:-/proc/cmdline}" 2>/dev/null || exit 0
 
 ID=$(cut -c1-8 /proc/sys/kernel/random/boot_id 2>/dev/null || echo inconnu)
 # Le nom du dossier est fixé UNE fois par démarrage (fichier dans /run) : les
 # instantanés successifs remplacent le même dossier au lieu d'en créer cinq.
-NOMF=/run/grenos/rapport-cle-nom
-mkdir -p /run/grenos 2>/dev/null || true
+NOMF=$RUN/rapport-cle-nom
+mkdir -p "$RUN" 2>/dev/null || true
 if [ ! -s "$NOMF" ]; then
     printf '%s-%s\n' "$(date +%Y%m%d-%H%M%S 2>/dev/null || echo date)" "$ID" > "$NOMF" 2>/dev/null || true
 fi
 NOM=$(cat "$NOMF" 2>/dev/null || echo "rapport-$ID")
 
-# Une commande bornée, sa sortie dans un fichier, jamais d'échec.
+# Le processus est-il fini (ou zombie, en attente d'être ramassé) ?
+fini() { # pid
+    e=$(sed -n 's/^[0-9]* (.*) \([A-Za-z]\) .*/\1/p' "/proc/$1/stat" 2>/dev/null)
+    [ -z "$e" ] || [ "$e" = Z ] || [ "$e" = X ]
+}
+
+# Une commande bornée, sa sortie dans un fichier, jamais d'échec — et JAMAIS
+# d'attente au-delà du délai. `timeout` tue, puis ATTEND que la commande
+# meure ; coincée dans le noyau (état D : un écran figé qu'on interroge),
+# elle ne meurt pas, et le rapport attendait avec elle (21 novembre). Ici
+# elle est tuée, puis abandonnée là : le rapport continue.
 borne() { # secondes fichier commande...
     s=$1; f=$2; shift 2
-    {
-        echo "\$ $*"
-        timeout "$s" "$@" 2>&1 || echo "(code $?)"
-        echo
-    } >> "$f" 2>/dev/null
+    echo "\$ $*" >> "$f" 2>/dev/null
+    "$@" >> "$f" 2>&1 < /dev/null &
+    p=$!
+    i=0
+    while ! fini "$p"; do
+        if [ "$i" -ge $((s * 5)) ]; then
+            kill -KILL "$p" 2>/dev/null
+            printf '(abandonnée après %s s : elle ne répondait plus)\n\n' "$s" >> "$f" 2>/dev/null
+            return 0
+        fi
+        sleep 0.2
+        i=$((i + 1))
+    done
+    wait "$p" 2>/dev/null
+    c=$?
+    [ "$c" = 0 ] || echo "(code $c)" >> "$f" 2>/dev/null
+    echo >> "$f" 2>/dev/null
+    return 0
 }
 
 # Le serveur X de l'instant : celui de l'assistant (xinit, root) ou celui de
 # lightdm. On cherche une autorisation qui marche plutôt que de la deviner.
+# Rend 2 si X ne répond plus du tout : inutile alors d'essayer les autres
+# clés, chacune coûterait le même délai (et c'est déjà un renseignement).
 x_essayer() {
     for a in /var/run/lightdm/root/:0 /run/lightdm/root/:0 /root/.Xauthority \
-             /home/*/.Xauthority /root/.serverauth.* ; do
+             /home/*/.Xauthority /root/.serverauth.* /dev/null; do
+        # /dev/null en dernier : le serveur de l'assistant (xinit, sans
+        # -auth) n'exige aucune clé.
         [ -r "$a" ] || continue
-        if DISPLAY=:0 XAUTHORITY="$a" timeout 5 xdpyinfo >/dev/null 2>&1; then
-            echo "$a"
-            return 0
-        fi
+        DISPLAY=:0 XAUTHORITY="$a" timeout -k 1 4 xdpyinfo >/dev/null 2>&1
+        case $? in
+            0) echo "$a"; return 0 ;;
+            124|137) return 2 ;;
+        esac
     done
-    # Le serveur de l'assistant (xinit, sans -auth) n'exige aucune clé.
-    if DISPLAY=:0 XAUTHORITY=/dev/null timeout 5 xdpyinfo >/dev/null 2>&1; then
-        echo /dev/null
-        return 0
-    fi
     return 1
+}
+
+# Le lien PCIe de chaque carte graphique et du port qui la porte (21
+# novembre). Sa RTX 5060 tourne en PCIe 5.0 x8, et ce lien fait des
+# erreurs à chaque démarrage, sous Windows aussi (70 « WHEA 17 » par
+# seconde) : vitesse, compteurs d'erreurs, économie d'énergie (ASPM). Que
+# des lectures de sysfs que le noyau tient en mémoire : rien n'interroge la
+# carte elle-même.
+lien_pcie() {
+    echo "== lien PCIe des cartes graphiques =="
+    echo "politique ASPM du noyau : $(cat /sys/module/pcie_aspm/parameters/policy 2>/dev/null || echo illisible)"
+    for d in /sys/bus/pci/devices/*; do
+        case "$(cat "$d/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
+        port=$(basename "$(dirname "$(readlink -f "$d" 2>/dev/null)")")
+        for x in "$(basename "$d")" "$port"; do
+            p=/sys/bus/pci/devices/$x
+            [ -d "$p" ] || continue
+            echo "$x : $(cat "$p/current_link_speed" 2>/dev/null) x$(cat "$p/current_link_width" 2>/dev/null) (au plus $(cat "$p/max_link_speed" 2>/dev/null) x$(cat "$p/max_link_width" 2>/dev/null))"
+            for c in aer_dev_correctable aer_dev_nonfatal aer_dev_fatal; do
+                [ -r "$p/$c" ] || continue
+                v=$(grep -v ' 0$' "$p/$c" 2>/dev/null | tr '\n' ' ')
+                echo "  $c : ${v:-aucune}"
+            done
+            [ -r "$p/aer_rootport_total_err_cor" ] && \
+                echo "  erreurs corrigées signalées à ce port : $(cat "$p/aer_rootport_total_err_cor" 2>/dev/null)"
+            if [ -d "$p/link" ]; then
+                printf '  ASPM :'
+                for f in "$p"/link/*; do
+                    [ -f "$f" ] && printf ' %s=%s' "$(basename "$f")" "$(cat "$f" 2>/dev/null)"
+                done
+                echo
+            fi
+        done
+    done
+    k=$(timeout 20 journalctl -k -b -o cat --no-pager 2>/dev/null)
+    echo "lignes « PCIe Bus Error » du noyau : $(printf '%s\n' "$k" | grep -c 'PCIe Bus Error')"
+    echo "écran figé (nouveau, wndw timeout) : $(printf '%s\n' "$k" | grep -cE 'nouveau [0-9a-f:.]+: drm: [a-z]+-[0-9]+: timeout')"
+}
+
+# Les écrans vus par le noyau (connecteurs DRM). À part, et lancé par
+# `borne` : lire les modes d'un connecteur prend un verrou que tient une
+# mise à jour d'écran figée.
+connecteurs() {
+    for c in /sys/class/drm/card*; do
+        [ -e "$c" ] || continue
+        n=$(basename "$c")
+        case "$n" in
+            *-*)
+                echo "  $n : $(cat "$c/status" 2>/dev/null), actif=$(cat "$c/enabled" 2>/dev/null), modes : $(head -3 "$c/modes" 2>/dev/null | tr '\n' ' ')"
+                ;;
+            *)
+                echo "$n : pilote $(basename "$(readlink -f "$c/device/driver" 2>/dev/null)" 2>/dev/null) ($(sed -n 's/^DRIVER=//p' "$c/device/uevent" 2>/dev/null))"
+                ;;
+        esac
+    done
 }
 
 instantane() { # moment
     moment=$1
-    T=$(mktemp -d /run/grenos/rapport.XXXXXX 2>/dev/null) || return 0
+    T=$(mktemp -d "$RUN/rapport.XXXXXX" 2>/dev/null) || return 0
 
     # ---- 00 : le résumé, ce qu'on lit en premier --------------------------
     R="$T/00-resume.txt"
@@ -113,19 +203,9 @@ instantane() { # moment
             echo "$(basename "$d") $(cat "$d/vendor" 2>/dev/null):$(cat "$d/device" 2>/dev/null) boot_vga=$(cat "$d/boot_vga" 2>/dev/null) pilote=${pil:-AUCUN}"
         done
         echo
-        echo "== périphériques d'affichage du noyau (DRM) =="
-        for c in /sys/class/drm/card*; do
-            [ -e "$c" ] || continue
-            n=$(basename "$c")
-            case "$n" in
-                *-*)
-                    echo "  $n : $(cat "$c/status" 2>/dev/null), actif=$(cat "$c/enabled" 2>/dev/null), modes : $(head -3 "$c/modes" 2>/dev/null | tr '\n' ' ')"
-                    ;;
-                *)
-                    echo "$n : pilote $(basename "$(readlink -f "$c/device/driver" 2>/dev/null)" 2>/dev/null) ($(sed -n 's/^DRIVER=//p' "$c/device/uevent" 2>/dev/null))"
-                    ;;
-            esac
-        done
+        lien_pcie
+        echo
+        echo "(les écrans vus par le noyau et par X : 50-ecrans.txt)"
         echo
         echo "== modules d'affichage chargés =="
         grep -E '^(nouveau|nvidia[a-z_]*|amdgpu|radeon|i915|xe|bochs|virtio_gpu|vmwgfx|qxl|simpledrm|efidrm|vesadrm) ' /proc/modules 2>/dev/null | cut -d' ' -f1 | tr '\n' ' '
@@ -186,28 +266,6 @@ instantane() { # moment
     done
     { echo "======== /etc/X11/xorg.conf.d"; head -50 /etc/X11/xorg.conf.d/*.conf; } >> "$X" 2>/dev/null
 
-    # ---- 50 : les écrans, vus par X ---------------------------------------
-    E="$T/50-ecrans.txt"
-    if AUTH=$(x_essayer); then
-        echo "autorisation X : $AUTH" >> "$E"
-        (
-            export DISPLAY=:0 XAUTHORITY="$AUTH"
-            # --current : surtout pas une nouvelle interrogation des écrans,
-            # qui fige X (le défaut des Réglages, 20 novembre).
-            borne 10 "$E" xrandr --current --verbose
-            borne 10 "$E" xdpyinfo
-            borne 10 "$E" glxinfo -B
-        )
-    else
-        echo "aucun serveur X joignable sur :0 à ce moment" >> "$E"
-    fi
-    for s in /sys/kernel/debug/dri/*/state; do
-        [ -r "$s" ] || continue
-        { echo "======== $s"; timeout 5 cat "$s"; } >> "$E" 2>/dev/null
-    done
-    { echo "======== /proc/bus/input/devices"; cat /proc/bus/input/devices; } >> "$E" 2>/dev/null
-    borne 10 "$E" lspci -nnk
-
     # ---- 60 : l'installateur et les disques (21 novembre) ----------------
     # « Il bloque au partitionnement, on ne peut plus choisir » : sans le
     # journal de Calamares et la liste de ce qui était monté, on devine.
@@ -239,13 +297,56 @@ instantane() { # moment
     { echo "== journal (son)"; timeout 20 journalctl -b --no-pager -o short-monotonic 2>/dev/null \
         | grep -iE 'snd|hda|sof-|sof_|audio|codec|pipewire|wireplumber|alsa' | tail -n 300; } >> "$A" 2>/dev/null
 
-    # ---- La copie sur la clé : ouverte, écrite, refermée ------------------
-    ecrire_sur_la_cle "$T"
+    # ---- Premier temps : sur la clé TOUT DE SUITE -------------------------
+    # Rien de ce qui précède ne parle à la carte graphique ni à X : même
+    # écran figé, ceci arrive sur la clé.
+    ecrire_sur_la_cle "$T" "premier temps"
+
+    # ---- 50 : les écrans, vus par le noyau et par X -----------------------
+    # Tout ici peut buter sur un écran figé : chaque commande passe par
+    # `borne`, qui abandonne au lieu d'attendre.
+    E="$T/50-ecrans.txt"
+    echo "== écrans vus par le noyau (DRM)" >> "$E"
+    borne 5 "$E" "$0" connecteurs
+    AUTH=$(x_essayer)
+    case $? in
+        0)
+            echo "autorisation X : $AUTH" >> "$E"
+            (
+                export DISPLAY=:0 XAUTHORITY="$AUTH"
+                # --current : surtout pas une nouvelle interrogation des
+                # écrans, qui fige X (le défaut des Réglages, 20 novembre).
+                borne 10 "$E" xrandr --current --verbose
+                borne 10 "$E" xdpyinfo
+                borne 10 "$E" glxinfo -B
+            )
+            ;;
+        2) echo "le serveur X (:0) ne répond plus : figé ?" >> "$E" ;;
+        *) echo "aucun serveur X joignable sur :0 à ce moment" >> "$E" ;;
+    esac
+    for s in /sys/kernel/debug/dri/*/state; do
+        [ -r "$s" ] || continue
+        echo "======== $s" >> "$E"
+        borne 5 "$E" cat "$s"
+    done
+    { echo "======== /proc/bus/input/devices"; cat /proc/bus/input/devices; } >> "$E" 2>/dev/null
+    borne 10 "$E" lspci -nnk
+    # Le détail du lien (LnkSta, LnkCtl2, erreurs) de chaque carte et de son
+    # port : ce que les compteurs du résumé ne disent pas.
+    for d in /sys/bus/pci/devices/*; do
+        case "$(cat "$d/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
+        port=$(basename "$(dirname "$(readlink -f "$d" 2>/dev/null)")")
+        borne 10 "$E" lspci -vv -s "$(basename "$d")"
+        [ -d "/sys/bus/pci/devices/$port" ] && borne 10 "$E" lspci -vv -s "$port"
+    done
+
+    # ---- Second temps : la copie complète --------------------------------
+    ecrire_sur_la_cle "$T" "complet"
     rm -rf "$T" 2>/dev/null
     return 0
 }
 
-ecrire_sur_la_cle() { # dossier
+ecrire_sur_la_cle() { # dossier, temps
     src=$1
     [ -d "$CLE/live" ] || return 0
     type=$(findmnt -no FSTYPE "$CLE" 2>/dev/null | head -1)
@@ -281,12 +382,16 @@ ecrire_sur_la_cle() { # dossier
         if [ "$etait_ro" = 1 ]; then
             timeout 15 mount -o remount,ro "$CLE" 2>/dev/null || true
         fi
-    ) 9>/run/grenos/cle.verrou
-    echo "grenos: rapport de demarrage ecrit sur la cle ($DOSSIER/$NOM)" > /dev/kmsg 2>/dev/null || true
+    ) 9>"$RUN/cle.verrou"
+    echo "grenos: rapport de demarrage ecrit sur la cle ($DOSSIER/$NOM, ${2:-complet})" 2>/dev/null > /dev/kmsg || true
     return 0
 }
 
 case "${1:-maintenant}" in
+    connecteurs)
+        # Appelé par l'instantané lui-même, à travers `borne`.
+        connecteurs
+        ;;
     boucle)
         # Le début compte le plus : c'est là que l'écran devient noir.
         for etape in 25:25s 35:1min 60:2min 120:4min; do

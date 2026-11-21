@@ -1,0 +1,53 @@
+#!/bin/sh
+# Un redémarrage demandé depuis grenOS revient à grenOS (21 novembre).
+#
+# Grenofar démarre sa clé par le menu F12 de sa carte mère : un choix qui ne
+# vaut qu'UNE fois. Écran vert à 18 h 50 : le filet de l'écran a bien écrit
+# « image du firmware » sur la clé et redémarré… et la carte mère a repris
+# son ordre habituel — Windows. Il n'a jamais vu le mode simple qui l'aurait
+# tiré d'affaire, seulement « écran vert, puis Windows ». Même chose pour
+# « Mettre à jour et redémarrer » sur un double démarrage dont Windows a
+# repris la tête de l'ordre.
+#
+# Au redémarrage (reboot.target, pas à l'extinction), on demande donc au
+# micrologiciel UEFI de reprendre UNE fois l'entrée qui a démarré grenOS :
+# BootNext = BootCurrent. La clé si on vient de la clé, « debian » si on
+# vient du disque. Sans clé branchée, l'entrée n'existe plus et la carte mère
+# reprend son ordre : rien de forcé.
+#
+# Jamais par-dessus un choix déjà posé : si BootNext existe (un « redémarrer
+# sous Windows », par exemple), on n'y touche pas.
+#
+# GRENOS_EFIBOOTMGR, GRENOS_EFIVARS : pour les essais seulement
+# (linux/tools/essai-revenir-ici.sh).
+
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+EFIBOOTMGR=${GRENOS_EFIBOOTMGR:-efibootmgr}
+EFIVARS=${GRENOS_EFIVARS:-/sys/firmware/efi/efivars}
+
+dire() {
+    echo "grenos: redemarrage : $*"
+    echo "grenos: redemarrage : $*" 2>/dev/null > /dev/kmsg || true
+}
+
+[ -d "$EFIVARS" ] || exit 0                  # démarré en BIOS : rien à dire
+command -v "$EFIBOOTMGR" >/dev/null 2>&1 || exit 0
+
+etat=$(timeout 10 "$EFIBOOTMGR" 2>/dev/null) || exit 0
+courant=$(printf '%s\n' "$etat" | sed -n 's/^BootCurrent: *\([0-9A-Fa-f]\{4\}\).*/\1/p' | head -n 1)
+if [ -z "$courant" ]; then
+    dire "entree de demarrage courante inconnue, la carte mere suivra son ordre"
+    exit 0
+fi
+if printf '%s\n' "$etat" | grep -q '^BootNext:'; then
+    dire "un prochain demarrage est deja choisi ($(printf '%s\n' "$etat" | sed -n 's/^BootNext: *//p')), on n y touche pas"
+    exit 0
+fi
+nom=$(printf '%s\n' "$etat" | sed -n "s/^Boot$courant[* ] *//p" | cut -f1 | head -n 1)
+if timeout 10 "$EFIBOOTMGR" -q -n "$courant" >/dev/null 2>&1; then
+    dire "retour a l entree $courant ($nom), celle qui a demarre grenOS"
+else
+    dire "BootNext refuse par le micrologiciel, la carte mere suivra son ordre"
+fi
+exit 0

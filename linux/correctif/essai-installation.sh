@@ -121,7 +121,17 @@ bash "$AIDES/calamares-dpkg-unsafe-io"
 if grep -v '^[[:space:]]*#' "$AIDES/calamares-bootloader-config" | grep -q 'apt-get'; then
     faute "bootloader-config est encore celui de Debian (apt-get)"
 fi
-bash "$AIDES/calamares-bootloader-config" || faute "bootloader-config sort en erreur"
+# Une clé qui a appris « firmware » (écran vert de la RTX 5060, 21 novembre) :
+# le disque installé doit repartir avec ce choix, pas de zéro.
+mkdir -p "$OUT/cle-factice/grenos"
+echo firmware > "$OUT/cle-factice/grenos/affichage"
+GRENOS_CLE="$OUT/cle-factice" bash "$AIDES/calamares-bootloader-config" || faute "bootloader-config sort en erreur"
+[ "$(cat "$T/etc/grenos/affichage" 2>/dev/null)" = firmware ] \
+    || faute "le choix d affichage de la cle (firmware) n a pas suivi sur le disque"
+echo "le choix d affichage de la cle a suivi sur le disque : firmware"
+# Le reste de l'essai démarre une machine sans RTX 50 : le choix y est sans
+# effet, mais on le retire pour que la suite reste celle déjà prouvée.
+rm -f "$T/etc/grenos/affichage"
 
 # ---------------------------------------------------------------- bootloader
 etape "bootloader : grenos-grub-install avec les arguments de Calamares, puis grub-mkconfig"

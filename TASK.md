@@ -1,6 +1,6 @@
 # TASK.md — ce qui est planifié, dans l'ordre
 
-> Tenu par Claude. Mis à jour le 2026-11-20 au soir. Une session qui reprend
+> Tenu par Claude. Mis à jour le 2026-11-21 au soir. Une session qui reprend
 > le travail lit d'abord ce fichier, puis `CLAUDE.md` (local, RÈGLE N°1 :
 > plug and play pour un non-développeur).
 
@@ -63,8 +63,37 @@ sur sa RTX 5060). Restaient, et où ça en est :
   fait maintenant deux passages, dont une clé déjà utilisée [prouvé sur
   disque virtuel : run 44929758992, RAW puis MBR, 292/292 fichiers
   identiques les deux fois ; .exe republié à 17:30Z]. Le chemin
-  amovible lui-même [écrit] : il refait sa clé avec le nouveau .exe (sa clé
-  est VIDE depuis l'échec, l'ISO 1551 vérifiée attend dans le cache).
+  amovible lui-même [prouvé sur SA clé] : il l'a refaite avec le nouveau
+  .exe (F:, FAT32 « GRENOS », 1551) et elle a démarré.
+- **Écran vert de 18 h 50 (21 nov., 1551, clé neuve donc `nouveau` essayé)**.
+  Ce que la clé et Windows disent :
+  - le filet a marché : `grenos/affichage = firmware` écrit à 18:50:00 ;
+    Windows redémarre à 18:51:00. MAIS le redémarrage est reparti sous
+    WINDOWS (clé prise au menu F12 : un choix d'une fois) — il n'a vu que
+    « écran vert puis Windows ». Réparé : `grenos-revenir-ici` (BootNext =
+    BootCurrent sur reboot.target, jamais par-dessus un BootNext déjà posé)
+    [écrit ; essai-revenir-ici.sh, 6 cas].
+  - AUCUN rapport sur la clé : le filet redémarre ~35-40 s après le
+    démarrage, avant le premier instantané ; celui de l'arrêt interrogeait
+    X et l'écran figés et a été tué au bout de 45 s. Réparé : rapport en
+    deux temps (premier temps sur la clé AVANT de parler à X), `borne` qui
+    abandonne au lieu d'attendre (état D), lien PCIe dans le résumé
+    [écrit ; essai-rapport-cle.sh, 6 cas, échoue sur l'ancien `borne`].
+  - le système installé repartait de zéro (écran vert au premier
+    démarrage) : le choix de la clé suit désormais sur le disque
+    (calamares-bootloader-config) [écrit ; vérifié par essai-installation.sh].
+  - CAUSE PROBABLE de l'écran vert, NON PROUVÉE : le lien PCIe de la RTX
+    5060 (Gen5 x8, port 00:01.0 8086:A70D, BIOS F4 du 27/09/2024). Sous
+    Windows : 12 441 « WHEA-Logger 17 » (erreur PCIe corrigée) en 3 min,
+    ~70/s. Sous Linux, à CHAQUE démarrage, même en mode simple : RxErr ; et
+    sous nouveau, « Replay Timer Timeout » côté carte dès 25,3 s, premier
+    `wndw-0: timeout` à 27,3 s — AVANT X (30,2 s) : ni Mesa ni l'interface
+    n'y sont pour rien (rapport 093509). Le mode simple marche malgré les
+    erreurs (la carte n'émet presque rien). grenOS ne peut PAS brider le
+    lien en Gen4 : verrouillage `integrity` (Secure Boot) → `setpci` refusé,
+    et Debian n'active pas CONFIG_PCIE_THERMAL (bwctrl). Pistes [à faire] :
+    lire l'ASPM du lien dans le prochain rapport ; Gen4 au BIOS (lui seul,
+    s'il le veut — RÈGLE N°1 : grenOS ne l'exige pas, le mode simple tient).
 - Correctif de clé (delta depuis la 2306) prêt : à copier en
   G:\live\grenos-correctif.squashfs quand la clé est branchée.
 - Construction complète relancée : run 44839968086 (la précédente a été

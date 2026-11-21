@@ -1,0 +1,21 @@
+# Un redémarrage demandé depuis grenOS revient à grenOS (voir
+# /usr/lib/grenos/grenos-revenir-ici, 21 novembre).
+#
+# WantedBy=reboot.target : il ne tourne QUE quand on redémarre — jamais au
+# démarrage, jamais à l'extinction. DefaultDependencies=no : sans cela,
+# Conflicts=shutdown.target l'empêcherait justement de tourner pendant un
+# redémarrage. Before=systemd-reboot.service : avant le dernier geste.
+[Unit]
+Description=grenOS : un redemarrage revient a grenOS
+DefaultDependencies=no
+Before=systemd-reboot.service
+ConditionPathExists=/sys/firmware/efi/efivars
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-revenir-ici
+TimeoutStartSec=25
+StandardOutput=journal
+
+[Install]
+WantedBy=reboot.target

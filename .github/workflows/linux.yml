@@ -133,6 +133,17 @@ jobs:
       - name: Le verdict du journal persistant, 7 cas
         run: sh linux/tools/essai-journal-persistant.sh
 
+      # Ecran vert de Grenofar, 21 novembre a 18 h 50 : la cle ne portait
+      # AUCUN rapport (celui de l arret attendait l ecran fige), et le
+      # redemarrage du filet est reparti sous Windows (cle demarree par F12).
+      # Les deux reparations, essayees ici avant toute construction : un X
+      # fige et un lspci coince ne retiennent plus le rapport ; un
+      # redemarrage revient a l entree UEFI qui a demarre grenOS.
+      - name: Le rapport de la cle face a un ecran fige, 6 cas
+        run: sh linux/tools/essai-rapport-cle.sh
+      - name: Un redemarrage revient a grenOS, 6 cas
+        run: sh linux/tools/essai-revenir-ici.sh
+
       # CE QUE L ASSISTANT FAIT, pas ce qu il dit. I7 est le seul ecran dont
       # le choix installe quelque chose ; neuf ecrans sur dix rangeaient une
       # preference dans un fichier et rien n arrivait. Le controle verifie que

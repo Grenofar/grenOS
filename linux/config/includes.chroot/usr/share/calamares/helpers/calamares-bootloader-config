@@ -29,6 +29,25 @@ if [ "$(mount | grep "$CHROOT"" " | cut -c -16)" = "/dev/mapper/luks" ]; then
     echo "UMASK=0077" > "$CHROOT/etc/initramfs-tools/conf.d/initramfs-permissions"
 fi
 
+# Le choix d'affichage de la clé suit sur le disque (21 novembre). Sur sa
+# RTX 5060, la clé a appris que `nouveau` fige l'écran (écran vert) et garde
+# « firmware » dans grenos/affichage. Sans cette copie, le système installé
+# repartait de zéro : écran vert au premier démarrage, puis le filet, puis
+# un redémarrage — tout ce que la clé avait déjà vécu. C'est ici, la seule
+# étape de l'installation qui est à nous ET qui voit la clé et le disque.
+# Seules deux valeurs connues passent ; un témoin d'essai, jamais.
+CLE=${GRENOS_CLE:-/run/live/medium}
+if [ -r "$CLE/grenos/affichage" ]; then
+    choix=$(head -c 64 "$CLE/grenos/affichage" 2>/dev/null | tr -dc 'a-z')
+    case "$choix" in
+        firmware|nouveau)
+            mkdir -p "$CHROOT/etc/grenos"
+            printf '%s\n' "$choix" > "$CHROOT/etc/grenos/affichage"
+            echo "grenos: choix d affichage de la cle garde sur le disque : $choix"
+            ;;
+    esac
+fi
+
 echo "grenos: preparation du chargeur de demarrage (sans reseau)"
 if [ ! -f "$CHROOT/etc/default/grub" ] && [ -f "$CHROOT/usr/share/grub/default/grub" ]; then
     cp "$CHROOT/usr/share/grub/default/grub" "$CHROOT/etc/default/grub"

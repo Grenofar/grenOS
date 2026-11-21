@@ -838,6 +838,13 @@ if [ ! -x "$AIDE_GRUB" ] || grep -v '^[[:space:]]*#' "$AIDE_GRUB" | grep -q 'apt
     exit 1
 fi
 echo "grenos: la preparation de GRUB se fait sans reseau"
+# Le choix d affichage de la cle suit sur le disque (21 novembre, RTX 5060 :
+# sans lui, ecran vert au premier demarrage du systeme installe).
+if ! grep -v '^[[:space:]]*#' "$AIDE_GRUB" | grep -q 'etc/grenos/affichage'; then
+    echo "grenos: $AIDE_GRUB ne recopie plus le choix d affichage de la cle sur le disque" >&2
+    exit 1
+fi
+echo "grenos: le choix d affichage de la cle suit sur le disque installe"
 # La pose de GRUB elle-meme, et la cle cachee (21 novembre, « grub-install
 # ... code 1 » chez Grenofar : Calamares avait pris la CLE pour partition
 # EFI). Notre bootloader.conf passe par grenos-grub-install (shim au chemin
@@ -1817,6 +1824,30 @@ if [ -n "$fautives" ]; then
     exit 1
 fi
 echo "grenos: aucune unite armee ne fait attendre le bureau sur le reseau ($desarmees desarmee(s))"
+
+echo "--- grenOS : un redemarrage revient a grenOS, le rapport n attend pas l ecran ---"
+# 21 novembre, ecran vert de Grenofar a 18 h 50 : le filet de l ecran a
+# redemarre la machine, qui est repartie sous Windows (cle demarree par F12,
+# un choix d une seule fois) — et la cle ne portait AUCUN rapport : celui de
+# l arret attendait l ecran fige. Les deux reparations sont gardees ici ;
+# leurs essais : linux/tools/essai-revenir-ici.sh, essai-rapport-cle.sh.
+if [ ! -x /usr/lib/grenos/grenos-revenir-ici ] || \
+   [ ! -f /etc/systemd/system/grenos-revenir-ici.service ]; then
+    echo "grenos: grenos-revenir-ici absent : un redemarrage repartirait sous Windows" >&2
+    exit 1
+fi
+arme=$(find /etc/systemd/system /usr/lib/systemd/system \
+    -path '*reboot.target.wants/*' -name grenos-revenir-ici.service 2>/dev/null | head -n 1)
+if [ -z "$arme" ]; then
+    echo "grenos: grenos-revenir-ici n est pas arme sur reboot.target (appliquer-systeme)" >&2
+    exit 1
+fi
+if ! grep -q 'ecrire_sur_la_cle "$T" "premier temps"' /usr/lib/grenos/grenos-rapport-cle || \
+   grep -q 'timeout "$s" "$@"' /usr/lib/grenos/grenos-rapport-cle; then
+    echo "grenos: le rapport de la cle attendrait encore un ecran fige" >&2
+    exit 1
+fi
+echo "grenos: un redemarrage revient a grenOS ($arme) ; le rapport ecrit son premier temps avant l ecran"
 
 echo "--- grenOS : menage ---"
 
