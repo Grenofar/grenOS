@@ -241,9 +241,16 @@ FIN
     # Et la machine a-t-elle TOUT ce que la nouvelle image declare ? C'est la
     # promesse entiere : « 0 donnees perdu, et rien a reinstaller ».
     LISTE=linux/config/package-lists/grenos.list.chroot
+    # SAUF l'installateur et la clé (21 novembre) : ce que packages.conf
+    # retire du système installé n'a rien à faire sur une machine posée, et
+    # grenos-systeme ne le tire plus — sinon le retirer emportait tout grenOS
+    # (voir make-deb.sh).
+    RETIRES=$(sed -n '/try_remove:/,$p' linux/config/includes.chroot/usr/share/grenos/packages.conf \
+        | tail -n +2 | sed -n 's/^[[:space:]]*- //p' | tr '\n' ' ')
     manquants=""
     combien=0
     for paquet in $(grep -v '^#' "$LISTE" | grep -v '^[[:space:]]*$'); do
+        case " $RETIRES " in *" $paquet "*) continue ;; esac
         combien=$((combien + 1))
         dpkg-query -W -f='${Status}' "$paquet" 2>/dev/null | grep -q 'ok installed' \
             || manquants="$manquants $paquet"
