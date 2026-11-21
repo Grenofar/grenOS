@@ -845,6 +845,22 @@ if ! grep -v '^[[:space:]]*#' "$AIDE_GRUB" | grep -q 'etc/grenos/affichage'; the
     exit 1
 fi
 echo "grenos: le choix d affichage de la cle suit sur le disque installe"
+# Le fuseau de l installateur (21 novembre : sans locale.conf, New York, et
+# la session de la cle passait a l heure de New York).
+CONF_LOCALE=/etc/calamares/modules/locale.conf
+if ! grep -q '^zone:[[:space:]]*"Paris"' "$CONF_LOCALE" 2>/dev/null || \
+   ! grep -q '^adjustLiveTimezone:[[:space:]]*false' "$CONF_LOCALE" 2>/dev/null; then
+    echo "grenos: $CONF_LOCALE absent ou sans Paris / adjustLiveTimezone false" >&2
+    exit 1
+fi
+echo "grenos: l installateur propose Europe/Paris et laisse l heure de la cle"
+# Un seul installateur a la fois (21 novembre, 20 h 29 : un second clic
+# avait rendu la cle au premier Calamares ; voir essai-installer.sh).
+if ! grep -q 'grenos-installateur.verrou' /usr/bin/grenos-installer; then
+    echo "grenos: grenos-installer n a plus son verrou : un second clic rendrait la cle" >&2
+    exit 1
+fi
+echo "grenos: un seul installateur a la fois, la cle reste cachee jusqu a la fin"
 # La pose de GRUB elle-meme, et la cle cachee (21 novembre, « grub-install
 # ... code 1 » chez Grenofar : Calamares avait pris la CLE pour partition
 # EFI). Notre bootloader.conf passe par grenos-grub-install (shim au chemin

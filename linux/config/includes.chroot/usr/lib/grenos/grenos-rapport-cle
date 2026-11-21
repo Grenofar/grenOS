@@ -192,6 +192,12 @@ instantane() { # moment
         [ -d /sys/firmware/efi ] || sb="sans objet (BIOS)"
         echo "secure boot : $sb"
         echo "verrouillage du noyau : $(cat /sys/kernel/security/lockdown 2>/dev/null || echo illisible)"
+        # L'horloge (21 novembre) : après une session sur la clé, Windows
+        # retardait encore d'une heure, alors que l'image dit LOCAL. Ce que
+        # le système croit VRAIMENT, en marche : /etc/adjtime, timedated, et
+        # si systemd a recalé l'heure lue au démarrage.
+        echo "horloge : /etc/adjtime dit $(sed -n 3p /etc/adjtime 2>/dev/null || echo 'rien (donc UTC)') ; $(timeout 5 timedatectl show -p Timezone -p LocalRTC -p NTPSynchronized 2>/dev/null | tr '\n' ' ')"
+        echo "  au démarrage : $(timeout 10 journalctl -b -o cat --no-pager 2>/dev/null | grep -m2 -E 'RTC configured in local time|setting system clock to' | tr '\n' ' ')"
         echo "processeur : $(sed -n 's/^model name\t*: //p' /proc/cpuinfo 2>/dev/null | head -1) ($(nproc 2>/dev/null) coeurs)"
         echo "mémoire : $(sed -n 's/^MemTotal: *//p' /proc/meminfo 2>/dev/null)"
         echo "machine : $(cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/board_name 2>/dev/null | tr '\n' ' ')"

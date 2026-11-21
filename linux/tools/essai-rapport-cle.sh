@@ -97,9 +97,10 @@ else
     faute "le lien PCIe manque au résumé"
 fi
 
-# X (5 s au plus) + lspci (10 s) + le reste. Si `borne` attendait la fin de
+# X (5 s au plus) + lspci (10 s) + le reste (l horloge lit le journal :
+# jusqu a 15 s sur une vraie machine). Si `borne` attendait la fin de
 # chaque commande déjà finie (zombie pris pour vivant), on dépasserait 90 s.
-if [ "$duree" -le 45 ]; then
+if [ "$duree" -le 60 ]; then
     bon "rapport complet en $duree s"
 else
     faute "rapport trop long : $duree s"

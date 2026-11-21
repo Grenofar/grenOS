@@ -54,7 +54,11 @@ echo "pkexec \$*" >> "$JOURNAL"
 exit 0
 EOF
 printf '#!/bin/sh\nexit 0\n' > "$T/bin/grenos-dire"
+# Aucun autre Calamares ouvert (le cas « autre installateur » plus bas le
+# change).
+printf '#!/bin/sh\nexit 1\n' > "$T/bin/pgrep"
 chmod +x "$T"/bin/*
+export GRENOS_VERROU_INSTALLATEUR="$T/verrou"
 
 PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
 
@@ -85,4 +89,36 @@ if grep -n 'udisksctl\|grenos-windows' "$JOURNAL" | tail -n 1 | cut -d: -f1 | \
 else
     echo "FAUX l installateur doit s ouvrir APRES que les disques sont liberes"; fautes=$((fautes + 1))
 fi
-[ "$fautes" -eq 0 ] && echo "installer : 8 cas justes" || { echo "installer : $fautes faute(s)"; cat "$JOURNAL"; exit 1; }
+[ -e "$T/verrou" ] && { echo "FAUX le verrou reste apres la fermeture"; fautes=$((fautes + 1)); } \
+    || echo "ok   le verrou part avec l installateur"
+
+# ---- Un second clic pendant que le premier installateur est ouvert (21
+# novembre, 20 h 29 : le second lanceur avait RENDU la clé au premier
+# Calamares). Le verrou est tenu par un processus vivant : ce shell.
+: > "$JOURNAL"
+mkdir "$T/verrou" && echo "$$" > "$T/verrou/pid"
+PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
+jamais "pkexec" "second clic : aucun second installateur"
+jamais "grenos-cle-masquee" "second clic : la cle reste cachee au premier (rien n est rendu)"
+jamais "udisksctl" "second clic : aucun disque n est touche"
+[ -e "$T/verrou/pid" ] && [ "$(cat "$T/verrou/pid")" = "$$" ] && echo "ok   second clic : le verrou du premier reste" \
+    || { echo "FAUX second clic : le verrou du premier a ete pris"; fautes=$((fautes + 1)); }
+rm -rf "$T/verrou"
+
+# ---- Un verrou laissé par une session coupée (processus mort) : il ne
+# bloque personne.
+: > "$JOURNAL"
+sh -c 'exit 0' & mort=$!; wait "$mort"
+mkdir "$T/verrou" && echo "$mort" > "$T/verrou/pid"
+PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
+attendu "pkexec /usr/bin/calamares" "verrou d une session coupee : l installateur s ouvre quand meme"
+
+# ---- Un autre Calamares encore ouvert quand le nôtre se ferme (lancé
+# ailleurs) : la clé reste cachée.
+: > "$JOURNAL"
+printf '#!/bin/sh\nexit 0\n' > "$T/bin/pgrep"
+PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
+attendu "systemctl start grenos-cle-masquee.service" "autre installateur ouvert : la cle est cachee"
+jamais  "systemctl stop grenos-cle-masquee.service" "autre installateur ouvert : la cle n est pas rendue sous lui"
+
+[ "$fautes" -eq 0 ] && echo "installer : 16 cas justes" || { echo "installer : $fautes faute(s)"; cat "$JOURNAL"; exit 1; }

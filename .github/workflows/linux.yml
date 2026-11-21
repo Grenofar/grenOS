@@ -143,6 +143,10 @@ jobs:
         run: sh linux/tools/essai-rapport-cle.sh
       - name: Un redemarrage revient a grenOS, 6 cas
         run: sh linux/tools/essai-revenir-ici.sh
+      # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
+      # rendu la cle au premier Calamares, qui l a prise pour partition EFI.
+      - name: Le lanceur de l installateur, un seul a la fois, 16 cas
+        run: sh linux/tools/essai-installer.sh
 
       # CE QUE L ASSISTANT FAIT, pas ce qu il dit. I7 est le seul ecran dont
       # le choix installe quelque chose ; neuf ecrans sur dix rangeaient une

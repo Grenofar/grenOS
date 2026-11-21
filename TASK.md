@@ -88,6 +88,36 @@ sur sa RTX 5060). Restaient, et où ça en est :
     44934751490 verte, essais rapport-cle et revenir-ici passés en CI).
     Sur SA machine : [à voir] — retour sur la clé après le filet (dépend
     de sa carte mère), rapport du démarrage figé lisible sur la clé.
+- **Installation 1908 ratée à 20 h 32 (21 nov.)** — le journal de Calamares
+  était sur la clé (rapport « arret », 60-installateur.txt) [prouvé, lu] :
+  - NOS réglages étaient bien lus (`grenos-grub-install … --bootloader-id=
+    debian`) ; l'erreur : `failed to make directory '/boot/efi/EFI/debian'`
+    — /boot/efi était la CLÉ (sdd1, montée en lecture seule).
+  - pourquoi : un SECOND clic sur « Installer grenOS » (pkexec 4156 à
+    72,1 s) ; son Calamares s'est refermé (déjà ouvert) et son lanceur a
+    RENDU la clé à 72,2 s — avant que le premier Calamares ne lise les
+    disques (72,4 s). Clé dans la liste, « Installer à côté » choisi sur le
+    Samsung (sans partition EFI), Calamares a pris la clé (MBR, partition
+    « active » = « boot » pour kpmcore) comme partition EFI.
+  - réparé [écrit ; essai-installer.sh 16 cas, échoue sur l'ancien lanceur
+    au second clic] : verrou (mkdir atomique) — un second lancement s'en va
+    sans rien toucher ; et la clé n'est jamais rendue tant qu'un calamares
+    tourne.
+  - fuseau : aucun locale.conf chez Debian → Calamares présélectionnait
+    New York et passait la session de la clé à l'heure de New York (photo :
+    « 14:33 » à 20 h 33). Réparé : locale.conf (Europe/Paris,
+    adjustLiveTimezone: false) [écrit, gardé au build et dans
+    essai-installation.sh].
+  - horloge : Windows retarde encore d'une heure après la session de la
+    clé. Le noyau lit l'horloge en UTC, aucun « RTC configured in local
+    time » de systemd (ni sur la clé, ni sur le disque installé en CI), puis
+    timesyncd recale et le noyau réécrit en UTC. L'image est censée dire
+    LOCAL (garde du hook 0100). [à faire] : le prochain rapport dit ce que
+    le système croit en marche ; essai-installation.sh affiche l'adjtime de
+    l'image.
+  - écarté : ne plus marquer la partition de la clé « active » dans le
+    Créateur — la clé démarre ainsi chez lui ; changer sans essai sur sa
+    carte mère risquerait une clé qui ne démarre plus.
   - CAUSE PROBABLE de l'écran vert, NON PROUVÉE : le lien PCIe de la RTX
     5060 (Gen5 x8, port 00:01.0 8086:A70D, BIOS F4 du 27/09/2024). Sous
     Windows : 12 441 « WHEA-Logger 17 » (erreur PCIe corrigée) en 3 min,

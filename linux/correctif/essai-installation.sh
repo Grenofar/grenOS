@@ -132,6 +132,13 @@ echo "le choix d affichage de la cle a suivi sur le disque : firmware"
 # Le reste de l'essai démarre une machine sans RTX 50 : le choix y est sans
 # effet, mais on le retire pour que la suite reste celle déjà prouvée.
 rm -f "$T/etc/grenos/affichage"
+# L'horloge que le disque installé héritera (21 novembre : Windows retardait
+# encore d'une heure après une session sur la clé). Dit, pas encore jugé :
+# la session de la clé n'a montré aucun recalage « local » au démarrage.
+echo "horloge de l image : /etc/adjtime dit $(sed -n 3p "$T/etc/adjtime" 2>/dev/null || echo 'rien (donc UTC)'), temoin $( [ -e "$T/var/lib/grenos/horloge-locale" ] && echo present || echo absent), fuseau $(readlink "$T/etc/localtime" 2>/dev/null)"
+grep -q '^zone:[[:space:]]*"Paris"' "$T/etc/calamares/modules/locale.conf" 2>/dev/null \
+    || faute "l installateur de l image n a pas Europe/Paris par defaut (locale.conf)"
+echo "l installateur de l image propose Europe/Paris"
 
 # ---------------------------------------------------------------- bootloader
 etape "bootloader : grenos-grub-install avec les arguments de Calamares, puis grub-mkconfig"

@@ -26,6 +26,32 @@ dire() {
     echo "grenos-installer: $*" >&2
 }
 
+# UN SEUL INSTALLATEUR À LA FOIS (21 novembre, 20 h 29 chez Grenofar). Un
+# second clic sur l'icône (Calamares met quelques secondes à paraître) a
+# lancé un second lanceur : son Calamares a vu le premier ouvert et s'est
+# refermé aussitôt — et ce second lanceur a RENDU la clé en partant, une
+# seconde avant que le premier Calamares ne lise les disques. La clé est
+# revenue dans la liste, « Installer à côté » l'a prise pour partition EFI,
+# et grub-install a échoué à la fin (clé en lecture seule). Désormais le
+# second lancement s'en va sans rien toucher.
+#
+# mkdir est atomique : de deux lancements simultanés, un seul gagne. Le
+# numéro du lanceur dedans : un verrou laissé par une session coupée ne
+# bloque personne (/run/user est vidé à chaque démarrage, de toute façon).
+VERROU="${GRENOS_VERROU_INSTALLATEUR:-${XDG_RUNTIME_DIR:-/tmp}/grenos-installateur.verrou}"
+if ! mkdir "$VERROU" 2>/dev/null; then
+    ancien=$(cat "$VERROU/pid" 2>/dev/null)
+    if [ -n "$ancien" ] && kill -0 "$ancien" 2>/dev/null; then
+        dire "installateur : deja ouvert — un seul a la fois, rien n est touche"
+        exit 0
+    fi
+    rm -rf "$VERROU" 2>/dev/null
+    mkdir "$VERROU" 2>/dev/null || { dire "installateur : deja ouvert"; exit 0; }
+fi
+echo "$$" > "$VERROU/pid"
+trap 'rm -rf "$VERROU"' EXIT
+trap 'exit 1' HUP INT TERM
+
 # La clé d'où grenOS tourne : son disque reste ouvert.
 medium=$(findmnt -rno SOURCE /run/live/medium 2>/dev/null | head -n 1)
 cle=""
@@ -63,5 +89,13 @@ fi
 
 pkexec /usr/bin/calamares "$@"
 code=$?
-[ -n "$cle" ] && systemctl stop grenos-cle-masquee.service 2>/dev/null
+# Et jamais rendue tant qu'un Calamares tourne encore, d'où qu'il vienne
+# (le lanceur de Debian, un terminal) : c'est lui qui lit les disques.
+if [ -n "$cle" ]; then
+    if pgrep -x calamares >/dev/null 2>&1; then
+        dire "installateur : un autre installateur tourne encore, la cle reste cachee"
+    else
+        systemctl stop grenos-cle-masquee.service 2>/dev/null
+    fi
+fi
 exit "$code"
