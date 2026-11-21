@@ -68,7 +68,15 @@ casque USB « OW810 » (3206:0861, sans nom de produit), adaptateur Xbox
 (pris pour une carte Wi-Fi par mt76x2u), Bluetooth Realtek 8851BU (marche),
 carte mère ALC897 (marche).
 - L'assistant ne s'affichait JAMAIS sous nouveau : « drmSetMaster failed »
-  (plymouth tenait la carte) → `plymouth deactivate` dans grenos-premier-x.
+  (plymouth tenait la carte). `plymouth deactivate`, puis `quit
+  --retain-splash`, essayés dans grenos-premier-x : X figé sur TOUTES les
+  machines d'essai (runs 44842167737, 44843240153) → RETIRÉS. OUVERT.
+  PISTE lue dans lightdm 1.32.0 (seat-local.c, get_vt) : plymouth sur un
+  terminal sous minimum-vt (7) — notre cas, tty1 — n'est NI désactivé NI
+  quitté « retain-splash » : lightdm lance `plymouth quit` tout court, en
+  ATTENDANT qu'il finisse, puis X sur vt7 -novtswitch, et active lui-même
+  le terminal (`vt_set_active`) une fois X prêt. À essayer dans
+  grenos-premier-x par cle.yml AVANT toute version.
 - Le filet a REDÉMARRÉ sa session qui marchait (il n'attendait que
   l'assistant) → un bureau ouvert vaut confirmation, plus jamais de
   redémarrage sous les yeux. Le choix de sa clé remis à « nouveau ».
@@ -77,6 +85,21 @@ carte mère ALC897 (marche).
 - Erreurs PCIe « corrigibles » en rafale sur le lien de la RTX (356 en
   210 s) : elles ont noyé le début de dmesg. Piste : ASPM du lien de la
   carte (udev, par carte) — pas encore fait, à mesurer d'abord.
+
+### 21 novembre, 2 h — deux pannes trouvées en préparant sa version
+- **L'initrd gardait les pilotes réseau** (deux constructions refusées par
+  la garde, 82 Mo, runs 44835521238 et 44844273146) : le crochet de
+  live-boot les inscrit par DOSSIER (`auto_add_modules net` →
+  « =drivers/net/ethernet »), le filtre par nom les laissait passer, et
+  mkinitramfs les recopiait APRÈS les crochets, Netronome (35 Mo) et
+  LiquidIO compris. Corrigé dans zz-grenos-sans-pilotes-graphiques [écrit,
+  essayé sur une fausse arborescence ; à prouver par la construction].
+- **Windows retardait d'une heure après une session grenOS** (vu sur son
+  PC) : Debian écrit l'heure en UTC dans la carte mère, Windows la lit à
+  l'heure locale — et l'installateur faisait pareil (étape hwclock de
+  Calamares). /etc/adjtime à LOCAL (appliquer-systeme, une fois par
+  machine), étape hwclock retirée, fuseau de l'image à Paris [écrit]. Son
+  horloge Windows reste fausse jusqu'à sa prochaine synchronisation.
 
 RESTE : GRUB du système INSTALLÉ vérifié en vrai (entrée Windows) ;
 installation Secure Boot menée au bout (jamais prouvée) ; le son de l'écran ;
