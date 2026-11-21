@@ -115,6 +115,22 @@ carte mère ALC897 (marche).
   deux rapports réels : 10 → bloqué, 0 → sain]. PISTE à mesurer : brider
   le lien à Gen4 avant nouveau (setpci, LnkCtl2) si les erreurs PCIe en
   sont la cause.
+- **21 novembre, midi — la 0935 sur son PC, clé en « firmware »** (rapport
+  20261121-104453) : l'assistant s'affiche (11 images/s, dessin au
+  processeur), il le finit en 30 s — puis ÉCRAN NOIR. lightdm attendait
+  sans fin que logind déclare seat0 graphique : systemd ne donne
+  « master-of-seat » à /dev/fb0 qu'avec `nomodeset` (71-seat.rules). Règle
+  udev 72-grenos-image-firmware.rules [PROUVÉ en QEMU : scénario
+  firmware-bureau de cle.yml, run 44892873792 — bureau, barre et heure à
+  110 s sur l'image du firmware]. « La souris dans l'OOBE » : X avait bien
+  sa Corsair (libinput) ; le curseur est CACHÉ tant que rien ne bouge (les
+  captures de 45 s n'en montrent aucun) et APPARAÎT dès que la souris bouge
+  (capture de 75 s, même run). premier_pret le pose désormais au centre,
+  visible d'emblée [écrit, compilé ; à voir dans la construction].
+  « Des % au chargement » : vrai pourcentage dans « Mise en place… »
+  (premier-etape, vu dans l'aperçu), barre sous la roulette au démarrage.
+  Il passe sur grenOS seul dès la version suivante (construction
+  44892885877).
 - Publiées : 20261121-0154 (l'initrd), puis 20261121-0248 (l'horloge). La
   clé G: porte la **0248** (292 fichiers vérifiés contre sha256sum.txt,
   affichage « nouveau » et rapports gardés) : prête pour installer sur son
