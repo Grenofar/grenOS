@@ -131,6 +131,30 @@ carte mère ALC897 (marche).
   (premier-etape, vu dans l'aperçu), barre sous la roulette au démarrage.
   Il passe sur grenOS seul dès la version suivante (construction
   44892885877).
+- **21 novembre, après-midi — L'INSTALLATION, quatre échecs chez lui, puis
+  l'essai qui va au bout.** Chaque tentative cassait une étape plus loin :
+  1. « impossible de trouver unsquashfs » : squashfs-tools seulement
+     recommandé par calamares → dans la liste ;
+  2. (relu avant qu'il y arrive) packages.conf de Debian : un seul apt-get
+     de neuf paquets, dont quatre absents, sans listes d'apt → try_remove ;
+     bootloader-config de Debian : apt-get install grub-efi (aucun dépôt,
+     aucun DNS dans le chroot) puis update-grub sans /boot/grub → le nôtre ;
+  3. « grub-install … code 1 » : en « À côté », Calamares a pris LA CLÉ pour
+     partition EFI (kpmcore : démarrable = ESP), montée en lecture seule →
+     la clé passe en lecture seule (blockdev) le temps de l'installateur,
+     kpmcore saute alors le disque ; grenos-grub-install (shim au chemin de
+     secours, jamais sur celui de Windows), installEFIFallback coupé ;
+  4. essai-installation.sh (cle.yml, job installation) : installe sur un
+     disque SATA vierge avec les étapes et arguments de Calamares, puis
+     démarre CE disque seul sous OVMF Secure Boot. Il a trouvé : GRUB signé
+     à l'invite « grub> » (préfixe /EFI/debian gravé → efiBootloaderId
+     « debian ») ; puis AUCUN service grenOS sur le disque installé —
+     grenos-systeme dépendait de calamares : retirer l'installateur
+     emportait grenos-systeme puis grenos-desktop, TOUT grenOS (make-deb
+     exclut désormais la liste de packages.conf ; garde à la construction).
+  [Prouvé en QEMU : shim → GRUB → noyau « Secure boot enabled » → écran de
+  connexion. À prouver : l'assistant grenOS sur le disque installé, avec la
+  construction 44914436115.]
 - Publiées : 20261121-0154 (l'initrd), puis 20261121-0248 (l'horloge). La
   clé G: porte la **0248** (292 fichiers vérifiés contre sha256sum.txt,
   affichage « nouveau » et rapports gardés) : prête pour installer sur son
