@@ -70,6 +70,16 @@ rm -f "$OUT/fs.sq"
 unsquashfs -q -f -d "$T" "$CORRECTIF" >/dev/null
 df -h "$T" | tail -1
 
+# Les services de grenOS ARMÉS sur le disque (21 novembre : au premier
+# passage complet, le système installé n'en a démarré AUCUN — ni l'assistant,
+# ni l'affichage, ni Windows). On les compte à chaque étape pour voir où ils
+# se perdent.
+armes() { # moment
+    n=$(find "$T/etc/systemd/system" -path '*.wants/grenos-*' 2>/dev/null | wc -l)
+    echo "services grenOS armes ($1) : $n — $(find "$T/etc/systemd/system" -path '*.wants/grenos-*' -printf '%f ' 2>/dev/null | head -c 400)"
+}
+armes "apres la copie de l image"
+
 # ---------------------------------------------------- les montages (mount.conf)
 etape "montages du chroot (mount.conf)"
 mount -t proc proc "$T/proc"
@@ -142,10 +152,17 @@ sed -n '/try_remove:/,$p' "$CONF" | tail -n +2 | sed -n 's/^[[:space:]]*- //p' |
     else echo "  refus d apt (sans gravite) : $p"; fi
 done
 
+armes "apres le retrait des paquets de la cle"
+
 # ---------------------------------------------------------------- initramfs
 etape "initramfs"
 dedans update-initramfs -k all -c -t || faute "update-initramfs sort en erreur"
 ls -la "$T"/boot/initrd.img-* "$T"/boot/vmlinuz-*
+
+armes "a la fin de l installation"
+if [ "$(find "$T/etc/systemd/system" -path '*.wants/grenos-*' 2>/dev/null | wc -l)" -eq 0 ]; then
+    echo "::warning::le systeme installe n a AUCUN service grenOS arme (assistant, affichage, Windows...)"
+fi
 
 etape "dpkg-unsafe-io -u, sources-final, demontage"
 bash "$AIDES/calamares-dpkg-unsafe-io" -u
