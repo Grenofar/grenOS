@@ -441,6 +441,11 @@ firmware-amd-graphics
 ## que le RECOMMANDER, et `--apt-recommends false` l'écartait. Aucune
 ## installation n'avait donc jamais pu copier le système.
 squashfs-tools
+## Et l'initrd en zstd, comme initramfs-tools le veut par défaut : sans le
+## programme, il retombait sur gzip — « W: No zstd in /usr/bin:/sbin:/bin,
+## using gzip », vu par l'essai d'installation du 21 novembre. zstd se
+## décompresse plusieurs fois plus vite, à CHAQUE démarrage.
+zstd
 
 ## Le chargeur d'amorçage, posé par Calamares selon la machine. Les deux
 ## metapaquets grub-pc et grub-efi-amd64 s'excluent l'un l'autre : les paquets

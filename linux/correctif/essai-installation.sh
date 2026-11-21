@@ -116,17 +116,22 @@ bash "$AIDES/calamares-bootloader-config" || faute "bootloader-config sort en er
 # ---------------------------------------------------------------- bootloader
 etape "bootloader : grenos-grub-install avec les arguments de Calamares, puis grub-mkconfig"
 [ -x "$T/usr/lib/grenos/grenos-grub-install" ] || faute "grenos-grub-install absent du systeme installe"
+# Le nom du dossier EFI : celui que NOTRE bootloader.conf donne à Calamares
+# (efiBootloaderId), sinon le nom de l'habillage (bootloaderEntryName).
+ID=$(sed -n 's/^efiBootloaderId:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$T/usr/share/grenos/bootloader.conf" 2>/dev/null | head -n 1)
+[ -n "$ID" ] || ID=$(sed -n 's/^[[:space:]]*bootloaderEntryName:[[:space:]]*//p' "$T/usr/share/calamares/branding/grenos/branding.desc" | head -n 1)
+echo "dossier EFI : $ID"
 dedans /usr/lib/grenos/grenos-grub-install --target=x86_64-efi --efi-directory=/boot/efi \
-    --bootloader-id=grenOS --force --no-nvram || faute "grub-install sort en erreur"
+    --bootloader-id="$ID" --force --no-nvram || faute "grub-install sort en erreur"
 dedans grub-mkconfig -o /boot/grub/grub.cfg || faute "grub-mkconfig sort en erreur"
 echo "partition EFI :"
 ( cd "$T/boot/efi" && find . -type f | sort )
-for f in EFI/BOOT/BOOTX64.EFI EFI/BOOT/grubx64.efi EFI/grenOS/shimx64.efi EFI/grenOS/grubx64.efi; do
+for f in EFI/BOOT/BOOTX64.EFI EFI/BOOT/grubx64.efi "EFI/$ID/shimx64.efi" "EFI/$ID/grubx64.efi" "EFI/$ID/grub.cfg"; do
     [ -f "$T/boot/efi/$f" ] || faute "$f absent de la partition EFI"
 done
 cmp -s "$T/boot/efi/EFI/BOOT/BOOTX64.EFI" "$T/usr/lib/shim/shimx64.efi.signed" \
     || faute "le chemin de secours n est pas shim : un PC en Secure Boot le refuserait"
-echo "chemin de secours : shim signe (comme EFI/grenOS/shimx64.efi)"
+echo "chemin de secours : shim signe (comme EFI/$ID/shimx64.efi)"
 
 # ----------------------------------------------------------------- packages
 etape "packages : try_remove de notre packages.conf"

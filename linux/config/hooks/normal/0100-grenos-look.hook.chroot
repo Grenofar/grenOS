@@ -830,8 +830,12 @@ echo "grenos: la preparation de GRUB se fait sans reseau"
 # de secours, jamais sur la partition EFI de Windows) ; grenos-installer
 # cache la cle a l installateur le temps de l installation.
 CONF_GRUB=/etc/calamares/modules/bootloader.conf
+# Et le dossier EFI « debian » : le GRUB signe de Debian a ce prefixe grave
+# dans son image ; dans EFI/grenOS il s arretait a l invite grub> (essai
+# d installation, cle.yml run 44911221383).
 if ! grep -q '^installEFIFallback: false' "$CONF_GRUB" 2>/dev/null || \
    ! grep -q '^grubInstall: "/usr/lib/grenos/grenos-grub-install"' "$CONF_GRUB" 2>/dev/null || \
+   ! grep -q '^efiBootloaderId: "debian"' "$CONF_GRUB" 2>/dev/null || \
    [ ! -x /usr/lib/grenos/grenos-grub-install ]; then
     echo "grenos: la pose de GRUB n est pas la notre ($CONF_GRUB, grenos-grub-install) : chemin de secours sans shim, ou celui de Windows ecrase" >&2
     exit 1
