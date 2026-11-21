@@ -1,0 +1,16 @@
+# La clé cachée à l'installateur le temps de l'installation (voir
+# /usr/lib/grenos/grenos-cle-masquee). Démarré et arrêté par grenos-installer,
+# autorisé sans mot de passe par la règle polkit 49 (org.freedesktop.systemd1).
+#
+# After=grenos-rapport-cle : à l'arrêt, la clé est rendue AVANT que le rapport
+# de démarrage n'y écrive son dernier état (l'ordre d'arrêt est l'inverse).
+[Unit]
+Description=grenOS : la cle cachee a l installateur, le temps de l installation
+ConditionKernelCommandLine=boot=live
+After=grenos-rapport-cle.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/grenos/grenos-cle-masquee cacher
+ExecStop=/usr/lib/grenos/grenos-cle-masquee montrer

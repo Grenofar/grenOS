@@ -71,9 +71,18 @@ attendu "udisksctl unmount -b /dev/nvme0n1p3" "Windows est referme meme s il res
 jamais  "/dev/sdc1" "la cle grenOS n est jamais touchee"
 jamais  "/dev/sdb1" "un disque deja ferme n est pas touche"
 attendu "pkexec /usr/bin/calamares" "puis l installateur s ouvre (pkexec calamares)"
-if [ "$(tail -n 1 "$JOURNAL")" != "pkexec /usr/bin/calamares" ]; then
-    echo "FAUX l installateur doit s ouvrir EN DERNIER"; fautes=$((fautes + 1))
+# La clé cachée à l'installateur AVANT qu'il s'ouvre, rendue APRÈS (21
+# novembre : Calamares l'avait prise pour partition EFI, grub-install code 1).
+ordre=$(grep -n -E 'grenos-cle-masquee|pkexec' "$JOURNAL" | cut -d: -f2- | tr '\n' '|')
+if [ "$ordre" = "systemctl start grenos-cle-masquee.service|pkexec /usr/bin/calamares|systemctl stop grenos-cle-masquee.service|" ]; then
+    echo "ok   la cle est cachee avant l installateur et rendue apres"
 else
-    echo "ok   l installateur s ouvre en dernier, disques deja liberes"
+    echo "FAUX la cle doit etre cachee avant l installateur et rendue apres (vu : $ordre)"; fautes=$((fautes + 1))
 fi
-[ "$fautes" -eq 0 ] && echo "installer : 7 cas justes" || { echo "installer : $fautes faute(s)"; cat "$JOURNAL"; exit 1; }
+if grep -n 'udisksctl\|grenos-windows' "$JOURNAL" | tail -n 1 | cut -d: -f1 | \
+        { read -r dernier; premier=$(grep -n pkexec "$JOURNAL" | cut -d: -f1); [ "$dernier" -lt "$premier" ]; }; then
+    echo "ok   l installateur s ouvre apres les disques liberes"
+else
+    echo "FAUX l installateur doit s ouvrir APRES que les disques sont liberes"; fautes=$((fautes + 1))
+fi
+[ "$fautes" -eq 0 ] && echo "installer : 8 cas justes" || { echo "installer : $fautes faute(s)"; cat "$JOURNAL"; exit 1; }

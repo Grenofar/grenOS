@@ -1,0 +1,44 @@
+#!/bin/sh
+# grub-install, tel que l'installateur l'appelle — avec le chemin de secours
+# fait pour le Secure Boot (21 novembre).
+#
+# Calamares (bootloader/main.py, 3.3.14) lance
+#   grub-install --target=x86_64-efi --efi-directory=/boot/efi
+#                --bootloader-id=grenOS --force
+# puis, si `installEFIFallback`, RECOPIE grubx64.efi en EFI/boot/bootx64.efi.
+# Deux défauts pour grenOS :
+#   - sous Secure Boot, le micrologiciel n'accepte en premier que shim (signé
+#     par Microsoft) ; un grubx64.efi au chemin de secours ne démarre pas ;
+#   - sur une partition EFI PARTAGÉE avec Windows, cette copie écrase le
+#     chemin de secours de Windows.
+# Notre bootloader.conf coupe donc cette copie, et ce lanceur demande à
+# grub-install de Debian de poser lui-même le chemin de secours, avec shim
+# (`--force-extra-removable`) — mais seulement sur une partition EFI à nous :
+# s'il y a Windows dessus, on n'y touche pas, l'entrée du micrologiciel suffit.
+
+esp=""
+suivant=""
+for argument in "$@"; do
+    if [ -n "$suivant" ]; then esp=$argument; suivant=""; continue; fi
+    case "$argument" in
+        --efi-directory=*) esp=${argument#--efi-directory=} ;;
+        --efi-directory) suivant=1 ;;
+    esac
+done
+
+# Le Secure Boot, DIT plutôt que supposé : grub-install de Debian pose shim et
+# le GRUB signé dès qu'ils sont là, mais on ne laisse pas un défaut décider de
+# ce qui fait démarrer le PC de Grenofar (Secure Boot actif, il ne le coupera
+# pas). Seulement si les images signées sont là : sinon l'option échouerait.
+if [ -f /usr/lib/shim/shimx64.efi.signed ] && \
+   [ -f /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed ]; then
+    set -- "$@" --uefi-secure-boot
+fi
+
+if [ -n "$esp" ] && ! ls -d "$esp"/[Ee][Ff][Ii]/[Mm]icrosoft >/dev/null 2>&1; then
+    set -- "$@" --force-extra-removable
+    echo "grenos-grub-install : partition EFI a grenOS ($esp) — chemin de secours avec shim"
+else
+    echo "grenos-grub-install : partition EFI partagee avec Windows ($esp) — son chemin de secours reste a Windows"
+fi
+exec /usr/sbin/grub-install "$@"

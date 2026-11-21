@@ -243,6 +243,13 @@ if [ -f /usr/share/grenos/packages.conf ]; then
     cp /usr/share/grenos/packages.conf /etc/calamares/modules/packages.conf || true
 fi
 
+# Et la pose de GRUB : shim au chemin de secours, jamais sur la partition EFI
+# de Windows (21 novembre ; voir le fichier et grenos-grub-install).
+if [ -f /usr/share/grenos/bootloader.conf ]; then
+    mkdir -p /etc/calamares/modules
+    cp /usr/share/grenos/bootloader.conf /etc/calamares/modules/bootloader.conf || true
+fi
+
 # ---- Les réglages que nous posons chez les autres ---------------------------
 #
 # Ces fichiers appartiennent à openbox, à l'explorateur, à la bibliothèque de

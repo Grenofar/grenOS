@@ -53,4 +53,15 @@ lsblk -rno PATH,PKNAME,TYPE,MOUNTPOINT 2>/dev/null | while read -r dev parent ty
     fi
 done
 
-exec pkexec /usr/bin/calamares "$@"
+# LA CLÉ ELLE-MÊME, cachée à l'installateur (21 novembre) : sinon Calamares la
+# prend pour une partition EFI et y pose GRUB — en lecture seule, échec à la
+# fin (voir /usr/lib/grenos/grenos-cle-masquee). Rendue dès qu'il se ferme.
+if [ -n "$cle" ]; then
+    systemctl start grenos-cle-masquee.service 2>/dev/null \
+        || dire "installateur : la cle n a pas pu etre cachee — l installateur la verra"
+fi
+
+pkexec /usr/bin/calamares "$@"
+code=$?
+[ -n "$cle" ] && systemctl stop grenos-cle-masquee.service 2>/dev/null
+exit "$code"

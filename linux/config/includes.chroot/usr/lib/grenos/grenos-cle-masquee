@@ -1,0 +1,51 @@
+#!/bin/sh
+# La clé de grenOS cachée à l'installateur, le temps de l'installation
+# (21 novembre).
+#
+# Sur le PC de Grenofar, l'installation a échoué sur `grub-install … code 1`
+# (rapport de sa clé 20261121-142532) : Calamares avait monté LA CLÉ ELLE-MÊME
+# — sa partition FAT32, en lecture seule — comme partition EFI du système à
+# installer. Calamares compte pour « partition EFI » toute partition marquée
+# démarrable (kpmcore 4 confond Boot et ESP), et une clé USB en a toujours
+# une ; il propose aussi la clé comme disque où installer. Et rien ne l'écarte :
+# il ne retire de sa liste que zram, les disquettes, les CD (iso9660) et le
+# disque qui porte « / » (DeviceList.cpp, Calamares 3.3.14).
+#
+# Mais kpmcore saute les disques en LECTURE SEULE (/sys/block/<disque>/ro),
+# et Calamares lui demande sa liste sans eux. On passe donc le disque de la
+# clé en lecture seule avant d'ouvrir l'installateur, et on le rend après.
+# Le système tourne toujours de la clé : il n'y fait que lire.
+#
+#   grenos-cle-masquee cacher | montrer     (grenos-cle-masquee.service)
+
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+dire() { echo "grenos: $*" > /dev/kmsg 2>/dev/null || true; echo "grenos: $*"; }
+
+medium=$(findmnt -rno SOURCE /run/live/medium 2>/dev/null | head -n 1)
+disque=""
+[ -n "$medium" ] && disque=$(lsblk -rno PKNAME "$medium" 2>/dev/null | head -n 1)
+if [ -z "$disque" ] || [ ! -b "/dev/$disque" ]; then
+    dire "installateur : disque de la cle introuvable (${medium:-pas de /run/live/medium}) — rien a cacher"
+    exit 0
+fi
+
+case "${1:-}" in
+    cacher)
+        if blockdev --setro "/dev/$disque"; then
+            dire "installateur : la cle (/dev/$disque) est cachee a l installateur, lecture seule"
+        else
+            dire "installateur : la cle (/dev/$disque) n a pas pu passer en lecture seule — l installateur la verra"
+        fi
+        ;;
+    montrer)
+        blockdev --setrw "/dev/$disque" 2>/dev/null || true
+        dire "installateur : la cle (/dev/$disque) est rendue"
+        ;;
+    *)
+        echo "grenos-cle-masquee cacher|montrer" >&2
+        exit 2
+        ;;
+esac
+exit 0

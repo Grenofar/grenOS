@@ -21,6 +21,15 @@ fichier etc/udev/rules.d/72-grenos-image-firmware.rules
 # Le curseur dans l'assistant : le thème du bureau, et une flèche sur le fond.
 fichier usr/bin/grenos-premier-lanceur
 
+# 21 novembre, après-midi — l'installation (quatre échecs chez Grenofar) :
+# la clé cachée à l'installateur, et la pose de GRUB avec shim au chemin de
+# secours, jamais sur la partition EFI de Windows.
+fichier usr/bin/grenos-installer
+fichier usr/lib/grenos/grenos-cle-masquee
+fichier etc/systemd/system/grenos-cle-masquee.service
+fichier usr/lib/grenos/grenos-grub-install
+fichier usr/share/grenos/bootloader.conf
+
 # L'installateur recopie aussi ce correctif (fichier propre au correctif,
 # dans linux/correctif/seul : il n'a pas de sens dans l'image complète).
 seul etc/calamares/modules/unpackfs.conf

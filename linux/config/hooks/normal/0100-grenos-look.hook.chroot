@@ -824,6 +824,25 @@ if [ ! -x "$AIDE_GRUB" ] || grep -v '^[[:space:]]*#' "$AIDE_GRUB" | grep -q 'apt
     exit 1
 fi
 echo "grenos: la preparation de GRUB se fait sans reseau"
+# La pose de GRUB elle-meme, et la cle cachee (21 novembre, « grub-install
+# ... code 1 » chez Grenofar : Calamares avait pris la CLE pour partition
+# EFI). Notre bootloader.conf passe par grenos-grub-install (shim au chemin
+# de secours, jamais sur la partition EFI de Windows) ; grenos-installer
+# cache la cle a l installateur le temps de l installation.
+CONF_GRUB=/etc/calamares/modules/bootloader.conf
+if ! grep -q '^installEFIFallback: false' "$CONF_GRUB" 2>/dev/null || \
+   ! grep -q '^grubInstall: "/usr/lib/grenos/grenos-grub-install"' "$CONF_GRUB" 2>/dev/null || \
+   [ ! -x /usr/lib/grenos/grenos-grub-install ]; then
+    echo "grenos: la pose de GRUB n est pas la notre ($CONF_GRUB, grenos-grub-install) : chemin de secours sans shim, ou celui de Windows ecrase" >&2
+    exit 1
+fi
+if [ ! -x /usr/lib/grenos/grenos-cle-masquee ] || \
+   [ ! -f /etc/systemd/system/grenos-cle-masquee.service ] || \
+   ! grep -q 'grenos-cle-masquee' /usr/bin/grenos-installer; then
+    echo "grenos: la cle n est pas cachee a l installateur : il pourrait y poser GRUB (grub-install code 1)" >&2
+    exit 1
+fi
+echo "grenos: GRUB pose avec shim, jamais sur la cle ni sur le chemin de secours de Windows"
 
 echo "--- grenOS : saurons-nous poser le chargeur de demarrage ---"
 # Le controle ci-dessus verifie qu'on sait FORMATER ce que l'installateur
