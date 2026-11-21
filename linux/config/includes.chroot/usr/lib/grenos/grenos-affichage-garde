@@ -21,34 +21,87 @@
 #      Jamais pendant qu'un assistant ou un bureau est à l'écran (21
 #      novembre : ce filet a redémarré la session de Grenofar qui marchait).
 #
-# Armé seulement quand l'assistant va s'ouvrir (machine pas encore nommée)
-# et quand le choix peut être gardé : sans cela, personne ne confirmerait
-# et la machine redémarrerait pour rien.
+# 4. LE MOTEUR D'AFFICHAGE BLOQUÉ (21 novembre au matin, rapport de sa clé
+#    20261121-093509). Même noyau, même carte, même clé que la veille où
+#    tout marchait à 300 Hz : cette fois `nouveau` écrit « drm: wndw-0:
+#    timeout » toutes les deux secondes DÈS l'écran de chargement, et
+#    l'écran reste VERT. X, l'assistant et openbox démarrent quand même —
+#    ils ne savent pas que rien ne s'affiche. Un bureau ouvert ne prouve
+#    donc plus rien tant que ces lignes existent : trois de ces « timeout »
+#    et la machine garde « firmware », puis redémarre (au bout d'une dizaine
+#    de secondes de vert, plus trois minutes). Et ce guet tourne À CHAQUE
+#    démarrage sous nouveau d'une RTX 50, même sur un choix déjà gardé :
+#    ce blocage-là va et vient d'un démarrage à l'autre.
 #
-#   grenos-affichage-garde          armer (le service)
-#   grenos-affichage-garde attendre (lancé par le premier, en arrière-plan)
+# Le témoin d'essai n'est posé que quand l'assistant va s'ouvrir (machine
+# pas encore nommée) et quand le choix peut être gardé : sans cela, personne
+# ne confirmerait et la machine redémarrerait pour rien.
+#
+#   grenos-affichage-garde            armer (le service)
+#   grenos-affichage-garde attendre   l'essai (lancé par le premier, en arrière-plan)
+#   grenos-affichage-garde surveiller le seul guet du moteur bloqué (choix gardé)
 
 set -u
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 ETAT=/usr/lib/grenos/grenos-affichage-etat
 DELAI=180
+SURVEILLANCE=120
 
 dire() {
     echo "grenos: $*" > /dev/kmsg 2>/dev/null || true
 }
+
+# Trois « wndw-N: timeout » (ou base-, curs-…) de nouveau depuis le démarrage.
+# Le journal plutôt que dmesg : les rafales d'erreurs PCIe de sa carte
+# (8 000 en 45 s) font déborder la mémoire du noyau, pas le journal.
+moteur_bloque() {
+    n=$(journalctl -k -b -o cat --no-pager 2>/dev/null \
+        | grep -cE 'nouveau [0-9a-f:.]+: drm: [a-z]+-[0-9]+: timeout')
+    [ "${n:-0}" -ge 3 ]
+}
+
+# Image du firmware au prochain démarrage, et redémarrer — sauf si le choix
+# ne peut pas être gardé (on reviendrait au même écran, en boucle) ou si une
+# installation tourne (la couper serait pire qu'un écran vert).
+repli_firmware() {
+    dire "ecran : nouveau ne repond plus a l ecran (wndw timeout) — image du firmware"
+    if ! "$ETAT" ecrire affichage firmware; then
+        dire "ecran : choix impossible a garder ici — pas de redemarrage, il reviendrait au meme"
+        exit 0
+    fi
+    "$ETAT" effacer affichage-essai 2>/dev/null
+    sync
+    if pgrep -x calamares >/dev/null 2>&1; then
+        dire "ecran : une installation tourne — l image du firmware attendra le prochain demarrage"
+        exit 0
+    fi
+    systemctl reboot
+    exit 0
+}
+
+if [ "${1:-}" = surveiller ]; then
+    t=0
+    while [ "$t" -lt "$SURVEILLANCE" ]; do
+        sleep 5
+        t=$((t + 5))
+        moteur_bloque && repli_firmware
+    done
+    exit 0
+fi
 
 if [ "${1:-}" = attendre ]; then
     t=0
     while [ "$t" -lt "$DELAI" ]; do
         sleep 5
         t=$((t + 5))
+        moteur_bloque && repli_firmware
         if ! "$ETAT" existe affichage-essai; then
             dire "ecran : confirme apres ${t} s, nouveau garde"
-            exit 0
+            exec "$0" surveiller
         fi
         if [ -e /run/grenos/affichage-garde-suspendu ]; then
             dire "ecran : garde suspendue (assistant de secours ouvert), le temoin reste"
-            exit 0
+            exec "$0" surveiller
         fi
         # UN BUREAU OUVERT EST UNE PREUVE (21 novembre). Sur la RTX 5060 de
         # Grenofar, l'assistant n'a pas pu s'afficher (plymouth tenait la
@@ -57,14 +110,17 @@ if [ "${1:-}" = attendre ]; then
         # REDÉMARRÉ sa machine en pleine session au bout de 180 s (rapport de
         # sa clé, 20261121-002001). Le gestionnaire de fenêtres de la
         # session tourne : X marche sous `nouveau`, sans glamor — la cause du
-        # vert d'avant. On garde « nouveau », et on ne touche à rien.
+        # vert d'avant. On garde « nouveau », sans rien redémarrer — et on
+        # continue de guetter le moteur bloqué (point 4), qu'un bureau
+        # ouvert ne suffit pas à écarter.
         if pgrep -x openbox >/dev/null 2>&1; then
             "$ETAT" effacer affichage-essai
             "$ETAT" ecrire affichage nouveau
             dire "ecran : bureau ouvert sous nouveau apres ${t} s — affichage garde, rien n est redemarre"
-            exit 0
+            exec "$0" surveiller
         fi
     done
+    moteur_bloque && repli_firmware
     # L'assistant est affiché mais personne n'a encore avancé : quelqu'un qui
     # lit, ou qui est parti boire un café. On ne redémarre JAMAIS sous ses
     # yeux : le lanceur confirmera quand il avancera, et s'il coupe au bouton
@@ -106,21 +162,22 @@ choix() {
 }
 
 grep -qw 'grenos.nouveau=1' /proc/cmdline 2>/dev/null && exit 0
-# Une machine déjà nommée n'ouvre plus l'assistant : on ne s'arme alors que
-# sur un RÉESSAI demandé dans les Réglages (la session posera la question).
+# Une machine déjà nommée n'ouvre plus l'assistant : le témoin d'essai n'est
+# alors posé que sur un RÉESSAI demandé dans les Réglages (la session posera
+# la question). Le guet du moteur bloqué, lui, tourne dans tous les cas.
 reessai=0
 "$ETAT" existe affichage-reessai 2>/dev/null && reessai=1
-if [ "$reessai" = 1 ]; then
-    "$ETAT" effacer affichage-reessai 2>/dev/null
-elif [ -e /etc/grenos/identite ]; then
-    exit 0
-fi
+[ "$reessai" = 1 ] && "$ETAT" effacer affichage-reessai 2>/dev/null
 carte_rtx50 "" || exit 0
 # `nouveau` se charge pendant que udev parcourt les cartes : on lui laisse
 # le temps d'arriver (dix secondes au plus, seulement sur ces machines).
 udevadm settle -t 10 >/dev/null 2>&1 || true
 carte_rtx50 nouveau || exit 0
-[ "$(choix)" = nouveau ] && exit 0
+if [ "$(choix)" = nouveau ] || { [ "$reessai" = 0 ] && [ -e /etc/grenos/identite ]; }; then
+    dire "ecran : RTX 50 sous nouveau, choix deja garde — guet du moteur d affichage ($SURVEILLANCE s)"
+    "$0" surveiller &
+    exit 0
+fi
 
 if ! "$ETAT" ecrire affichage-essai "$(date +%s)"; then
     dire "ecran : RTX 50 sous nouveau, mais le choix ne peut pas etre garde ici (cle gravee en ISO ?) — pas de filet"

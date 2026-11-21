@@ -102,6 +102,19 @@ carte mère ALC897 (marche).
   machine), étape hwclock retirée, fuseau de l'image à Paris [écrit ; la
   garde de construction passe, pas encore vu sur sa machine]. Son horloge
   Windows reste fausse jusqu'à sa prochaine synchronisation.
+- **21 novembre au matin, la 0248 sur son PC : ÉCRAN VERT** (rapport
+  20261121-093509). `nouveau` écrit « drm: wndw-0/2: timeout » toutes les
+  2 s dès l'écran de chargement (plymouth tient les deux écrans), X et
+  l'assistant démarrent dans le vide ; erreurs PCIe 5× plus fréquentes que
+  la veille (8 300 en 47 s, lien Gen5 x8 sur un port PEG Raptor Lake).
+  Même noyau, même carte que le démarrage de la veille qui marchait : le
+  blocage va et vient. Clé passée à « firmware » (G:\grenos\affichage). Le
+  filet guette désormais ces « timeout » à CHAQUE démarrage sous nouveau
+  d'une RTX 50 (3 → image du firmware + redémarrage), et un bureau ouvert ne
+  vaut plus preuve tant qu'ils existent [écrit, détection essayée sur ses
+  deux rapports réels : 10 → bloqué, 0 → sain]. PISTE à mesurer : brider
+  le lien à Gen4 avant nouveau (setpci, LnkCtl2) si les erreurs PCIe en
+  sont la cause.
 - Publiées : 20261121-0154 (l'initrd), puis 20261121-0248 (l'horloge). La
   clé G: porte la **0248** (292 fichiers vérifiés contre sha256sum.txt,
   affichage « nouveau » et rapports gardés) : prête pour installer sur son
