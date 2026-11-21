@@ -811,6 +811,20 @@ if ! grep -q 'try_remove' /etc/calamares/modules/packages.conf 2>/dev/null; then
     exit 1
 fi
 echo "grenos: l installateur sait copier le systeme (unsquashfs, rsync) et finir sans erreur d apt"
+# Et retirer l installateur ne doit PAS emporter grenOS (21 novembre) : si le
+# metapaquet grenos-systeme dependait d un paquet que packages.conf retire,
+# apt retirerait grenos-systeme, puis grenos-desktop — tout grenOS — du
+# disque installe. make-deb.sh l exclut ; on le verifie sur l image.
+if command -v dpkg-query >/dev/null 2>&1 && dpkg-query -W grenos-systeme >/dev/null 2>&1; then
+    deps=$(dpkg-query -W -f='${Depends}' grenos-systeme | tr ',' '\n' | sed 's/^ *//; s/ .*//')
+    for paquet in $(sed -n '/try_remove:/,$p' /etc/calamares/modules/packages.conf | tail -n +2 | sed -n 's/^[[:space:]]*- //p'); do
+        if printf '%s\n' "$deps" | grep -qx "$paquet"; then
+            echo "grenos: grenos-systeme depend de $paquet, que l installateur retire : grenOS partirait avec lui" >&2
+            exit 1
+        fi
+    done
+    echo "grenos: retirer l installateur n emporte pas grenOS (grenos-systeme n en depend pas)"
+fi
 # Et l etape bootloader-config : celle de Debian installait grub-efi par apt
 # (aucun depot sur la cle, aucun DNS dans le chroot) puis finissait par un
 # update-grub sans /boot/grub — son echec arretait l installation. La notre

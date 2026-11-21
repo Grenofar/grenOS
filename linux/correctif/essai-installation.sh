@@ -153,6 +153,15 @@ sed -n '/try_remove:/,$p' "$CONF" | tail -n +2 | sed -n 's/^[[:space:]]*- //p' |
 done
 
 armes "apres le retrait des paquets de la cle"
+# L'étape packages ne doit PAS emporter grenOS lui-même (21 novembre : le
+# métapaquet grenos-systeme dépendait de calamares — le retirer retirait
+# grenos-systeme puis grenos-desktop, et tout grenOS partait du disque).
+for paquet in grenos-systeme grenos-desktop; do
+    etat=$(dedans dpkg-query -W -f='${Status}' "$paquet" 2>/dev/null || true)
+    [ "$etat" = "install ok installed" ] || faute "l etape packages a retire $paquet (etat : ${etat:-absent}) — grenOS part avec l installateur"
+done
+[ -f "$T/etc/systemd/system/grenos-premier.service" ] || faute "les services grenOS ont disparu du disque installe"
+echo "grenOS reste installe (grenos-systeme, grenos-desktop, services)"
 
 # ---------------------------------------------------------------- initramfs
 etape "initramfs"
@@ -171,11 +180,6 @@ ls -la "$T/etc/systemd/system/" 2>&1 | grep -E 'grenos-(premier|windows|affichag
 stat -c '%A %U:%G %s %n' "$T/etc/systemd/system/grenos-premier.service" 2>&1 || true
 head -n 5 "$T/etc/systemd/system/grenos-premier.service" 2>&1 | cat -A | head -n 5
 systemctl --root="$T" list-unit-files 'grenos-*' --no-pager 2>&1 | head -n 30 || true
-# Le premier démarrage en journal détaillé de systemd, pour cet essai
-# seulement : s'il ignore encore nos services, il dira pourquoi.
-sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 systemd.log_level=debug"/' "$T/etc/default/grub"
-grep '^GRUB_CMDLINE_LINUX_DEFAULT' "$T/etc/default/grub"
-dedans update-grub >/dev/null 2>&1 || true
 
 etape "dpkg-unsafe-io -u, sources-final, demontage"
 bash "$AIDES/calamares-dpkg-unsafe-io" -u
@@ -235,9 +239,9 @@ fi
 umount "$OUT/racine"
 losetup -d "$LOOP"
 
-PREUVE=$( { cat "$OUT/serie.log" 2>/dev/null; cat "${JOURNAL:-/dev/null}"; } | grep -cE 'premier : ecran bienvenue|premier ecran : le programme demarre|Started lightdm' || true)
+PREUVE=$( { cat "$OUT/serie.log" 2>/dev/null; cat "${JOURNAL:-/dev/null}"; } | grep -cE 'premier : ecran bienvenue|premier ecran : le programme demarre|Starting grenos-premier' || true)
 if [ "${PREUVE:-0}" -eq 0 ]; then
-    faute "le systeme installe n a atteint ni l assistant ni lightdm (captures dans la sortie)"
+    faute "le systeme installe n a pas lance l assistant de grenOS (captures dans la sortie)"
 fi
 if [ -n "$JOURNAL" ] && ! grep -qiE 'secure ?boot enabled|secureboot: Secure boot enabled' "$JOURNAL"; then
     echo "::warning::le journal ne dit pas que le Secure Boot etait actif"

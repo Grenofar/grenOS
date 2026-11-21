@@ -447,7 +447,28 @@ META=$(mktemp -d)
 trap 'rm -rf "$BUILD" "$META"' EXIT
 mkdir -p "$META/DEBIAN"
 
-DEPENDANCES=$(grep -v '^#' "$HERE/config/package-lists/grenos.list.chroot"     | grep -v '^[[:space:]]*$' | paste -sd, - | sed 's/,/, /g')
+# SAUF ce que l'installateur retire du système installé (21 novembre). Le
+# métapaquet dépendait de calamares : à la fin de l'installation, retirer
+# calamares retirait grenos-systeme, puis grenos-desktop qui en dépend — TOUT
+# grenOS (programmes, services, bureau) partait du disque installé, et il ne
+# restait que les liens des services, vers rien. L'essai d'installation l'a
+# vu (cle.yml, runs 44912960777 et 44913650249) ; aucune installation n'était
+# allée assez loin pour le voir avant. La liste vient de packages.conf : une
+# seule source, aucune copie à tenir.
+RETIRES="$META/retires"
+sed -n '/try_remove:/,$p' "$HERE/config/includes.chroot/usr/share/grenos/packages.conf" \
+    | tail -n +2 | sed -n 's/^[[:space:]]*- //p' > "$RETIRES"
+[ -s "$RETIRES" ] || { echo "make-deb : packages.conf ne nomme rien a retirer — refus" >&2; exit 1; }
+DEPENDANCES=$(grep -v '^#' "$HERE/config/package-lists/grenos.list.chroot" \
+    | grep -v '^[[:space:]]*$' | sed 's/[[:space:]]*$//' | grep -vxF -f "$RETIRES" \
+    | paste -sd, - | sed 's/,/, /g')
+for paquet in $(cat "$RETIRES"); do
+    if printf '%s\n' "$DEPENDANCES" | tr ',' '\n' | sed 's/^ *//' | grep -qx "$paquet"; then
+        echo "make-deb : grenos-systeme dependrait de $paquet, que l installateur retire — refus" >&2
+        exit 1
+    fi
+done
+echo "make-deb : grenos-systeme ne depend d aucun paquet retire a l installation ($(tr '\n' ' ' < "$RETIRES"))"
 
 cat > "$META/DEBIAN/control" <<EOF
 Package: grenos-systeme

@@ -112,6 +112,7 @@ fn ouverture(login: &str) {
     let lignes = format!(
         "# Écrit par grenOS. LightDM lit lightdm.conf en dernier.\n\
          [Seat:*]\nuser-session=grenos\ngreeter-session=lightdm-gtk-greeter\n\
+         greeter-hide-users=false\n\
          autologin-user={login}\nautologin-user-timeout=0\nautologin-session=grenos\n"
     );
     let _ = fs::create_dir_all("/etc/lightdm/lightdm.conf.d");

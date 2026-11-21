@@ -107,8 +107,12 @@ def probleme(login):
 
 def ouverture(login, automatique=True):
     """Écrit qui ouvre la session, dans le fichier qui a le dernier mot."""
+    # greeter-hide-users=false : quand l'écran de connexion se montre (un mot
+    # de passe posé), le compte y est listé — Debian le cache, et il fallait
+    # taper son nom (essai d'installation du 21 novembre).
     lignes = ["[Seat:*]\n", "user-session=grenos\n",
-              "greeter-session=lightdm-gtk-greeter\n"]
+              "greeter-session=lightdm-gtk-greeter\n",
+              "greeter-hide-users=false\n"]
     if automatique:
         lignes += [f"autologin-user={login}\n", "autologin-user-timeout=0\n",
                    "autologin-session=grenos\n"]
