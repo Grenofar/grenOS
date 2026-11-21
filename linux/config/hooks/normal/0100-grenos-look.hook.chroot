@@ -811,6 +811,16 @@ if ! grep -q 'try_remove' /etc/calamares/modules/packages.conf 2>/dev/null; then
     exit 1
 fi
 echo "grenos: l installateur sait copier le systeme (unsquashfs, rsync) et finir sans erreur d apt"
+# Et l etape bootloader-config : celle de Debian installait grub-efi par apt
+# (aucun depot sur la cle, aucun DNS dans le chroot) puis finissait par un
+# update-grub sans /boot/grub — son echec arretait l installation. La notre
+# ne demande rien au reseau et ne fait jamais echouer l installation.
+AIDE_GRUB=/usr/share/calamares/helpers/calamares-bootloader-config
+if [ ! -x "$AIDE_GRUB" ] || grep -q 'apt-get' "$AIDE_GRUB"; then
+    echo "grenos: $AIDE_GRUB absent ou encore celui de Debian (apt-get) : l installation echouerait a la fin" >&2
+    exit 1
+fi
+echo "grenos: la preparation de GRUB se fait sans reseau"
 
 echo "--- grenOS : saurons-nous poser le chargeur de demarrage ---"
 # Le controle ci-dessus verifie qu'on sait FORMATER ce que l'installateur

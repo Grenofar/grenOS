@@ -1,0 +1,46 @@
+#!/bin/bash
+# grenOS — la préparation du chargeur de démarrage, SANS réseau.
+#
+# Remplace celui de calamares-settings-debian (21 novembre), relu avant que
+# Grenofar n'y arrive : il fait `chroot … apt-get -y install grub-efi`, puis
+# finit par `update-grub`, et c'est le code de retour de cette dernière ligne
+# qui décide du sort de l'installation (module « process » de Calamares).
+# Sur les ISO de Debian, le paquet vient d'un dépôt posé sur la clé. grenOS
+# n'en pose pas, et le chroot de l'installation n'a pas de DNS (/run y est un
+# tmpfs) : apt échouait, donc ni /etc/default/grub ni /boot/grub — et
+# `update-grub` sortait en erreur, l'installation avec, le disque déjà écrit.
+#
+# Tout ce qu'il faut est DÉJÀ dans l'image : grub2-common (update-grub et le
+# modèle de /etc/default/grub), grub-efi-amd64-bin et -signed, shim-signed,
+# cryptsetup-initramfs. On fait donc à la main ce que le postinst de
+# grub-efi-amd64 aurait fait, et l'étape suivante de Calamares (bootloader)
+# pose GRUB signé avec grub-install, puis refait la configuration.
+
+CHROOT=$(mount | grep proc | grep calamares | awk '{print $3}' | sed -e "s#/proc##g")
+if [ -z "$CHROOT" ] || [ ! -d "$CHROOT" ]; then
+    echo "grenos: chroot de Calamares introuvable — rien a preparer ici"
+    exit 0
+fi
+
+# Un disque chiffré : l'initrd ne doit pas être lisible par tous (comme
+# Debian). cryptsetup-initramfs est déjà dans l'image.
+if [ "$(mount | grep "$CHROOT"" " | cut -c -16)" = "/dev/mapper/luks" ]; then
+    mkdir -p "$CHROOT/etc/initramfs-tools/conf.d"
+    echo "UMASK=0077" > "$CHROOT/etc/initramfs-tools/conf.d/initramfs-permissions"
+fi
+
+echo "grenos: preparation du chargeur de demarrage (sans reseau)"
+if [ ! -f "$CHROOT/etc/default/grub" ] && [ -f "$CHROOT/usr/share/grub/default/grub" ]; then
+    cp "$CHROOT/usr/share/grub/default/grub" "$CHROOT/etc/default/grub"
+fi
+# Windows dans le menu (Debian le fait aussi ; /etc/default/grub.d/grenos.cfg
+# le dit déjà, ceci n'est qu'une ceinture).
+sed -i "s/^#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/" \
+    "$CHROOT/etc/default/grub" 2>/dev/null || true
+mkdir -p "$CHROOT/boot/grub"
+if ! chroot "$CHROOT" /usr/sbin/update-grub; then
+    # Jamais une raison d'arrêter l'installation : l'étape « bootloader »
+    # qui suit refait grub-install puis grub-mkconfig.
+    echo "grenos: update-grub a echoue ici ; l etape bootloader le refait"
+fi
+exit 0
