@@ -104,7 +104,7 @@
     // le compte
     nom: "", login: "", protege: false, mot: "", confirme: "",
     // la fin
-    compris: false, avance: { part: 0, texte: "" }, echec: "",
+    compris: false, resumeDepuis: 0, avance: { part: 0, texte: "" }, echec: "",
   };
   const N = {};
 
@@ -573,9 +573,17 @@
   }
 
   function aller(etape) {
-    if (etape === "resume") D.compris = false;
+    if (etape === "resume") {
+      D.compris = false;
+      D.resumeDepuis = Date.now();
+    }
     D.etape = etape;
     dessiner();
+    // « Continuer » et « Installer » sont le MÊME bouton : s'il gardait le
+    // focus, Entrée au résumé effacerait le disque (reproduit le 22 novembre).
+    if (!N.corps.contains(document.activeElement)) N.corps.focus({ preventScroll: true });
+    // Le rapport de la clé dit ainsi jusqu'où la personne est allée.
+    api.appeler("premier_dire", { texte: `installation : page ${etape}` });
   }
 
   function reculer() {
@@ -593,7 +601,11 @@
         if (D.etape !== "compte") return;
         if (probleme) { souci(probleme); return; }
       }
-      if (D.etape === "resume") { await lancer(); return; }
+      // Le second clic d'un double-clic lent : personne n'a relu si vite.
+      if (D.etape === "resume") {
+        if (Date.now() - D.resumeDepuis >= 800) await lancer();
+        return;
+      }
       if (D.etape === "installation") {
         D.echec = "";
         aller("disque");
@@ -690,11 +702,18 @@
 
   N.sous = el("p.note");
   N.fil = el("ol.in-fil", { "aria-label": "Étapes de l'installation" });
-  N.corps = el("main.in-corps");
+  N.corps = el("main.in-corps", { tabindex: "-1" });
   N.retour = el("button.bouton.discret", { onclick: reculer }, svg("retour"), "Retour");
   N.etat = el("p.in-resume", { role: "status" });
   N.suiteTexte = el("span");
-  N.suite = el("button.bouton.principal", { onclick: avancer }, N.suiteTexte, svg("fleche"));
+  // Un double-clic ne vaut qu'un clic : il sautait une page, et au compte il
+  // lançait l'installation sans que le résumé soit lu.
+  N.suite = el("button.bouton.principal", {
+    onclick: (e) => { if (e.detail <= 1) avancer(); },
+    // Au résumé, la souris ne lui donne jamais le focus : le second appui
+    // d'un double-clic le lui rendait, et Entrée installait. Tab, lui, reste.
+    onmousedown: (e) => { if (D.etape === "resume") e.preventDefault(); },
+  }, N.suiteTexte, svg("fleche"));
   N.pied = el("footer.in-pied", N.retour, N.etat, N.suite);
   document.body.append(aurore(), el("div.in-page",
     el("header.tete", el("span.in-logo", svg("marque")), el("div", el("h1", "Installer grenOS"), N.sous)),

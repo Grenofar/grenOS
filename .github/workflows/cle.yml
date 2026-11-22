@@ -229,6 +229,79 @@ jobs:
             ${{ runner.temp }}/installation-grenos/*.log
           retention-days: 14
 
+  # « Installer grenOS » PAR SA FENETRE (22 novembre), avant toute
+  # publication : grenos-ui compile de CE depot, pose en couche sur l image
+  # publiee, puis tout le parcours d une personne jusqu au bureau du disque
+  # installe. Voir linux/correctif/essai-installation-fenetre.sh.
+  installation-fenetre:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Faire de la place
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          df -h / | tail -1
+
+      - name: Outils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq squashfs-tools xorriso mtools dosfstools fdisk qemu-system-x86 ovmf python3
+          sudo chmod 0666 /dev/kvm 2>/dev/null || true
+
+      - name: grenos-ui de ce depot (le meme Rust que la construction)
+        timeout-minutes: 30
+        run: |
+          RUST=$(sed -n 's/^RUST=//p' scripts/construire-binaires.sh)
+          docker run --rm -v "$PWD:/work" -w /work/linux/ui -e CARGO_TERM_COLOR=never "$RUST" sh -ec '
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev build-essential pkg-config >/dev/null
+            cargo build --release --locked'
+          sudo install -m 0755 linux/ui/target/release/grenos-ui "$RUNNER_TEMP/grenos-ui"
+          sudo rm -rf linux/ui/target
+          docker image rm "$RUST" >/dev/null 2>&1 || true
+
+      - name: La couche de l installateur (ce que la prochaine image portera)
+        run: |
+          A="$RUNNER_TEMP/arbre"
+          bash linux/correctif/fabriquer.sh "$A" "$RUNNER_TEMP/correctif.squashfs"
+          S=linux/config/includes.chroot
+          for f in usr/lib/grenos/grenos-installation usr/lib/grenos/grenos-revenir-ici usr/lib/grenos/grenos-rapport-cle usr/share/polkit-1/actions/fr.grenos.installation.policy; do
+            install -D -m "$(stat -c %a "$S/$f")" "$S/$f" "$A/$f"
+          done
+          install -D -m 0755 "$RUNNER_TEMP/grenos-ui" "$A/usr/bin/grenos-ui"
+          mksquashfs "$A" "$RUNNER_TEMP/couche.squashfs" -all-root -comp xz -noappend -quiet
+
+      - name: La version publiee
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          V="$VERSION"
+          if [ -z "$V" ]; then
+            V=$(gh release list -R "$GITHUB_REPOSITORY" -L 20 --json tagName -q '[.[] | select(.tagName | startswith("linux-"))][0].tagName')
+          fi
+          echo "version : $V"
+          gh release download "$V" -R "$GITHUB_REPOSITORY" -p '*.iso' -D "$RUNNER_TEMP/iso"
+
+      - name: La cle, la fenetre, l installation, le redemarrage sur le disque
+        timeout-minutes: 60
+        run: |
+          ISO=$(ls "$RUNNER_TEMP"/iso/*.iso | head -1)
+          bash linux/correctif/essai-installation-fenetre.sh "$ISO" "$RUNNER_TEMP/couche.squashfs" "$RUNNER_TEMP/fenetre"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installation-fenetre
+          path: |
+            ${{ runner.temp }}/fenetre/*.png
+            ${{ runner.temp }}/fenetre/*.txt
+            ${{ runner.temp }}/fenetre/*.log
+            ${{ runner.temp }}/fenetre/grenos-rapports
+          retention-days: 14
+
   # L'INSTALLATION DE BOUT EN BOUT (21 novembre). Quatre installations de
   # Grenofar ont échoué, chacune une étape plus loin (unsquashfs, apt dans le
   # chroot, la clé prise pour partition EFI). Aucun essai n'allait jusqu'au

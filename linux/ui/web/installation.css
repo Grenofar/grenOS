@@ -8,6 +8,7 @@
 .in-logo svg { width: 24px; height: 24px; }
 
 .in-corps { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.in-corps:focus { outline: none; }
 .in-pied { display: flex; align-items: center; gap: 14px; padding: 12px 24px; border-top: 1px solid var(--bord); }
 .in-pied[hidden] { display: none; }
 .in-resume { flex: 1; min-width: 0; margin: 0; color: var(--texte-2); font-size: 14px; line-height: 1.35; }
