@@ -32,6 +32,7 @@ SERIE="$OUT/serie.log"
 MON="$OUT/mon.sock"
 QMP="$OUT/qmp.sock"
 DISQUE="$OUT/disque.img"
+WINDOWS="$OUT/windows.img"
 QEMU=""
 : > "$SERIE"
 
@@ -145,7 +146,10 @@ EOF
 ln -sf ../grenos-essai-priorite.service "$S/reboot.target.wants/grenos-essai-priorite.service"
 mksquashfs "$PLUS" "$OUT/couche.squashfs" -all-root -comp xz -noappend -quiet
 rm -rf "$PLUS"
-bash "$ICI/cle-fat.sh" "$ISO" "$OUT/couche.squashfs" "$OUT/cle.img"
+# La ligne du noyau de la PROCHAINE image : l'image publiée garde la sienne.
+NOYAU_PLUS=$(grep -o 'persistence-storage=[a-z,]*' "$RACINE/linux/auto/config" | head -n 1 || true)
+echo "ajoute a la ligne du noyau de la cle : ${NOYAU_PLUS:-rien}"
+bash "$ICI/cle-fat.sh" "$ISO" "$OUT/couche.squashfs" "$OUT/cle.img" "$NOYAU_PLUS"
 truncate -s 36G "$DISQUE"
 # Comme le Samsung de Grenofar avant l'effacement : trois partitions Linux,
 # la dernière un grenOS d'avant. 1, 2049 et 5121 Mio, en secteurs de 512.
@@ -165,6 +169,35 @@ sync
 GARDE_1=$(sudo sha256sum "${BOUCLE}p1" | cut -d' ' -f1)
 GARDE_2=$(sudo sha256sum "${BOUCLE}p2" | cut -d' ' -f1)
 sudo losetup -d "$BOUCLE"
+
+etape "un second disque, avec un faux Windows : rien ne doit y ecrire, jamais"
+# 22 novembre, run 45017904727 : la CLÉ montait en écriture chaque partition
+# de chaque disque au démarrage (live-boot, « persistence »). 3 Gio : trop
+# petit pour être proposé, les clics de l'essai ne bougent pas.
+truncate -s 3G "$WINDOWS"
+sfdisk -q "$WINDOWS" <<'EOF'
+label: gpt
+first-lba: 2048
+start=2048, size=409600, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+start=411648, size=5246976, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
+EOF
+BOUCLE=$(sudo losetup -fP --show "$WINDOWS")
+sudo udevadm settle || true
+sudo mkfs.vfat -F 32 -n SYSTEM "${BOUCLE}p1" > /dev/null
+sudo mkfs.ntfs -Q -q -L Windows "${BOUCLE}p2" > /dev/null
+mkdir -p "$OUT/pose"
+sudo mount "${BOUCLE}p1" "$OUT/pose"
+sudo mkdir -p "$OUT/pose/EFI/Microsoft/Boot"
+echo "le gestionnaire de Windows" | sudo tee "$OUT/pose/EFI/Microsoft/Boot/bootmgfw.efi" > /dev/null
+sudo umount "$OUT/pose"
+sudo mount -t ntfs-3g "${BOUCLE}p2" "$OUT/pose"
+sudo mkdir -p "$OUT/pose/Windows/System32" "$OUT/pose/Users/Zoe"
+sudo umount "$OUT/pose"
+sleep 3   # ntfs-3g finit d'écrire après le démontage
+sync
+WINDOWS_1=$(sudo sha256sum "${BOUCLE}p1" | cut -d' ' -f1)
+WINDOWS_2=$(sudo sha256sum "${BOUCLE}p2" | cut -d' ' -f1)
+sudo losetup -d "$BOUCLE"
 cp /usr/share/OVMF/OVMF_VARS_4M.ms.fd "$OUT/vars.fd"
 ACCEL=()
 if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then ACCEL=(-enable-kvm -cpu host); fi
@@ -176,6 +209,7 @@ qemu-system-x86_64 "${ACCEL[@]}" -machine q35,smm=on -global driver=cfi.pflash01
     -drive if=none,id=cle,format=raw,file="$OUT/cle.img" \
     -device usb-storage,bus=xhci.0,drive=cle,removable=on \
     -drive if=none,id=ssd,format=raw,file="$DISQUE" -device ide-hd,drive=ssd,bus=ide.0 \
+    -drive if=none,id=windows,format=raw,file="$WINDOWS" -device ide-hd,drive=windows,bus=ide.1 \
     -device usb-tablet,bus=xhci.0 \
     -nic none -vga std -display none \
     -serial file:"$SERIE" \
@@ -323,9 +357,26 @@ attendu = [(1, 2048), (2049, 3072), (5121, 512), (5633, 25600)]
 print("table :", vu)
 sys.exit(0 if vu == attendu else 1)
 EOF
-[ "$(sudo sha256sum "${BOUCLE}p1" | cut -d' ' -f1)" = "$GARDE_1" ] || faute "la premiere partition gardee a change"
-[ "$(sudo sha256sum "${BOUCLE}p2" | cut -d' ' -f1)" = "$GARDE_2" ] || faute "la seconde partition gardee a change"
-echo "supprimee, creee, 25 Gio, et pas un octet change dans les deux partitions gardees"
+CHANGE=""
+change() { # peripherique, empreinte d avant, son nom
+    if [ "$(sudo sha256sum "$1" | cut -d' ' -f1)" = "$2" ]; then
+        echo "intacte : $3"
+    else
+        echo "A CHANGE : $3"
+        CHANGE="$CHANGE [$3]"
+        # Qui : ext4 note où et quand il a été monté en écriture.
+        sudo dumpe2fs -h "$1" 2>/dev/null | grep -E 'Last mounted on|Last mount time|Last write time|Mount count' || true
+    fi
+}
+change "${BOUCLE}p1" "$GARDE_1" "premiere partition gardee"
+change "${BOUCLE}p2" "$GARDE_2" "seconde partition gardee"
+BOUCLE_WINDOWS=$(sudo losetup -fP --show "$WINDOWS")
+sudo udevadm settle || true
+change "${BOUCLE_WINDOWS}p1" "$WINDOWS_1" "EFI de Windows"
+change "${BOUCLE_WINDOWS}p2" "$WINDOWS_2" "Windows NTFS"
+sudo losetup -d "$BOUCLE_WINDOWS"
+[ -z "$CHANGE" ] || faute "des partitions qui devaient rester intactes ont change :$CHANGE"
+echo "supprimee, creee, 25 Gio, et pas un octet change ailleurs, Windows compris"
 mkdir -p "$OUT/vu"
 sudo mount -o ro,noload "${BOUCLE}p4" "$OUT/vu"
 sudo journalctl -D "$OUT/vu/var/log/journal" -b -o short-monotonic --no-pager > "$OUT/journal-installe.txt" 2>/dev/null || true
