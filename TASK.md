@@ -53,6 +53,11 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
   (RTX 5060, sa carte mère, mot de passe sur la clé → fenêtre polkit).
 - La cause du « il fallait attendre » de Calamares n'a PAS été trouvée dans
   un journal : l'écran est remplacé, la panne n'est pas expliquée.
+- Place minimale ramenée à celle de Calamares : 15 Gio au lieu de 20,5 [écrit].
+- Windows d'un autre disque dans le menu du disque installé (os-prober, menu
+  5 s) : jugé par installation-fenetre [écrit].
+- Aussi en moins que Calamares : 16 claviers seulement, nom du PC fixe
+  (« grenos »), un disque MBR ne se prend qu'en entier.
 - Ce que Calamares offrait et que notre installateur n'a PAS : chiffrement
   du disque, partition d'échange (il reste zram, la mémoire compressée),
   choix btrfs / xfs, points de montage à la main. À dire avant de publier.

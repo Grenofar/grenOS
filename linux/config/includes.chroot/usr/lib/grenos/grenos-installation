@@ -55,7 +55,10 @@ MIO = 1024 * 1024
 EFI_MIO = 512
 EFI_MINIMUM_MIO = 90
 EFI_LIBRE_MIO = 16
-MINIMUM_RACINE_MIO = 20 * 1024
+# Calamares acceptait 15 Gio (welcome.conf, requiredStorage) : 14 pour la
+# racine et 512 Mio pour l'EFI y tiennent. À 20, une VM de 20 Gio était
+# refusée, pour un système qui pèse 4,2 Gio installé (mesuré en CI).
+MINIMUM_RACINE_MIO = 14 * 1024
 TROU_MINIMUM_MIO = 1024
 DISQUE_MINIMUM_MIO = 8 * 1024
 MARQUE_REUSSIE = "/run/grenos/installation-reussie"

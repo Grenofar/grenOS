@@ -242,7 +242,7 @@
         const samsung = location.search.includes("vide")
           ? { etat: "vide", partitions: [] }
           : { etat: "gpt", partitions: [part("/dev/sda1", 1, 5325, "linux", "Linux (ext4)"), part("/dev/sda2", 5326, 9728, "linux", "Linux (ext4)"), part("/dev/sda3", 15054, 223400, "grenos", "grenOS")] };
-        return { efi: !location.search.includes("bios"), cle: true, minimum_mio: 20480, efi_mio: 512, trou_minimum_mio: 1024, disques: [
+        return { efi: !location.search.includes("bios"), cle: true, minimum_mio: 14336, efi_mio: 512, trou_minimum_mio: 1024, disques: [
           { dev: "/dev/nvme0n1", modele: "KINGSTON SNV3S1000G", sorte: "SSD NVMe", taille_mio: 953869, etat: "gpt", raison: "", premier_mio: 1, fin_mio: 953868, empreinte: "k", partitions: [
             part("/dev/nvme0n1p1", 1, 200, "efi", "Démarrage (EFI)", true), part("/dev/nvme0n1p2", 201, 16, "microsoft", "Réservée à Windows"),
             part("/dev/nvme0n1p3", 217, 952700, "windows", "Windows ou fichiers (NTFS)"), part("/dev/nvme0n1p4", 952917, 944, "microsoft", "Récupération de Windows")] },

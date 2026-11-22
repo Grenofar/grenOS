@@ -180,6 +180,7 @@ label: gpt
 first-lba: 2048
 start=2048, size=409600, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 start=411648, size=5246976, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
+start=5658624, size=32768, type=E3C9E316-0B5C-4DB8-817D-F92DF00215AE
 EOF
 BOUCLE=$(sudo losetup -fP --show "$WINDOWS")
 sudo udevadm settle || true
@@ -189,6 +190,8 @@ mkdir -p "$OUT/pose"
 sudo mount "${BOUCLE}p1" "$OUT/pose"
 sudo mkdir -p "$OUT/pose/EFI/Microsoft/Boot"
 echo "le gestionnaire de Windows" | sudo tee "$OUT/pose/EFI/Microsoft/Boot/bootmgfw.efi" > /dev/null
+# os-prober ne reconnaît Windows qu'avec SON BCD à côté de bootmgfw.efi.
+echo "sa configuration" | sudo tee "$OUT/pose/EFI/Microsoft/Boot/BCD" > /dev/null
 sudo umount "$OUT/pose"
 sudo mount -t ntfs-3g "${BOUCLE}p2" "$OUT/pose"
 sudo mkdir -p "$OUT/pose/Windows/System32" "$OUT/pose/Users/Zoe"
@@ -381,9 +384,18 @@ mkdir -p "$OUT/vu"
 sudo mount -o ro,noload "${BOUCLE}p4" "$OUT/vu"
 sudo journalctl -D "$OUT/vu/var/log/journal" -b -o short-monotonic --no-pager > "$OUT/journal-installe.txt" 2>/dev/null || true
 LOGIN=$(sed -n 's/^login=//p' "$OUT/vu/etc/grenos/preinstallation" || true)
+# WINDOWS RESTE JOIGNABLE (22 novembre) : grenOS passe premier au démarrage,
+# et Windows vit sur un autre disque. Sans son entrée, et sans le menu qui
+# s'affiche, il faudrait la touche du BIOS pour le retrouver.
+sudo cat "$OUT/vu/boot/grub/grub.cfg" > "$OUT/grub-installe.txt" || true
 IDENTITE=$(sudo cat "$OUT/vu/etc/grenos/identite" 2>/dev/null || true)
 sudo umount "$OUT/vu"
 sudo losetup -d "$BOUCLE"
+grep -q "^menuentry 'Windows Boot Manager" "$OUT/grub-installe.txt" \
+    || faute "Windows n est pas dans le menu de demarrage du disque installe"
+grep -q 'set timeout=5' "$OUT/grub-installe.txt" \
+    || faute "avec Windows, le menu de demarrage ne s affiche pas"
+echo "Windows est dans le menu de demarrage, affiche 5 s"
 [ -n "$LOGIN" ] || faute "le disque ne dit pas qui habite ici"
 echo "$IDENTITE" | grep -qx "login=$LOGIN" || faute "l assistant n a pas garde le compte de l installation"
 grep -qiE 'secure ?boot enabled|secureboot: Secure boot enabled' "$OUT/journal-installe.txt" \

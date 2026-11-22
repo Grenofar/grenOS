@@ -579,6 +579,14 @@ def _():
     assert M.reseau_pour(commun, "camille") == commun
 
 
+@cas("un disque de 15 Gio suffit, comme avec Calamares (requiredStorage: 15)")
+def _():
+    w = monde(lambda b, t: b[0].update(size=15 * 1024 * MIO))
+    for champs in ({"effacer": True}, {"zone_mio": 1}):
+        op = w.ecrit(plan(w.disque("/dev/sda"), **champs))
+        assert op["racine_debut_mio"] + op["racine_mio"] <= 15 * 1024 - 1, op
+
+
 def main():
     fautes = 0
     for titre, f in CAS:

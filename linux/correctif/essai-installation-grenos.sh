@@ -90,8 +90,10 @@ preparer() { # fichier, taille → BOUCLE
 }
 
 # ======================================================== A : le disque vide
-etape "A : disque vide, tout le disque, compte avec mot de passe"
-preparer "$OUT/disque-a.img" 32G
+etape "A : disque vide de 15 Gio, tout le disque, compte avec mot de passe"
+# 15 Gio : le plus petit disque accepté (comme Calamares). S'il s'installe et
+# démarre là, la limite n'est pas qu'un chiffre.
+preparer "$OUT/disque-a.img" 15G
 A=$BOUCLE
 [ "$(champ "$A" 'd["etat"]')" = vide ] || faute "A : un disque vide n est pas vu vide"
 # Un secret tiré au sort pour cet essai seulement : il ne doit se retrouver
