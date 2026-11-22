@@ -1,7 +1,11 @@
 #!/bin/bash
 # « INSTALLER grenOS » PAR SA VRAIE FENÊTRE, comme sur un PC (22 novembre).
 #
-#   bash linux/correctif/essai-installation-fenetre.sh <iso> <couche.squashfs> <sortie>
+#   bash linux/correctif/essai-installation-fenetre.sh <iso> <couche.squashfs | -> <sortie>
+#
+# « - » : l'image TELLE QU'ELLE EST PUBLIÉE, sans rien de ce dépôt par-dessus
+# (22 novembre). Avec la couche, un fichier oublié dans l'image, ou sa ligne
+# du noyau, restait invisible : l'essai les fournissait lui-même.
 #
 # essai-installation-grenos.sh lance le moteur seul. Il manquait ce que la
 # personne fait : la clé démarre, l'assistant, le bureau, « Installer
@@ -114,7 +118,12 @@ etape "la cle FAT32 et un disque de 36 Gio : deux partitions a garder, un ancien
 # que grenOS pose son BootNext : sans lui, le PC repartirait sur la clé.
 PLUS="$OUT/couche"
 rm -rf "$PLUS"
-unsquashfs -q -n -d "$PLUS" "$COUCHE" > /dev/null
+if [ "$COUCHE" = - ]; then
+    mkdir -p "$PLUS"
+    echo "IMAGE NUE : seul le service d essai de priorite est ajoute"
+else
+    unsquashfs -q -n -d "$PLUS" "$COUCHE" > /dev/null
+fi
 S="$PLUS/etc/systemd/system"
 mkdir -p "$PLUS/usr/lib/grenos-essai" "$S/reboot.target.wants"
 cat > "$PLUS/usr/lib/grenos-essai/cle-en-tete" <<'EOF'
@@ -148,6 +157,7 @@ mksquashfs "$PLUS" "$OUT/couche.squashfs" -all-root -comp xz -noappend -quiet
 rm -rf "$PLUS"
 # La ligne du noyau de la PROCHAINE image : l'image publiée garde la sienne.
 NOYAU_PLUS=$(grep -e '--bootappend-live' "$RACINE/linux/auto/config" | grep -o 'persistence-storage=[a-z,]*' | head -n 1 || true)
+if [ "$COUCHE" = - ]; then NOYAU_PLUS=""; fi
 echo "ajoute a la ligne du noyau de la cle : ${NOYAU_PLUS:-rien}"
 bash "$ICI/cle-fat.sh" "$ISO" "$OUT/couche.squashfs" "$OUT/cle.img" "$NOYAU_PLUS"
 truncate -s 36G "$DISQUE"

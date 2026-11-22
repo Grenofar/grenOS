@@ -30,6 +30,10 @@ on:
       version:
         description: "Version publiee a essayer (vide : la derniere)"
         default: ""
+      nue:
+        description: "installation-fenetre juge l'image publiee telle quelle, sans couche de ce depot"
+        type: boolean
+        default: false
 
 concurrency:
   group: cle-${{ github.ref }}
@@ -251,6 +255,7 @@ jobs:
           sudo chmod 0666 /dev/kvm 2>/dev/null || true
 
       - name: grenos-ui de ce depot (le meme Rust que la construction)
+        if: ${{ !inputs.nue }}
         timeout-minutes: 30
         run: |
           RUST=$(sed -n 's/^RUST=//p' scripts/construire-binaires.sh)
@@ -263,6 +268,7 @@ jobs:
           docker image rm "$RUST" >/dev/null 2>&1 || true
 
       - name: La couche de l installateur (ce que la prochaine image portera)
+        if: ${{ !inputs.nue }}
         run: |
           A="$RUNNER_TEMP/arbre"
           bash linux/correctif/fabriquer.sh "$A" "$RUNNER_TEMP/correctif.squashfs"
@@ -287,9 +293,13 @@ jobs:
 
       - name: La cle, la fenetre, l installation, le redemarrage sur le disque
         timeout-minutes: 60
+        env:
+          NUE: ${{ inputs.nue }}
         run: |
           ISO=$(ls "$RUNNER_TEMP"/iso/*.iso | head -1)
-          bash linux/correctif/essai-installation-fenetre.sh "$ISO" "$RUNNER_TEMP/couche.squashfs" "$RUNNER_TEMP/fenetre"
+          COUCHE="$RUNNER_TEMP/couche.squashfs"
+          if [ "$NUE" = true ]; then COUCHE=-; fi
+          bash linux/correctif/essai-installation-fenetre.sh "$ISO" "$COUCHE" "$RUNNER_TEMP/fenetre"
 
       - uses: actions/upload-artifact@v4
         if: always()
