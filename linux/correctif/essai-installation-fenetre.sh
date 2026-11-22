@@ -8,9 +8,11 @@
 # du noyau, restait invisible : l'essai les fournissait lui-même.
 #
 # essai-installation-grenos.sh lance le moteur seul. Il manquait ce que la
-# personne fait : la clé démarre, l'assistant, le bureau, « Installer
-# grenOS », les sept pages (WebKitGTK, sudo, la vraie NVRAM), « Redémarrer
-# maintenant ». La clé reste branchée et PRIORITAIRE, comme chez Grenofar :
+# personne fait : la clé démarre, le bureau SANS assistant (22 novembre au
+# soir : il n'est que pour le grenOS installé), « Installer grenOS », les
+# sept pages (WebKitGTK, sudo, la vraie NVRAM), « Redémarrer maintenant »,
+# l'assistant du disque, son bureau, et l'entrée « grenOS » au micrologiciel.
+# La clé reste branchée et PRIORITAIRE, comme chez Grenofar :
 # seul le redémarrage posé par grenOS peut mener au disque.
 #
 # La couche porte ce que la prochaine image portera (grenos-ui, moteur,
@@ -232,18 +234,11 @@ QEMU=$!
 sleep 3
 kill -0 "$QEMU" 2>/dev/null || faute "QEMU n a pas demarre"
 
-etape "la cle : l assistant"
-attendre 'premier : ecran bienvenue' 300
-SUR_LA_CLE=$(ecrans)
-for _ in $(seq 1 30); do
-    [ "$(vu 'premier ecran affiche')" -eq 0 ] || break
-    touche ret 4
-done
-attendre 'premier ecran affiche' 10
-for t in c i ret; do touche "$t"; done
-finir_assistant 1
-attendre 'session de bureau ouverte' 180
+etape "la cle : le bureau, sans lobby"
+attendre 'session de bureau ouverte' 300
 sleep 25
+[ "$(vu 'premier : ecran')" -eq 0 ] || faute "le lobby s est ouvert sur la cle"
+voir 0-bureau-de-la-cle
 
 etape "le menu : Installer grenOS"
 # « install » sur un clavier AZERTY : sendkey parle en positions QWERTY.
@@ -299,6 +294,9 @@ voir 3-disque-choisi
 cliquer 1067 695
 attendre 'installation : page compte' 20
 sleep 2
+# Plus de lobby pour le nommer : le nom se tape ici, champ deja choisi.
+for t in c i; do touche "$t"; done
+sleep 2
 voir 4-compte
 double_clic 1067 695                     # Continuer : ne doit PAS installer
 attendre 'installation : page resume' 20
@@ -345,15 +343,15 @@ SESSIONS=$(vu 'session de bureau ouverte')
 cliquer 1019 695                         # Redemarrer maintenant
 attendre 'grenos: essai : la cle en tete de l ordre' 120
 # La ligne du micrologiciel lui-même : il démarre l'entrée du disque.
-attendre 'BdsDxe: starting Boot[0-9A-F]* "debian"' 120
+attendre 'BdsDxe: starting Boot[0-9A-F]* "grenOS"' 120
 attendre 'premier : ecran bienvenue' 420 $(( AVANT + 1 ))
 sleep 4
 voir 8-assistant-du-disque
 SUR_LE_DISQUE=$(ecrans)
-echo "assistant : $SUR_LA_CLE ecrans sur la cle, $SUR_LE_DISQUE apres le redemarrage"
-[ "$SUR_LE_DISQUE" -eq $(( SUR_LA_CLE - 3 )) ] \
+echo "assistant : aucun sur la cle, $SUR_LE_DISQUE ecrans apres le redemarrage"
+[ "$SUR_LE_DISQUE" = 12 ] \
     || faute "ce n est pas le disque installe, ou l assistant redemande langue, clavier et compte"
-finir_assistant 2
+finir_assistant 1
 attendre 'premier : compte, clavier et fuseau repris de l installation' 10
 attendre 'session de bureau ouverte' 240 $(( SESSIONS + 1 ))
 sleep 25
@@ -401,18 +399,19 @@ mkdir -p "$OUT/vu"
 sudo mount -o ro,noload "${BOUCLE}p4" "$OUT/vu"
 sudo journalctl -D "$OUT/vu/var/log/journal" -b -o short-monotonic --no-pager > "$OUT/journal-installe.txt" 2>/dev/null || true
 LOGIN=$(sed -n 's/^login=//p' "$OUT/vu/etc/grenos/preinstallation" || true)
-# WINDOWS RESTE JOIGNABLE (22 novembre) : grenOS passe premier au démarrage,
-# et Windows vit sur un autre disque. Sans son entrée, et sans le menu qui
-# s'affiche, il faudrait la touche du BIOS pour le retrouver.
+# AUCUN MENU (22 novembre au soir, Grenofar : « affiche plusieurs trucs,
+# choix : enlève »). Windows reste dans le menu de secours (Échap) ; son
+# chemin normal est Fin de session (essai-demarrage-installe.sh le prouve).
 sudo cat "$OUT/vu/boot/grub/grub.cfg" > "$OUT/grub-installe.txt" || true
 IDENTITE=$(sudo cat "$OUT/vu/etc/grenos/identite" 2>/dev/null || true)
 sudo umount "$OUT/vu"
 sudo losetup -d "$BOUCLE"
 grep -q "^menuentry 'Windows Boot Manager" "$OUT/grub-installe.txt" \
     || faute "Windows n est pas dans le menu de demarrage du disque installe"
-grep -q 'set timeout=5' "$OUT/grub-installe.txt" \
-    || faute "avec Windows, le menu de demarrage ne s affiche pas"
-echo "Windows est dans le menu de demarrage, affiche 5 s"
+grep -q 'set timeout_style=hidden' "$OUT/grub-installe.txt" \
+    || faute "le menu de demarrage s affiche"
+if grep -qE 'set timeout=[1-9]' "$OUT/grub-installe.txt"; then faute "le demarrage attend devant un menu"; fi
+echo "aucun menu ; Windows reste dans celui de secours (Echap)"
 [ -n "$LOGIN" ] || faute "le disque ne dit pas qui habite ici"
 echo "$IDENTITE" | grep -qx "login=$LOGIN" || faute "l assistant n a pas garde le compte de l installation"
 grep -qiE 'secure ?boot enabled|secureboot: Secure boot enabled' "$OUT/journal-installe.txt" \

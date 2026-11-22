@@ -132,6 +132,11 @@ fi
 sleep 20
 python3 scripts/ci-screen.py send "$PRISE" "sendkey ret" || true
 
+# DEPUIS LE 22 NOVEMBRE, LA CLE N A PLUS D ASSISTANT (« l OOBE seulement
+# dans grenOS installe ») : cette machine, sans la marque d integration,
+# ouvre son bureau directement. On ne tape que si un assistant se montre —
+# Entree sur le bureau cliquerait dans l accueil.
+#
 # Le premier ecran demande un nom, et la session ne s ouvre pas tant qu il n
 # en a pas. On tape « ci », exactement comme le parcours ordinaire.
 #
@@ -142,6 +147,7 @@ python3 scripts/ci-screen.py send "$PRISE" "sendkey ret" || true
 # que l assistant est la sans etre sur le nom, puis le nom, puis Entree
 # jusqu a ce que le nom soit pris.
 for essai in $(seq 1 48); do
+    grep -aq 'session de bureau ouverte' "$SERIE" 2>/dev/null && break
     if grep -aq 'premier ecran affiche' "$SERIE" 2>/dev/null; then
         echo "sans materiel : ecran du nom vu apres $((essai * 5))s"
         for touche in c i ret; do
@@ -156,6 +162,7 @@ for essai in $(seq 1 48); do
     sleep 5
 done
 for essai in $(seq 1 24); do
+    grep -aq 'premier ecran affiche' "$SERIE" 2>/dev/null || break
     grep -aq 'nom choisi' "$SERIE" 2>/dev/null && break
     python3 scripts/ci-screen.py send "$PRISE" "sendkey ret" || true
     sleep 3

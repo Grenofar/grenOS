@@ -1890,6 +1890,27 @@ if [ -z "$arme" ]; then
     echo "grenos: grenos-revenir-ici n est pas arme sur reboot.target (appliquer-systeme)" >&2
     exit 1
 fi
+# Le disque installe demarre droit (22 novembre : lobby recouvert a 10 s,
+# bureau jamais ouvert au demarrage suivant, « debian » au BIOS, menu).
+# Les essais : linux/tools/essai-demarrage.sh.
+for programme in /usr/lib/grenos/grenos-ecran-libre /usr/lib/grenos/grenos-demarrage \
+                 /etc/grub.d/06_grenos_discret; do
+    if [ ! -x "$programme" ]; then
+        echo "grenos: $programme absent ou pas executable : le disque installe ne demarrerait pas droit" >&2
+        exit 1
+    fi
+done
+if ! grep -qs '^ExecStartPre=-/usr/lib/grenos/grenos-ecran-libre' \
+        /etc/systemd/system/lightdm.service.d/20-grenos-ecran-libre.conf; then
+    echo "grenos: lightdm n attend pas Plymouth : ecran noir au demarrage du disque installe" >&2
+    exit 1
+fi
+arme=$(find /etc/systemd/system /usr/lib/systemd/system \
+    -path '*multi-user.target.wants/*' -name grenos-demarrage.service 2>/dev/null | head -n 1)
+if [ -z "$arme" ]; then
+    echo "grenos: grenos-demarrage n est pas arme (appliquer-systeme) : le BIOS dirait debian" >&2
+    exit 1
+fi
 if ! grep -q 'ecrire_sur_la_cle "$T" "premier temps"' /usr/lib/grenos/grenos-rapport-cle || \
    grep -q 'timeout "$s" "$@"' /usr/lib/grenos/grenos-rapport-cle; then
     echo "grenos: le rapport de la cle attendrait encore un ecran fige" >&2

@@ -1,5 +1,6 @@
 // Bienvenue : quelques gestes utiles, des astuces, et le nom de la personne
-// en tête — c'est sa machine. Pas de leçon.
+// en tête — c'est sa machine. Pas de leçon. Sur la clé (22 novembre), c'est
+// le premier écran : on le dit, on essaie, puis on installe.
 "use strict";
 (function () {
   const { api, el, svg, habiller, aurore, pret, ouvrirProgramme, toast } = window.grenos;
@@ -21,7 +22,9 @@
       el("header.bv-tete",
         el("div.logo", svg("marque")),
         el("div", el("h1.titre", el("span.degrade", v.salut)),
-          el("p.sous", `Cette machine est à toi : ${v.adresse}. Voici de quoi commencer.`))),
+          el("p.sous", v.essai
+            ? "Tu essaies grenOS depuis la clé. Pour le garder, installe-le."
+            : `Cette machine est à toi : ${v.adresse}. Voici de quoi commencer.`))),
       grille,
       el("section.carte.verre.bv-astuces", el("div.etiquette", "Astuces"),
         el("ul", v.astuces.map((a) => el("li", a))))));

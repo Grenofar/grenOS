@@ -69,7 +69,7 @@ done < "$ICI/liste"
 
 # Un script sans le droit d'exécution ne tournerait pas, et systemd le dirait
 # trop tard (sur la clé de Grenofar). On le refuse ici.
-for f in "$ARBRE"/usr/lib/grenos/* "$ARBRE"/usr/bin/*; do
+for f in "$ARBRE"/usr/lib/grenos/* "$ARBRE"/usr/bin/* "$ARBRE"/etc/grub.d/*; do
     [ -f "$f" ] || continue
     # Les modules Python (.py) sont IMPORTÉS ou lancés par `python3 …` :
     # ils n'ont pas à être exécutables (ecran.py, pont.py sont en 0644 dans

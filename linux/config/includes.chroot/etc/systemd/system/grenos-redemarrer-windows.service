@@ -1,0 +1,14 @@
+# « Redémarrer sous Windows » (Fin de session, 22 novembre) : le menu du
+# démarrage a disparu, voici le chemin vers Windows. Lancé à la demande, sans
+# mot de passe (polkit 49 : org.freedesktop.systemd1). AUCUNE Condition ici :
+# un service sauté compte pour une réussite, et le PC redémarrerait sous
+# grenOS en promettant Windows.
+[Unit]
+Description=grenOS : le prochain demarrage est Windows
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-demarrage windows
+TimeoutStartSec=40
+StandardOutput=journal
+StandardError=journal

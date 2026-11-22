@@ -141,8 +141,13 @@ jobs:
       # redemarrage revient a l entree UEFI qui a demarre grenOS.
       - name: Le rapport de la cle face a un ecran fige, 6 cas
         run: sh linux/tools/essai-rapport-cle.sh
-      - name: Un redemarrage revient a grenOS (et au disque installe apres l installation), 10 cas
+      - name: Un redemarrage revient a grenOS (et au disque installe apres l installation), 13 cas
         run: sh linux/tools/essai-revenir-ici.sh
+
+      # 22 novembre, disque installe de Grenofar : lobby recouvert, bureau
+      # jamais ouvert au demarrage suivant, « debian » au BIOS, menu.
+      - name: Le disque installe demarre droit (lobby, nom au BIOS, sans menu, Windows joignable)
+        run: sh linux/tools/essai-demarrage.sh
       # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
       # rendu la cle au premier Calamares, qui l a prise pour partition EFI.
       - name: Le lanceur de l installateur, 27 cas

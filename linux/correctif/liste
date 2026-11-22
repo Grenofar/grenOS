@@ -34,6 +34,22 @@ fichier usr/share/grenos/bootloader.conf
 # (le moteur de l'installation appelle ce script dans le disque installé).
 fichier usr/lib/grenos/grenos-compte
 
+# 22 novembre au soir — le disque installé de Grenofar : lobby recouvert,
+# bureau jamais ouvert au démarrage suivant, « debian » au BIOS, menu ; et
+# le lobby seulement sur le grenOS installé.
+fichier usr/lib/grenos/grenos-ecran-libre
+fichier etc/systemd/system/lightdm.service.d/20-grenos-ecran-libre.conf
+fichier usr/bin/grenos-premier-x
+fichier usr/lib/grenos/grenos-demarrage
+fichier etc/systemd/system/grenos-demarrage.service
+lien etc/systemd/system/multi-user.target.wants/grenos-demarrage.service /etc/systemd/system/grenos-demarrage.service
+fichier etc/systemd/system/grenos-redemarrer-windows.service
+fichier usr/lib/grenos/grenos-revenir-ici
+fichier usr/lib/grenos/grenos-recuperation
+fichier usr/lib/grenos/appliquer-systeme
+fichier etc/default/grub.d/grenos.cfg
+fichier etc/grub.d/06_grenos_discret
+
 # L'installateur recopie aussi ce correctif (fichier propre au correctif,
 # dans linux/correctif/seul : il n'a pas de sens dans l'image complète).
 seul etc/calamares/modules/unpackfs.conf

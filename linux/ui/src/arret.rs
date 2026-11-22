@@ -6,6 +6,9 @@
 //!   semaines ;
 //! - « Mettre à jour et redémarrer » n'apparaît que s'il y a vraiment quelque
 //!   chose qui attend, et dit QUOI (paquets ou changements de système) ;
+//! - « Redémarrer sous Windows » (22 novembre, le menu de démarrage retiré)
+//!   n'apparaît que si le PC sait démarrer un Windows, et ne redémarre que si
+//!   le micrologiciel a bien noté Windows pour la fois suivante ;
 //! - la page n'envoie qu'une CLÉ (« eteindre »…), jamais une commande : c'est
 //!   Rust qui sait ce que chaque clé lance. Une page compromise ne peut rien
 //!   faire de plus qu'un clic sur un des boutons.
@@ -18,6 +21,9 @@ use serde::Serialize;
 const ETATS_VEILLE: &str = "/sys/power/state";
 const ATTENTE: &str = "/run/grenos/maj";
 const TRAVAUX: &str = "/var/lib/grenos/au-prochain-demarrage";
+/// Posé au démarrage par grenos-demarrage : lire la NVRAM ici coûterait une
+/// seconde à l'ouverture.
+const WINDOWS: &str = "/run/grenos/windows-au-demarrage";
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Geste {
@@ -46,6 +52,10 @@ fn veille() -> Option<&'static str> {
     veille_de(&lire(ETATS_VEILLE))
 }
 
+fn windows_demarre() -> bool {
+    std::path::Path::new(WINDOWS).exists()
+}
+
 fn combien_attendent() -> u32 {
     lire(ATTENTE).trim().parse().unwrap_or(0)
 }
@@ -66,7 +76,7 @@ fn pluriel(n: u32, un: &str, plusieurs: &str) -> String {
     format!("{n} {}", if n == 1 { un } else { plusieurs })
 }
 
-fn composer(veille: Option<&str>, paquets: u32, travaux: u32) -> Vec<Geste> {
+fn composer(veille: Option<&str>, paquets: u32, travaux: u32, windows: bool) -> Vec<Geste> {
     let g = |cle, titre: &str, note: &str, genre, icone| Geste { cle, titre: titre.into(), note: note.into(), genre, icone };
     let mut liste = vec![g("session", "Fermer la session", "Revenir à l'écran de connexion.", "", "compte")];
     if let Some(etat) = veille {
@@ -78,6 +88,9 @@ fn composer(veille: Option<&str>, paquets: u32, travaux: u32) -> Vec<Geste> {
         liste.push(g("veille", "Mettre en veille", note, "", "nuit"));
     }
     liste.push(g("redemarrer", "Redémarrer", "Éteindre puis rallumer la machine.", "", "redemarrer"));
+    if windows {
+        liste.push(g("windows", "Redémarrer sous Windows", "Pour cette fois seulement.", "", "fenetres"));
+    }
     liste.push(g("eteindre", "Éteindre", "Arrêter complètement la machine.", "danger", "eteindre"));
 
     if paquets > 0 || travaux > 0 {
@@ -105,7 +118,7 @@ pub struct Vue {
 #[tauri::command]
 pub fn arret_vue() -> Vue {
     let etat = veille();
-    let gestes = composer(etat, combien_attendent(), combien_de_travaux());
+    let gestes = composer(etat, combien_attendent(), combien_de_travaux(), windows_demarre());
     dire(&format!("arret : {} geste(s), veille {}", gestes.len(), etat.unwrap_or("impossible ici")));
     Vue { gestes, adresse: crate::systeme::adresse() }
 }
@@ -114,7 +127,8 @@ fn commande(cle: &str) -> Option<(&'static str, &'static [&'static str])> {
     Some(match cle {
         "session" => ("openbox", &["--exit"]),
         "veille" => ("systemctl", &["suspend"]),
-        "redemarrer" => ("systemctl", &["reboot"]),
+        // Pour « windows », BootNext est posé AVANT (arret_faire).
+        "redemarrer" | "windows" => ("systemctl", &["reboot"]),
         "eteindre" => ("systemctl", &["poweroff"]),
         "maj" => ("sh", &["-c", "systemctl enable grenos-maj-demarrage.service && systemctl reboot"]),
         _ => return None,
@@ -123,12 +137,16 @@ fn commande(cle: &str) -> Option<(&'static str, &'static [&'static str])> {
 
 /// Lance le geste, détaché (la fenêtre se ferme aussitôt après), et ferme.
 #[tauri::command]
-pub fn arret_faire(fenetre: tauri::WebviewWindow, cle: String) -> Result<(), String> {
+pub async fn arret_faire(fenetre: tauri::WebviewWindow, cle: String) -> Result<(), String> {
     // On refuse ce que la vue n'a pas proposé : pas de veille sur une machine
     // qui ne sait pas dormir, même si la page le demande.
-    let offerts = composer(veille(), combien_attendent(), combien_de_travaux());
+    let offerts = composer(veille(), combien_attendent(), combien_de_travaux(), windows_demarre());
     if !offerts.iter().any(|g| g.cle == cle) {
         return Err("geste non proposé ici".into());
+    }
+    if cle == "windows" && !crate::systeme::reussit("systemctl", &["start", "grenos-redemarrer-windows.service"]) {
+        dire("arret : windows refuse par le micrologiciel, rien ne redemarre");
+        return Err("Windows n'a pas pu être choisi pour le prochain démarrage. Le PC n'a pas redémarré.".into());
     }
     let (programme, arguments) = commande(&cle).ok_or("geste inconnu")?;
     crate::systeme::detacher(programme, arguments)?;
@@ -155,33 +173,40 @@ mod essais {
 
     #[test]
     fn sans_veille_pas_de_bouton() {
-        assert_eq!(cles(&composer(None, 0, 0)), ["session", "redemarrer", "eteindre"]);
-        assert_eq!(cles(&composer(Some("freeze"), 0, 0)), ["session", "veille", "redemarrer", "eteindre"]);
+        assert_eq!(cles(&composer(None, 0, 0, false)), ["session", "redemarrer", "eteindre"]);
+        assert_eq!(cles(&composer(Some("freeze"), 0, 0, false)), ["session", "veille", "redemarrer", "eteindre"]);
+    }
+
+    #[test]
+    fn windows_seulement_s_il_demarre() {
+        assert!(!cles(&composer(Some("mem"), 1, 1, false)).contains(&"windows"));
+        assert_eq!(cles(&composer(None, 0, 0, true)), ["session", "redemarrer", "windows", "eteindre"]);
+        assert_eq!(commande("windows"), commande("redemarrer"));
     }
 
     #[test]
     fn la_mise_a_jour_dit_ce_qui_attend() {
-        let g = composer(None, 3, 0);
+        let g = composer(None, 3, 0, false);
         assert_eq!(g[0].cle, "maj");
         assert_eq!(g[0].titre, "Mettre à jour et redémarrer");
         assert!(g[0].note.contains("3 mises à jour"));
-        let g = composer(None, 0, 1);
+        let g = composer(None, 0, 1, false);
         assert_eq!(g[0].titre, "Appliquer et redémarrer");
         assert!(g[0].note.contains("1 changement "));
-        let g = composer(None, 1, 2);
+        let g = composer(None, 1, 2, false);
         assert!(g[0].note.contains("1 mise à jour et 2 changements"));
     }
 
     #[test]
     fn seul_eteindre_est_rouge() {
-        let g = composer(Some("mem"), 2, 2);
+        let g = composer(Some("mem"), 2, 2, true);
         let rouges: Vec<_> = g.iter().filter(|g| g.genre == "danger").map(|g| g.cle).collect();
         assert_eq!(rouges, ["eteindre"]);
     }
 
     #[test]
     fn chaque_geste_a_sa_commande() {
-        for g in composer(Some("mem"), 1, 1) {
+        for g in composer(Some("mem"), 1, 1, true) {
             assert!(commande(g.cle).is_some(), "{}", g.cle);
         }
         assert!(commande("rm").is_none());

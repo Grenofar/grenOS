@@ -1,0 +1,20 @@
+# L'entrée du BIOS s'appelle grenOS, et Fin de session sait si Windows est là
+# (22 novembre, voir /usr/lib/grenos/grenos-demarrage). À chaque démarrage :
+# une mise à jour de GRUB, ou une installation d'avant, remettent « debian ».
+# Jamais sur la clé : son entrée n'est pas à nous.
+[Unit]
+Description=grenOS : son nom au demarrage du PC
+ConditionKernelCommandLine=!boot=live
+ConditionPathIsDirectory=/sys/firmware/efi/efivars
+After=local-fs.target
+RequiresMountsFor=/boot/efi
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-demarrage au-demarrage
+TimeoutStartSec=90
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

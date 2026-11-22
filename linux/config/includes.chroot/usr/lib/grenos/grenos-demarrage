@@ -1,0 +1,236 @@
+#!/bin/sh
+# L'ENTRÉE DU BIOS S'APPELLE grenOS, ET WINDOWS RESTE À UN CLIC (22 novembre).
+#
+# Grenofar : « fais que dans le BIOS, dans Boot Option, on voit grenOS et pas
+# debian », et « affiche plusieurs trucs, choix : enlève ». Le GRUB signé de
+# Debian ne cherche sa configuration que dans EFI/debian : le DOSSIER garde
+# ce nom, l'entrée du micrologiciel s'appelle grenOS. Et sans menu, Windows
+# se choisit dans Fin de session (BootNext : une seule fois).
+#
+#   grenos-demarrage nommer              l'entrée de ce disque, à sa place dans l'ordre
+#   grenos-demarrage nommer nettoyer     après une pose de GRUB : en tête, et sans
+#                                        les « debian » des installations effacées
+#   grenos-demarrage au-demarrage        le service : nommer, et dire si Windows est là
+#   grenos-demarrage windows-existe      vrai si une entrée Windows peut démarrer
+#   grenos-demarrage windows             le prochain démarrage, et lui seul, est Windows
+#
+# JAMAIS : Windows, le Debian d'un disque branché, une entrée effacée avant
+# que la nouvelle soit relue.
+#
+# GRENOS_EFIVARS, GRENOS_ESP, GRENOS_SYSBLOCK, GRENOS_MEMOIRE, GRENOS_ETAT :
+# pour les essais (linux/tools/essai-demarrage.sh) ; GRENOS_ESP sert aussi à
+# grenos-grub-install.
+
+set -u
+export LC_ALL=C
+PATH="$PATH:/usr/sbin:/sbin"
+EFIVARS=${GRENOS_EFIVARS:-/sys/firmware/efi/efivars}
+ESP=${GRENOS_ESP:-/boot/efi}
+SYSBLOCK=${GRENOS_SYSBLOCK:-/sys/class/block}
+MEMOIRE=${GRENOS_MEMOIRE:-/var/lib/grenos/demarrage-nettoye}
+ETAT_VU=${GRENOS_ETAT:-/run/grenos}
+CHARGEUR='\EFI\debian\shimx64.efi'
+
+NVRAM=""
+DEV=""
+DISQUE=""
+PARTIE=""
+UUID=""
+PRESENTES=""
+
+dire() { echo "grenos: demarrage : $*" >&2; }
+
+lire_nvram() {
+    [ -d "$EFIVARS" ] && command -v efibootmgr > /dev/null 2>&1 || return 1
+    NVRAM=$(timeout 15 efibootmgr 2> /dev/null) || return 1
+}
+
+ordre() { printf '%s\n' "$NVRAM" | sed -n 's/^BootOrder: *//p' | head -n 1 | tr ',' ' '; }
+
+# Une ligne par entrée : numero partition genre nom.
+entrees() {
+    printf '%s\n' "$NVRAM" | awk '
+        /^Boot[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][* ]/ {
+            numero = substr($0, 5, 4)
+            reste = substr($0, 10)
+            sub(/^ +/, "", reste)
+            t = index(reste, "\t")
+            if (!t) next
+            nom = substr(reste, 1, t - 1)
+            chemin = tolower(substr(reste, t + 1))
+            partition = "-"
+            if (match(chemin, /^hd\([0-9]+,gpt,[0-9a-f-]+/)) {
+                partition = substr(chemin, RSTART, RLENGTH)
+                sub(/^hd\([0-9]+,gpt,/, "", partition)
+            }
+            genre = "autre"
+            if (index(chemin, "\\efi\\debian\\shimx64.efi")) genre = "shim"
+            else if (index(chemin, "\\efi\\debian\\grubx64.efi") || index(chemin, "\\efi\\grenos\\")) genre = "ancien"
+            else if (index(chemin, "\\efi\\microsoft\\boot\\bootmgfw.efi")) genre = "windows"
+            print numero, partition, genre, nom
+        }'
+}
+
+lire_presentes() {
+    PRESENTES=" $(lsblk -rno PARTUUID 2> /dev/null | tr 'A-F\n' 'a-f ' ) "
+}
+
+notre_partition() {
+    DEV=$(findmnt -rno SOURCE "$ESP" 2> /dev/null | tail -n 1)
+    case "$DEV" in /dev/*) ;; *) return 1 ;; esac
+    DISQUE=$(lsblk -dno PKNAME "$DEV" 2> /dev/null | head -n 1 | tr -d ' ')
+    UUID=$(lsblk -dno PARTUUID "$DEV" 2> /dev/null | head -n 1 | tr -d ' ' | tr 'A-F' 'a-f')
+    PARTIE=$(cat "$SYSBLOCK/${DEV##*/}/partition" 2> /dev/null)
+    [ -n "$DISQUE" ] && [ -n "$UUID" ] && [ -n "$PARTIE" ]
+}
+
+entree_grenos() {
+    entrees | awk -v u="$UUID" '$2 == u && $3 == "shim" && NF == 4 && $4 == "grenOS" { print $1; exit }'
+}
+
+# Les entrées à nous qui font double emploi : sur notre partition ; et, au
+# ménage seulement, celles dont la partition n'existe plus nulle part.
+a_retirer() { # entree gardee, "ici" ou "mortes"
+    entrees | awk -v u="$UUID" -v garde="$1" -v quoi="$2" -v presentes="$PRESENTES" '
+        $1 != garde && ($3 == "shim" || $3 == "ancien") && NF == 4 {
+            nom = tolower($4)
+            if (nom != "debian" && nom != "grenos") next
+            if (quoi == "ici" && $2 == u) print $1
+            if (quoi == "mortes" && $2 != "-" && $2 != u && index(presentes, " " $2 " ") == 0) print $1
+        }' | tr '\012' ' '   # \012 : verif-shell lit une ligne a la fois
+}
+
+# Le programme de secours de shim recrée une entrée au nom lu dans ce
+# fichier, et affiche un écran bleu de redémarrage sur une carte mère à TPM.
+# La 1719 l'avait copié au chemin de secours : il part de là, seulement d'une
+# partition EFI sans Windows. shim y lance alors GRUB directement.
+soigner_le_secours() {
+    dossier="$ESP/EFI/debian"
+    voulu=$(mktemp) || return 0
+    if printf 'shimx64.efi,grenOS,,Le demarrage de grenOS\n' | iconv -f UTF-8 -t UTF-16LE > "$voulu" 2> /dev/null &&
+        ! cmp -s "$voulu" "$dossier/BOOTX64.CSV"; then
+        cp "$voulu" "$dossier/BOOTX64.CSV" || dire "le nom du secours n a pas pu etre ecrit"
+    fi
+    rm -f "$voulu"
+    ls -d "$ESP"/[Ee][Ff][Ii]/[Mm]icrosoft > /dev/null 2>&1 && return 0
+    secours="$ESP/EFI/BOOT"
+    if [ -f "$secours/grubx64.efi" ] && cmp -s "$secours/fbx64.efi" "$dossier/fbx64.efi"; then
+        rm -f "$secours/fbx64.efi" && dire "chemin de secours direct, sans ecran bleu"
+    fi
+    return 0
+}
+
+nommer() { # "", nettoyer, nettoyer-une-fois
+    tete=""
+    menage=""
+    case "$1" in
+        nettoyer) tete=1; menage=1 ;;
+        nettoyer-une-fois) [ -e "$MEMOIRE" ] || menage=1 ;;
+    esac
+    notre_partition || { dire "partition EFI de grenOS introuvable, rien n est change"; return 1; }
+    [ -f "$ESP/EFI/debian/shimx64.efi" ] || { dire "shim absent de $DEV, aucune entree vers du vide"; return 1; }
+    soigner_le_secours
+    lire_nvram || { dire "demarrages UEFI illisibles, rien n est change"; return 1; }
+
+    avant=$(ordre)
+    suivant=$(printf '%s\n' "$NVRAM" | sed -n 's/^BootNext: *//p' | head -n 1)
+    cree=""
+    nous=$(entree_grenos)
+    if [ -z "$nous" ]; then
+        if ! timeout 15 efibootmgr -q -c -d "/dev/$DISQUE" -p "$PARTIE" -L grenOS -l "$CHARGEUR" > /dev/null; then
+            dire "le micrologiciel refuse l entree grenOS, l ancienne reste"
+            return 1
+        fi
+        lire_nvram || return 1
+        nous=$(entree_grenos)
+        [ -n "$nous" ] || { dire "l entree grenOS ne se relit pas, l ancienne reste"; return 1; }
+        cree=1
+        dire "entree $nous « grenOS » creee"
+    fi
+
+    ici=$(a_retirer "$nous" ici)
+    mortes=""
+    if [ -n "$menage" ]; then
+        lire_presentes
+        # Une liste de disques qui n'a même pas la nôtre ne prouve rien.
+        case "$PRESENTES" in
+            *" $UUID "*) mortes=$(a_retirer "$nous" mortes) ;;
+            *) menage=""; dire "disques illisibles, aucun menage" ;;
+        esac
+    fi
+
+    voulu=""
+    place=""
+    if [ -n "$tete" ]; then voulu=$nous; place=1; fi
+    for n in $avant; do
+        case " $nous $ici " in
+            *" $n "*) if [ -z "$place" ]; then voulu="$voulu $nous"; place=1; fi ;;
+            *) case " $mortes " in *" $n "*) ;; *) voulu="$voulu $n" ;; esac ;;
+        esac
+    done
+    if [ -z "$place" ] && [ -n "$cree" ]; then voulu="$nous $voulu"; fi
+
+    for n in $ici $mortes; do
+        if [ "$suivant" = "$n" ]; then
+            timeout 15 efibootmgr -q -n "$nous" > /dev/null || true
+        fi
+        if timeout 15 efibootmgr -q -b "$n" -B > /dev/null; then
+            dire "ancienne entree $n retiree"
+        else
+            dire "ancienne entree $n impossible a retirer"
+        fi
+    done
+
+    lire_nvram || return 1
+    connues=" $(entrees | cut -d' ' -f1 | tr '\n' ' ') "
+    final=""
+    for n in $voulu $(ordre); do
+        case "$connues" in *" $n "*) ;; *) continue ;; esac
+        case ",$final," in *",$n,"*) ;; *) final="${final:+$final,}$n" ;; esac
+    done
+    if [ -n "$final" ] && [ "$final" != "$(ordre | tr ' ' ',')" ]; then
+        timeout 15 efibootmgr -q -o "$final" > /dev/null || dire "ordre de demarrage refuse"
+    fi
+
+    if [ -n "$menage" ] && [ ! -e "$MEMOIRE" ]; then
+        mkdir -p "$(dirname "$MEMOIRE")" 2> /dev/null && : > "$MEMOIRE"
+    fi
+    return 0
+}
+
+numero_windows() {
+    lire_nvram || return 1
+    lire_presentes
+    for n in $(ordre) $(entrees | cut -d' ' -f1); do
+        partition=$(entrees | awk -v n="$n" '$1 == n && $3 == "windows" { print $2; exit }')
+        [ -n "$partition" ] || continue
+        case "$PRESENTES" in *" $partition "*) echo "$n"; return 0 ;; esac
+    done
+    return 1
+}
+
+windows() {
+    numero=$(numero_windows) || { dire "aucun Windows a demarrer"; return 1; }
+    timeout 15 efibootmgr -q -n "$numero" > /dev/null || { dire "BootNext refuse"; return 1; }
+    lire_nvram || return 1
+    printf '%s\n' "$NVRAM" | grep -qix "BootNext: $numero" || { dire "BootNext ne se relit pas"; return 1; }
+    dire "le prochain demarrage, et lui seul, est Windows ($numero)"
+}
+
+case "${1:-}" in
+    nommer) nommer "${2:-}" ;;
+    au-demarrage)
+        nommer nettoyer-une-fois || true
+        # Fin de session lit ce témoin : efibootmgr y coûterait une seconde
+        # à l'ouverture (efivarfs freine les lectures sans droits).
+        mkdir -p "$ETAT_VU"
+        if numero_windows > /dev/null; then
+            : > "$ETAT_VU/windows-au-demarrage"
+        else
+            rm -f "$ETAT_VU/windows-au-demarrage"
+        fi
+        ;;
+    windows-existe) numero_windows > /dev/null ;;
+    windows) windows ;;
+    *) echo "usage : grenos-demarrage nommer [nettoyer] | au-demarrage | windows-existe | windows" >&2; exit 2 ;;
+esac

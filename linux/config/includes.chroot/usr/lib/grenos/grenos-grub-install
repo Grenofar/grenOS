@@ -4,7 +4,7 @@
 #
 # Calamares (bootloader/main.py, 3.3.14) lance
 #   grub-install --target=x86_64-efi --efi-directory=/boot/efi
-#                --bootloader-id=grenOS --force
+#                --bootloader-id=debian --force
 # puis, si `installEFIFallback`, RECOPIE grubx64.efi en EFI/boot/bootx64.efi.
 # Deux défauts pour grenOS :
 #   - sous Secure Boot, le micrologiciel n'accepte en premier que shim (signé
@@ -16,13 +16,17 @@
 # (`--force-extra-removable`) — mais seulement sur une partition EFI à nous :
 # s'il y a Windows dessus, on n'y touche pas, l'entrée du micrologiciel suffit.
 
+GRUB=${GRENOS_GRUB_INSTALL:-/usr/sbin/grub-install}
+DEMARRAGE=${GRENOS_DEMARRAGE:-/usr/lib/grenos/grenos-demarrage}
 esp=""
 suivant=""
+sans_nvram=""
 for argument in "$@"; do
     if [ -n "$suivant" ]; then esp=$argument; suivant=""; continue; fi
     case "$argument" in
         --efi-directory=*) esp=${argument#--efi-directory=} ;;
         --efi-directory) suivant=1 ;;
+        --no-nvram) sans_nvram=1 ;;
     esac
 done
 
@@ -41,4 +45,22 @@ if [ -n "$esp" ] && ! ls -d "$esp"/[Ee][Ff][Ii]/[Mm]icrosoft >/dev/null 2>&1; th
 else
     echo "grenos-grub-install : partition EFI partagee avec Windows ($esp) — son chemin de secours reste a Windows"
 fi
-exec /usr/sbin/grub-install "$@"
+
+# LE MICROLOGICIEL, C'EST NOUS QUI L'ÉCRIVONS (22 novembre). Laissé à lui,
+# grub-install de Debian :
+#   - nomme l'entrée comme le dossier, « debian » (Grenofar veut grenOS) ;
+#   - EFFACE toutes les entrées « debian », celles des autres disques aussi
+#     (efi-variable-storage-minimise-writes.patch) ;
+#   - copie fbx64 au chemin de secours, d'où un écran bleu de redémarrage
+#     sur une carte mère à TPM (grub-install-removable-shim.patch).
+# --no-nvram évite les trois. Appelé AVEC --no-nvram (les essais), on ne
+# touche jamais à la NVRAM ; en BIOS (aucune partition EFI), rien ne change.
+if [ -n "$sans_nvram" ] || [ -z "$esp" ]; then
+    exec "$GRUB" "$@"
+fi
+"$GRUB" "$@" --no-nvram || exit $?
+if GRENOS_ESP="$esp" "$DEMARRAGE" nommer nettoyer; then
+    exit 0
+fi
+echo "grenos-grub-install : entree grenOS refusee — celle de grub-install, pour que le PC demarre"
+exec "$GRUB" "$@"

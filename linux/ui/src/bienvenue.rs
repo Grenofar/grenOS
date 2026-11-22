@@ -2,8 +2,13 @@
 //!
 //! Repris de `grenos-bienvenue` (Python) le 18 novembre. Les mêmes gestes, les
 //! mêmes astuces, et la même règle : « Installer grenOS » n'apparaît que sur
-//! une vraie machine — dans une machine virtuelle, le disque garde déjà tout,
-//! et proposer d'installer par-dessus ne ferait qu'inquiéter.
+//! une vraie machine démarrée par la clé — dans une machine virtuelle, le
+//! disque garde déjà tout, et proposer d'installer par-dessus ne ferait
+//! qu'inquiéter. Sur un grenOS DÉJÀ installé, la carte ne menait à rien : le
+//! moteur refuse hors de la clé (22 novembre).
+//!
+//! La clé n'a plus d'assistant (22 novembre) : cet accueil est le premier
+//! écran qu'on y voit, il dit donc qu'on essaie, et non « ta machine ».
 
 use crate::{materiel, systeme};
 use serde::Serialize;
@@ -54,18 +59,20 @@ pub struct Vue {
     adresse: String,
     gestes: Vec<&'static Geste>,
     astuces: Vec<&'static str>,
+    /// Sur la clé, d'un vrai PC : on essaie avant d'installer.
+    essai: bool,
 }
 
 type Compose = (String, Vec<&'static Geste>, Vec<&'static str>);
 
-fn composer(nom: &str, virtuelle: bool) -> Compose {
+fn composer(nom: &str, virtuelle: bool, cle: bool) -> Compose {
     let salut = if nom.is_empty() { "Bienvenue".to_string() } else { format!("Bonjour {nom}") };
     let mut gestes: Vec<&'static Geste> = GESTES.iter().collect();
     let mut astuces = ASTUCES.to_vec();
     if virtuelle {
         astuces.push(ASTUCE_VIRTUELLE);
-    } else {
-        // Sur un vrai PC, installer est le geste qui compte : il passe devant.
+    } else if cle {
+        // Sur la clé d'un vrai PC, installer est le geste qui compte : devant.
         gestes.insert(0, &INSTALLER);
     }
     (salut, gestes, astuces)
@@ -74,8 +81,10 @@ fn composer(nom: &str, virtuelle: bool) -> Compose {
 #[tauri::command]
 pub async fn bienvenue_vue() -> Vue {
     let id = systeme::identite();
-    let (salut, gestes, astuces) = composer(&id["nom"], !materiel::virtuelle().is_empty());
-    Vue { salut, adresse: systeme::adresse(), gestes, astuces }
+    let virtuelle = !materiel::virtuelle().is_empty();
+    let cle = systeme::sur_cle();
+    let (salut, gestes, astuces) = composer(&id["nom"], virtuelle, cle);
+    Vue { salut, adresse: systeme::adresse(), gestes, astuces, essai: cle && !virtuelle }
 }
 
 #[cfg(test)]
@@ -83,13 +92,15 @@ mod essais {
     use super::*;
 
     #[test]
-    fn installer_seulement_sur_une_vraie_machine() {
-        let (_, g, a) = composer("", true);
+    fn installer_seulement_depuis_la_cle_d_un_vrai_pc() {
+        let (_, g, a) = composer("", true, true);
         assert!(g.iter().all(|g| g.programme != "installer"));
         assert_eq!(a.last(), Some(&ASTUCE_VIRTUELLE));
-        let (_, g, a) = composer("Léa", false);
+        let (_, g, a) = composer("", false, true);
         assert_eq!(g[0].programme, "installer");
         assert!(!a.contains(&ASTUCE_VIRTUELLE));
+        let (_, g, _) = composer("Léa", false, false);
+        assert!(g.iter().all(|g| g.programme != "installer"), "deja installe : rien a installer");
     }
 
     #[test]
@@ -101,7 +112,7 @@ mod essais {
 
     #[test]
     fn le_salut() {
-        assert_eq!(composer("", true).0, "Bienvenue");
-        assert_eq!(composer("Léa", true).0, "Bonjour Léa");
+        assert_eq!(composer("", true, false).0, "Bienvenue");
+        assert_eq!(composer("Léa", true, false).0, "Bonjour Léa");
     }
 }

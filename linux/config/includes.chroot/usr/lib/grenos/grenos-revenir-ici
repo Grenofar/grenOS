@@ -22,14 +22,14 @@
 # maintenant » de l'installateur doit mener au système INSTALLÉ, pas revenir
 # sur la clé. Calamares écrit « completion: succeeded » dans son journal
 # quand il a fini (« completion: failed » à 20 h 32 chez Grenofar) ; on vise
-# alors la première entrée « debian » de l'ordre de démarrage — celle que
-# grub-install vient de poser en tête.
+# alors la première entrée « grenOS » (« debian » avant le 22 novembre) de
+# l'ordre de démarrage — celle que grenos-grub-install vient de poser en tête.
 #
 # Notre installateur (22 novembre) pose, lui, une marque dans /run une fois
 # tout écrit et vérifié : /run/grenos/installation-reussie.
 #
-# GRENOS_EFIBOOTMGR, GRENOS_EFIVARS, GRENOS_CALAMARES_JOURNAL, GRENOS_MARQUE :
-# pour les essais seulement (linux/tools/essai-revenir-ici.sh).
+# GRENOS_EFIBOOTMGR, GRENOS_EFIVARS, GRENOS_CALAMARES_JOURNAL, GRENOS_MARQUE,
+# GRENOS_LIGNE : pour les essais seulement (linux/tools/essai-revenir-ici.sh).
 
 set -u
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -37,6 +37,7 @@ EFIBOOTMGR=${GRENOS_EFIBOOTMGR:-efibootmgr}
 EFIVARS=${GRENOS_EFIVARS:-/sys/firmware/efi/efivars}
 JOURNAL_CALAMARES=${GRENOS_CALAMARES_JOURNAL:-/root/.cache/calamares/session.log}
 MARQUE=${GRENOS_MARQUE:-/run/grenos/installation-reussie}
+LIGNE=${GRENOS_LIGNE:-/proc/cmdline}
 
 dire() {
     echo "grenos: redemarrage : $*"
@@ -59,16 +60,24 @@ fi
 if [ -e "$MARQUE" ] || grep -q 'completion: succeeded' "$JOURNAL_CALAMARES" 2>/dev/null; then
     for n in $(printf '%s\n' "$etat" | sed -n 's/^BootOrder: *//p' | tr ',' ' '); do
         nom=$(printf '%s\n' "$etat" | sed -n "s/^Boot$n[* ] *//p" | cut -f1 | head -n 1)
-        [ "$nom" = debian ] || continue
+        case "$nom" in grenOS|debian) ;; *) continue ;; esac
         if timeout 10 "$EFIBOOTMGR" -q -n "$n" >/dev/null 2>&1; then
-            dire "installation terminee : retour sur le systeme installe (entree $n, debian)"
+            dire "installation terminee : retour sur le systeme installe (entree $n, $nom)"
         else
             dire "installation terminee : BootNext refuse, la carte mere suivra son ordre"
         fi
         exit 0
     done
-    dire "installation terminee : aucune entree debian, la carte mere suivra son ordre"
+    dire "installation terminee : aucune entree grenOS, la carte mere suivra son ordre"
     exit 0
+fi
+# L'entrée qui nous a démarrés vient d'être renommée (grenos-demarrage la
+# remplace) : sur le disque installé, on revient par celle qui porte grenOS.
+if ! printf '%s\n' "$etat" | grep -q "^Boot$courant[* ]" && ! grep -qw 'boot=live' "$LIGNE" 2>/dev/null; then
+    for n in $(printf '%s\n' "$etat" | sed -n 's/^BootOrder: *//p' | tr ',' ' '); do
+        nom=$(printf '%s\n' "$etat" | sed -n "s/^Boot$n[* ] *//p" | cut -f1 | head -n 1)
+        if [ "$nom" = grenOS ]; then courant=$n; break; fi
+    done
 fi
 nom=$(printf '%s\n' "$etat" | sed -n "s/^Boot$courant[* ] *//p" | cut -f1 | head -n 1)
 if timeout 10 "$EFIBOOTMGR" -q -n "$courant" >/dev/null 2>&1; then

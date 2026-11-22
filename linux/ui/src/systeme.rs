@@ -79,6 +79,11 @@ pub fn sortie(programme: &str, arguments: &[&str]) -> String {
         .unwrap_or_default()
 }
 
+/// Le système tourne depuis la clé (ou l'image), pas depuis un disque installé.
+pub fn sur_cle() -> bool {
+    lire("/proc/cmdline").split_whitespace().any(|m| m == "boot=live")
+}
+
 pub fn lire(chemin: &str) -> String {
     fs::read_to_string(chemin).unwrap_or_default()
 }

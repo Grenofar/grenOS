@@ -346,6 +346,15 @@ install -m 0644 "$DEDANS/etc/xdg/openbox/rc.xml" "$BUILD/usr/share/grenos/modele
 install -m 0644 "$DEDANS/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-terminal.xml"     "$BUILD/usr/share/grenos/modeles/xfce4-terminal.xml"
 
 # Celui-ci est bien le notre : personne d'autre ne le reclame.
+# Le démarrage du disque installé (22 novembre) : les boucles ci-dessus ne
+# prennent ni les compléments d'unités, ni un .cfg, ni /etc/grub.d. Sans eux,
+# une machine mise à jour garderait son menu, et son écran noir.
+for relatif in etc/default/grub.d/grenos.cfg \
+               etc/systemd/system/lightdm.service.d/20-grenos-ecran-libre.conf \
+               etc/systemd/system/getty@tty1.service.d/20-grenos-apres-assistant.conf; do
+    install -D -m 0644 "$DEDANS/$relatif" "$BUILD/$relatif"
+done
+install -D -m 0755 "$DEDANS/etc/grub.d/06_grenos_discret" "$BUILD/etc/grub.d/06_grenos_discret"
 install -m 0644 "$DEDANS/etc/polkit-1/rules.d/49-grenos-administration.rules" \
     "$BUILD/etc/polkit-1/rules.d/"
 

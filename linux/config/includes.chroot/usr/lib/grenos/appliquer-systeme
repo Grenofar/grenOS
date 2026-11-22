@@ -37,7 +37,7 @@ for service in grenos-premier.service grenos-preuve.service grenos-maj-verif.tim
                grenos-video.service grenos-sonde-session.service \
                grenos-windows.service grenos-affichage-firmware.service \
                grenos-rapport-cle.service grenos-affichage-garde.service \
-               grenos-revenir-ici.service; do
+               grenos-revenir-ici.service grenos-demarrage.service; do
     systemctl enable "$service" >/dev/null 2>&1 || true
 done
 
@@ -361,6 +361,22 @@ done
 # reprendrait la barre de progression de la mise à jour au redémarrage — celle
 # que Grenofar voit. On rejoue l'habillage à chaque passage ici.
 [ -x /usr/lib/grenos/habiller-plymouth ] && /usr/lib/grenos/habiller-plymouth
+
+# ---- Le démarrage du disque installé -----------------------------------------
+#
+# 22 novembre : ni menu, ni lignes (grenos.cfg, 06_grenos_discret). Ces deux
+# fichiers ne valent qu'une fois grub.cfg refait, et une machine posée avec
+# la 1719 ne le referait qu'au prochain noyau. Jamais sur la clé, ni pendant
+# la construction (pas de grub.cfg) ; une seule fois, la marque y reste.
+if [ -f /boot/grub/grub.cfg ] && command -v update-grub >/dev/null 2>&1 && \
+   ! grep -qw 'boot=live' /proc/cmdline 2>/dev/null && \
+   ! grep -q 'color_normal=black/black' /boot/grub/grub.cfg; then
+    if update-grub >/dev/null 2>&1; then
+        echo "grenos: demarrage sans menu"
+    else
+        echo "grenos: attention : le menu de demarrage n a pas pu etre refait"
+    fi
+fi
 
 # ---- Les icônes et les menus ------------------------------------------------
 gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true

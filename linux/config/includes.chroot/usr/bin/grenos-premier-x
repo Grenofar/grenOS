@@ -6,21 +6,30 @@
 # sur le septième terminal virtuel. Quand la personne a donné son nom, le
 # programme se termine, le serveur s'arrête, et lightdm prend la suite sur son
 # propre écran.
+#
+# GRENOS_LIGNE, GRENOS_DMI, GRENOS_IDENTITE, GRENOS_ECRAN_LIBRE : pour les
+# essais seulement (linux/tools/essai-demarrage.sh).
 
 set -eu
+LIGNE=${GRENOS_LIGNE:-/proc/cmdline}
+DMI=${GRENOS_DMI:-/sys/class/dmi/id/product_version}
 
-[ -e /etc/grenos/identite ] && exit 0
+[ -e "${GRENOS_IDENTITE:-/etc/grenos/identite}" ] && exit 0
+
+# L'ASSISTANT EST POUR LE GRENOS INSTALLÉ (22 novembre, Grenofar : « fais
+# qu'il y a l'OOBE seulement dans grenOS de base installé »). La clé ouvre
+# son bureau, et l'installateur demande langue, clavier et compte. Seule la
+# machine d'intégration le voit encore sur l'image : elle n'a que cela pour
+# le juger avant publication (SMBIOS de scripts/ci-demarrage.sh).
+if grep -qw 'boot=live' "$LIGNE" 2>/dev/null && ! grep -qs grenos-essai-charge "$DMI"; then
+    exit 0
+fi
 command -v Xorg >/dev/null 2>&1 || exit 0
 
-# PLYMOUTH N'EST PAS TOUCHÉ ICI (21 novembre, trois essais en une heure).
-# Sur la RTX 5060 de Grenofar, le serveur X de l'assistant meurt sous nouveau
-# (« drmSetMaster failed » : plymouth tient la carte) — le bureau s'ouvre
-# alors directement, et le filet de l'écran le compte comme une preuve. Mais
-# `plymouth deactivate` puis `plymouth quit --retain-splash` avant xinit ont
-# FIGÉ ce serveur X au changement de terminal, sur toutes les machines
-# d'essai (cle.yml, runs 44842167737 et 44843240153) : plus d'assistant du
-# tout. Le chemin d'origine reste, prouvé partout ; l'assistant sous nouveau
-# se règlera à part, sans risquer la version d'installation.
+# PLYMOUTH PART D'ABORD, ET ON ATTEND SA MORT (22 novembre). Le 21, on avait
+# renoncé à y toucher : `deactivate` puis `quit --retain-splash` figeaient X
+# au changement de terminal — faute d'attendre, voir grenos-ecran-libre.
+"${GRENOS_ECRAN_LIBRE:-/usr/lib/grenos/grenos-ecran-libre}" || true
 
 # `-keeptty` : sans terminal de contrôle — c'est le cas sous systemd — Xorg
 # refuse de démarrer sans cette option.

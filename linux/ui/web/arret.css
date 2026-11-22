@@ -2,7 +2,16 @@
 body[data-page="arret"] { overflow: hidden; }
 .page-arret { position: relative; z-index: 1; padding: 24px 22px 18px; display: flex; flex-direction: column; gap: 16px; height: 100vh; box-sizing: border-box; }
 .page-arret .tete .note { color: var(--texte-3); }
-.gestes { display: flex; flex-direction: column; gap: 8px; }
+.gestes { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; }
+.gestes > .geste { flex: none; }
+/* Six gestes (mise a jour, veille ET Windows, 22 novembre) : 638 px dans une
+   fenetre de 560, Annuler hors de l'ecran. On resserre ; au pire la liste
+   defile, jamais le bouton Annuler. */
+.page-arret:has(.geste:nth-child(6)) { gap: 10px; padding-top: 18px; padding-bottom: 12px; }
+.page-arret:has(.geste:nth-child(6)) .gestes { gap: 5px; }
+.page-arret:has(.geste:nth-child(6)) .geste { padding-top: 5px; padding-bottom: 5px; }
+.page-arret:has(.geste:nth-child(6)) .geste .pastille { width: 36px; height: 36px; }
+.page-arret:has(.geste:nth-child(6)) .geste small { line-height: 1.25; }
 .geste {
   display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
   padding: 12px 14px; border-radius: var(--rayon-petit);

@@ -1,4 +1,4 @@
-// Fin de session : quatre ou cinq gestes, aucun déclenché par erreur.
+// Fin de session : trois à six gestes, aucun déclenché par erreur.
 //
 // Échap ou « Annuler » ferment. Éteindre est le seul bouton rouge. La page ne
 // connaît que des CLÉS ; c'est Rust (arret.rs) qui sait ce qu'elles lancent,
@@ -12,7 +12,7 @@
 "use strict";
 (function () {
   const { api, el, svg, habiller, aurore, toast } = window.grenos;
-  const LETTRES = { session: "f", veille: "v", redemarrer: "r", eteindre: "e", maj: "m" };
+  const LETTRES = { session: "f", veille: "v", redemarrer: "r", windows: "w", eteindre: "e", maj: "m" };
   const parLettre = {};
 
   async function faire(geste, bouton) {

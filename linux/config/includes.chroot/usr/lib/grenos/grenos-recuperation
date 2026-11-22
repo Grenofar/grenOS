@@ -193,7 +193,12 @@ demarrage)
     monter_rw "$dev" || exit 1
     if [ -d /sys/firmware/efi ]; then
         [ -n "$(efi_de "$dev")" ] || { echo "Aucune partition EFI sur ce disque." >&2; exit 1; }
-        dans grub-install --target=x86_64-efi --efi-directory=/boot/efi --recheck || exit 1
+        # Par notre lanceur (22 novembre) : sans --bootloader-id, GRUB se
+        # posait dans EFI/grenos, où le GRUB signé ne lit pas sa
+        # configuration ; et seul le lanceur nomme l'entrée grenOS.
+        pose=/usr/lib/grenos/grenos-grub-install
+        dans test -x "$pose" || pose=grub-install
+        dans "$pose" --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --recheck || exit 1
     else
         d=$(disque_de "$dev")
         dans grub-install --target=i386-pc "/dev/$d" || exit 1

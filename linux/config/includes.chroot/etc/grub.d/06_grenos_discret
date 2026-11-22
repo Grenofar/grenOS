@@ -1,0 +1,9 @@
+#!/bin/sh
+# GRUB n'écrit rien à l'écran (22 novembre, captures du run 45053914956 :
+# « Booting `grenOS GNU/Linux' », « Loading Linux 7.3.4… », « Loading initial
+# ramdisk… », en anglais, jusqu'à l'ouverture du bureau). Le GRUB signé ne
+# se recompile pas, et ses `echo` reviennent à chaque update-grub : son texte
+# ordinaire devient noir sur noir. Les choix du menu (Échap) ont leurs
+# propres couleurs et restent lisibles.
+set -e
+echo "set color_normal=black/black"

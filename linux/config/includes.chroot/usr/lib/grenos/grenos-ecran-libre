@@ -1,0 +1,38 @@
+#!/bin/sh
+# AUCUN SERVEUR X NE DÉMARRE TANT QUE PLYMOUTH VIT (22 novembre).
+#
+# Le disque installé de Grenofar (image du firmware, SSD), reproduit en CI,
+# run 45053914956 — deux pannes, une seule cause :
+#   - premier démarrage : l'assistant s'affiche à 4 s, Plymouth vit encore ;
+#     à 10 s il ouvre son moteur fbdev, RAPPELLE le terminal 1 et y peint son
+#     chargement sans fin, par-dessus l'assistant ;
+#   - démarrage suivant : lightdm dit « plymouth quit » sans attendre et
+#     lance X. X demande le terminal 7 pendant que Plymouth meurt : le noyau
+#     attend un accord qui ne viendra plus, puis l'oublie (VT_SETMODE remet
+#     vt_newvt à -1). X attend sans fin, écran noir. C'est aussi ce qui avait
+#     figé l'assistant le 21 novembre (runs 44842167737 et 44843240153).
+#
+# La seule preuve qu'il a rendu le terminal : le PROCESSUS est parti. La
+# réponse de `plymouth quit` ou de `--wait` arrive avant.
+# Appelé par grenos-premier-x et avant lightdm (lightdm.service.d).
+
+set -u
+vivant() { pgrep -x plymouthd > /dev/null 2>&1; }
+attendre_sa_fin() { # dixiemes de seconde
+    n=0
+    while [ "$n" -lt "$1" ]; do
+        vivant || return 0
+        sleep 0.1
+        n=$((n + 1))
+    done
+    ! vivant
+}
+
+vivant || exit 0
+timeout 5 plymouth quit > /dev/null 2>&1 || true
+attendre_sa_fin 50 && exit 0
+# Mort, le noyau rend lui-même le terminal (reset_vc).
+echo "grenos: ecran : plymouth ne part pas, arrete de force" >&2
+pkill -KILL -x plymouthd > /dev/null 2>&1 || true
+attendre_sa_fin 20 || echo "grenos: ecran : plymouth est toujours la" >&2
+exit 0

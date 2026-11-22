@@ -24,13 +24,15 @@ EOF
 chmod +x "$T/efibootmgr"
 
 MARQUE="$T/pas-de-marque"
+echo "quiet splash" > "$T/ligne"
+LIGNE="$T/ligne"
 cas() { # titre, état (fichier), BootNext attendu (- : aucun), efivars (oui/non), [journal de Calamares]
     printf '%b' "$2" > "$T/etat"
     rm -f "$T/bootnext" "$T/calamares.log"
     [ -n "${5:-}" ] && printf '%s\n' "$5" > "$T/calamares.log"
     vars="$T/efivars"
     [ "$4" = non ] && vars="$T/absent"
-    GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$vars" GRENOS_CALAMARES_JOURNAL="$T/calamares.log" GRENOS_MARQUE="$MARQUE" \
+    GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$vars" GRENOS_CALAMARES_JOURNAL="$T/calamares.log" GRENOS_MARQUE="$MARQUE" GRENOS_LIGNE="$LIGNE" \
         sh "$S" > "$T/sortie" 2>&1
     obtenu=$(cat "$T/bootnext" 2>/dev/null || echo -)
     if [ "$obtenu" = "$3" ]; then
@@ -67,6 +69,15 @@ echo /dev/sda > "$MARQUE"
 cas "notre installateur a réussi : le redémarrage mène au disque installé"     "$APRES"       0004 oui
 MARQUE="$T/pas-de-marque"
 
+# Le 22 novembre, l'entrée s'appelle grenOS.
+APRES_NOM='BootCurrent: 0003\nBootOrder: 0004,0000,0003\nBoot0000* Windows Boot Manager\tHD(1,GPT)\nBoot0003* UEFI: USB DISK 2.0 PMAP, Partition 1\tPciRoot(0x0)\nBoot0004* grenOS\tHD(1,GPT,ssd)\n'
+RENOMMEE='BootCurrent: 0002\nBootOrder: 0000,0009\nBoot0000* Windows Boot Manager\tHD(1,GPT)\nBoot0009* grenOS\tHD(1,GPT,ssd)\n'
+cas "installation réussie, entrée « grenOS » : mène au disque installé"        "$APRES_NOM"   0004 oui "$REUSSIE"
+cas "entrée renommée pendant la session : retour à grenOS, pas à Windows"      "$RENOMMEE"    0009 oui
+echo "boot=live quiet splash" > "$T/ligne"
+cas "sur la clé, une entrée disparue ne mène pas au disque"                    "$RENOMMEE"    0002 oui
+echo "quiet splash" > "$T/ligne"
+
 # Le nom de l'entrée est dit dans le journal (c'est ce qu'on lira).
 printf '%b' "$CLE" > "$T/etat"; rm -f "$T/bootnext"
 GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$T/efivars" GRENOS_CALAMARES_JOURNAL="$T/aucun-journal" GRENOS_MARQUE="$T/pas-de-marque" sh "$S" > "$T/sortie" 2>&1
@@ -77,5 +88,5 @@ else
     fautes=$((fautes + 1))
 fi
 
-echo "revenir-ici : 10 cas, $fautes faute(s)"
+echo "revenir-ici : 13 cas, $fautes faute(s)"
 [ "$fautes" = 0 ]
