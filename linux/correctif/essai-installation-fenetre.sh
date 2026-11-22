@@ -265,6 +265,11 @@ cliquer 1067 695                         # Continuer
 attendre 'installation : page disque' 20
 sleep 2
 voir 3-disque
+# Le geste qui n a rien donne chez Grenofar le 22 au matin : cliquer la
+# grande partition DANS LA BARRE. Elle doit surligner sa ligne.
+cliquer 806 281
+sleep 2
+voir 3-disque-barre
 double_clic 1079 471                     # Supprimer (l ancien grenOS)
 sleep 2
 voir 3-disque-supprimee

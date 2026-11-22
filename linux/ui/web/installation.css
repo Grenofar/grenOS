@@ -67,6 +67,8 @@ button.in-segment:hover { background: color-mix(in srgb, var(--genre) 36%, trans
   border-radius: var(--rayon-petit); border: 1px solid var(--bord); background: var(--surface);
 }
 .in-ligne.in-libre { border-style: dashed; }
+/* Le morceau de barre cliqué désigne sa ligne, sans rien faire bouger. */
+.in-page [data-montre] { outline: 2px solid var(--accent); outline-offset: -1px; border-radius: var(--rayon-petit); }
 .in-nom { flex: 1; min-width: 0; line-height: 1.3; }
 .in-nom b { display: block; font-size: 14px; overflow-wrap: anywhere; }
 .in-nom small { display: block; color: var(--texte-2); font-size: 12px; }

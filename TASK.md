@@ -51,8 +51,16 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
 - [à faire, dans l'ordre] 1. publication, avec l'accord de Grenofar (push sur
   main) ; 2. cle.yml sur la version publiée ; 3. la clé ; 4. vu sur son PC
   (RTX 5060, sa carte mère, mot de passe sur la clé → fenêtre polkit).
-- La cause du « il fallait attendre » de Calamares n'a PAS été trouvée dans
-  un journal : l'écran est remplacé, la panne n'est pas expliquée.
+- CAUSE du « pas cliquable » [prouvé : rapport 20261122-094033 de sa clé, lu
+  le 22 au soir, et ChoicePage.cpp de Calamares 3.3.14] : quatre clics sur la
+  partition de 218 Gio dans la barre (« Clicked row 2 »), ignorés, car
+  Calamares met la barre en NoSelection tant qu'aucun choix n'est fait
+  au-dessus. Rien ne faisait attendre : les disques étaient lus en 1 s.
+  Chez nous la barre ignorait aussi ces clics : elle surligne désormais la
+  ligne cliquée [écrit, vu dans l'aperçu ; PAS dans les 15 commits publiés
+  avec l'accord du 22 au soir].
+- L'écriture de la clé sur les disques [prouvé SUR SON PC] : même rapport,
+  sdb1, sdb2 et sdb3 montées r/w à 18 s, avant le bureau.
 - Place minimale ramenée à celle de Calamares : 15 Gio au lieu de 20,5 [écrit].
 - Windows d'un autre disque dans le menu du disque installé (os-prober, menu
   5 s) : jugé par installation-fenetre [écrit].

@@ -107,7 +107,7 @@
     // le compte
     nom: "", login: "", protege: false, mot: "", confirme: "",
     // la fin
-    compris: false, resumeDepuis: 0, avance: { part: 0, texte: "" }, echec: "",
+    compris: false, resumeDepuis: 0, montre: "", avance: { part: 0, texte: "" }, echec: "",
   };
   const N = {};
 
@@ -130,6 +130,7 @@
 
   function changer(disque, geste) {
     geste(choixDe(disque));
+    D.montre = "";
     D.compris = false;
     dessiner();
   }
@@ -217,20 +218,24 @@
     return s;
   }
 
+  // AUCUN MORCEAU DE BARRE N'EST MORT (22 novembre, rapport 20261122-094033) :
+  // dans Calamares, Grenofar a cliqué quatre fois sa partition de 218 Gio dans
+  // la barre, qui l'ignorait tant qu'un choix n'était pas fait au-dessus.
   function segments(disque, c) {
-    const morceaux = c.restent.map((p) => ({ debut: p.debut_mio, n: segment(p.genre, p.taille_mio, p.nom) }));
+    const montrer = (cle) => () => { D.montre = cle; dessiner(); };
+    const morceaux = c.restent.map((p) => ({ debut: p.debut_mio, n: segment(p.genre, p.taille_mio, p.nom, montrer(p.dev)) }));
     for (const z of c.zones) {
       if (c.creation && c.creation.zone === z) {
         const k = c.creation;
-        if (k.efi_neuve) morceaux.push({ debut: z.debut_mio, n: segment("efi", k.efi_neuve, "Démarrage") });
-        morceaux.push({ debut: k.debut_mio, n: segment("nouveau", k.taille, "grenOS") });
-        if (k.reste >= 1) morceaux.push({ debut: k.debut_mio + k.taille, n: segment("libre", k.reste, "Espace libre") });
+        if (k.efi_neuve) morceaux.push({ debut: z.debut_mio, n: segment("efi", k.efi_neuve, "Démarrage", montrer("grenos")) });
+        morceaux.push({ debut: k.debut_mio, n: segment("nouveau", k.taille, "grenOS", montrer("grenos")) });
+        if (k.reste >= 1) morceaux.push({ debut: k.debut_mio + k.taille, n: segment("libre", k.reste, "Espace libre", montrer("grenos")) });
       } else {
-        const clic = z.possible ? () => changer(disque, (x) => { x.point = z.debut_mio; x.taille = 0; }) : null;
+        const clic = z.possible ? () => changer(disque, (x) => { x.point = z.debut_mio; x.taille = 0; }) : montrer(`libre${z.debut_mio}`);
         morceaux.push({ debut: z.debut_mio, n: segment("libre", z.taille_mio, "Espace libre", clic) });
       }
     }
-    if (!morceaux.length) morceaux.push({ debut: 0, n: segment("autre", disque.taille_mio, "Données") });
+    if (!morceaux.length) morceaux.push({ debut: 0, n: segment("autre", disque.taille_mio, "Données", montrer("tout")) });
     return morceaux.sort((a, b) => a.debut - b.debut).map((m) => m.n);
   }
 
@@ -252,7 +257,7 @@
   function ligneLibre(disque, z) {
     const bouton = el("button.bouton.petit.principal", { disabled: !z.possible, onclick: () => changer(disque, (x) => { x.point = z.debut_mio; x.taille = 0; }) }, "Créer pour grenOS");
     const note = z.possible ? "rien dessus" : `trop petit : grenOS demande ${gio(D.regles.minimum_mio + z.taille_mio - z.maximum)}`;
-    return el("div.in-ligne.in-libre",
+    return el("div.in-ligne.in-libre", { "data-ligne": `libre${z.debut_mio}` },
       el("i.in-point", { "data-genre": "libre" }),
       el("div.in-nom", el("b", "Espace libre"), el("small", note)),
       el("span.in-taille", gio(z.taille_mio)),
@@ -326,7 +331,7 @@
     const contient = d.partitions.some((p) => p.genre === "windows") ? "Windows ou fichiers"
       : d.partitions.length ? `${d.partitions.length} partition${d.partitions.length > 1 ? "s" : ""}`
       : d.etat === "vide" ? "Vide" : "Données";
-    return el("button.in-disque", { "aria-pressed": String(d.dev === D.choisi), onclick: () => { D.choisi = d.dev; D.compris = false; dessiner(); } },
+    return el("button.in-disque", { "aria-pressed": String(d.dev === D.choisi), onclick: () => { D.choisi = d.dev; D.compris = false; D.montre = ""; dessiner(); } },
       svg("disque"),
       el("span", el("b", d.modele), el("small", `${gio(d.taille_mio)} · ${d.sorte}`), el("small", contient)));
   }
@@ -347,7 +352,7 @@
     N.barre = el("div.in-barre", {}, segments(disque, c));
     const raison = disque.raison && !c.effacer ? el("p.in-avis", disque.raison) : null;
     return el("section.in-detail",
-      el("div.in-detail-tete",
+      el("div.in-detail-tete", { "data-ligne": "tout" },
         el("div.in-titre", el("h2", disque.modele), el("p.note", `${gio(disque.taille_mio)} · ${disque.sorte}`)),
         [tout]),
       N.barre,
@@ -357,6 +362,12 @@
 
   function etatDisque(disque, c) {
     if (!disque) return "Choisis le disque où installer grenOS.";
+    const montree = c.restent.find((p) => p.dev === D.montre);
+    if (montree) {
+      return disque.etat === "gpt"
+        ? `${montree.nom}, ${gio(montree.taille_mio)} : ses choix sont sur la ligne surlignée.`
+        : disque.raison;
+    }
     if (!c.creation) {
       if (c.zones.some((z) => z.possible)) return "Clique « Créer pour grenOS » sur l'espace libre.";
       // Jamais « supprime » devant Windows : ce moteur ne sait pas réduire
@@ -573,7 +584,9 @@
     if (apres) {
       apres.scrollTop = defile;
       // La taille qu'on vient de faire apparaître ne reste pas sous le bord.
-      apres.querySelector('[data-ligne="grenos"]')?.scrollIntoView({ block: "nearest" });
+      const montree = D.montre && N.corps.querySelector(`[data-ligne="${D.montre}"]`);
+      if (montree) montree.setAttribute("data-montre", "");
+      (montree || apres.querySelector('[data-ligne="grenos"]'))?.scrollIntoView({ block: "nearest" });
     }
     if (page.apres) page.apres();
   }
