@@ -4,6 +4,45 @@
 > le travail lit d'abord ce fichier, puis `CLAUDE.md` (local, RÈGLE N°1 :
 > plug and play pour un non-développeur).
 
+## 0000. EN COURS — 22 novembre au soir : le disque installé démarre droit
+
+Grenofar, 19 h, grenOS installé sur son Samsung : « dans le BIOS […] on voit
+grenOS et pas debian », le menu (« enlève »), « l'OOBE apparaît pendant 3 sec
+[…] un chargement de grenOS qui ne se termine pas », « l'OOBE seulement dans
+grenOS de base installé ».
+
+- DEUX pannes, UNE cause [prouvé : reproduit sans pilote d'écran, 45053914956,
+  journal et sources de Plymouth, LightDM et du noyau] : X démarrait pendant
+  que Plymouth vivait. 1) à 10 s Plymouth rappelle le terminal 1 par-dessus
+  le lobby ; 2) au démarrage suivant, le changement de terminal se perd quand
+  Plymouth meurt : X attend, aucun bureau. `grenos-ecran-libre` (lobby et
+  lightdm) attend la MORT du processus [écrit].
+- Sur le disque de la 1719, Ctrl+Alt+F7 ramène le lobby et il se finit
+  [prouvé dans QEMU]. Au démarrage suivant : PAS mesuré ; ne rien lui promettre.
+- Lobby seulement sur le grenOS installé ; la clé ouvre son bureau, Bienvenue
+  propose d'installer (plus jamais sur une machine installée) [écrit]. La
+  machine VirtualBox publiée est une image live : elle n'a plus de lobby.
+- BIOS : « grenOS » (`grenos-demarrage`, au démarrage et à la pose de GRUB).
+  Le dossier reste EFI/debian (GRUB signé). grub-install en --no-nvram : il
+  effaçait les « debian » des autres disques et copiait fbx64 (écran bleu au
+  chemin de secours) [écrit]. Une ligne « UEFI OS » (chemin de secours, nommée
+  par la carte mère) peut rester à côté [à voir sur son PC].
+- Ni menu ni texte de GRUB, ligne du noyau de la clé [écrit]. Windows : Fin
+  de session › « Redémarrer sous Windows » (BootNext, une fois) [écrit].
+- « Une erreur EVO » : ligne exacte PAS revue. Son journal a une ligne du
+  noyau « Samsung SSD 860 EVO […] applying quirks » (un avis, pas une panne).
+  Le disque installé n'avait que « quiet splash » ; il a maintenant les
+  silences de la clé [écrit]. Si elle revient : lui demander une photo.
+- Preuves : cle.yml `demarrage-installe` (neuf ; mise à jour de la 1719 avec
+  mot de passe ; Windows par la vraie souris), installation-fenetre, puis
+  construction complète SANS publication [à faire : runs 45067830100 et
+  45067829927].
+- [à faire, dans l'ordre] 1. les deux runs verts, captures regardées ;
+  2. SON accord pour publier (tout claude/suite, barre cliquable comprise) ;
+  3. l'image publiée jugée nue ; 4. la clé, avec son accord ; 5. réparer son
+  disque par mise à jour si c'est prouvé, sinon réinstaller (il perd alors
+  ce grenOS-là : son choix).
+
 ## 000. EN COURS — 22 novembre : NOTRE installateur, toutes ses pages
 
 Grenofar : « refais le système de partition, des fois c'est pas cliquable

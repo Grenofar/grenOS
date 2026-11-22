@@ -11,7 +11,7 @@
 #
 # Au redémarrage (reboot.target, pas à l'extinction), on demande donc au
 # micrologiciel UEFI de reprendre UNE fois l'entrée qui a démarré grenOS :
-# BootNext = BootCurrent. La clé si on vient de la clé, « debian » si on
+# BootNext = BootCurrent. La clé si on vient de la clé, « grenOS » si on
 # vient du disque. Sans clé branchée, l'entrée n'existe plus et la carte mère
 # reprend son ordre : rien de forcé.
 #
