@@ -30,7 +30,7 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
 - Calamares reste en secours (`grenos-installer --secours`) ET pour les PC
   démarrés en BIOS : notre moteur n'installe qu'en UEFI. Le recul a été vu
   sur la capture de l'image complète (45020774130), avant publication
-  [écrit ; la construction exige la fenêtre de Calamares en BIOS].
+  [prouvé : sa fenêtre exigée et vue en BIOS, 45039267660 et 45043924806].
   [à faire] installer en BIOS avec notre installateur.
 - Par la vraie fenêtre [prouvé : cle.yml 45016476457 — sept pages sous
   WebKitGTK (captures regardées), installé, Alt+F4 sans effet en pleine copie,
@@ -48,22 +48,34 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
   `persistence-storage=filesystem` (45019134134), rien ne change. La clé
   publiée 2146 a encore le défaut. La persistance elle-même : jugée par la
   prochaine construction (« persistance : active », retour au 2e démarrage).
-- [à faire, dans l'ordre] 1. publication, avec l'accord de Grenofar (push sur
-  main) ; 2. cle.yml sur la version publiée ; 3. la clé ; 4. vu sur son PC
-  (RTX 5060, sa carte mère, mot de passe sur la clé → fenêtre polkit).
+- **PUBLIÉE : linux-20261122-1719** (main 55c5cb5, 15 commits, construction
+  45043924806, paquets 1.0.202611221636), avec son accord du 22 au soir.
+  [prouvé sur l'image publiée SEULE, sans couche du dépôt : cle.yml
+  45049086586 — souris, 25 Gio, Windows au menu et intact, zéro montage en
+  écriture au démarrage, disque démarré en Secure Boot jusqu'au bureau].
+- **Sa clé F: porte la 1719** [prouvé : relue fichier par fichier contre
+  sha256sum.txt ; mode simple et rapports identiques].
+- [à faire, dans l'ordre] 1. vu sur son PC : RTX 5060, sa carte mère repart-
+  elle sur le disque après l'installation ?, mot de passe jusqu'à l'écran de
+  connexion, fenêtre polkit ; 2. lire le rapport que la clé aura écrit ;
+  3. publier la barre cliquable et l'essai « image nue » (claude/suite, PAS
+  publiés) : demander son accord, et passer d'abord une construction
+  complète sur une branche (sur main, catalogue et dépôt APT partent AVANT
+  les essais de l'image).
 - CAUSE du « pas cliquable » [prouvé : rapport 20261122-094033 de sa clé, lu
   le 22 au soir, et ChoicePage.cpp de Calamares 3.3.14] : quatre clics sur la
   partition de 218 Gio dans la barre (« Clicked row 2 »), ignorés, car
   Calamares met la barre en NoSelection tant qu'aucun choix n'est fait
   au-dessus. Rien ne faisait attendre : les disques étaient lus en 1 s.
   Chez nous la barre ignorait aussi ces clics : elle surligne désormais la
-  ligne cliquée [écrit, vu dans l'aperçu ; PAS dans les 15 commits publiés
-  avec l'accord du 22 au soir].
+  ligne cliquée [prouvé sous WebKitGTK : 45044025025, capture regardée ;
+  PAS dans la 1719].
 - L'écriture de la clé sur les disques [prouvé SUR SON PC] : même rapport,
   sdb1, sdb2 et sdb3 montées r/w à 18 s, avant le bureau.
-- Place minimale ramenée à celle de Calamares : 15 Gio au lieu de 20,5 [écrit].
+- Place minimale ramenée à celle de Calamares : 15 Gio au lieu de 20,5
+  [prouvé : installé sur 15 Gio et démarré en Secure Boot, 45040347252].
 - Windows d'un autre disque dans le menu du disque installé (os-prober, menu
-  5 s) : jugé par installation-fenetre [écrit].
+  5 s) [prouvé : 45040347252 et 45049086586, sur un faux Windows].
 - Aussi en moins que Calamares : 16 claviers seulement, nom du PC fixe
   (« grenos »), un disque MBR ne se prend qu'en entier.
 - Ce que Calamares offrait et que notre installateur n'a PAS : chiffrement
