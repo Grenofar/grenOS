@@ -41,16 +41,23 @@ grenOS de base installé ».
   n'en coupait qu'une ; 40 s de retard sans réseau, des centaines de Mo avec
   [prouvé : journal de 45053914956]. Les trois coupées, garde à la
   construction, essai-antivirus 10 cas [écrit].
-- Premier passage, cle.yml 45067830100 [prouvé] : parcours entier par la
-  fenêtre, clé sans lobby, micrologiciel qui démarre « grenOS », lobby du
-  disque, bureau ; mise à jour de la 1719 : « debian » remplacé par grenOS.
-  ROUGE : le lobby sans pilote d'écran (point 2 ci-dessus), corrigé depuis
-  [à faire : le repasser, puis une construction complète SANS publication].
-- [à faire, dans l'ordre] 1. les deux runs verts, captures regardées ;
-  2. SON accord pour publier (tout claude/suite, barre cliquable comprise) ;
-  3. l'image publiée jugée nue ; 4. la clé, avec son accord ; 5. réparer son
-  disque par mise à jour si c'est prouvé, sinon réinstaller (il perd alors
-  ce grenOS-là : son choix).
+- PROUVÉ, cle.yml 45072143683 (9 essais verts, commit d7ae3bd), sans pilote
+  d'écran et en Secure Boot, sur un disque neuf ET sur la 1719 mise à jour
+  par nos paquets (avec mot de passe) : aucun menu ni texte à l'écran
+  (captures regardées), lobby 25 s à l'écran puis fini, « grenOS » au
+  micrologiciel et plus de « debian », bureau aux deux démarrages, aucune
+  erreur de Secure Boot, antivirus muet, démarrage complet en 3 s sans
+  réseau, « Redémarrer sous Windows » à la souris : le micrologiciel essaie
+  Windows une fois, puis rouvre grenOS. Et la fenêtre d'installation entière
+  (clé sans lobby, 12 écrans sur le disque, bureau).
+- [à faire, dans l'ordre, accord de Grenofar du 22 à 22 h 14 : « publie si
+  tout est vert », Samsung effacé une fois la clé prête] 1. construction
+  complète verte (45072143479) ; 2. publier ; 3. image publiée jugée nue ;
+  4. clé F: écrite et relue ; 5. réveil de 6 h 30 (tâche « grenOS - reveil
+  6h30 », %LOCALAPPDATA%\grenos-reveil) : il ne sonne que si la clé est prête
+  (cle-prete.txt), et ouvre alors l'autorisation Windows pour effacer le
+  Samsung ; 6. vu sur son PC : BIOS, lobby, bureau, Windows par Fin de
+  session, « UEFI OS » éventuel à côté de « grenOS ».
 
 ## 000. EN COURS — 22 novembre : NOTRE installateur, toutes ses pages
 
