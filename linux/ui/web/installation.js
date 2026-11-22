@@ -706,10 +706,8 @@
   N.retour = el("button.bouton.discret", { onclick: reculer }, svg("retour"), "Retour");
   N.etat = el("p.in-resume", { role: "status" });
   N.suiteTexte = el("span");
-  // Un double-clic ne vaut qu'un clic : il sautait une page, et au compte il
-  // lançait l'installation sans que le résumé soit lu.
   N.suite = el("button.bouton.principal", {
-    onclick: (e) => { if (e.detail <= 1) avancer(); },
+    onclick: avancer,
     // Au résumé, la souris ne lui donne jamais le focus : le second appui
     // d'un double-clic le lui rendait, et Entrée installait. Tab, lui, reste.
     onmousedown: (e) => { if (D.etape === "resume") e.preventDefault(); },
@@ -718,6 +716,23 @@
   document.body.append(aurore(), el("div.in-page",
     el("header.tete", el("span.in-logo", svg("marque")), el("div", el("h1", "Installer grenOS"), N.sous)),
     N.fil, N.corps, N.pied));
+
+  // UN DOUBLE-CLIC NE VAUT QU'UN CLIC, partout (22 novembre, reproduit). Chaque
+  // geste redessine : sous le pointeur, « Supprimer » devient « Garder » et
+  // le second clic annulait le premier (un bouton qui semble mort) ; au
+  // compte, il tombait sur « Installer ». Le temps et la place comptent aussi,
+  // au cas où le moteur web recompterait à 1 sur le bouton redessiné.
+  let dernierClic = { quand: -1e9, x: 0, y: 0 };
+  document.addEventListener("click", (e) => {
+    if (!e.detail || !(e.clientX || e.clientY) || !e.target.closest?.("button")) return;
+    const avant = dernierClic;
+    dernierClic = { quand: e.timeStamp, x: e.clientX, y: e.clientY };
+    const proche = Math.abs(e.clientX - avant.x) < 6 && Math.abs(e.clientY - avant.y) < 6;
+    if (e.detail > 1 || (proche && e.timeStamp - avant.quand < 350)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 
   // Entrée continue — jamais au résumé : on n'efface pas un disque d'une
   // touche tenue trop longtemps.

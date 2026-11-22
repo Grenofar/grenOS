@@ -18,12 +18,17 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
   dans l'aperçu Windows, pas encore sous WebKitGTK].
 - Moteur : tout est vérifié avant la première écriture ; la clé et le disque
   du système ne sont jamais proposés [écrit ; essai-installation-moteur.py
-  40 cas, essai-installation-ecran.py 20000 tirages].
+  40 cas, essai-installation-ecran.py 20000 tirages] ; de bout en bout sur
+  disques virtuels [prouvé : cle.yml 45014857052 — le disque démarre seul en
+  Secure Boot jusqu'à l'assistant ; faux Windows et partition gardée intacts].
+- Un double-clic s'annulait (« Supprimer » redevenait « Garder ») et, au
+  compte, lançait l'installation ; Entrée au résumé aussi. Reproduit dans
+  l'aperçu avec de vrais gestes, corrigé, rejoué [écrit].
 - L'assistant du disque installé ne redemande ni langue, ni clavier, ni
   compte, et n'efface pas le mot de passe [écrit ; essais Rust].
 - Calamares reste en secours : `grenos-installer --secours`.
-- [à faire, dans l'ordre] 1. cle.yml `installation-grenos` vert (vrai moteur,
-  disques virtuels, Secure Boot) ; 2. la fenêtre vue sous WebKitGTK ;
+- [à faire, dans l'ordre] 1. cle.yml `installation-fenetre` vert (le parcours
+  entier sous WebKitGTK, jusqu'au bureau du disque) ; 2. regarder ses captures ;
   3. publication, avec l'accord de Grenofar ; 4. la clé ; 5. vu sur son PC.
 - La cause du « il fallait attendre » de Calamares n'a PAS été trouvée dans
   un journal : l'écran est remplacé, la panne n'est pas expliquée.
