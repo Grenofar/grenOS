@@ -49,6 +49,9 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
   (RTX 5060, sa carte mère, mot de passe sur la clé → fenêtre polkit).
 - La cause du « il fallait attendre » de Calamares n'a PAS été trouvée dans
   un journal : l'écran est remplacé, la panne n'est pas expliquée.
+- Ce que Calamares offrait et que notre installateur n'a PAS : chiffrement
+  du disque, partition d'échange (il reste zram, la mémoire compressée),
+  choix btrfs / xfs, points de montage à la main. À dire avant de publier.
 - [à faire] réduire Windows pour installer sur le même disque : Calamares le
   proposait, notre moteur ne le sait pas. L'écran le dit et ne conseille plus
   de supprimer ; sur un PC à un seul disque plein, c'est un manque (RÈGLE N°1).
