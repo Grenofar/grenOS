@@ -27,6 +27,11 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
 - L'assistant du disque installé ne redemande ni langue, ni clavier, ni
   compte, et n'efface pas le mot de passe [écrit ; essais Rust].
 - Calamares reste en secours : `grenos-installer --secours`.
+- Par la vraie fenêtre [prouvé jusqu'à « grenOS est installé » : cle.yml
+  45015327277, captures regardées des pages sous WebKitGTK ; Alt+F4 en pleine
+  copie ne ferme rien]. Le redémarrage y est revenu sur la clé : `bootindex`
+  de QEMU fait supprimer par OVMF l'entrée du disque (lu dans
+  QemuBootOrderLib). Machine d'essai refaite [écrit, pas encore vert].
 - [à faire, dans l'ordre] 1. cle.yml `installation-fenetre` vert (le parcours
   entier sous WebKitGTK, jusqu'au bureau du disque) ; 2. regarder ses captures ;
   3. publication, avec l'accord de Grenofar ; 4. la clé ; 5. vu sur son PC.

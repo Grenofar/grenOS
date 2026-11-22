@@ -76,7 +76,47 @@ ranger() {
 trap ranger EXIT
 
 etape "la cle FAT32 et un disque vide de 32 Gio"
-bash "$ICI/cle-fat.sh" "$ISO" "$COUCHE" "$OUT/cle.img"
+# LA CLÉ PRIORITAIRE, SANS `bootindex` (22 novembre, run 45015327277). Avec
+# lui, OVMF réécrit l'ordre à chaque démarrage et SUPPRIME toute entrée HD()
+# (QemuBootOrderLib : « drop HD() », puis PruneBootVariables) : l'entrée du
+# disque disparaissait avant que BootNext la lise, ce qu'aucun PC ne fait.
+# À la place, un service d'essai remet la clé EN TÊTE de l'ordre juste avant
+# que grenOS pose son BootNext : sans lui, le PC repartirait sur la clé.
+PLUS="$OUT/couche"
+rm -rf "$PLUS"
+unsquashfs -q -n -d "$PLUS" "$COUCHE" > /dev/null
+S="$PLUS/etc/systemd/system"
+mkdir -p "$PLUS/usr/lib/grenos-essai" "$S/reboot.target.wants"
+cat > "$PLUS/usr/lib/grenos-essai/cle-en-tete" <<'EOF'
+#!/bin/sh
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+etat=$(efibootmgr) || exit 0
+cle=$(printf '%s
+' "$etat" | sed -n 's/^BootCurrent: *//p')
+ordre=$cle
+for n in $(printf '%s
+' "$etat" | sed -n 's/^BootOrder: *//p' | tr ',' ' '); do
+    [ "$n" = "$cle" ] || ordre="$ordre,$n"
+done
+efibootmgr -q -o "$ordre" && echo "grenos: essai : la cle en tete de l ordre ($ordre)" > /dev/ttyS0
+EOF
+chmod 0755 "$PLUS/usr/lib/grenos-essai/cle-en-tete"
+cat > "$S/grenos-essai-priorite.service" <<'EOF'
+[Unit]
+Description=essai : la cle en tete de l ordre de demarrage
+DefaultDependencies=no
+ConditionKernelCommandLine=boot=live
+Before=grenos-revenir-ici.service systemd-reboot.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos-essai/cle-en-tete
+TimeoutStartSec=20
+EOF
+ln -sf ../grenos-essai-priorite.service "$S/reboot.target.wants/grenos-essai-priorite.service"
+mksquashfs "$PLUS" "$OUT/couche.squashfs" -all-root -comp xz -noappend -quiet
+rm -rf "$PLUS"
+bash "$ICI/cle-fat.sh" "$ISO" "$OUT/couche.squashfs" "$OUT/cle.img"
 truncate -s 32G "$DISQUE"
 cp /usr/share/OVMF/OVMF_VARS_4M.ms.fd "$OUT/vars.fd"
 ACCEL=()
@@ -87,10 +127,10 @@ qemu-system-x86_64 "${ACCEL[@]}" -machine q35,smm=on -global driver=cfi.pflash01
     -drive if=pflash,format=raw,file="$OUT/vars.fd" \
     -device qemu-xhci,id=xhci \
     -drive if=none,id=cle,format=raw,file="$OUT/cle.img" \
-    -device usb-storage,bus=xhci.0,drive=cle,removable=on,bootindex=0 \
+    -device usb-storage,bus=xhci.0,drive=cle,removable=on \
     -drive if=none,id=ssd,format=raw,file="$DISQUE" -device ide-hd,drive=ssd,bus=ide.0 \
     -device usb-tablet,bus=xhci.0 \
-    -vga std -display none \
+    -nic none -vga std -display none \
     -serial file:"$SERIE" \
     -monitor unix:"$MON",server,nowait &
 QEMU=$!
@@ -184,6 +224,9 @@ AVANT=$(vu 'premier : ecran bienvenue')
 SESSIONS=$(vu 'session de bureau ouverte')
 touche tab
 touche ret
+attendre 'grenos: essai : la cle en tete de l ordre' 120
+# La ligne du micrologiciel lui-même : il démarre l'entrée du disque.
+attendre 'BdsDxe: starting Boot[0-9A-F]* "debian"' 120
 attendre 'premier : ecran bienvenue' 420 $(( AVANT + 1 ))
 sleep 4
 voir 8-assistant-du-disque
