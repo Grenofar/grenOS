@@ -154,7 +154,7 @@ jobs:
       - name: L ecran et le moteur font le meme calcul, 20000 tirages
         run: python3 linux/tools/essai-installation-ecran.py
       # 22 novembre : sans ce mot, la cle monte en ECRITURE chaque partition
-      # de chaque disque au demarrage, Windows compris (live-boot).
+      # de chaque disque au demarrage (live-boot ; prouve sur ext4).
       - name: La cle n ecrit pas sur les disques du PC en demarrant
         run: |
           grep -q -e '--bootappend-live ".* persistence-storage=filesystem ' linux/auto/config || {

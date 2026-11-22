@@ -14,35 +14,39 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
   seulement [prouvé : relu depuis Windows, aucune partition, C: et D: intacts].
 - « Installer grenOS » ouvre notre installateur (grenos-ui, page
   « installation », 7 pages) ; moteur root `usr/lib/grenos/grenos-installation`.
-  Les disques sont lus une fois, chaque clic n'est qu'un calcul [écrit ; vu
-  dans l'aperçu Windows, pas encore sous WebKitGTK].
+  Les disques sont lus une fois, chaque clic n'est qu'un calcul [prouvé
+  sous WebKitGTK en CI, voir plus bas ; jamais vu sur son PC].
 - Moteur : tout est vérifié avant la première écriture ; la clé et le disque
-  du système ne sont jamais proposés [écrit ; essai-installation-moteur.py
+  du système ne sont jamais proposés [prouvé en CI ; essai-installation-moteur.py
   40 cas, essai-installation-ecran.py 20000 tirages] ; de bout en bout sur
   disques virtuels [prouvé : cle.yml 45014857052 — le disque démarre seul en
   Secure Boot jusqu'à l'assistant ; faux Windows et partition gardée intacts].
 - Un double-clic s'annulait (« Supprimer » redevenait « Garder ») et, au
   compte, lançait l'installation ; Entrée au résumé aussi. Reproduit dans
-  l'aperçu avec de vrais gestes, corrigé, rejoué [écrit].
+  l'aperçu avec de vrais gestes, corrigé, rejoué [prouvé : 45019134134].
 - L'assistant du disque installé ne redemande ni langue, ni clavier, ni
-  compte, et n'efface pas le mot de passe [écrit ; essais Rust].
+  compte [prouvé : 45019134134] ; n'efface pas le mot de passe [écrit ;
+  essais Rust, jamais démarré jusqu'à la connexion avec un mot de passe].
 - Calamares reste en secours : `grenos-installer --secours`.
 - Par la vraie fenêtre [prouvé : cle.yml 45016476457 — sept pages sous
   WebKitGTK (captures regardées), installé, Alt+F4 sans effet en pleine copie,
   redémarré sur le disque avec la clé branchée et en tête de l'ordre, 12
   écrans d'assistant au lieu de 15, bureau ouvert, Secure Boot ; sans réseau].
   `bootindex` de QEMU faussait le redémarrage (OVMF efface l'entrée du disque).
-- Le même parcours À LA SOURIS, sur le scénario demandé (supprimer, créer,
-  25 Gio, double-clics) [écrit, pas encore vert].
-- L'assistant du disque installé accueille en français : l'écran de langue y
-  est sauté, l'anglais n'y menait plus à rien [écrit, vu dans l'aperçu].
-- [à faire, dans l'ordre] 1. l'essai à la souris vert ; 2. publication, avec
-  l'accord de Grenofar ; 3. la clé ; 4. vu sur son PC (RTX 5060, sa carte mère).
-- GRAVE, d'avant l'installateur, trouvé par son essai (cle.yml 45017904727) :
-  la clé montait EN ÉCRITURE chaque partition de chaque disque au démarrage
-  (live-boot, `persistence` cherche aussi des fichiers) [prouvé sur ext4 ;
-  lu dans live-boot pour le reste]. `persistence-storage=filesystem`
-  [écrit ; essai avec faux Windows EFI + NTFS, sans puis avec, en cours].
+- À LA SOURIS, sur le scénario demandé [prouvé : cle.yml 45019134134 —
+  supprimer, créer, 25 Gio, double-clics, table exacte ; les deux partitions
+  gardées et un faux Windows (EFI + NTFS) identiques à l'octet près ; accueil
+  du disque installé en français].
+- GRAVE, d'avant l'installateur, trouvé par cet essai : la clé montait en
+  écriture les partitions des disques du PC à chaque démarrage (live-boot,
+  `persistence` cherche aussi des fichiers). [prouvé] sans le correctif
+  (45019065101) les partitions Linux changent, le faux Windows non ; avec
+  `persistence-storage=filesystem` (45019134134), rien ne change. La clé
+  publiée 2146 a encore le défaut. La persistance elle-même : jugée par la
+  prochaine construction (« persistance : active », retour au 2e démarrage).
+- [à faire, dans l'ordre] 1. publication, avec l'accord de Grenofar (push sur
+  main) ; 2. cle.yml sur la version publiée ; 3. la clé ; 4. vu sur son PC
+  (RTX 5060, sa carte mère, mot de passe sur la clé → fenêtre polkit).
 - La cause du « il fallait attendre » de Calamares n'a PAS été trouvée dans
   un journal : l'écran est remplacé, la panne n'est pas expliquée.
 - [à faire] réduire Windows pour installer sur le même disque : Calamares le

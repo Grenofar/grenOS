@@ -40,7 +40,8 @@ fi
 # `persistence-storage=filesystem` (22 novembre) — NE JAMAIS L'ENLEVER. Sans
 # lui, live-boot cherche aussi la persistance dans des FICHIERS : il monte EN
 # ÉCRITURE chaque partition de chaque disque, à chaque démarrage de la clé,
-# Windows compris (9990-misc-helpers.sh, probe_for_file_name). Trouvé par
+# (9990-misc-helpers.sh, probe_for_file_name). Prouvé sur ext4 : des octets
+# changeaient ; le faux Windows (EFI, NTFS), lui, restait intact. Trouvé par
 # l'essai de l'installateur : une partition « gardée » avait changé d'octets
 # (cle.yml 45017904727). Avec lui, seule une partition nommée « persistence »
 # (linux/tools/make-disk.sh) est montée.
