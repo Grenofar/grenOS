@@ -46,6 +46,8 @@
     const p = R.parcours;
     return infos.donnees.ecrans
       .filter((e) => e.parcours.includes(p) && CONSTRUITS.includes(e.cle))
+      // Déjà choisis dans l'installateur (22 novembre) : on ne les redemande pas.
+      .filter((e) => !(infos.installe && ["langue", "clavier", "compte"].includes(e.cle)))
       // « Pilotes » : seulement sur grenOS installé, avec une carte NVIDIA
       // sans le pilote officiel (premier.rs le décide). Et PAS de MokManager
       // hors du parcours Dev (Grenofar, 20 novembre : « pas de réglage
@@ -547,7 +549,7 @@
       complets: "Complets", equilibres: "Équilibrés", performance: "Performance max" };
     const lignes = [
       ["compte", "Compte", `${R.compte}@${infos.machine}${mdp.actif && mdp.mot ? " · mot de passe" : ""}`],
-      ["clavier", "Clavier", c.nom],
+      ["clavier", "Clavier", infos.installe ? `${c.nom} · choisi à l'installation` : c.nom],
       ["palette", "Apparence", `${MOTS[R.apparence]} · ${R.accent} · effets ${MOTS[R.effets].toLowerCase()}`],
       ["bureau", "Usage", usage],
       ["oeil", "Télémétrie", MOTS[R.telemetrie]],
@@ -608,7 +610,7 @@
       fini = false;
       D.suite.disabled = false;
       D.retour.disabled = false;
-      aller("compte");
+      aller(infos.installe ? "final" : "compte");
       D.erreur.textContent = String(e);
       return;
     }
@@ -652,6 +654,15 @@
     habiller({ theme: "nuit", accent: R.accent, effets: R.effets });
     dessinerCadre();
     infos = await api.appeler("premier_infos");
+    if (infos.installe) {
+      const i = infos.installe;
+      R.compte = i.login;
+      R.nom_affiche = i.nom;
+      R.clavier = i.clavier || R.clavier;
+      let n = infos.donnees.claviers.findIndex((c) => c.disposition === i.clavier && c.variante === i.variante && c.fuseau === i.fuseau);
+      if (n < 0) n = infos.donnees.claviers.findIndex((c) => c.disposition === i.clavier && c.variante === i.variante);
+      R.clavier_index = String(Math.max(0, n));
+    }
     aller("bienvenue");
     api.appeler("premier_pret");
     // Une seconde d'images : moins de 30, la machine dessine au processeur et

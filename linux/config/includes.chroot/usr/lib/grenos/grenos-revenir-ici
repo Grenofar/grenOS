@@ -25,14 +25,18 @@
 # alors la première entrée « debian » de l'ordre de démarrage — celle que
 # grub-install vient de poser en tête.
 #
-# GRENOS_EFIBOOTMGR, GRENOS_EFIVARS, GRENOS_CALAMARES_JOURNAL : pour les
-# essais seulement (linux/tools/essai-revenir-ici.sh).
+# Notre installateur (22 novembre) pose, lui, une marque dans /run une fois
+# tout écrit et vérifié : /run/grenos/installation-reussie.
+#
+# GRENOS_EFIBOOTMGR, GRENOS_EFIVARS, GRENOS_CALAMARES_JOURNAL, GRENOS_MARQUE :
+# pour les essais seulement (linux/tools/essai-revenir-ici.sh).
 
 set -u
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 EFIBOOTMGR=${GRENOS_EFIBOOTMGR:-efibootmgr}
 EFIVARS=${GRENOS_EFIVARS:-/sys/firmware/efi/efivars}
 JOURNAL_CALAMARES=${GRENOS_CALAMARES_JOURNAL:-/root/.cache/calamares/session.log}
+MARQUE=${GRENOS_MARQUE:-/run/grenos/installation-reussie}
 
 dire() {
     echo "grenos: redemarrage : $*"
@@ -52,7 +56,7 @@ if printf '%s\n' "$etat" | grep -q '^BootNext:'; then
     dire "un prochain demarrage est deja choisi ($(printf '%s\n' "$etat" | sed -n 's/^BootNext: *//p')), on n y touche pas"
     exit 0
 fi
-if grep -q 'completion: succeeded' "$JOURNAL_CALAMARES" 2>/dev/null; then
+if [ -e "$MARQUE" ] || grep -q 'completion: succeeded' "$JOURNAL_CALAMARES" 2>/dev/null; then
     for n in $(printf '%s\n' "$etat" | sed -n 's/^BootOrder: *//p' | tr ',' ' '); do
         nom=$(printf '%s\n' "$etat" | sed -n "s/^Boot$n[* ] *//p" | cut -f1 | head -n 1)
         [ "$nom" = debian ] || continue

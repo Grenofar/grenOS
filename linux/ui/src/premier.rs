@@ -86,7 +86,9 @@ fn existe(login: &str) -> bool {
     reussit("getent", &["passwd", login])
 }
 
-pub fn probleme(login: &str) -> Option<&'static str> {
+/// Ce qui cloche dans le nom lui-même (sans regarder cette machine) : la
+/// règle que l'installateur partage avec l'assistant.
+pub fn probleme_de_forme(login: &str) -> Option<&'static str> {
     if login.is_empty() {
         return Some("Un nom, avec au moins une lettre.");
     }
@@ -96,6 +98,13 @@ pub fn probleme(login: &str) -> Option<&'static str> {
     if RESERVES.contains(&login) {
         return Some("Ce nom est déjà pris par le système, choisis-en un autre.");
     }
+    None
+}
+
+pub fn probleme(login: &str) -> Option<&'static str> {
+    if let Some(souci) = probleme_de_forme(login) {
+        return Some(souci);
+    }
     if existe(login) {
         return Some("Ce compte existe déjà sur cette machine.");
     }
@@ -104,6 +113,62 @@ pub fn probleme(login: &str) -> Option<&'static str> {
 
 fn compte_actuel() -> String {
     sortie("getent", &["passwd", "1000"]).split(':').next().unwrap_or("").trim().to_string()
+}
+
+// ------------------------------------------------- ce que l'installateur a posé
+
+const PREINSTALLATION: &str = "/etc/grenos/preinstallation";
+
+/// Compte, clavier et fuseau choisis dans l'installateur (22 novembre) : le
+/// compte existe déjà, avec son mot de passe. L'assistant ne les redemande
+/// pas, et surtout ne passe pas par `appliquer`, qui finit par `passwd -d`.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Preinstalle {
+    pub login: String,
+    pub nom: String,
+    pub clavier: String,
+    pub variante: String,
+    pub fuseau: String,
+}
+
+pub fn preinstallation_de(texte: &str) -> Option<Preinstalle> {
+    let v = |cle: &str| {
+        texte
+            .lines()
+            .filter_map(|l| l.trim().split_once('='))
+            .find(|(c, _)| *c == cle)
+            .map(|(_, v)| v.trim().to_string())
+            .unwrap_or_default()
+    };
+    let login = v("login");
+    let forme = login.starts_with(|c: char| c.is_ascii_lowercase())
+        && login.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    forme.then(|| Preinstalle {
+        nom: if v("nom").is_empty() { login.clone() } else { v("nom") },
+        clavier: v("clavier"),
+        variante: v("variante"),
+        fuseau: v("fuseau"),
+        login,
+    })
+}
+
+fn preinstalle() -> Option<Preinstalle> {
+    preinstallation_de(&fs::read_to_string(PREINSTALLATION).ok()?).filter(|p| existe(&p.login))
+}
+
+/// Rien à renommer, rien à effacer : il reste à dire qui habite ici.
+fn reprendre(p: &Preinstalle) -> Result<String, String> {
+    fs::write(
+        IDENTITE,
+        format!(
+            "# Qui habite cette machine. Écrit une seule fois, au premier démarrage.\n\
+             login={}\nnom={}\nmachine={MACHINE}\nclavier={}\nvariante={}\nfuseau={}\n",
+            p.login, p.nom, p.clavier, p.variante, p.fuseau
+        ),
+    )
+    .map_err(|e| format!("La configuration n'a pas pu être gardée : {e}"))?;
+    dire("premier : compte, clavier et fuseau repris de l installation");
+    Ok(p.login.clone())
 }
 
 // ---------------------------------------------------------- l'application
@@ -396,6 +461,8 @@ pub struct Infos {
     secure_boot: String,
     secure_boot_phrase: String,
     machine: String,
+    /// Ce que l'installateur a déjà posé : ces écrans-là ne reviennent pas.
+    installe: Option<Preinstalle>,
 }
 
 #[tauri::command]
@@ -419,6 +486,7 @@ pub async fn premier_infos() -> Infos {
         secure_boot: etat.into(),
         secure_boot_phrase: mot_sur_secure_boot(etat).into(),
         machine: MACHINE.into(),
+        installe: preinstalle(),
     }
 }
 
@@ -483,9 +551,12 @@ pub async fn premier_terminer(
     mot_de_passe: Option<String>,
 ) -> Result<String, String> {
     let donnees = donnees();
+    let installe = preinstalle();
     let login = reponses.get("compte").cloned().unwrap_or_default();
-    if let Some(souci) = probleme(&login) {
-        return Err(souci.into());
+    if installe.is_none() {
+        if let Some(souci) = probleme(&login) {
+            return Err(souci.into());
+        }
     }
     let index: usize = reponses.get("clavier_index").and_then(|i| i.parse().ok()).unwrap_or(0);
     let clavier = donnees.claviers.get(index).cloned().unwrap_or_else(|| donnees.claviers[0].clone());
@@ -496,11 +567,17 @@ pub async fn premier_terminer(
     let etape = |fait: u32| {
         let _ = app.emit("premier-etape", fait);
     };
-    let retenu = appliquer(&login, affiche.trim(), &clavier);
-    if let Some(mot) = mot_de_passe.filter(|m| !m.is_empty()) {
-        let ok = poser_mot_de_passe(&retenu, &mot);
-        dire(&format!("premier : mot de passe {}", if ok { "pose" } else { "PAS pose" }));
-    }
+    let retenu = match &installe {
+        Some(p) => reprendre(p)?,
+        None => {
+            let retenu = appliquer(&login, affiche.trim(), &clavier);
+            if let Some(mot) = mot_de_passe.filter(|m| !m.is_empty()) {
+                let ok = poser_mot_de_passe(&retenu, &mot);
+                dire(&format!("premier : mot de passe {}", if ok { "pose" } else { "PAS pose" }));
+            }
+            retenu
+        }
+    };
     etape(2); // le compte, le clavier et le fuseau
     poser_apparence(&retenu, &reponses);
     etape(3);
@@ -674,6 +751,12 @@ mod essais {
         assert!(probleme("").is_some());
         assert!(probleme("1abc").is_some());
         assert!(probleme("root").is_some());
+        assert!(probleme_de_forme("root").is_some());
+        assert!(probleme_de_forme("camille").is_none());
+        let p = preinstallation_de("# note\nlogin=camille\nnom=Camille D\nclavier=ca\nvariante=eng\nfuseau=America/Montreal\n").unwrap();
+        assert_eq!((p.login.as_str(), p.nom.as_str(), p.variante.as_str()), ("camille", "Camille D", "eng"));
+        assert!(preinstallation_de("").is_none());
+        assert!(preinstallation_de("login=../root\n").is_none());
     }
 
     #[test]

@@ -23,13 +23,14 @@ done
 EOF
 chmod +x "$T/efibootmgr"
 
+MARQUE="$T/pas-de-marque"
 cas() { # titre, état (fichier), BootNext attendu (- : aucun), efivars (oui/non), [journal de Calamares]
     printf '%b' "$2" > "$T/etat"
     rm -f "$T/bootnext" "$T/calamares.log"
     [ -n "${5:-}" ] && printf '%s\n' "$5" > "$T/calamares.log"
     vars="$T/efivars"
     [ "$4" = non ] && vars="$T/absent"
-    GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$vars" GRENOS_CALAMARES_JOURNAL="$T/calamares.log" \
+    GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$vars" GRENOS_CALAMARES_JOURNAL="$T/calamares.log" GRENOS_MARQUE="$MARQUE" \
         sh "$S" > "$T/sortie" 2>&1
     obtenu=$(cat "$T/bootnext" 2>/dev/null || echo -)
     if [ "$obtenu" = "$3" ]; then
@@ -60,10 +61,15 @@ RATEE='2026-11-21 - 20:32:17 [6]:     Notification not sent; completion: failed'
 cas "installation réussie : « Redémarrer maintenant » mène au disque installé" "$APRES"       0004 oui "$REUSSIE"
 cas "installation ratée : on revient sur la clé (pour réessayer)"              "$APRES"       0003 oui "$RATEE"
 cas "installation réussie sans entrée debian : rien de forcé"                  "$SANS_DEBIAN" -    oui "$REUSSIE"
+# Notre installateur (22 novembre) : sa marque, sans journal de Calamares.
+MARQUE="$T/installation-reussie"
+echo /dev/sda > "$MARQUE"
+cas "notre installateur a réussi : le redémarrage mène au disque installé"     "$APRES"       0004 oui
+MARQUE="$T/pas-de-marque"
 
 # Le nom de l'entrée est dit dans le journal (c'est ce qu'on lira).
 printf '%b' "$CLE" > "$T/etat"; rm -f "$T/bootnext"
-GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$T/efivars" GRENOS_CALAMARES_JOURNAL="$T/aucun-journal" sh "$S" > "$T/sortie" 2>&1
+GRENOS_EFIBOOTMGR="$T/efibootmgr" GRENOS_EFIVARS="$T/efivars" GRENOS_CALAMARES_JOURNAL="$T/aucun-journal" GRENOS_MARQUE="$T/pas-de-marque" sh "$S" > "$T/sortie" 2>&1
 if grep -q 'retour a l entree 0003 (UEFI: USB DISK 2.0 PMAP, Partition 1)' "$T/sortie"; then
     echo "ok   le journal nomme l'entrée reprise"
 else
@@ -71,5 +77,5 @@ else
     fautes=$((fautes + 1))
 fi
 
-echo "revenir-ici : 9 cas, $fautes faute(s)"
+echo "revenir-ici : 10 cas, $fautes faute(s)"
 [ "$fautes" = 0 ]

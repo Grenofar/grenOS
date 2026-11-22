@@ -242,8 +242,8 @@ pub fn ouvrir_programme(nom: String) -> Result<(), String> {
         return Err(format!("« {nom} » n'est pas une application de grenOS"));
     }
     if nom == "installer" {
-        // Par le lanceur qui referme les disques ouverts (21 novembre) : un
-        // disque monté ne laisse à Calamares que le partitionnement manuel.
+        // Par le lanceur : il ouvre notre installateur (22 novembre), ou
+        // Calamares avec --secours, disques refermés d'abord (21 novembre).
         return detacher("grenos-installer", &[]);
     }
     detacher(&nom, &[])

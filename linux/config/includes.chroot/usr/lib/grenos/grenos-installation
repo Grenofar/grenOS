@@ -1,0 +1,920 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+"""Le moteur de l'installation de grenOS (22 novembre).
+
+Grenofar : « refais le système de partition, des fois ce n'est pas
+cliquable ; il fallait attendre avant de pouvoir cliquer — avec supprimer
+une partition, créer pour grenOS, et une taille en Gio qu'on change ».
+L'écran est le nôtre (grenos-ui, page « installation ») ; ce programme fait
+le travail, en root, et ne fait QUE ce que le plan dit.
+
+    grenos-installation lister              l'état des disques, en JSON
+    grenos-installation installer < plan    le plan (JSON) sur l'entrée standard
+
+TOUT SE VÉRIFIE AVANT LA PREMIÈRE ÉCRITURE. Ce programme efface des disques :
+  - un disque qui porte le système qui tourne (la clé, /, /run/live) n'est
+    jamais proposé, et jamais accepté ;
+  - chaque disque a une empreinte (modèle, série, taille, partitions). Elle
+    est relue au moment d'agir : sda devenu sdb, une partition qui a bougé
+    → arrêt, rien n'est touché ;
+  - le plan (place, taille, partition EFI) est calculé en mémoire et refusé
+    AVANT de supprimer quoi que ce soit (`calculer`, essayé sans disque par
+    linux/tools/essai-installation-moteur.py) ;
+  - un disque formaté sans table des partitions n'est pas de l'espace libre :
+    il ne se prend qu'avec « Effacer tout le disque » ;
+  - la partition EFI d'un AUTRE disque (celle de Windows, celle d'une clé —
+    la panne du 21 novembre) n'est jamais utilisée.
+
+Les étapes d'après sont celles de linux/correctif/essai-installation.sh :
+copie, machine-id, fstab, clavier, fuseau, compte (UID 1000), bootloader-
+config, GRUB, paquets de la clé, initramfs, sources. Les choix faits ici
+vont dans /etc/grenos/preinstallation : l'assistant du premier démarrage les
+reprend sans les redemander. Le mot de passe n'y est pas : il ne passe que
+par l'entrée standard, jamais par un argument, un fichier ou le journal.
+
+Lignes pour l'écran : « AVANCE <0-100> <phrase> », « ERREUR <phrase> »,
+« FINI ». L'unité du plan est le Mio ; sfdisk, lui, reçoit des SECTEURS :
+avec une unité, il réaligne sur la taille d'écriture que le disque annonce
+(33 Mo chez certains boîtiers USB), et les bornes montrées ne tiendraient plus.
+
+Réservé aux essais : GRENOS_IMAGES, GRENOS_SANS_EFI, GRENOS_SANS_NVRAM.
+"""
+
+import hashlib
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import unicodedata
+
+MIO = 1024 * 1024
+EFI_MIO = 512
+EFI_MINIMUM_MIO = 90
+EFI_LIBRE_MIO = 16
+MINIMUM_RACINE_MIO = 20 * 1024
+TROU_MINIMUM_MIO = 1024
+DISQUE_MINIMUM_MIO = 8 * 1024
+MARQUE_REUSSIE = "/run/grenos/installation-reussie"
+VERROU = "/run/grenos/installation.verrou"
+JOURNAL = "/var/log/grenos-installation.log"
+AIDES = "/usr/share/calamares/helpers"
+
+TYPE_EFI = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+TYPE_LINUX = "0fc63daf-8483-4772-8e79-3d69d8477de4"
+TYPE_MSR = "e3c9e316-0b5c-4db8-817d-f92df00215ae"
+TYPE_SECOURS_WINDOWS = "de94bba4-06d1-4d40-a16a-bfd50179d6ac"
+TYPE_SWAP = "0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"
+CONTENEURS_MBR = ("5", "f", "85")
+
+
+# Les mêmes noms refusés que l'assistant (premier.rs, RESERVES).
+RESERVES = ("root", "daemon", "bin", "sys", "sync", "nobody", "systemd", "lightdm",
+            "messagebus", "grenos", "admin", "user", "live")
+
+
+class Arret(Exception):
+    """Une raison de s'arrêter, dite telle quelle à la personne."""
+
+
+def en_essai():
+    return bool(os.environ.get("GRENOS_IMAGES"))
+
+
+def noter(texte):
+    try:
+        with open(JOURNAL, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} {texte}\n")
+    except OSError:
+        pass
+
+
+def annoncer(ligne):
+    # La fenêtre peut se fermer en route : le tube casse, l'installation,
+    # elle, va au bout (un disque à moitié écrit ne démarre pas).
+    try:
+        print(ligne, flush=True)
+    except OSError:
+        sys.stdout = open(os.devnull, "w")
+
+
+def avance(part, phrase):
+    annoncer(f"AVANCE {int(part)} {phrase}")
+    noter(f"{int(part)} % {phrase}")
+
+
+def environnement():
+    return dict(os.environ, LC_ALL="C.UTF-8", DEBIAN_FRONTEND="noninteractive",
+                PATH="/usr/sbin:/usr/bin:/sbin:/bin")
+
+
+def courir(*commande, entree=None, tolerer=False):
+    """Lance une commande ; une erreur arrête l'installation, avec sa phrase."""
+    noter("$ " + " ".join(commande))
+    flux = {"input": entree} if entree is not None else {"stdin": subprocess.DEVNULL}
+    try:
+        r = subprocess.run(list(commande), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", env=environnement(), **flux)
+    except OSError as e:
+        if tolerer:
+            return subprocess.CompletedProcess(commande, 127, "", str(e))
+        raise Arret(f"« {commande[0]} » est introuvable sur cette clé") from e
+    for sortie in (r.stdout, r.stderr):
+        if sortie and sortie.strip():
+            noter(sortie.rstrip()[-4000:])
+    if r.returncode != 0 and not tolerer:
+        detail = (r.stderr.strip() or r.stdout.strip()).splitlines()
+        raise Arret(f"« {commande[0]} » a échoué : {detail[-1] if detail else r.returncode}")
+    return r
+
+
+# -------------------------------------------------- l'état des disques (pur)
+
+def porte_le_systeme(bloc):
+    """Ce disque porte-t-il le système qui tourne, ou la clé ?"""
+    for m in bloc.get("mountpoints") or []:
+        if m and (m in ("/", "/usr", "/var", "/home", "/boot", "/boot/efi")
+                  or m.startswith(("/run/live/", "/usr/lib/live/mount/", "/lib/live/mount/"))):
+            return True
+    return any(porte_le_systeme(e) for e in bloc.get("children") or [])
+
+
+def volume_ouvert(bloc):
+    """Un volume chiffré, LVM ou RAID ouvert dessus."""
+    for e in bloc.get("children") or []:
+        if e.get("type") != "part" or e.get("children"):
+            return True
+    return False
+
+
+def genre(type_partition, info):
+    fs = (info.get("fstype") or "").lower()
+    etiquette = (info.get("label") or "").strip()
+    suite = f" — {etiquette}" if etiquette else ""
+    if type_partition in (TYPE_EFI, "ef"):
+        return "efi", "Démarrage (EFI)"
+    if type_partition == TYPE_MSR:
+        return "microsoft", "Réservée à Windows"
+    if type_partition == TYPE_SECOURS_WINDOWS:
+        return "microsoft", "Récupération de Windows"
+    if fs == "bitlocker":
+        return "windows", "Windows chiffré (BitLocker)"
+    if fs == "ntfs":
+        return "windows", f"Windows ou fichiers (NTFS){suite}"
+    if fs == "ext4" and etiquette.lower() == "grenos":
+        return "grenos", "grenOS"
+    if fs == "swap" or type_partition == TYPE_SWAP:
+        return "swap", "Mémoire d'échange"
+    if fs == "crypto_luks":
+        return "linux", "Linux chiffré"
+    if fs in ("ext4", "ext3", "ext2", "btrfs", "xfs", "f2fs"):
+        return "linux", f"Linux ({fs}){suite}"
+    if fs in ("vfat", "exfat"):
+        return "donnees", f"Fichiers ({fs}){suite}"
+    return "autre", f"Partition{suite}"
+
+
+def trous(premier, fin, partitions):
+    """Les espaces libres d'au moins 1 Gio, en Mio. Le même calcul est fait
+    par la page (installation.js) quand elle montre une suppression."""
+    libres = []
+    position = premier
+    for p in sorted(partitions, key=lambda p: p["debut_mio"]):
+        if p["debut_mio"] - position >= TROU_MINIMUM_MIO:
+            libres.append({"debut_mio": position, "taille_mio": p["debut_mio"] - position})
+        position = max(position, p["fin_mio"])
+    if fin - position >= TROU_MINIMUM_MIO:
+        libres.append({"debut_mio": position, "taille_mio": fin - position})
+    return libres
+
+
+def decrire(bloc, table):
+    """Un disque de lsblk et sa table (sfdisk -J) → ce que l'écran montre."""
+    taille = int(bloc.get("size") or 0) // MIO
+    pttype = (bloc.get("pttype") or "").lower()
+    enfants = {e.get("path"): e for e in bloc.get("children") or []}
+    premier, fin = 1, taille - 1
+    partitions = []
+    if table:
+        secteur = int(table.get("sectorsize") or 512)
+        if table.get("label") == "gpt" and "firstlba" in table and "lastlba" in table:
+            premier = max(1, -(-int(table["firstlba"]) * secteur // MIO))
+            fin = min(taille - 1, (int(table["lastlba"]) + 1) * secteur // MIO)
+        for p in table.get("partitions") or []:
+            sorte = str(p.get("type", "")).lower()
+            if sorte in CONTENEURS_MBR:
+                continue
+            debut = int(p["start"]) * secteur
+            bout = debut + int(p["size"]) * secteur
+            info = enfants.get(p["node"], {})
+            g, nom = genre(sorte, info)
+            partitions.append({
+                "dev": p["node"],
+                "debut_mio": debut // MIO,
+                "fin_mio": -(-bout // MIO),
+                "taille_mio": (bout - debut) // MIO,
+                "fs": info.get("fstype") or "",
+                "genre": g,
+                "nom": nom,
+                "efi_utilisable": g == "efi" and (info.get("fstype") or "") == "vfat"
+                and (bout - debut) // MIO >= EFI_MINIMUM_MIO,
+                "exact": [debut, bout, sorte],
+            })
+        partitions.sort(key=lambda p: p["debut_mio"])
+
+    if volume_ouvert(bloc):
+        etat, raison = "occupe", "Ce disque porte un volume chiffré, LVM ou RAID ouvert."
+    elif pttype and table is None:
+        etat, raison = "effacer", "La table des partitions de ce disque est illisible."
+    elif not pttype and (bloc.get("fstype") or enfants):
+        etat, raison = "effacer", "Ce disque contient des données, sans partitions : il ne se prend qu'en entier."
+    elif pttype == "gpt":
+        etat, raison = "gpt", ""
+    elif not partitions and not enfants:
+        etat, raison = "vide", ""
+    else:
+        etat, raison = "effacer", "Ce disque est dans un ancien format (MBR) : il ne se prend qu'en entier."
+
+    transport = (bloc.get("tran") or "").lower()
+    if transport == "usb":
+        sorte_disque = "Disque USB"
+    elif transport == "nvme":
+        sorte_disque = "SSD NVMe"
+    else:
+        sorte_disque = "Disque dur" if bloc.get("rota") else "SSD"
+
+    modele = (bloc.get("model") or "").strip() or bloc.get("path")
+    signature = [bloc.get("path"), modele, bloc.get("serial"), bloc.get("size"), pttype,
+                 bloc.get("fstype"), [[p["dev"], p["fs"], p["exact"]] for p in partitions]]
+    empreinte = hashlib.sha256(json.dumps(signature).encode("utf-8")).hexdigest()
+    for p in partitions:
+        del p["exact"]
+    return {
+        "dev": bloc.get("path"), "modele": modele, "sorte": sorte_disque,
+        "taille_mio": taille, "etat": etat, "raison": raison,
+        "premier_mio": premier, "fin_mio": fin, "partitions": partitions,
+        "libres": trous(premier, fin, partitions) if etat in ("gpt", "vide") else [],
+        "empreinte": empreinte,
+    }
+
+
+def calculer(disque, plan):
+    """Le plan, vérifié en entier, SANS RIEN ÉCRIRE. Lève Arret sinon."""
+    if plan.get("empreinte") != disque["empreinte"]:
+        raise Arret("ce disque a changé depuis l'écran : rien n'a été touché, actualise la liste")
+    if disque["etat"] == "occupe":
+        raise Arret(disque["raison"])
+    effacer = plan.get("effacer", False)
+    supprimer = plan.get("supprimer", [])
+    voulue = plan.get("taille_mio", 0)
+    if not isinstance(effacer, bool) or not isinstance(supprimer, list):
+        raise Arret("plan illisible : rien n'a été touché")
+    if not isinstance(voulue, int) or isinstance(voulue, bool) or voulue < 0:
+        raise Arret("taille illisible : rien n'a été touché")
+
+    connues = [p["dev"] for p in disque["partitions"]]
+    if effacer:
+        if supprimer:
+            raise Arret("plan contradictoire : rien n'a été touché")
+        partent = connues
+        debut, fin = 1, disque["taille_mio"] - 1
+        efi = None
+    else:
+        if disque["etat"] not in ("gpt", "vide"):
+            raise Arret(disque["raison"])
+        if any(d not in connues for d in supprimer) or len(set(map(str, supprimer))) != len(supprimer):
+            raise Arret("une partition à supprimer n'existe pas : rien n'a été touché")
+        partent = list(supprimer)
+        restent = [p for p in disque["partitions"] if p["dev"] not in partent]
+        zones = [t for t in trous(disque["premier_mio"], disque["fin_mio"], restent)
+                 if t["debut_mio"] == plan.get("zone_mio")]
+        if not zones:
+            raise Arret("l'espace libre choisi n'existe pas : rien n'a été touché")
+        debut = zones[0]["debut_mio"]
+        fin = debut + zones[0]["taille_mio"]
+        efi = next((p["dev"] for p in restent if p["efi_utilisable"]), None)
+
+    efi_debut = None
+    if efi is None:
+        efi_debut = debut
+        debut += EFI_MIO
+    maximum = fin - debut
+    taille = voulue or maximum
+    if taille < MINIMUM_RACINE_MIO:
+        raise Arret(f"il faut au moins {MINIMUM_RACINE_MIO // 1024} Gio pour grenOS : rien n'a été touché")
+    if taille > maximum:
+        raise Arret("la taille demandée ne tient pas dans cet espace : rien n'a été touché")
+    return {
+        "disque": disque["dev"],
+        "table_neuve": effacer or disque["etat"] == "vide",
+        "effacer": effacer,
+        "partent": partent,
+        "efi": efi,
+        "efi_debut_mio": efi_debut,
+        "racine_debut_mio": debut,
+        "racine_mio": taille,
+    }
+
+
+def verifier_reglages(plan, noms_pris, fuseau_connu):
+    """Compte, clavier, fuseau : vérifiés eux aussi AVANT toute écriture."""
+    def champ(groupe, nom):
+        v = plan.get(groupe)
+        v = v.get(nom) if isinstance(v, dict) else None
+        return v if isinstance(v, str) else None
+
+    login = champ("compte", "login")
+    if not login or not re.fullmatch(r"[a-z][a-z0-9-]{0,30}", login) or login in RESERVES or login in noms_pris:
+        raise Arret("ce nom de compte ne peut pas servir : choisis-en un autre, rien n'a été touché")
+    nom = (champ("compte", "nom") or "").strip() or login
+    # La même règle que la page (Rust, `is_control`) : `isprintable` refusait
+    # l'espace insécable, après le résumé.
+    if len(nom) > 60 or any(c in ":," or unicodedata.category(c) in ("Cc", "Cs") for c in nom):
+        raise Arret("ce nom contient un signe refusé (« : » ou « , ») : rien n'a été touché")
+    mot = plan["compte"].get("mot_de_passe")
+    if mot is not None and (not isinstance(mot, str) or not 0 < len(mot) <= 256
+                            or any(c in mot for c in "\n\r\0")):
+        raise Arret("ce mot de passe ne peut pas servir : rien n'a été touché")
+    disposition = champ("clavier", "disposition") or ""
+    variante = champ("clavier", "variante") or ""
+    if not re.fullmatch(r"[a-z]{2,8}", disposition) or not re.fullmatch(r"[a-z0-9_-]{0,20}", variante):
+        raise Arret("clavier inconnu : rien n'a été touché")
+    fuseau = plan.get("fuseau")
+    if (not isinstance(fuseau, str) or not re.fullmatch(r"[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}", fuseau)
+            or not fuseau_connu(fuseau)):
+        raise Arret("fuseau horaire inconnu : rien n'a été touché")
+    return {"login": login, "nom": nom, "mot_de_passe": mot,
+            "disposition": disposition, "variante": variante, "fuseau": fuseau}
+
+
+# ------------------------------------------------- l'état des disques (réel)
+
+def blocs():
+    r = courir("lsblk", "-J", "-b", "-o",
+               "NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,ROTA,RO,FSTYPE,LABEL,MOUNTPOINTS,PTTYPE")
+    return json.loads(r.stdout).get("blockdevices", [])
+
+
+def lire_table(chemin):
+    r = courir("sfdisk", "-J", chemin, tolerer=True)
+    try:
+        return json.loads(r.stdout)["partitiontable"] if r.returncode == 0 else None
+    except (ValueError, KeyError):
+        return None
+
+
+def disques():
+    sortes = ("disk", "loop") if en_essai() else ("disk",)
+    liste = []
+    for b in blocs():
+        chemin = b.get("path") or ""
+        if b.get("type") not in sortes or b.get("ro"):
+            continue
+        if chemin.startswith(("/dev/zram", "/dev/sr", "/dev/fd", "/dev/ram")):
+            continue
+        if int(b.get("size") or 0) // MIO < DISQUE_MINIMUM_MIO or porte_le_systeme(b):
+            continue
+        liste.append(decrire(b, lire_table(chemin) if b.get("pttype") else None))
+    return liste
+
+
+def en_direct():
+    return en_essai() or os.path.isdir("/run/live/medium")
+
+
+def en_uefi():
+    return os.path.isdir("/sys/firmware/efi") or bool(os.environ.get("GRENOS_SANS_EFI"))
+
+
+def lister():
+    print(json.dumps({
+        "efi": en_uefi(),
+        "cle": en_direct(),
+        "minimum_mio": MINIMUM_RACINE_MIO,
+        "efi_mio": EFI_MIO,
+        "trou_minimum_mio": TROU_MINIMUM_MIO,
+        "disques": disques() if en_direct() else [],
+    }, ensure_ascii=False))
+
+
+# ------------------------------------------------------------ les partitions
+
+def montages(bloc):
+    trouves = [(bloc.get("path"), m) for m in bloc.get("mountpoints") or [] if m]
+    for e in bloc.get("children") or []:
+        trouves += montages(e)
+    return trouves
+
+
+def fermer(disque):
+    """Referme le disque. Encore ouvert après : arrêt, jamais de démontage forcé."""
+    def lu():
+        bloc = next((b for b in blocs() if b.get("path") == disque), None)
+        if bloc is None:
+            raise Arret("le disque n'est plus branché")
+        if porte_le_systeme(bloc):
+            raise Arret("ce disque porte le système qui tourne : il n'est pas touché")
+        return montages(bloc)
+
+    for chemin, ou in sorted(lu(), key=lambda m: len(m[1]), reverse=True):
+        if ou == "[SWAP]":
+            courir("swapoff", chemin, tolerer=True)
+        else:
+            courir("umount", ou, tolerer=True)
+    courir("udevadm", "settle", "-t", "10", tolerer=True)
+    restes = lu()
+    if restes:
+        raise Arret(f"{restes[0][1]} est encore utilisé : ferme ce qui l'a ouvert, puis recommence")
+
+
+def place_dans_efi(partition):
+    """La partition EFI gardée a-t-elle la place de GRUB ? Lue sans écrire."""
+    dossier = tempfile.mkdtemp(prefix="grenos-efi-")
+    courir("mount", "-o", "ro", partition, dossier)
+    try:
+        s = os.statvfs(dossier)
+        if s.f_bavail * s.f_frsize < EFI_LIBRE_MIO * MIO:
+            raise Arret("la partition de démarrage (EFI) de ce disque est pleine : rien n'a été touché")
+    finally:
+        courir("umount", dossier, tolerer=True)
+
+
+def partition_au_debut(disque, debut_mio):
+    for _ in range(20):
+        table = lire_table(disque) or {}
+        secteur = int(table.get("sectorsize") or 512)
+        for p in table.get("partitions") or []:
+            if int(p["start"]) * secteur == debut_mio * MIO and os.path.exists(p["node"]):
+                return p["node"]
+        time.sleep(0.5)
+    raise Arret("une partition qui vient d'être créée est introuvable")
+
+
+def partitionner(op):
+    disque = op["disque"]
+    secteur = courir("blockdev", "--getss", disque).stdout.strip()
+    if secteur not in ("512", "1024", "2048", "4096"):
+        raise Arret("la taille des secteurs de ce disque est illisible : rien n'a été touché")
+
+    def secteurs(mio):
+        return mio * MIO // int(secteur)
+
+    def laisser_udev_finir():
+        # udev rouvre ce qui vient de changer ; sfdisk, pendant ce temps,
+        # répond « disque occupé »… sur un disque déjà effacé.
+        courir("udevadm", "settle", "-t", "15", tolerer=True)
+
+    avance(3, "Préparation des partitions")
+    if op["effacer"]:
+        for p in op["partent"]:
+            courir("wipefs", "-a", "-f", p, tolerer=True)
+        courir("wipefs", "-a", "-f", disque)
+        laisser_udev_finir()
+    else:
+        numeros = [int(re.search(r"(\d+)$", p).group(1)) for p in op["partent"]]
+        for numero in sorted(numeros, reverse=True):
+            courir("sfdisk", "--delete", disque, str(numero))
+            laisser_udev_finir()
+    lignes = []
+    if op["efi"] is None:
+        lignes.append(f'start={secteurs(op["efi_debut_mio"])}, size={secteurs(EFI_MIO)}, '
+                      f'type={TYPE_EFI}, name="ESP"')
+    lignes.append(f'start={secteurs(op["racine_debut_mio"])}, size={secteurs(op["racine_mio"])}, '
+                  f'type={TYPE_LINUX}, name="grenOS"')
+    if op["table_neuve"]:
+        commande = ["sfdisk", "--wipe", "always", "--wipe-partitions", "always", disque]
+        lignes[:0] = ["label: gpt", f"first-lba: {secteurs(1)}"]
+    else:
+        commande = ["sfdisk", "--append", "--wipe-partitions", "always", disque]
+    courir(*commande, entree="\n".join(lignes) + "\n")
+    courir("partx", "-u", disque, tolerer=True)
+    courir("udevadm", "settle", "-t", "15", tolerer=True)
+    dev_efi = op["efi"] or partition_au_debut(disque, op["efi_debut_mio"])
+    dev_racine = partition_au_debut(disque, op["racine_debut_mio"])
+    # L'explorateur a pu rouvrir une partition en la voyant apparaître.
+    fermer(disque)
+    avance(5, "Formatage")
+    if op["efi"] is None:
+        courir("mkfs.vfat", "-F", "32", "-n", "ESP", dev_efi)
+    courir("mkfs.ext4", "-F", "-q", "-L", "grenOS", dev_racine)
+    return dev_efi, dev_racine
+
+
+# ---------------------------------------------------------------- le système
+
+def images():
+    if en_essai():
+        liste = [i for i in os.environ["GRENOS_IMAGES"].split(":") if i]
+    else:
+        dossier = "/run/live/medium/live"
+        try:
+            noms = sorted(f for f in os.listdir(dossier) if f.endswith(".squashfs"))
+        except OSError:
+            noms = []
+        noms.sort(key=lambda f: f != "filesystem.squashfs")  # l'image, puis les correctifs
+        liste = [os.path.join(dossier, f) for f in noms]
+    if not liste or not all(os.access(i, os.R_OK) for i in liste):
+        raise Arret("l'image de grenOS est illisible sur la clé : rien n'a été touché")
+    return liste
+
+
+def copier(cible, liste):
+    for i, image in enumerate(liste):
+        bas = 8 + 67 * i / len(liste)
+        haut = 8 + 67 * (i + 1) / len(liste)
+        phrase = "Copie de grenOS" if i == 0 else "Copie du correctif"
+        avance(bas, phrase)
+        commande = ["unsquashfs", "-f", "-percentage", "-d", cible, image]
+        noter("$ " + " ".join(commande))
+        # Les erreurs dans un fichier : un tube plein figerait la copie.
+        with tempfile.TemporaryFile() as erreurs:
+            proc = subprocess.Popen(commande, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                    stderr=erreurs, text=True, errors="replace", env=environnement())
+            dernier = -1
+            for ligne in proc.stdout:
+                ligne = ligne.strip()
+                if ligne.isdigit() and int(ligne) != dernier:
+                    dernier = int(ligne)
+                    avance(bas + (haut - bas) * min(dernier, 100) / 100, f"{phrase} — {dernier} %")
+            if proc.wait() != 0:
+                erreurs.seek(0)
+                noter(erreurs.read().decode("utf-8", "replace")[-4000:])
+                raise Arret("la copie de grenOS a échoué (clé illisible ou disque défaillant)")
+
+
+def lire(chemin):
+    try:
+        with open(chemin, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def ecrire(chemin, texte, mode=0o644):
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+    with os.fdopen(os.open(chemin, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode), "w", encoding="utf-8") as f:
+        f.write(texte)
+    os.chmod(chemin, mode)
+
+
+def chemin_du_disque(cible, chemin):
+    """Ce chemin tel que le disque installé le voit. Un lien absolu y repart
+    de SA racine : suivi d'ici, il ferait écrire root sur le système qui tourne."""
+    restent, faits, liens = chemin.split("/"), [], 0
+    while restent:
+        nom = restent.pop(0)
+        if nom in ("", "."):
+            continue
+        if nom == "..":
+            del faits[-1:]
+            continue
+        ici = os.path.join(cible, *faits, nom)
+        if not os.path.islink(ici):
+            faits.append(nom)
+            continue
+        liens += 1
+        if liens > 40:
+            raise Arret(f"{chemin} tourne en rond sur le disque installé")
+        vers = os.readlink(ici)
+        if vers.startswith("/"):
+            faits = []
+        restent[:0] = vers.split("/")
+    return os.path.join(cible, *faits)
+
+
+def montages_a_part():
+    """À partir d'ici, nos montages ne sont qu'à nous (22 novembre).
+
+    Un montage sous /tmp se recopie dans chaque service qui a son propre
+    espace de montage ; ces copies gardaient le disque occupé (second essai
+    impossible), et démonter notre /dev/pts emportait celui de la session.
+    Dans un espace à nous, rien ne sort, et le noyau démonte tout quand ce
+    programme se termine, même tué. « rslave » : ce que la session démonte
+    se démonte aussi chez nous."""
+    os.unshare(os.CLONE_NEWNS)
+    courir("mount", "--make-rslave", "/")
+
+
+def monter(montes, options, chemin):
+    os.makedirs(chemin, exist_ok=True)
+    courir("mount", *options, chemin)
+    montes.append(chemin)
+
+
+def noms_systeme():
+    """Les comptes et groupes du système : la clé a les mêmes que le disque
+    installé (la même image), et useradd refuserait leurs noms."""
+    noms = set()
+    for chemin in ("/etc/passwd", "/etc/group"):
+        for ligne in lire(chemin).splitlines():
+            champs = ligne.split(":")
+            if len(champs) > 2 and champs[2].isdigit() and not 1000 <= int(champs[2]) < 60000:
+                noms.add(champs[0])
+    return noms
+
+
+def fuseau_existe(fuseau):
+    return os.path.isfile(os.path.join("/usr/share/zoneinfo", fuseau))
+
+
+def lier(vers, chemin):
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+    try:
+        os.remove(chemin)
+    except FileNotFoundError:
+        pass
+    os.symlink(vers, chemin)
+
+
+def habiller_grub(texte):
+    """Ce que faisait l'étape « grubcfg » de Calamares : le menu dit grenOS, et
+    le démarrage montre notre chargement, pas des lignes techniques."""
+    for cle, valeur in (("GRUB_DISTRIBUTOR", "'grenOS'"),
+                        ("GRUB_CMDLINE_LINUX_DEFAULT", '"quiet splash"')):
+        ligne = f"{cle}={valeur}"
+        texte, n = re.subn(rf"^{cle}=.*$", ligne, texte, flags=re.M)
+        if not n:
+            texte = f"{texte.rstrip()}\n{ligne}\n"
+    return texte
+
+
+def reseau_pour(texte, login):
+    """Comme l'étape « networkcfg » : un Wi-Fi réservé au compte de la clé
+    serait invisible au compte du disque."""
+    return re.sub(r"^permissions=user:[^:;\n]+", f"permissions=user:{login}", texte, flags=re.M)
+
+
+def monter_chroot(cible, montes):
+    for options, ou in ((["-t", "proc", "proc"], "proc"),
+                        (["-t", "sysfs", "sys"], "sys"),
+                        (["--bind", "/dev"], "dev"),
+                        (["--bind", "/dev/pts"], "dev/pts"),
+                        (["-t", "tmpfs", "tmpfs"], "run"),
+                        (["--bind", "/run/udev"], "run/udev")):
+        monter(montes, options, chemin_du_disque(cible, ou))
+    efivars = "/sys/firmware/efi/efivars"
+    if os.path.isdir(efivars) and os.listdir(efivars):
+        monter(montes, ["-t", "efivarfs", "efivarfs"], chemin_du_disque(cible, efivars))
+
+
+def configurer(cible, dev_racine, dev_efi, choisi):
+    def dedans(*commande, **options):
+        return courir("chroot", cible, *commande, **options)
+
+    def du_disque(chemin):
+        return chemin_du_disque(cible, chemin)
+
+    avance(76, "Réglages du système")
+    # Celui de dbus d'abord : systemd le recopierait, et toutes les machines
+    # installées auraient l'identifiant de l'image.
+    for dossier in ("etc", "var/lib/dbus"):
+        try:
+            os.remove(os.path.join(du_disque(dossier), "machine-id"))
+        except OSError:
+            pass
+    dedans("systemd-machine-id-setup")
+    lier("/etc/machine-id", os.path.join(du_disque("var/lib/dbus"), "machine-id"))
+
+    # -p : lu sur le disque, jamais dans le cache de blkid (l'ancien système
+    # de fichiers y est encore : fstab chercherait une partition disparue).
+    uuid_racine = courir("blkid", "-p", "-s", "UUID", "-o", "value", dev_racine).stdout.strip()
+    uuid_efi = courir("blkid", "-p", "-s", "UUID", "-o", "value", dev_efi).stdout.strip()
+    if not uuid_racine or not uuid_efi:
+        raise Arret("les nouvelles partitions n'ont pas d'identifiant")
+    ecrire(du_disque("etc/fstab"),
+           "# Écrit par l'installateur de grenOS.\n"
+           f"UUID={uuid_racine} / ext4 defaults,noatime,errors=remount-ro 0 1\n"
+           f"UUID={uuid_efi} /boot/efi vfat defaults,nofail,umask=0077,x-systemd.device-timeout=10s 0 2\n")
+    ecrire(du_disque("etc/hostname"), "grenos\n")
+    ecrire(du_disque("etc/hosts"),
+           "127.0.0.1\tlocalhost\n127.0.1.1\tgrenos\n"
+           "::1\tlocalhost ip6-localhost ip6-loopback\n"
+           "ff02::1\tip6-allnodes\nff02::2\tip6-allrouters\n")
+
+    login = choisi["login"]
+    deja = re.search(r"^([^:]+):[^:]*:1000:", lire(du_disque("etc/passwd")), re.M)
+    if deja:
+        if deja.group(1) != login:
+            dedans("usermod", "-l", login, "-d", f"/home/{login}", "-m", deja.group(1))
+            dedans("groupmod", "-n", login, deja.group(1))
+        dedans("usermod", "-c", choisi["nom"], login)
+    else:
+        voulus = ("cdrom", "floppy", "sudo", "audio", "dip", "video", "plugdev", "netdev",
+                  "lpadmin", "scanner", "bluetooth", "autologin")
+        groupes = lire(du_disque("etc/group"))
+        presents = [g for g in voulus if re.search(rf"^{g}:", groupes, re.M)]
+        commande = ["useradd", "-m", "-u", "1000", "-U", "-s", "/bin/bash", "-c", choisi["nom"]]
+        if presents:
+            commande += ["-G", ",".join(presents)]
+        dedans(*commande, login)
+    # grenos-compte règle d'un coup le mot de passe, l'ouverture automatique
+    # et l'administration, comme les Réglages.
+    compte = "/usr/lib/grenos/grenos-compte"
+    if choisi["mot_de_passe"]:
+        dedans(compte, "definir", login, entree=choisi["mot_de_passe"] + "\n")
+    else:
+        dedans(compte, "effacer", login)
+    dedans("passwd", "-l", "root")  # comme Calamares (setRootPassword: false)
+
+    lier("/usr/share/zoneinfo/" + choisi["fuseau"], os.path.join(du_disque("etc"), "localtime"))
+    ecrire(du_disque("etc/timezone"), choisi["fuseau"] + "\n")
+    ecrire(du_disque("etc/grenos/preinstallation"),
+           "# Choisi dans l'installateur : l'assistant du premier démarrage le reprend.\n"
+           f"login={login}\nnom={choisi['nom']}\nmachine=grenos\n"
+           f"clavier={choisi['disposition']}\nvariante={choisi['variante']}\nfuseau={choisi['fuseau']}\n")
+
+    ecrire(du_disque("etc/default/locale"), "LANG=fr_FR.UTF-8\n")
+    if "fr_fr.utf8" not in dedans("locale", "-a", tolerer=True).stdout.lower():
+        chemin = du_disque("etc/locale.gen")
+        ecrire(chemin, lire(chemin).rstrip("\n") + "\nfr_FR.UTF-8 UTF-8\n")
+        dedans("locale-gen", tolerer=True)
+    ecrire(du_disque("etc/default/keyboard"),
+           f'XKBMODEL="pc105"\nXKBLAYOUT="{choisi["disposition"]}"\n'
+           f'XKBVARIANT="{choisi["variante"]}"\nXKBOPTIONS=""\nBACKSPACE="guess"\n')
+
+    # Le Wi-Fi choisi pendant la session de la clé suit sur le disque.
+    reseaux = "/etc/NetworkManager/system-connections"
+    if not en_essai() and os.path.isdir(reseaux):
+        for nom in os.listdir(reseaux):
+            source = os.path.join(reseaux, nom)
+            if os.path.isfile(source):
+                ecrire(du_disque(f"{reseaux}/{nom}"), reseau_pour(lire(source), login), 0o600)
+
+
+def aide(cible, nom):
+    """Nos scripts d'étape : ceux de la clé (ceux de l'image, dans l'essai)."""
+    chemin = os.path.join(cible + AIDES if en_essai() else AIDES, nom)
+    texte = lire(chemin)
+    if not texte:
+        raise Arret(f"{nom} manque dans grenOS")
+    return texte
+
+
+def jouer(texte):
+    """Un script d'étape, depuis un fichier : par l'entrée standard, un de
+    ses enfants pourrait avaler les lignes qui restent."""
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="grenos-etape-") as f:
+        f.write(texte)
+        f.flush()
+        courir("bash", f.name)
+
+
+def demarrage(cible):
+    avance(80, "Chargeur de démarrage")
+    # bootloader-config (le nôtre) : /etc/default/grub, /boot/grub, et le
+    # choix d'affichage de la clé qui suit sur le disque.
+    jouer(aide(cible, "calamares-bootloader-config"))
+    grub = chemin_du_disque(cible, "etc/default/grub")
+    ecrire(grub, habiller_grub(lire(grub)))
+    arguments = ["/usr/lib/grenos/grenos-grub-install", "--target=x86_64-efi",
+                 "--efi-directory=/boot/efi", "--bootloader-id=debian", "--force"]
+    if os.environ.get("GRENOS_SANS_NVRAM"):
+        arguments.append("--no-nvram")
+    courir("chroot", cible, *arguments)
+    courir("chroot", cible, "grub-mkconfig", "-o", "/boot/grub/grub.cfg")
+
+
+def a_retirer(cible):
+    texte = lire(chemin_du_disque(cible, "usr/share/grenos/packages.conf"))
+    if "try_remove:" not in texte:
+        return []
+    return re.findall(r"^\s*-\s+([a-z0-9][a-z0-9+.-]+)\s*$", texte.split("try_remove:", 1)[1], re.M)
+
+
+def finir(cible):
+    # Lu AVANT le retrait : calamares-settings-debian emporte ce script.
+    sources = aide(cible, "calamares-sources-final")
+    retrait = "Retrait de ce qui ne sert qu'à la clé"
+    avance(86, retrait)
+    paquets = a_retirer(cible)
+    for i, paquet in enumerate(paquets):
+        avance(86 + 6 * i / len(paquets), f"{retrait} — {i + 1} sur {len(paquets)}")
+        courir("chroot", cible, "apt-get", "--purge", "-q", "-y", "remove", paquet, tolerer=True)
+    avance(92, "Image de démarrage")
+    courir("chroot", cible, "update-initramfs", "-k", "all", "-c", "-t")
+    jouer(sources)
+
+    avance(97, "Vérification")
+    for paquet in ("grenos-systeme", "grenos-desktop"):
+        etat = courir("chroot", cible, "dpkg-query", "-W", "-f=${Status}", paquet, tolerer=True).stdout
+        if etat.strip() != "install ok installed":
+            raise Arret(f"{paquet} manque sur le disque installé")
+    for fichier in ("boot/efi/EFI/debian/shimx64.efi", "boot/efi/EFI/debian/grubx64.efi",
+                    "boot/grub/grub.cfg"):
+        if not os.path.isfile(os.path.join(cible, fichier)):
+            raise Arret(f"le démarrage est incomplet ({fichier} manque)")
+    noyaux = os.listdir(os.path.join(cible, "boot"))
+    if not any(n.startswith("initrd.img-") for n in noyaux):
+        raise Arret("l'image de démarrage du noyau manque")
+
+
+def demonter(montes):
+    for chemin in reversed(montes):
+        if courir("umount", chemin, tolerer=True).returncode != 0:
+            courir("umount", "-l", chemin, tolerer=True)
+    courir("sync", tolerer=True)
+
+
+def un_seul():
+    import fcntl
+    os.makedirs(os.path.dirname(VERROU), exist_ok=True)
+    verrou = open(VERROU, "w")
+    try:
+        fcntl.flock(verrou, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as e:
+        raise Arret("une installation est déjà en cours") from e
+    if courir("pgrep", "-x", "calamares", tolerer=True).returncode == 0:
+        raise Arret("un autre installateur est ouvert : ferme-le d'abord")
+    return verrou
+
+
+def installer(plan):
+    if os.geteuid() != 0:
+        raise Arret("l'installation demande les droits d'administrateur")
+    if not en_direct():
+        raise Arret("grenOS s'installe depuis sa clé : démarre sur la clé")
+    if not en_uefi():
+        raise Arret("ce PC a démarré en mode BIOS : redémarre sur la clé en choisissant « UEFI »")
+    verrou = un_seul()  # gardé ouvert jusqu'à la fin
+
+    # ---- Tout ce qui suit, jusqu'à « la première écriture », ne fait que lire.
+    disque = next((d for d in disques() if d["dev"] == plan.get("disque")), None)
+    if disque is None:
+        raise Arret("ce disque ne peut pas recevoir grenOS (absent, ou c'est la clé) : rien n'a été touché")
+    op = calculer(disque, plan)
+    choisi = verifier_reglages(plan, noms_systeme(), fuseau_existe)
+    liste = images()
+    if not en_essai():
+        for nom in ("calamares-bootloader-config", "calamares-sources-final"):
+            aide("", nom)  # absents : on le saurait sinon le disque déjà effacé
+    courir("systemctl", "stop", "grenos-windows.service", tolerer=True)
+    avance(1, "Fermeture du disque")
+    fermer(op["disque"])
+    if op["efi"]:
+        place_dans_efi(op["efi"])
+    noter(f"plan verifie : {json.dumps(op)}")
+    try:
+        os.remove(MARQUE_REUSSIE)
+    except OSError:
+        pass
+
+    # ---- La première écriture.
+    dev_efi, dev_racine = partitionner(op)
+    montages_a_part()
+    cible = tempfile.mkdtemp(prefix="calamares-root-grenos-")  # « calamares » : nos scripts y reconnaissent le chroot
+    montes = []
+    try:
+        monter(montes, [dev_racine], cible)
+        copier(cible, liste)
+        # Après la copie : le FAT refuse les droits que unsquashfs voudrait
+        # poser sur /boot/efi.
+        monter(montes, [dev_efi], chemin_du_disque(cible, "boot/efi"))
+        monter_chroot(cible, montes)
+        configurer(cible, dev_racine, dev_efi, choisi)
+        demarrage(cible)
+        finir(cible)
+        avance(98, "Écriture sur le disque")
+        courir("sync")
+    finally:
+        demonter(montes)
+    ecrire(MARQUE_REUSSIE, f"{op['disque']}\n")
+    avance(100, "grenOS est installé")
+    annoncer("FINI")
+    verrou.close()
+
+
+def main(arguments):
+    if arguments == ["lister"]:
+        try:
+            lister()
+            return 0
+        except Arret as e:
+            print(e, file=sys.stderr)
+            return 1
+    if arguments == ["installer"]:
+        for nom in ("SIGHUP", "SIGPIPE"):
+            if hasattr(signal, nom):
+                signal.signal(getattr(signal, nom), signal.SIG_IGN)
+        os.umask(0o022)  # pkexec et sudo laissent passer celui de la session
+        try:
+            plan = json.load(sys.stdin)
+            if not isinstance(plan, dict):
+                raise Arret("plan illisible : rien n'a été touché")
+            installer(plan)
+            return 0
+        except Arret as e:
+            annoncer(f"ERREUR {e}")
+            noter(f"ARRET {e}")
+        except Exception as e:  # une erreur imprévue se dit aussi
+            annoncer(f"ERREUR imprévu : {type(e).__name__} : {e}")
+            noter(f"IMPREVU {type(e).__name__} {e}")
+        return 1
+    print("grenos-installation lister | installer < plan.json", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

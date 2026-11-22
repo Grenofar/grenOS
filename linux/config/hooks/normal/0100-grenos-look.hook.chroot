@@ -861,6 +861,38 @@ if ! grep -q 'grenos-installateur.verrou' /usr/bin/grenos-installer; then
     exit 1
 fi
 echo "grenos: un seul installateur a la fois, la cle reste cachee jusqu a la fin"
+# Notre installateur (22 novembre) : la page, le moteur, ses outils. Un seul
+# absent, et « Installer grenOS » serait un bouton sans rien derriere.
+MOTEUR=/usr/lib/grenos/grenos-installation
+if [ ! -x "$MOTEUR" ] || ! python3 -B -c "compile(open('$MOTEUR', encoding='utf-8').read(), 'moteur', 'exec')"; then
+    echo "grenos: $MOTEUR absent, pas executable ou illisible par python3" >&2
+    exit 1
+fi
+for outil in sfdisk wipefs partx blockdev mkfs.vfat mkfs.ext4 unsquashfs lsblk blkid udevadm pgrep efibootmgr; do
+    if ! command -v "$outil" >/dev/null 2>&1 && [ ! -x "/usr/sbin/$outil" ] && [ ! -x "/sbin/$outil" ]; then
+        echo "grenos: l installateur a besoin de $outil, absent de l image" >&2
+        exit 1
+    fi
+done
+if [ ! -f /usr/share/polkit-1/actions/fr.grenos.installation.policy ]; then
+    echo "grenos: l action polkit de l installateur manque : avec un mot de passe, il ne s ouvrirait pas" >&2
+    exit 1
+fi
+# Il efface des disques : jamais dans nos regles sans mot de passe.
+if grep -q 'fr.grenos.installation' /etc/polkit-1/rules.d/49-grenos-administration.rules 2>/dev/null; then
+    echo "grenos: l installateur ne doit pas passer sans mot de passe par polkit" >&2
+    exit 1
+fi
+if ! grep -q 'exec grenos-ui installation' /usr/bin/grenos-installer || \
+   ! grep -aq 'installation : lancee sur' /usr/bin/grenos-ui; then
+    echo "grenos: Installer grenOS n ouvre pas notre installateur (lanceur ou page absente de grenos-ui)" >&2
+    exit 1
+fi
+if ! grep -q '/etc/grenos/preinstallation' /usr/bin/grenos-premier-lanceur; then
+    echo "grenos: le secours de l assistant effacerait le mot de passe choisi a l installation" >&2
+    exit 1
+fi
+echo "grenos: notre installateur est la (page, moteur, outils), l assistant reprend ses choix"
 # La pose de GRUB elle-meme, et la cle cachee (21 novembre, « grub-install
 # ... code 1 » chez Grenofar : Calamares avait pris la CLE pour partition
 # EFI). Notre bootloader.conf passe par grenos-grub-install (shim au chemin

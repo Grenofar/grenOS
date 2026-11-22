@@ -121,4 +121,36 @@ PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
 attendu "systemctl start grenos-cle-masquee.service" "autre installateur ouvert : la cle est cachee"
 jamais  "systemctl stop grenos-cle-masquee.service" "autre installateur ouvert : la cle n est pas rendue sous lui"
 
-[ "$fautes" -eq 0 ] && echo "installer : 16 cas justes" || { echo "installer : $fautes faute(s)"; cat "$JOURNAL"; exit 1; }
+# ---- Notre installateur (22 novembre) : « Installer grenOS » l'ouvre, et
+# Calamares ne reste qu'avec --secours.
+: > "$JOURNAL"
+printf '#!/bin/sh\nexit 1\n' > "$T/bin/pgrep"
+cat > "$T/bin/grenos-ui" <<EOF
+#!/bin/sh
+echo "grenos-ui \$*" >> "$JOURNAL"
+exit 0
+EOF
+chmod +x "$T/bin/grenos-ui"
+printf '#!/bin/sh\nexit 0\n' > "$T/moteur"
+chmod +x "$T/moteur"
+export GRENOS_MOTEUR="$T/moteur"
+PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
+attendu "grenos-ui installation" "Installer grenOS ouvre notre installateur"
+jamais  "pkexec" "notre installateur : Calamares ne s ouvre pas"
+jamais  "grenos-cle-masquee" "notre installateur : la cle n a pas a etre cachee"
+jamais  "udisksctl" "notre installateur : aucun disque referme avant le choix"
+[ -e "$T/verrou" ] && { echo "FAUX notre installateur laisse un verrou"; fautes=$((fautes + 1)); } \
+    || echo "ok   notre installateur ne laisse aucun verrou"
+: > "$JOURNAL"
+PATH="$T/bin:$PATH" sh "$S" --secours 2>/dev/null
+attendu "pkexec /usr/bin/calamares" "--secours ouvre encore Calamares"
+jamais  "grenos-ui" "--secours n ouvre pas les deux"
+
+# Le correctif pose ce lanceur sur des images qui n'ont pas notre moteur :
+# un bouton qui ouvrirait une page absente serait un bouton sans rien derrière.
+: > "$JOURNAL"
+GRENOS_MOTEUR="$T/absent" PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
+attendu "pkexec /usr/bin/calamares" "image sans notre moteur : Calamares s ouvre"
+jamais  "grenos-ui" "image sans notre moteur : pas de page absente"
+
+[ "$fautes" -eq 0 ] && echo "installer : 25 cas justes" || { echo "installer : $fautes faute(s)"; cat "$JOURNAL"; exit 1; }

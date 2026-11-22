@@ -5,6 +5,7 @@
 //!     grenos-ui perf      grenPerf : mémoire, processeur, processus, mode jeu
 //!     grenos-ui lance     GrenLaunch : tous les jeux au même endroit
 //!     grenos-ui arret     Fin de session : veille, redémarrer, éteindre
+//!     grenos-ui installation  Installer grenOS depuis la clé (partitions, copie)
 //!
 //! Chaque page est une fenêtre du MÊME processus (voir `systeme::instance`).
 //! Ajouter une application, c'est ajouter une page dans `web/` et ses
@@ -29,6 +30,7 @@ mod bienvenue;
 mod lance;
 mod maj;
 mod materiel;
+mod installation;
 mod installer;
 mod perf;
 mod pont;
@@ -164,6 +166,7 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("connexions", "Connexions", 560.0, 640.0),
     ("secours", "Mode sans échec de grenOS", 720.0, 560.0),
     ("bienvenue", "Bienvenue dans grenOS", 940.0, 700.0),
+    ("installation", "Installer grenOS", 1040.0, 700.0),
 ];
 
 pub fn ouvrir(app: &AppHandle, page: &str) -> tauri::Result<()> {
@@ -311,6 +314,11 @@ fn fermeture_animee(fenetre: &tauri::Window, evenement: &tauri::WindowEvent) {
     if fenetre.label() == "premier" {
         return;
     }
+    // AVANT le fondu : `destroy()` passerait outre (22 novembre).
+    if installation::retient(fenetre.label(), installation::en_cours().is_some()) {
+        api.prevent_close();
+        return;
+    }
     let Some(delai) = delai_fermeture(&systeme::apparence().effets) else { return };
     let Some(vue) = fenetre.app_handle().get_webview_window(fenetre.label()) else { return };
     api.prevent_close();
@@ -385,6 +393,11 @@ fn main() {
             fenetre_prete,
             systeme::ouvrir_programme,
             installer::installer,
+            installation::installation_infos,
+            installation::installation_nom,
+            installation::installation_lire,
+            installation::installation_lancer,
+            installation::installation_redemarrer,
             premier::premier_infos,
             premier::premier_dire,
             premier::premier_pret,

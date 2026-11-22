@@ -2,7 +2,7 @@
 // `window.GRENOS_PAGE` ; dans un navigateur, c'est l'ancre (#maj).
 "use strict";
 (function () {
-  const PAGES = ["premier", "maj", "perf", "lance", "arret", "recuperation", "grenai", "agenda", "horloge", "fichiers", "reglages", "jeux", "grenplace", "hub", "taches", "connexions", "secours", "bienvenue"];
+  const PAGES = ["premier", "maj", "perf", "lance", "arret", "recuperation", "grenai", "agenda", "horloge", "fichiers", "reglages", "jeux", "grenplace", "hub", "taches", "connexions", "secours", "bienvenue", "installation"];
   // Dans l'aperçu, « #reglages:ecran » ouvre aussi l'onglet, comme Rust le
   // fait avec GRENOS_ONGLET (« grenos-ui reglages:ecran »).
   const [ancre, onglet] = location.hash.slice(1).split(":");

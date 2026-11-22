@@ -110,6 +110,21 @@ if [ -x /usr/bin/grenos-ui ]; then
     dire "premier : grenos-ui s est termine sans nommer la machine — secours python"
 fi
 
+# INSTALLÉ PAR NOTRE INSTALLATEUR (22 novembre) : compte, clavier et mot de
+# passe sont déjà posés. Le secours Python les redemanderait, et il finit par
+# `passwd -d` : il EFFACERAIT le mot de passe choisi. La machine est nommée
+# avec ce qui a été choisi ; le reste se règle dans les Réglages.
+CHOISI=/etc/grenos/preinstallation
+if [ -r "$CHOISI" ]; then
+    LOGIN=$(sed -n 's/^login=//p' "$CHOISI" | head -n 1)
+    if [ -n "$LOGIN" ] && getent passwd "$LOGIN" >/dev/null 2>&1; then
+        [ -n "$GARDE" ] && kill "$GARDE" 2>/dev/null
+        cp "$CHOISI" /etc/grenos/identite
+        dire "premier : assistant non termine — compte de l installation repris, sans toucher au mot de passe"
+        exit 0
+    fi
+fi
+
 # Le secours Python n'écrit rien au journal : seul son aboutissement (la
 # machine nommée) confirme l'écran. Le service de garde est SUSPENDU — il ne
 # redémarrera pas la machine au milieu de l'assistant — et le témoin d'essai

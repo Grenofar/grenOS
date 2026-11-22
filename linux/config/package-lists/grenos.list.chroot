@@ -317,6 +317,9 @@ calamares-settings-debian
 ## `e2fsprogs` et `cryptsetup`, eux, arrivent bien par les dependances : on a
 ## verifie plutot que de supposer.
 dosfstools
+# sfdisk : le moteur de notre installateur (22 novembre) ecrit les tables de
+# partitions avec lui. Il venait par ricochet de Calamares ; il est nomme.
+fdisk
 btrfs-progs
 xfsprogs
 ## Calamares est en Qt et grenOS en GTK : sans ce theme de plateforme, les

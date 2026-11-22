@@ -23,7 +23,7 @@
   };
   window.APERCU = async function (commande, a) {
     switch (commande) {
-      case "premier_infos": return { donnees: DONNEES, machine: "grenos", virtuelle: "", secure_boot: "actif", pilote_nvidia: true,
+      case "premier_infos": return { donnees: DONNEES, installe: location.search.includes("installe") ? { login: "camille-durand", nom: "Camille Durand", clavier: "ca", variante: "", fuseau: "America/Montreal" } : null, machine: "grenos", virtuelle: "", secure_boot: "actif", pilote_nvidia: true,
         secure_boot_phrase: "Secure Boot est désactivé. grenOS démarre aussi bien avec : tu peux l'activer dans le BIOS quand tu veux, rien ne cassera.",
         materiel: [
           { icone: "cpu", nom: "Processeur", valeur: "8 cœur(s)", detail: "AMD Ryzen 7 5800X" },
@@ -224,6 +224,48 @@
       case "recuperation_lister": await attendre(500); return [{ dev: "/dev/nvme0n1p2", fs: "ext4", taille: "476,4G", etiquette: "", grenos: true, machine: "grenos-lea", comptes: ["lea"], montee: "" }, { dev: "/dev/sda1", fs: "ext4", taille: "20G", etiquette: "DONNEES", grenos: false, machine: "", comptes: [], montee: "" }];
       case "recuperation_faire": await attendre(600); return a.geste === "ouvrir" ? "/run/grenos-recup/nvme0n1p2" : "Le système de fichiers est sain.";
       case "fichiers_dire": console.log("série :", a.texte); return null;
+      // L'installateur : la machine de Grenofar (22 novembre). « ?vide » : le
+      // Samsung effacé ; « ?bios » : démarré sans UEFI ; « ?echec » : un arrêt.
+      case "installation_infos": await attendre(80); return {
+        cle: true, efi: !location.search.includes("bios"), secure_boot: "actif",
+        secure_boot_phrase: "Secure Boot est actif, et grenOS démarre avec. Rien à changer dans le BIOS.",
+        claviers: DONNEES.claviers, fuseaux: ["America/Montreal", "America/New_York", "Europe/Brussels", "Europe/Paris", "Indian/Reunion"],
+        nom: location.search.includes("connu") ? "Camille" : "", clavier: "fr", variante: "", fuseau: "Europe/Paris", en_cours: null };
+      case "installation_nom": {
+        const login = a.texte.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ /g, "-").replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "").slice(0, 31);
+        const probleme = !login ? "Un nom, avec au moins une lettre." : ["root", "audio", "grenos"].includes(login) ? "Ce nom est déjà pris par le système, choisis-en un autre." : null;
+        return { login, probleme };
+      }
+      case "installation_lire": {
+        await attendre(250);
+        const part = (dev, debut, taille, genre, nom, efi) => ({ dev, debut_mio: debut, fin_mio: debut + taille, taille_mio: taille, fs: "", genre, nom, efi_utilisable: !!efi });
+        const samsung = location.search.includes("vide")
+          ? { etat: "vide", partitions: [] }
+          : { etat: "gpt", partitions: [part("/dev/sda1", 1, 5325, "linux", "Linux (ext4)"), part("/dev/sda2", 5326, 9728, "linux", "Linux (ext4)"), part("/dev/sda3", 15054, 223400, "grenos", "grenOS")] };
+        return { efi: !location.search.includes("bios"), cle: true, minimum_mio: 20480, efi_mio: 512, trou_minimum_mio: 1024, disques: [
+          { dev: "/dev/nvme0n1", modele: "KINGSTON SNV3S1000G", sorte: "SSD NVMe", taille_mio: 953869, etat: "gpt", raison: "", premier_mio: 1, fin_mio: 953868, empreinte: "k", partitions: [
+            part("/dev/nvme0n1p1", 1, 200, "efi", "Démarrage (EFI)", true), part("/dev/nvme0n1p2", 201, 16, "microsoft", "Réservée à Windows"),
+            part("/dev/nvme0n1p3", 217, 952700, "windows", "Windows ou fichiers (NTFS)"), part("/dev/nvme0n1p4", 952917, 944, "microsoft", "Récupération de Windows")] },
+          { dev: "/dev/sda", modele: "Samsung SSD 860 EVO 250GB", sorte: "SSD", taille_mio: 238475, raison: "", premier_mio: 1, fin_mio: 238474, empreinte: "s", ...samsung },
+          { dev: "/dev/sdb", modele: "ST2000DL003-9VT166", sorte: "Disque dur", taille_mio: 1907729, etat: "effacer", raison: "Ce disque est dans un ancien format (MBR) : il ne se prend qu'en entier.", premier_mio: 1, fin_mio: 1907728, empreinte: "h", partitions: [
+            part("/dev/sdb1", 1, 1907727, "windows", "Windows ou fichiers (NTFS) — Disque hdd 2to")] },
+        ] };
+      }
+      case "installation_lancer": {
+        window.APERCU_PLAN = a.plan;
+        const e = window.APERCU_ECOUTE || {};
+        (async () => {
+          for (const [part, texte] of [[3, "Préparation des partitions"], [20, "Copie de grenOS — 18 %"], [52, "Copie de grenOS — 66 %"], [80, "Chargeur de démarrage"], [97, "Vérification"]]) {
+            await attendre(700);
+            e["installation-avance"] && e["installation-avance"]({ part, texte });
+          }
+          await attendre(700);
+          const rate = location.search.includes("echec");
+          e["installation-fin"] && e["installation-fin"]({ bien: !rate, texte: rate ? "ce disque a changé depuis l'écran : rien n'a été touché, actualise la liste" : "" });
+        })();
+        return null;
+      }
+      case "installation_redemarrer": window.APERCU_REDEMARRE = true; return null;
       default: return null;
     }
   };

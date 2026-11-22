@@ -103,6 +103,9 @@ fn paquets_et_installation() {
     eprouver("identifiant_sain", TOURS, &m, |t| { let _ = crate::installer::identifiant_sain(t); });
     eprouver("pour_cent", TOURS, &m, |t| { let _ = crate::installer::pour_cent(t); });
     eprouver("etape", TOURS, &m, |t| { let _ = crate::installer::etape(t); });
+    let l = ["AVANCE ", "ERREUR ", "FINI", "/dev/", "nvme0n1p3", " 42 ", "— 51 %"];
+    eprouver("dit", TOURS, &l, |t| { let _ = crate::installation::dit(t); });
+    eprouver("peripherique_valide", TOURS, &l, |t| { let _ = crate::installation::peripherique_valide(t); });
 }
 
 #[test]

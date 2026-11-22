@@ -1,8 +1,34 @@
 # TASK.md — ce qui est planifié, dans l'ordre
 
-> Tenu par Claude. Mis à jour le 2026-11-21 au soir. Une session qui reprend
+> Tenu par Claude. Mis à jour le 2026-11-22. Une session qui reprend
 > le travail lit d'abord ce fichier, puis `CLAUDE.md` (local, RÈGLE N°1 :
 > plug and play pour un non-développeur).
+
+## 000. EN COURS — 22 novembre : NOTRE installateur, toutes ses pages
+
+Grenofar : « refais le système de partition, des fois c'est pas cliquable
+[…] avec supprimer une partition et créer pour grenOS, et taille Gio
+changeable », puis « l'interface, mets-la pour toutes les pages ».
+
+- Samsung 860 EVO vidé depuis Windows, avec son accord pour CET effacement
+  seulement [prouvé : relu depuis Windows, aucune partition, C: et D: intacts].
+- « Installer grenOS » ouvre notre installateur (grenos-ui, page
+  « installation », 7 pages) ; moteur root `usr/lib/grenos/grenos-installation`.
+  Les disques sont lus une fois, chaque clic n'est qu'un calcul [écrit ; vu
+  dans l'aperçu Windows, pas encore sous WebKitGTK].
+- Moteur : tout est vérifié avant la première écriture ; la clé et le disque
+  du système ne sont jamais proposés [écrit ; essai-installation-moteur.py
+  40 cas, essai-installation-ecran.py 20000 tirages].
+- L'assistant du disque installé ne redemande ni langue, ni clavier, ni
+  compte, et n'efface pas le mot de passe [écrit ; essais Rust].
+- Calamares reste en secours : `grenos-installer --secours`.
+- [à faire, dans l'ordre] 1. cle.yml `installation-grenos` vert (vrai moteur,
+  disques virtuels, Secure Boot) ; 2. la fenêtre vue sous WebKitGTK ;
+  3. publication, avec l'accord de Grenofar ; 4. la clé ; 5. vu sur son PC.
+- La cause du « il fallait attendre » de Calamares n'a PAS été trouvée dans
+  un journal : l'écran est remplacé, la panne n'est pas expliquée.
+- [à faire] « English » dans l'assistant de la clé est enregistré et jamais
+  appliqué : une case sans effet. Pas reprise dans l'installateur.
 
 ## 00. EN COURS — 20 novembre au soir : « termine l'OS, une bêta, pas une pré-alpha »
 

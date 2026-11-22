@@ -278,7 +278,7 @@ instantane() { # moment
     I="$T/60-installateur.txt"
     borne 10 "$I" lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MODEL,MOUNTPOINTS
     borne 10 "$I" findmnt -rn -t ext4,ext3,ext2,vfat,exfat,ntfs,ntfs3,fuseblk,btrfs,xfs -o TARGET,SOURCE,FSTYPE,OPTIONS
-    for f in /root/.cache/calamares/session.log /home/*/.cache/calamares/session.log; do
+    for f in /var/log/grenos-installation.log /root/.cache/calamares/session.log /home/*/.cache/calamares/session.log; do
         [ -r "$f" ] || continue
         { echo "======== $f"; tail -n 4000 "$f"; echo; } >> "$I" 2>/dev/null
     done

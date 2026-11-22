@@ -16,6 +16,12 @@
 # et on dit ce qui est refermé. Rien n'est effacé ni modifié : refermer un
 # disque, c'est ce que fait « Éjecter » dans l'explorateur.
 #
+# DEPUIS LE 22 NOVEMBRE, tout cela n'est plus que le SECOURS : « Installer
+# grenOS » ouvre notre installateur (grenos-ui, page « installation » ; le
+# moteur est /usr/lib/grenos/grenos-installation, qui referme lui-même le
+# disque choisi et n'accepte jamais la clé). `grenos-installer --secours`
+# ouvre encore Calamares, avec ce qui suit.
+#
 # Le reste ne change pas : `pkexec calamares`, ouvert sans mot de passe par
 # la règle polkit 49 (et vérifié à chaque session par grenos-session).
 
@@ -25,6 +31,19 @@ dire() {
     grenos-dire "$*" 2>/dev/null || true
     echo "grenos-installer: $*" >&2
 }
+
+# NOTRE INSTALLATEUR. Rien d'autre ici : pas de disque refermé, pas de clé
+# cachée. grenos-ui n'a qu'un processus : un second clic ramène la fenêtre
+# devant. Pas de repli automatique sur Calamares si la fenêtre se ferme en
+# erreur : deux installateurs ne doivent jamais écrire sur le même disque.
+# Le moteur absent (ce lanceur posé par le correctif sur une image d'avant le
+# 22 novembre) : la page n'y est pas non plus, Calamares reste.
+MOTEUR=${GRENOS_MOTEUR:-/usr/lib/grenos/grenos-installation}
+if [ "${1:-}" = --secours ]; then
+    shift
+elif [ -x "$MOTEUR" ] && command -v grenos-ui >/dev/null 2>&1; then
+    exec grenos-ui installation
+fi
 
 # UN SEUL INSTALLATEUR À LA FOIS (21 novembre, 20 h 29 chez Grenofar). Un
 # second clic sur l'icône (Calamares met quelques secondes à paraître) a
