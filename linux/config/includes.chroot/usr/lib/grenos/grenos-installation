@@ -703,7 +703,10 @@ def configurer(cible, dev_racine, dev_efi, choisi):
         dedans("usermod", "-c", choisi["nom"], login)
     else:
         voulus = ("cdrom", "floppy", "sudo", "audio", "dip", "video", "plugdev", "netdev",
-                  "lpadmin", "scanner", "bluetooth", "autologin")
+                  "lpadmin", "scanner", "bluetooth", "autologin",
+                  # appliquer-systeme n'y met que les comptes déjà là ;
+                  # celui-ci naît après, et GameMode échouerait en silence.
+                  "gamemode")
         groupes = lire(du_disque("etc/group"))
         presents = [g for g in voulus if re.search(rf"^{g}:", groupes, re.M)]
         commande = ["useradd", "-m", "-u", "1000", "-U", "-s", "/bin/bash", "-c", choisi["nom"]]

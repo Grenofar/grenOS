@@ -134,6 +134,10 @@ if grep -rq '^autologin-user=' "$V/etc/lightdm/lightdm.conf" "$V/etc/lightdm/lig
     faute "A : avec un mot de passe, la session s ouvrirait toute seule"
 fi
 if grep -q NOPASSWD "$V/etc/sudoers.d/grenos-identite"; then faute "A : administration sans mot de passe"; fi
+grep -qx 'greeter-hide-users=false' "$V/etc/lightdm/lightdm.conf" || faute "A : avec un mot de passe, le compte serait cache (nom a taper)"
+if grep -q '^gamemode:' "$V/etc/group"; then
+    grep -qE '^gamemode:.*[:,]camille(,|$)' "$V/etc/group" || faute "A : le compte n est pas dans gamemode"
+fi
 grep -q '^camille:x:1000:1000:Zoé Essai' "$V/etc/passwd" || faute "A : le nom accentue n est pas garde"
 grep -q '^login=camille$' "$V/etc/grenos/preinstallation" || faute "A : l assistant ne saurait pas qui habite ici"
 [ ! -e "$V/etc/grenos/identite" ] || faute "A : l assistant ne se lancerait pas"

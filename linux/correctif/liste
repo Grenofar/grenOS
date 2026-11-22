@@ -30,6 +30,10 @@ fichier etc/systemd/system/grenos-cle-masquee.service
 fichier usr/lib/grenos/grenos-grub-install
 fichier usr/share/grenos/bootloader.conf
 
+# 22 novembre — le compte à mot de passe reste listé à l'écran de connexion
+# (le moteur de l'installation appelle ce script dans le disque installé).
+fichier usr/lib/grenos/grenos-compte
+
 # L'installateur recopie aussi ce correctif (fichier propre au correctif,
 # dans linux/correctif/seul : il n'a pas de sens dans l'image complète).
 seul etc/calamares/modules/unpackfs.conf

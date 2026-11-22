@@ -44,12 +44,15 @@ definir)
     printf '%s:%s\n' "$COMPTE" "$MOT" | chpasswd
 
     # La session ne s'ouvre plus toute seule : sinon le mot de passe ne
-    # protégerait rien.
+    # protégerait rien. Le compte reste LISTÉ (22 novembre) : ces fichiers
+    # remplacent ceux du 21, et sans la ligne Debian le cache — il fallait
+    # taper son nom pour entrer.
     for FICHIER in "$AUTO" "$AUTOD"; do
         cat > "$FICHIER" <<EOF
 [Seat:*]
 user-session=grenos
 greeter-session=lightdm-gtk-greeter
+greeter-hide-users=false
 EOF
     done
     # Et l'administration redemande ce mot de passe.
@@ -66,6 +69,7 @@ autologin-user-timeout=0
 autologin-session=grenos
 user-session=grenos
 greeter-session=lightdm-gtk-greeter
+greeter-hide-users=false
 EOF
     done
     printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$COMPTE" > "$SUDO"
