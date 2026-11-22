@@ -381,7 +381,7 @@ jobs:
         run: |
           ISO=$(ls "$RUNNER_TEMP"/iso/*.iso | head -1)
           xorriso -osirrox on -indev "$ISO" -extract /live/filesystem.squashfs "$RUNNER_TEMP/fs.sq" > /dev/null 2>&1
-          unsquashfs -q -n -d "$RUNNER_TEMP/publie" "$RUNNER_TEMP/fs.sq" 'usr/bin/gren*' > /dev/null
+          unsquashfs -q -n -d "$RUNNER_TEMP/publie" "$RUNNER_TEMP/fs.sq" 'usr/bin/gren*' 'usr/lib/grenos/grenos-*-natif' > /dev/null
           rm -f "$RUNNER_TEMP/fs.sq"
           B=linux/config/includes.chroot/usr/bin
           for f in "$RUNNER_TEMP"/publie/usr/bin/gren*; do
@@ -389,6 +389,13 @@ jobs:
             if [ ! -f "$f" ] || [ -L "$f" ] || [ -e "$B/$nom" ]; then continue; fi
             install -m 0755 "$f" "$B/"
             echo "binaire publie : $nom"
+          done
+          # La barre et le bureau natifs (45069872841 : sans eux, le paquet les
+          # retirait, et l'ancienne barre Python revenait).
+          for f in "$RUNNER_TEMP"/publie/usr/lib/grenos/grenos-*-natif; do
+            [ -e "linux/config/includes.chroot/usr/lib/grenos/$(basename "$f")" ] && continue
+            install -m 0755 "$f" linux/config/includes.chroot/usr/lib/grenos/
+            echo "binaire publie : $(basename "$f")"
           done
           install -m 0755 "$RUNNER_TEMP/grenos-ui" "$B/grenos-ui"
           sh linux/tools/make-deb.sh "9.0.$GITHUB_RUN_ID" "$RUNNER_TEMP/paquets" > "$RUNNER_TEMP/paquets.txt"

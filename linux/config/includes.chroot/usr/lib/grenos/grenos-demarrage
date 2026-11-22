@@ -51,22 +51,22 @@ ordre() { printf '%s\n' "$NVRAM" | sed -n 's/^BootOrder: *//p' | head -n 1 | tr 
 entrees() {
     printf '%s\n' "$NVRAM" | awk '
         /^Boot[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][* ]/ {
-            numero = substr($0, 5, 4)
-            reste = substr($0, 10)
+            numero=substr($0, 5, 4)
+            reste=substr($0, 10)
             sub(/^ +/, "", reste)
-            t = index(reste, "\t")
+            t=index(reste, "\t")
             if (!t) next
-            nom = substr(reste, 1, t - 1)
-            chemin = tolower(substr(reste, t + 1))
-            partition = "-"
+            nom=substr(reste, 1, t - 1)
+            chemin=tolower(substr(reste, t + 1))
+            partition="-"
             if (match(chemin, /^hd\([0-9]+,gpt,[0-9a-f-]+/)) {
-                partition = substr(chemin, RSTART, RLENGTH)
+                partition=substr(chemin, RSTART, RLENGTH)
                 sub(/^hd\([0-9]+,gpt,/, "", partition)
             }
-            genre = "autre"
-            if (index(chemin, "\\efi\\debian\\shimx64.efi")) genre = "shim"
-            else if (index(chemin, "\\efi\\debian\\grubx64.efi") || index(chemin, "\\efi\\grenos\\")) genre = "ancien"
-            else if (index(chemin, "\\efi\\microsoft\\boot\\bootmgfw.efi")) genre = "windows"
+            genre="autre"
+            if (index(chemin, "\\efi\\debian\\shimx64.efi")) genre="shim"
+            else if (index(chemin, "\\efi\\debian\\grubx64.efi") || index(chemin, "\\efi\\grenos\\")) genre="ancien"
+            else if (index(chemin, "\\efi\\microsoft\\boot\\bootmgfw.efi")) genre="windows"
             print numero, partition, genre, nom
         }'
 }
@@ -93,7 +93,7 @@ entree_grenos() {
 a_retirer() { # entree gardee, "ici" ou "mortes"
     entrees | awk -v u="$UUID" -v garde="$1" -v quoi="$2" -v presentes="$PRESENTES" '
         $1 != garde && ($3 == "shim" || $3 == "ancien") && NF == 4 {
-            nom = tolower($4)
+            nom=tolower($4)
             if (nom != "debian" && nom != "grenos") next
             if (quoi == "ici" && $2 == u) print $1
             if (quoi == "mortes" && $2 != "-" && $2 != u && index(presentes, " " $2 " ") == 0) print $1

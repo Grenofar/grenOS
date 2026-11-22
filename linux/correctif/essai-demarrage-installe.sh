@@ -516,7 +516,9 @@ if [ "$CORRIGE" = oui ] && [ "$bureau" = oui ]; then
     if [ "$ouverte" = oui ]; then
         sleep 4
         photo 2-fin-de-session
-        touche w 1
+        # « sendkey » parle en positions QWERTY : le W d'un clavier AZERTY
+        # est la touche z (45069872841 : la fenêtre a reçu un Z).
+        touche z 1
         if attendre 'BdsDxe: .*Boot[0-9A-F]* "Windows Boot Manager"' 120; then
             dire "Redemarrer sous Windows : le micrologiciel lance l entree de Windows"
             if attendre 'BdsDxe: starting Boot[0-9A-F]* "grenOS"' 90 2; then

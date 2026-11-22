@@ -32,7 +32,8 @@ attendre_sa_fin() { # dixiemes de seconde
 # retenait ce qui y avait été écrit). Jamais sous un serveur X qui tourne.
 rendre_le_terminal() {
     pgrep -x Xorg > /dev/null 2>&1 && return 0
-    timeout 5 python3 -I -c '
+    # `python3 -c '` tel quel : verif-commandes y reconnaît du Python.
+    timeout 5 python3 -c '
 import fcntl, os
 with open("/sys/class/tty/tty0/active") as f:
     chemin = "/dev/" + f.read().strip()
