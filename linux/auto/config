@@ -37,6 +37,13 @@ if [ -n "${GRENOS_INSTANTANE:-}" ]; then
         "$@"
 fi
 
+# `persistence-storage=filesystem` (22 novembre) — NE JAMAIS L'ENLEVER. Sans
+# lui, live-boot cherche aussi la persistance dans des FICHIERS : il monte EN
+# ÉCRITURE chaque partition de chaque disque, à chaque démarrage de la clé,
+# Windows compris (9990-misc-helpers.sh, probe_for_file_name). Trouvé par
+# l'essai de l'installateur : une partition « gardée » avait changé d'octets
+# (cle.yml 45017904727). Avec lui, seule une partition nommée « persistence »
+# (linux/tools/make-disk.sh) est montée.
 lb config noauto \
     --distribution trixie \
     --backports true \
@@ -58,5 +65,5 @@ lb config noauto \
     --chroot-squashfs-compression-level 19 \
     --apt-recommends false \
     --apt-options "--yes --allow-downgrades" \
-    --bootappend-live "boot=live components locales=fr_FR.UTF-8 keyboard-layouts=fr keyboard-model=pc105 timezone=Europe/Paris username=grenos user-fullname=grenOS hostname=grenos persistence persistence-encryption=none quiet splash loglevel=3 udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 rd.udev.log_level=3 noprompt noeject" \
+    --bootappend-live "boot=live components locales=fr_FR.UTF-8 keyboard-layouts=fr keyboard-model=pc105 timezone=Europe/Paris username=grenos user-fullname=grenOS hostname=grenos persistence persistence-encryption=none persistence-storage=filesystem quiet splash loglevel=3 udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 rd.udev.log_level=3 noprompt noeject" \
     "${@}"

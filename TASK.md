@@ -38,6 +38,11 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
   est sauté, l'anglais n'y menait plus à rien [écrit, vu dans l'aperçu].
 - [à faire, dans l'ordre] 1. l'essai à la souris vert ; 2. publication, avec
   l'accord de Grenofar ; 3. la clé ; 4. vu sur son PC (RTX 5060, sa carte mère).
+- GRAVE, d'avant l'installateur, trouvé par son essai (cle.yml 45017904727) :
+  la clé montait EN ÉCRITURE chaque partition de chaque disque au démarrage
+  (live-boot, `persistence` cherche aussi des fichiers) [prouvé sur ext4 ;
+  lu dans live-boot pour le reste]. `persistence-storage=filesystem`
+  [écrit ; essai avec faux Windows EFI + NTFS, sans puis avec, en cours].
 - La cause du « il fallait attendre » de Calamares n'a PAS été trouvée dans
   un journal : l'écran est remplacé, la panne n'est pas expliquée.
 - [à faire] réduire Windows pour installer sur le même disque : Calamares le

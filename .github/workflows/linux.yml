@@ -153,6 +153,14 @@ jobs:
         run: python3 linux/tools/essai-installation-moteur.py
       - name: L ecran et le moteur font le meme calcul, 20000 tirages
         run: python3 linux/tools/essai-installation-ecran.py
+      # 22 novembre : sans ce mot, la cle monte en ECRITURE chaque partition
+      # de chaque disque au demarrage, Windows compris (live-boot).
+      - name: La cle n ecrit pas sur les disques du PC en demarrant
+        run: |
+          grep -q -e '--bootappend-live ".* persistence-storage=filesystem ' linux/auto/config || {
+            echo "::error::persistence-storage=filesystem manque : la cle ecrirait sur les disques du PC"
+            exit 1
+          }
 
       # CE QUE L ASSISTANT FAIT, pas ce qu il dit. I7 est le seul ecran dont
       # le choix installe quelque chose ; neuf ecrans sur dix rangeaient une

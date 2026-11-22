@@ -147,7 +147,7 @@ ln -sf ../grenos-essai-priorite.service "$S/reboot.target.wants/grenos-essai-pri
 mksquashfs "$PLUS" "$OUT/couche.squashfs" -all-root -comp xz -noappend -quiet
 rm -rf "$PLUS"
 # La ligne du noyau de la PROCHAINE image : l'image publiée garde la sienne.
-NOYAU_PLUS=$(grep -o 'persistence-storage=[a-z,]*' "$RACINE/linux/auto/config" | head -n 1 || true)
+NOYAU_PLUS=$(grep -e '--bootappend-live' "$RACINE/linux/auto/config" | grep -o 'persistence-storage=[a-z,]*' | head -n 1 || true)
 echo "ajoute a la ligne du noyau de la cle : ${NOYAU_PLUS:-rien}"
 bash "$ICI/cle-fat.sh" "$ISO" "$OUT/couche.squashfs" "$OUT/cle.img" "$NOYAU_PLUS"
 truncate -s 36G "$DISQUE"
