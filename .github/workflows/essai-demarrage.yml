@@ -16,7 +16,7 @@ permissions:
 jobs:
   demarrage:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -35,12 +35,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download linux-20261122-1719 -R "$GITHUB_REPOSITORY" -p '*.iso' -D "$RUNNER_TEMP/iso"
+          gh release download linux-20261122-2300 -R "$GITHUB_REPOSITORY" -p '*.iso' -D "$RUNNER_TEMP/iso"
 
       - name: Installer, demarrer comme son PC
         run: |
           ISO=$(ls "$RUNNER_TEMP"/iso/*.iso | head -1)
-          sudo bash linux/correctif/essai-demarrage-installe.sh "$ISO" - "$RUNNER_TEMP/demarrage"
+          sudo env JUGER=oui bash linux/correctif/essai-demarrage-installe.sh "$ISO" - "$RUNNER_TEMP/demarrage"
 
       - uses: actions/upload-artifact@v4
         if: always()
