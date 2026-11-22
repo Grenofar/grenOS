@@ -297,7 +297,9 @@ double_clic 640 424                      # J ai compris
 sleep 2
 voir 5-resume-compris
 cliquer 1047 695                         # Installer grenOS
-attendre 'installation : lancee sur /dev/sda' 30
+# sda ou sdb : deux disques SATA sondés en même temps n'ont pas d'ordre fixe
+# (run 45039266877). Que ce soit le BON, la table et les empreintes le jugent.
+attendre 'installation : lancee sur /dev/sd[ab]' 30
 
 etape "l installation"
 sleep 15
