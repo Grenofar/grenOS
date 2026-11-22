@@ -33,7 +33,7 @@ const GESTES: [Geste; 8] = [
 
 const INSTALLER: Geste = g(
     "Installer grenOS",
-    "Poser le système sur le disque de ce PC, à côté ou à la place de ce qui s'y trouve. Rien n'est touché avant que tu ne valides.",
+    "Poser le système sur le disque de ce PC, dans un espace libre ou à la place de ce qui s'y trouve. Rien n'est touché avant que tu ne valides.",
     "installer",
     "disque",
 );

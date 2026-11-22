@@ -61,9 +61,12 @@
 
   // Le disque montré d'abord : un disque vide, sinon un disque sans Windows
   // ni fichiers — JAMAIS celui de Windows : il se choisit d'un clic voulu.
+  function aGarder(disque) {
+    return disque.partitions.some((p) => ["windows", "microsoft", "donnees", "autre"].includes(p.genre));
+  }
   function parDefaut(disques) {
     const sansRien = disques.find((d) => d.etat === "vide");
-    const sansWindows = disques.find((d) => d.etat === "gpt" && !d.partitions.some((p) => ["windows", "microsoft", "donnees", "autre"].includes(p.genre)));
+    const sansWindows = disques.find((d) => d.etat === "gpt" && !aGarder(d));
     return (sansRien || sansWindows || {}).dev || null;
   }
 
@@ -356,6 +359,9 @@
     if (!disque) return "Choisis le disque où installer grenOS.";
     if (!c.creation) {
       if (c.zones.some((z) => z.possible)) return "Clique « Créer pour grenOS » sur l'espace libre.";
+      // Jamais « supprime » devant Windows : ce moteur ne sait pas réduire
+      // une partition, et une personne qui veut le garder l'effacerait.
+      if (aGarder(disque)) return "Pour garder ce qui est sur ce disque, choisis-en un autre : grenOS ne sait pas encore réduire une partition.";
       return disque.etat === "gpt" ? "Pas assez de place : supprime une partition, ou efface tout le disque." : "Efface tout le disque pour y installer grenOS.";
     }
     const n = c.partent.length;

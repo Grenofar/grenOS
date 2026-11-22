@@ -32,6 +32,9 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
   3. publication, avec l'accord de Grenofar ; 4. la clé ; 5. vu sur son PC.
 - La cause du « il fallait attendre » de Calamares n'a PAS été trouvée dans
   un journal : l'écran est remplacé, la panne n'est pas expliquée.
+- [à faire] réduire Windows pour installer sur le même disque : Calamares le
+  proposait, notre moteur ne le sait pas. L'écran le dit et ne conseille plus
+  de supprimer ; sur un PC à un seul disque plein, c'est un manque (RÈGLE N°1).
 - [à faire] « English » dans l'assistant de la clé est enregistré et jamais
   appliqué : une case sans effet. Pas reprise dans l'installateur.
 
