@@ -27,7 +27,11 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
 - L'assistant du disque installé ne redemande ni langue, ni clavier, ni
   compte [prouvé : 45019134134] ; n'efface pas le mot de passe [écrit ;
   essais Rust, jamais démarré jusqu'à la connexion avec un mot de passe].
-- Calamares reste en secours : `grenos-installer --secours`.
+- Calamares reste en secours (`grenos-installer --secours`) ET pour les PC
+  démarrés en BIOS : notre moteur n'installe qu'en UEFI. Le recul a été vu
+  sur la capture de l'image complète (45020774130), avant publication
+  [écrit ; la construction exige la fenêtre de Calamares en BIOS].
+  [à faire] installer en BIOS avec notre installateur.
 - Par la vraie fenêtre [prouvé : cle.yml 45016476457 — sept pages sous
   WebKitGTK (captures regardées), installé, Alt+F4 sans effet en pleine copie,
   redémarré sur le disque avec la clé branchée et en tête de l'ordre, 12

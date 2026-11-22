@@ -936,8 +936,7 @@ for touche in i n s t q l l ret; do
   python3 scripts/ci-screen.py send "$RUNNER_TEMP/monitor.sock" "sendkey $touche" || true
   sleep 1
 done
-# Notre installateur (22 novembre) lit les disques des sa premiere page ; on
-# lui laisse le temps de le faire en emulation.
+# Calamares charge Qt et ses trente modules : il lui faut du temps.
 sleep 30
 python3 scripts/ci-screen.py grab "$RUNNER_TEMP/monitor.sock" "$RUNNER_TEMP/ecran-installateur.ppm" || true
 echo "installateur: capture prise — la fenetre est a regarder"
@@ -1293,18 +1292,22 @@ fi
 # L'installateur a-t-il OUVERT SA FENETRE ?
 #
 # `pkcheck : autorise sans mot de passe` dit seulement que polkit laisserait
-# passer. Depuis le 22 novembre c'est NOTRE installateur : il ne dit « ecran
-# ouvert » qu'une fois son moteur root execute et les disques lus. La preuve
-# couvre donc la fenetre, le droit d'administration et la lecture des disques.
+# passer. pkexec peut autoriser et Calamares refuser de demarrer — une
+# configuration illisible, un module manquant, un theme Qt absent. La barre,
+# elle, ne peut pas se tromper : une fenetre de classe « calamares » a existe.
+#
+# CETTE MACHINE DEMARRE EN BIOS, et en BIOS c'est Calamares qui installe
+# (22 novembre). Notre installateur, lui, est juge en UEFI par sa fenetre :
+# cle.yml, installation-fenetre.
 #
 # Exige depuis aujourd'hui : vue verte aux trois constructions depuis que la CI
 # ouvre l'installateur (fd1ca088, 07355248, 85130c58). C'est le premier des
 # trois verrous de « l'installation sur disque menee a son terme », et le seul
 # qui ne demande pas la main de Grenofar.
-if grep -aq 'installation : ecran ouvert, ' "$RUNNER_TEMP/serial.log"; then
-  echo "prouve: l'installateur a ouvert sa fenetre et lu les disques ($(grep -a -o 'installation : ecran ouvert, [0-9]* disque' "$RUNNER_TEMP/serial.log" | tail -1))"
+if grep -aq 'tuiles.*calamares' "$RUNNER_TEMP/serial.log"; then
+  echo "prouve: l'installateur a ouvert sa fenetre (BIOS : Calamares)"
 else
-  echo "::error::L'installateur de grenOS ne s'est pas ouvert, ou son moteur n'a pas lu les disques."
+  echo "::error::L'installateur ne s'est pas ouvert : en BIOS, Calamares doit demarrer."
   MUET=1
 fi
 # Le clavier ne se contente pas d'exister : il doit etre celui qu'on a

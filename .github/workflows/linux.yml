@@ -145,7 +145,7 @@ jobs:
         run: sh linux/tools/essai-revenir-ici.sh
       # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
       # rendu la cle au premier Calamares, qui l a prise pour partition EFI.
-      - name: Le lanceur de l installateur, 25 cas
+      - name: Le lanceur de l installateur, 27 cas
         run: sh linux/tools/essai-installer.sh
       # 22 novembre, notre installateur : il efface des disques. Un refus ne
       # doit RIEN avoir ecrit, et l ecran montre exactement ce qui sera fait.

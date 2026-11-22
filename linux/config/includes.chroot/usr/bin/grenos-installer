@@ -19,8 +19,8 @@
 # DEPUIS LE 22 NOVEMBRE, tout cela n'est plus que le SECOURS : « Installer
 # grenOS » ouvre notre installateur (grenos-ui, page « installation » ; le
 # moteur est /usr/lib/grenos/grenos-installation, qui referme lui-même le
-# disque choisi et n'accepte jamais la clé). `grenos-installer --secours`
-# ouvre encore Calamares, avec ce qui suit.
+# disque choisi et n'accepte jamais la clé). Calamares, avec ce qui suit,
+# reste pour `grenos-installer --secours` et pour un PC démarré en BIOS.
 #
 # Le reste ne change pas : `pkexec calamares`, ouvert sans mot de passe par
 # la règle polkit 49 (et vérifié à chaque session par grenos-session).
@@ -39,9 +39,13 @@ dire() {
 # Le moteur absent (ce lanceur posé par le correctif sur une image d'avant le
 # 22 novembre) : la page n'y est pas non plus, Calamares reste.
 MOTEUR=${GRENOS_MOTEUR:-/usr/lib/grenos/grenos-installation}
+# En BIOS aussi : notre moteur n'installe qu'en UEFI. La page ne savait que
+# refuser (vu sur la capture de l'image complète, run 45020774130), là où
+# Calamares laissait installer.
+EFI=${GRENOS_EFI:-/sys/firmware/efi}
 if [ "${1:-}" = --secours ]; then
     shift
-elif [ -x "$MOTEUR" ] && command -v grenos-ui >/dev/null 2>&1; then
+elif [ -d "$EFI" ] && [ -x "$MOTEUR" ] && command -v grenos-ui >/dev/null 2>&1; then
     exec grenos-ui installation
 fi
 

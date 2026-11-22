@@ -134,6 +134,8 @@ chmod +x "$T/bin/grenos-ui"
 printf '#!/bin/sh\nexit 0\n' > "$T/moteur"
 chmod +x "$T/moteur"
 export GRENOS_MOTEUR="$T/moteur"
+mkdir "$T/efi"
+export GRENOS_EFI="$T/efi"
 PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
 attendu "grenos-ui installation" "Installer grenOS ouvre notre installateur"
 jamais  "pkexec" "notre installateur : Calamares ne s ouvre pas"
@@ -153,4 +155,11 @@ GRENOS_MOTEUR="$T/absent" PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
 attendu "pkexec /usr/bin/calamares" "image sans notre moteur : Calamares s ouvre"
 jamais  "grenos-ui" "image sans notre moteur : pas de page absente"
 
-[ "$fautes" -eq 0 ] && echo "installer : 25 cas justes" || { echo "installer : $fautes faute(s)"; cat "$JOURNAL"; exit 1; }
+# Démarré en BIOS (capture de l'image complète, run 45020774130) : notre
+# moteur refuse, et la version publiée, elle, laissait installer.
+: > "$JOURNAL"
+GRENOS_EFI="$T/sans-efi" PATH="$T/bin:$PATH" sh "$S" 2>/dev/null
+attendu "pkexec /usr/bin/calamares" "demarre en BIOS : Calamares reste"
+jamais  "grenos-ui" "demarre en BIOS : pas de page qui ne ferait que refuser"
+
+[ "$fautes" -eq 0 ] && echo "installer : 27 cas justes" || { echo "installer : $fautes faute(s)"; cat "$JOURNAL"; exit 1; }
