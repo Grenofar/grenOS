@@ -730,11 +730,16 @@
   // au cas où le moteur web recompterait à 1 sur le bouton redessiné.
   let dernierClic = { quand: -1e9, x: 0, y: 0 };
   document.addEventListener("click", (e) => {
-    if (!e.detail || !(e.clientX || e.clientY) || !e.target.closest?.("button")) return;
+    if (!e.detail || !(e.clientX || e.clientY)) return;
+    // La case d'accord aussi : cochée puis décochée, elle semblait morte. Pour
+    // elle, seul `detail` juge — le clic que le libellé renvoie à sa case
+    // arrive à la même place, au même instant.
+    const cible = e.target.closest?.("button, label.in-accord");
+    if (!cible) return;
     const avant = dernierClic;
     dernierClic = { quand: e.timeStamp, x: e.clientX, y: e.clientY };
     const proche = Math.abs(e.clientX - avant.x) < 6 && Math.abs(e.clientY - avant.y) < 6;
-    if (e.detail > 1 || (proche && e.timeStamp - avant.quand < 350)) {
+    if (e.detail > 1 || (cible.tagName === "BUTTON" && proche && e.timeStamp - avant.quand < 350)) {
       e.preventDefault();
       e.stopPropagation();
     }
