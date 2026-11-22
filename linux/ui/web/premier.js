@@ -99,7 +99,7 @@
     D.erreur.textContent = "";
     D.retour.style.visibility = rang > 1 ? "visible" : "hidden";
     D.suite.querySelector("span").textContent =
-      cle === "bienvenue" ? "Start" : cle === "final" ? "Démarrer" : "Continuer";
+      cle === "bienvenue" ? (infos.installe ? "Commencer" : "Start") : cle === "final" ? "Démarrer" : "Continuer";
     D.suite.disabled = false;
     D.aide.style.display = cle === "final" ? "none" : "";
     D.ecran.className = "ecran apparait " + (sens > 0 ? "vers-avant" : "vers-arriere");
@@ -219,6 +219,18 @@
   // en livrer une pour un mot coûterait 60 Mo à l'image.
   const SALUTS = ["Welcome", "Bienvenue", "Bienvenido", "Willkommen", "Benvenuto", "Bem-vindo", "مرحبا", "Welkom", "Välkommen", "Witaj"];
   ecrans.bienvenue = () => {
+    // Installé (22 novembre) : l'écran de langue est sauté, l'installateur
+    // était en français. L'anglais n'y menait plus à rien (vu sur la capture
+    // du disque installé, run 45016476457).
+    if (infos.installe) {
+      return el("div.accueil",
+        el("div.embleme", el("div.anneau"), el("div.anneau.a2"), el("div.logo.geant", svg("marque"))),
+        el("h1.titre.enorme", el("span.salut.degrade", "Bienvenue")),
+        el("p.sous.centre", "dans ", el("b", "grenOS"), " — encore quelques choix, et c'est prêt."),
+        el("div.puces-accueil",
+          el("span.badge", svg("eclair"), "Rapide"), el("span.badge", svg("cadenas"), "Privé par défaut"),
+          el("span.badge", svg("palette"), "À ton goût")));
+    }
     // La seule page en anglais : quelqu'un qui ne lit pas le français doit
     // pouvoir atteindre l'écran où l'on choisit la langue.
     const salut = el("span.salut.degrade", SALUTS[0]);

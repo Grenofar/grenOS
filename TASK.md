@@ -27,14 +27,17 @@ changeable », puis « l'interface, mets-la pour toutes les pages ».
 - L'assistant du disque installé ne redemande ni langue, ni clavier, ni
   compte, et n'efface pas le mot de passe [écrit ; essais Rust].
 - Calamares reste en secours : `grenos-installer --secours`.
-- Par la vraie fenêtre [prouvé jusqu'à « grenOS est installé » : cle.yml
-  45015327277, captures regardées des pages sous WebKitGTK ; Alt+F4 en pleine
-  copie ne ferme rien]. Le redémarrage y est revenu sur la clé : `bootindex`
-  de QEMU fait supprimer par OVMF l'entrée du disque (lu dans
-  QemuBootOrderLib). Machine d'essai refaite [écrit, pas encore vert].
-- [à faire, dans l'ordre] 1. cle.yml `installation-fenetre` vert (le parcours
-  entier sous WebKitGTK, jusqu'au bureau du disque) ; 2. regarder ses captures ;
-  3. publication, avec l'accord de Grenofar ; 4. la clé ; 5. vu sur son PC.
+- Par la vraie fenêtre [prouvé : cle.yml 45016476457 — sept pages sous
+  WebKitGTK (captures regardées), installé, Alt+F4 sans effet en pleine copie,
+  redémarré sur le disque avec la clé branchée et en tête de l'ordre, 12
+  écrans d'assistant au lieu de 15, bureau ouvert, Secure Boot ; sans réseau].
+  `bootindex` de QEMU faussait le redémarrage (OVMF efface l'entrée du disque).
+- Le même parcours À LA SOURIS, sur le scénario demandé (supprimer, créer,
+  25 Gio, double-clics) [écrit, pas encore vert].
+- L'assistant du disque installé accueille en français : l'écran de langue y
+  est sauté, l'anglais n'y menait plus à rien [écrit, vu dans l'aperçu].
+- [à faire, dans l'ordre] 1. l'essai à la souris vert ; 2. publication, avec
+  l'accord de Grenofar ; 3. la clé ; 4. vu sur son PC (RTX 5060, sa carte mère).
 - La cause du « il fallait attendre » de Calamares n'a PAS été trouvée dans
   un journal : l'écran est remplacé, la panne n'est pas expliquée.
 - [à faire] réduire Windows pour installer sur le même disque : Calamares le

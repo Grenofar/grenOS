@@ -12,8 +12,13 @@
 # La couche porte ce que la prochaine image portera (grenos-ui, moteur,
 # lanceur) : on voit tout cela AVANT de publier quoi que ce soit.
 #
-# Tout se fait au clavier : chaque page dit son nom sur le port série, on
-# n'appuie jamais à l'aveugle.
+# L'installateur se fait À LA SOURIS, sur ce qui a été demandé : SUPPRIMER
+# une partition, CRÉER pour grenOS, CHANGER la taille en Gio. Grenofar disait
+# « des fois c'est pas cliquable » : on double-clique donc là où, avant, le
+# second clic annulait le premier. Les positions sont celles de l'aperçu à
+# 1040×696, identiques au pixel près aux captures du run 45015327277 (écran
+# 1280×800). Chaque page dit son nom sur le port série : un clic à côté fait
+# échouer l'essai, il ne passe pas inaperçu.
 
 set -euo pipefail
 ISO=$1
@@ -25,6 +30,7 @@ ECRAN="$RACINE/scripts/ci-screen.py"
 mkdir -p "$OUT"
 SERIE="$OUT/serie.log"
 MON="$OUT/mon.sock"
+QMP="$OUT/qmp.sock"
 DISQUE="$OUT/disque.img"
 QEMU=""
 : > "$SERIE"
@@ -56,6 +62,29 @@ attendre() { # motif, secondes, [combien de fois]
         sleep 2
     done
 }
+cliquer() { # x, y
+    python3 "$ECRAN" clic "$QMP" "$1" "$2" 1280 800 > /dev/null || faute "le clic en $1,$2 n est pas parti"
+}
+# `clic` de ci-screen attend 0,5 s entre deux ordres : ce ne serait plus un
+# double-clic. (ci-screen lui-même ne change pas : il relance d'autres
+# constructions, jusqu'à une publication.)
+double_clic() { # x, y
+    python3 -B - "$ECRAN" "$QMP" "$1" "$2" <<'EOF' || faute "le double-clic en $1,$2 n est pas parti"
+import importlib.util, sys
+fiche = importlib.util.spec_from_file_location("ecran", sys.argv[1])
+ecran = importlib.util.module_from_spec(fiche)
+fiche.loader.exec_module(ecran)
+x, y = int(sys.argv[3]) * 0x7FFF // 1280, int(sys.argv[4]) * 0x7FFF // 800
+def envoi(*evenements):
+    return {"execute": "input-send-event", "arguments": {"events": list(evenements)}}
+def bouton(bas):
+    return envoi({"type": "btn", "data": {"button": "left", "down": bas}})
+bouger = envoi({"type": "abs", "data": {"axis": "x", "value": x}},
+               {"type": "abs", "data": {"axis": "y", "value": y}})
+reponses = ecran.qmp(sys.argv[2], [bouger, bouton(True), bouton(False), bouton(True), bouton(False)], pause=0.07)
+sys.exit(1 if any("error" in r for r in reponses) else 0)
+EOF
+}
 finir_assistant() { # combien de « nom choisi » attendus
     local i
     for i in $(seq 1 60); do
@@ -71,11 +100,11 @@ ranger() {
     if [ -n "$QEMU" ]; then kill "$QEMU" 2>/dev/null || true; fi
     # Le rapport que la clé écrit toute seule, pour comprendre un échec.
     MTOOLS_SKIP_CHECK=1 mcopy -s -n -i "$OUT/cle.img@@1048576" ::/grenos-rapports "$OUT/" > /dev/null 2>&1 || true
-    rm -f "$OUT/vars.fd" "$MON"
+    rm -f "$OUT/vars.fd" "$MON" "$QMP"
 }
 trap ranger EXIT
 
-etape "la cle FAT32 et un disque vide de 32 Gio"
+etape "la cle FAT32 et un disque de 36 Gio : deux partitions a garder, un ancien grenOS a supprimer"
 # LA CLÉ PRIORITAIRE, SANS `bootindex` (22 novembre, run 45015327277). Avec
 # lui, OVMF réécrit l'ordre à chaque démarrage et SUPPRIME toute entrée HD()
 # (QemuBootOrderLib : « drop HD() », puis PruneBootVariables) : l'entrée du
@@ -117,7 +146,25 @@ ln -sf ../grenos-essai-priorite.service "$S/reboot.target.wants/grenos-essai-pri
 mksquashfs "$PLUS" "$OUT/couche.squashfs" -all-root -comp xz -noappend -quiet
 rm -rf "$PLUS"
 bash "$ICI/cle-fat.sh" "$ISO" "$OUT/couche.squashfs" "$OUT/cle.img"
-truncate -s 32G "$DISQUE"
+truncate -s 36G "$DISQUE"
+# Comme le Samsung de Grenofar avant l'effacement : trois partitions Linux,
+# la dernière un grenOS d'avant. 1, 2049 et 5121 Mio, en secteurs de 512.
+sfdisk -q "$DISQUE" <<'EOF'
+label: gpt
+first-lba: 2048
+start=2048, size=4194304, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
+start=4196352, size=6291456, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
+start=10487808, size=62914560, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
+EOF
+BOUCLE=$(sudo losetup -fP --show "$DISQUE")
+sudo udevadm settle || true
+sudo mkfs.ext4 -q -F "${BOUCLE}p1"
+sudo mkfs.ext4 -q -F "${BOUCLE}p2"
+sudo mkfs.ext4 -q -F -L grenOS "${BOUCLE}p3"
+sync
+GARDE_1=$(sudo sha256sum "${BOUCLE}p1" | cut -d' ' -f1)
+GARDE_2=$(sudo sha256sum "${BOUCLE}p2" | cut -d' ' -f1)
+sudo losetup -d "$BOUCLE"
 cp /usr/share/OVMF/OVMF_VARS_4M.ms.fd "$OUT/vars.fd"
 ACCEL=()
 if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then ACCEL=(-enable-kvm -cpu host); fi
@@ -132,7 +179,8 @@ qemu-system-x86_64 "${ACCEL[@]}" -machine q35,smm=on -global driver=cfi.pflash01
     -device usb-tablet,bus=xhci.0 \
     -nic none -vga std -display none \
     -serial file:"$SERIE" \
-    -monitor unix:"$MON",server,nowait &
+    -monitor unix:"$MON",server,nowait \
+    -qmp unix:"$QMP",server,nowait &
 QEMU=$!
 sleep 3
 kill -0 "$QEMU" 2>/dev/null || faute "QEMU n a pas demarre"
@@ -167,33 +215,51 @@ attendre 'installation : ecran ouvert, ' 10
 sleep 4
 voir 1-bienvenue
 
-etape "les pages"
-touche ret
+TAILLE=$(head -1 "$OUT/1-bienvenue.txt" 2>/dev/null | cut -d, -f1 || true)
+[ "$TAILLE" = 1280x800 ] || faute "ecran de ${TAILLE:-taille inconnue}, les clics visent un ecran de 1280x800"
+
+etape "les pages, a la souris"
+double_clic 1060 695                     # Commencer
 attendre 'installation : page clavier' 20
-sleep 2
+sleep 3
+[ "$(vu 'installation : page disque')" -eq 0 ] || faute "un double-clic sur Commencer a saute une page"
 voir 2-clavier
-touche ret
+cliquer 1067 695                         # Continuer
 attendre 'installation : page disque' 20
 sleep 2
 voir 3-disque
-# La carte du disque, « Actualiser », « Utiliser tout le disque ».
-for t in tab tab tab ret; do touche "$t"; done
+double_clic 1079 471                     # Supprimer (l ancien grenOS)
+sleep 2
+voir 3-disque-supprimee
+double_clic 1054 531                     # Creer pour grenOS
+sleep 2
+voir 3-disque-creee
+cliquer 560 578                          # la glissiere bouge
+sleep 1
+voir 3-disque-glissiere
+cliquer 905 578                          # le champ des Gio : on y tape 25
+touche end
+for _ in 1 2 3; do touche backspace; done
+touche shift-2
+touche shift-5
 sleep 2
 voir 3-disque-choisi
-touche ret
+cliquer 1067 695
 attendre 'installation : page compte' 20
 sleep 2
-for t in c i; do touche "$t"; done
-sleep 1
 voir 4-compte
-touche ret
+double_clic 1067 695                     # Continuer : ne doit PAS installer
 attendre 'installation : page resume' 20
-sleep 2
+sleep 3
 voir 5-resume
+[ "$(vu 'installation : lancee sur')" -eq 0 ] || faute "un double-clic sur Continuer a lance l installation"
 touche ret 4
 [ "$(vu 'installation : lancee sur')" -eq 0 ] || faute "Entree au resume a lance l installation"
-echo "Entree au resume : rien n est lance"
-for t in tab tab ret; do touche "$t"; done
+echo "double-clic sur Continuer, puis Entree au resume : rien n est lance"
+double_clic 640 424                      # J ai compris
+sleep 2
+voir 5-resume-compris
+cliquer 1047 695                         # Installer grenOS
 attendre 'installation : lancee sur /dev/sda' 30
 
 etape "l installation"
@@ -222,8 +288,7 @@ voir 7-termine
 etape "Redemarrer maintenant, la cle restee branchee et prioritaire"
 AVANT=$(vu 'premier : ecran bienvenue')
 SESSIONS=$(vu 'session de bureau ouverte')
-touche tab
-touche ret
+cliquer 1019 695                         # Redemarrer maintenant
 attendre 'grenos: essai : la cle en tete de l ordre' 120
 # La ligne du micrologiciel lui-même : il démarre l'entrée du disque.
 attendre 'BdsDxe: starting Boot[0-9A-F]* "debian"' 120
@@ -248,8 +313,21 @@ QEMU=""
 etape "ce que le disque a garde"
 BOUCLE=$(sudo losetup -fP --show "$DISQUE")
 sudo udevadm settle || true
+sfdisk -J "$DISQUE" > "$OUT/table.json"
+python3 - "$OUT/table.json" <<'EOF' || faute "le disque n a pas ce que l ecran montrait (25 Gio dans la place liberee)"
+import json, sys
+with open(sys.argv[1]) as f:
+    table = json.load(f)["partitiontable"]["partitions"]
+vu = sorted((p["start"] // 2048, p["size"] // 2048) for p in table)
+attendu = [(1, 2048), (2049, 3072), (5121, 512), (5633, 25600)]
+print("table :", vu)
+sys.exit(0 if vu == attendu else 1)
+EOF
+[ "$(sudo sha256sum "${BOUCLE}p1" | cut -d' ' -f1)" = "$GARDE_1" ] || faute "la premiere partition gardee a change"
+[ "$(sudo sha256sum "${BOUCLE}p2" | cut -d' ' -f1)" = "$GARDE_2" ] || faute "la seconde partition gardee a change"
+echo "supprimee, creee, 25 Gio, et pas un octet change dans les deux partitions gardees"
 mkdir -p "$OUT/vu"
-sudo mount -o ro,noload "${BOUCLE}p2" "$OUT/vu"
+sudo mount -o ro,noload "${BOUCLE}p4" "$OUT/vu"
 sudo journalctl -D "$OUT/vu/var/log/journal" -b -o short-monotonic --no-pager > "$OUT/journal-installe.txt" 2>/dev/null || true
 LOGIN=$(sed -n 's/^login=//p' "$OUT/vu/etc/grenos/preinstallation" || true)
 IDENTITE=$(sudo cat "$OUT/vu/etc/grenos/identite" 2>/dev/null || true)
@@ -263,5 +341,5 @@ CMD=$(grep -m1 -i 'command line:' "$OUT/journal-installe.txt" || true)
 case "$CMD" in *boot=live*) faute "c est la cle qui a redemarre" ;; esac
 case "$CMD" in *splash*) ;; *) faute "le disque demarre sans ecran de chargement" ;; esac
 
-echo "FENETRE : installe par la fenetre, redemarre sur le disque (cle branchee), bureau ouvert, Secure Boot" \
+echo "FENETRE : supprimer, creer, 25 Gio a la souris ; installe par la fenetre, redemarre sur le disque (cle branchee), bureau ouvert, Secure Boot" \
     | tee -a "$OUT/verdict.txt"
