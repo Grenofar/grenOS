@@ -11,14 +11,17 @@ grenOS et pas debian », le menu (« enlève »), « l'OOBE apparaît pendant 3 
 […] un chargement de grenOS qui ne se termine pas », « l'OOBE seulement dans
 grenOS de base installé ».
 
-- DEUX pannes, UNE cause [prouvé : reproduit sans pilote d'écran, 45053914956,
-  journal et sources de Plymouth, LightDM et du noyau] : X démarrait pendant
-  que Plymouth vivait. 1) à 10 s Plymouth rappelle le terminal 1 par-dessus
-  le lobby ; 2) au démarrage suivant, le changement de terminal se perd quand
-  Plymouth meurt : X attend, aucun bureau. `grenos-ecran-libre` (lobby et
-  lightdm) attend la MORT du processus [écrit].
-- Sur le disque de la 1719, Ctrl+Alt+F7 ramène le lobby et il se finit
-  [prouvé dans QEMU]. Au démarrage suivant : PAS mesuré ; ne rien lui promettre.
+- DEUX pannes, deux gestes manquants avant X [prouvé : 45053914956, puis
+  45067830100 ; sources de Plymouth, LightDM et du noyau] :
+  1) Plymouth vivant rappelle le terminal 1 à 10 s, par-dessus le lobby ;
+  2) Plymouth arrêté avant d'avoir rien peint laisse le terminal en
+  KD_GRAPHICS + VT_AUTO, où le noyau IGNORE tout changement : X attend sans
+  fin. Attendre sa mort ne suffisait donc PAS (45067830100, rouge).
+  `grenos-ecran-libre` attend sa mort PUIS rend le terminal en texte, avant
+  le lobby et lightdm [écrit].
+- Sur le disque de la 1719, SANS rien changer, Ctrl+Alt+F7 ramène le lobby,
+  puis ouvre le bureau au démarrage suivant [prouvé dans QEMU : 45068030925 ;
+  à voir sur son PC]. C'est le chemin de la réparation par mise à jour.
 - Lobby seulement sur le grenOS installé ; la clé ouvre son bureau, Bienvenue
   propose d'installer (plus jamais sur une machine installée) [écrit]. La
   machine VirtualBox publiée est une image live : elle n'a plus de lobby.
@@ -29,14 +32,20 @@ grenOS de base installé ».
   par la carte mère) peut rester à côté [à voir sur son PC].
 - Ni menu ni texte de GRUB, ligne du noyau de la clé [écrit]. Windows : Fin
   de session › « Redémarrer sous Windows » (BootNext, une fois) [écrit].
-- « Une erreur EVO » : ligne exacte PAS revue. Son journal a une ligne du
-  noyau « Samsung SSD 860 EVO […] applying quirks » (un avis, pas une panne).
-  Le disque installé n'avait que « quiet splash » ; il a maintenant les
-  silences de la clé [écrit]. Si elle revient : lui demander une photo.
-- Preuves : cle.yml `demarrage-installe` (neuf ; mise à jour de la 1719 avec
-  mot de passe ; Windows par la vraie souris), installation-fenetre, puis
-  construction complète SANS publication [à faire : runs 45067830100 et
-  45067829927].
+- « Une erreur EVO » : très probablement « error: prohibited by secure boot
+  policy. », à CHAQUE démarrage installé en Secure Boot [prouvé : séries de
+  45053914956 et 45067830100] : `insmod bli` (25_bli de GRUB 2.12), absent de
+  l'image signée. 25_bli perd son bit d'exécution ; la ligne du noyau de la
+  clé fait taire le reste [écrit]. Si elle revient : lui demander une photo.
+- Antivirus (demandé le 22 au soir) : Debian arme TROIS unités freshclam, on
+  n'en coupait qu'une ; 40 s de retard sans réseau, des centaines de Mo avec
+  [prouvé : journal de 45053914956]. Les trois coupées, garde à la
+  construction, essai-antivirus 10 cas [écrit].
+- Premier passage, cle.yml 45067830100 [prouvé] : parcours entier par la
+  fenêtre, clé sans lobby, micrologiciel qui démarre « grenOS », lobby du
+  disque, bureau ; mise à jour de la 1719 : « debian » remplacé par grenOS.
+  ROUGE : le lobby sans pilote d'écran (point 2 ci-dessus), corrigé depuis
+  [à faire : le repasser, puis une construction complète SANS publication].
 - [à faire, dans l'ordre] 1. les deux runs verts, captures regardées ;
   2. SON accord pour publier (tout claude/suite, barre cliquable comprise) ;
   3. l'image publiée jugée nue ; 4. la clé, avec son accord ; 5. réparer son

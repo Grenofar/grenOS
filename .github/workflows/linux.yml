@@ -148,6 +148,10 @@ jobs:
       # jamais ouvert au demarrage suivant, « debian » au BIOS, menu.
       - name: Le disque installe demarre droit (lobby, nom au BIOS, sans menu, Windows joignable)
         run: sh linux/tools/essai-demarrage.sh
+
+      # 22 novembre : trois telechargeurs de signatures armes, un seul coupe.
+      - name: L antivirus ne telecharge rien au demarrage
+        run: sh linux/tools/essai-antivirus.sh
       # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
       # rendu la cle au premier Calamares, qui l a prise pour partition EFI.
       - name: Le lanceur de l installateur, 27 cas

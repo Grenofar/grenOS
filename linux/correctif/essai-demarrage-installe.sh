@@ -50,6 +50,7 @@ DISQUE="$OUT/disque.img"
 WINDOWS="$OUT/windows.img"
 VU="$OUT/vu"
 QEMU=""
+QEMU_VU=""
 SERIE=""
 RATES=""
 BOUCLES=()
@@ -60,8 +61,30 @@ etape() { echo; echo "=== $* ==="; }
 dire() { echo "$*" | tee -a "$OUT/verdict.txt"; }
 rate() { echo "::error::$*"; dire "ECHEC : $*"; RATES="$RATES [$*]"; }
 fin() {
+    relever || true
     if [ -n "$RATES" ]; then dire "DEMARRAGE : ECHEC$RATES"; exit 1; fi
     dire "DEMARRAGE : le lobby reste, se finit, et le disque rouvre le bureau au demarrage suivant"
+}
+# Les journaux du disque : AUSSI quand l'essai échoue tôt (45067830100
+# n'avait rien laissé pour expliquer le lobby jamais affiché).
+RELEVE=""
+relever() {
+    local j p
+    [ -z "$RELEVE" ] && [ -n "$QEMU_VU" ] || return 0
+    RELEVE=oui
+    boucler "$DISQUE" || return 0
+    p=$BOUCLE
+    if mount -o ro,noload "${p}p2" "$VU"; then
+        j="$VU/var/log/journal"
+        journalctl -D "$j" -o short-monotonic --no-pager > "$OUT/journal-installe.txt" 2>/dev/null || true
+        # Ce que « quiet » laisse passer à l'écran : le « une erreur evo » de Grenofar.
+        journalctl -D "$j" -k -p err -o short-monotonic --no-pager > "$OUT/noyau-erreurs.txt" 2>/dev/null || true
+        for j in lightdm/lightdm.log lightdm/x-0.log Xorg.0.log; do
+            cp "$VU/var/log/$j" "$OUT/x-$(basename "$j")" 2>/dev/null || true
+        done
+        umount "$VU"
+    fi
+    losetup -d "$p" 2>/dev/null || true
 }
 ranger() {
     if [ -n "$QEMU" ]; then kill "$QEMU" 2>/dev/null || true; fi
@@ -205,12 +228,18 @@ if [ "$COUCHE" = - ]; then
     cp "$VU/boot/efi/EFI/debian/fbx64.efi" "$VU/boot/efi/EFI/BOOT/fbx64.efi"
 fi
 
-if [ -n "$PAQUETS" ]; then
-    etape "la mise a jour, sans reinstaller"
+dans_le_disque() {
     mount --bind /dev "$VU/dev"
     mount --bind /dev/pts "$VU/dev/pts"
     mount -t proc proc "$VU/proc"
     mount -t sysfs sys "$VU/sys"
+}
+hors_du_disque() {
+    for m in sys proc dev/pts dev; do umount "$VU/$m"; done
+}
+if [ -n "$PAQUETS" ]; then
+    etape "la mise a jour, sans reinstaller"
+    dans_le_disque
     mkdir -p "$VU/var/tmp/grenos-maj"
     cp "$PAQUETS"/*.deb "$VU/var/tmp/grenos-maj/"
     if chroot "$VU" env DEBIAN_FRONTEND=noninteractive sh -c 'dpkg -i /var/tmp/grenos-maj/*.deb' > "$OUT/mise-a-jour.log" 2>&1; then
@@ -220,7 +249,15 @@ if [ -n "$PAQUETS" ]; then
         rate "la mise a jour a echoue"
     fi
     rm -rf "$VU/var/tmp/grenos-maj"
-    for m in sys proc dev/pts dev; do umount "$VU/$m"; done
+    hors_du_disque
+elif [ "$COUCHE" != - ]; then
+    # Ce que la CONSTRUCTION joue, et qu'une couche de fichiers ne peut pas
+    # porter (unités désarmées, 25_bli sans son bit d'exécution).
+    etape "ce que la construction de l image fait"
+    dans_le_disque
+    chroot "$VU" /usr/lib/grenos/appliquer-systeme > "$OUT/construction.log" 2>&1 \
+        || rate "appliquer-systeme echoue"
+    hors_du_disque
 fi
 
 etape "ce que le disque porte"
@@ -230,6 +267,10 @@ if [ "$CORRIGE" = oui ]; then
     grep -q 'set timeout_style=hidden' "$OUT/grub-installe.txt" || rate "le menu s afficherait"
     if grep -qE 'set timeout=[1-9]' "$OUT/grub-installe.txt"; then rate "le demarrage attendrait devant un menu"; fi
     grep -q 'color_normal=black/black' "$OUT/grub-installe.txt" || rate "GRUB ecrirait a l ecran"
+    if grep -q 'insmod bli' "$OUT/grub-installe.txt"; then rate "GRUB chargerait un module refuse par le Secure Boot (bli)"; fi
+    for f in "$VU"/etc/systemd/system/*.wants/clamav-freshclam*; do
+        if [ -L "$f" ]; then rate "antivirus encore arme : ${f##*/}"; fi
+    done
     grep -qE '^[[:space:]]*linux[[:space:]].* systemd.show_status=false' "$OUT/grub-installe.txt" \
         || rate "la ligne du noyau laisse passer des messages"
 fi
@@ -312,6 +353,7 @@ demarrer() { # numero
         -monitor unix:"$MON",server,nowait \
         -qmp unix:"$QMP",server,nowait &
     QEMU=$!
+    QEMU_VU=oui
     sleep 1
     kill -0 "$QEMU" 2>/dev/null || { rate "QEMU n a pas demarre"; fin; }
 }
@@ -496,17 +538,29 @@ fi
 eteindre
 
 etape "le journal du disque"
-boucler "$DISQUE"; D=$BOUCLE
-if mount -o ro,noload "${D}p2" "$VU"; then
-    J="$VU/var/log/journal"
-    journalctl -D "$J" -o short-monotonic --no-pager > "$OUT/journal-installe.txt" 2>/dev/null || true
-    # Ce que « quiet » laisse passer à l'écran : le « une erreur evo » de Grenofar.
-    journalctl -D "$J" -k -p err -o short-monotonic --no-pager > "$OUT/noyau-erreurs.txt" 2>/dev/null || true
-    for j in lightdm/lightdm.log lightdm/x-0.log Xorg.0.log; do
-        cp "$VU/var/log/$j" "$OUT/x-$(basename "$j")" 2>/dev/null || true
-    done
-    umount "$VU"
+relever
+if [ "$CORRIGE" = oui ]; then
+    if grep -aq 'prohibited by secure boot policy' "$OUT"/serie-*.log; then
+        rate "GRUB affiche une erreur de Secure Boot"
+    else
+        dire "GRUB : aucune erreur de Secure Boot"
+    fi
+    # Antivirus : rien au demarrage, et la session graphique n attend plus.
+    if [ ! -s "$OUT/journal-installe.txt" ]; then
+        rate "journal illisible : l antivirus n est pas juge"
+    elif grep -aqE 'systemd\[1\]: (Starting|Started) clamav-freshclam' "$OUT/journal-installe.txt"; then
+        rate "l antivirus telecharge encore au demarrage"
+    else
+        dire "antivirus : ni telechargeur ni minuteur au demarrage"
+        ATTEINT=$(grep -a 'Reached target graphical.target' "$OUT/journal-installe.txt" | tail -n 1 | sed 's/^\[ *//; s/\..*//' || true)
+        if [ -n "$ATTEINT" ] && [ "$ATTEINT" -lt 25 ]; then
+            dire "dernier demarrage complet en ${ATTEINT} s, sans reseau"
+        else
+            rate "dernier demarrage pas complet en 25 s sans reseau (${ATTEINT:-jamais})"
+        fi
+    fi
 fi
+boucler "$DISQUE"; D=$BOUCLE
 if [ "$CORRIGE" = oui ] && mount -o ro "${D}p1" "$VU"; then
     if [ -f "$VU/EFI/BOOT/fbx64.efi" ]; then rate "le secours garde son ecran bleu (fbx64)"; fi
     umount "$VU"

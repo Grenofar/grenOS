@@ -1,19 +1,20 @@
 #!/bin/sh
-# AUCUN SERVEUR X NE DÉMARRE TANT QUE PLYMOUTH VIT (22 novembre).
+# AVANT TOUT SERVEUR X : PLYMOUTH EST MORT, LE TERMINAL EN TEXTE (22 novembre).
 #
-# Le disque installé de Grenofar (image du firmware, SSD), reproduit en CI,
-# run 45053914956 — deux pannes, une seule cause :
-#   - premier démarrage : l'assistant s'affiche à 4 s, Plymouth vit encore ;
-#     à 10 s il ouvre son moteur fbdev, RAPPELLE le terminal 1 et y peint son
-#     chargement sans fin, par-dessus l'assistant ;
-#   - démarrage suivant : lightdm dit « plymouth quit » sans attendre et
-#     lance X. X demande le terminal 7 pendant que Plymouth meurt : le noyau
-#     attend un accord qui ne viendra plus, puis l'oublie (VT_SETMODE remet
-#     vt_newvt à -1). X attend sans fin, écran noir. C'est aussi ce qui avait
-#     figé l'assistant le 21 novembre (runs 44842167737 et 44843240153).
+# Le disque installé de Grenofar (image du firmware, SSD), reproduit en CI :
+#   - premier démarrage (run 45053914956) : l'assistant s'affiche à 4 s,
+#     Plymouth vit encore ; à 10 s il ouvre son moteur fbdev, RAPPELLE le
+#     terminal 1 et y peint son chargement sans fin, par-dessus l'assistant ;
+#   - démarrage suivant, et assistant une fois Plymouth arrêté (run
+#     45067830100) : X attend sans fin le terminal 7, écran noir. Arrêté
+#     avant d'avoir rien peint, Plymouth ne remet PAS le terminal en texte
+#     (quit_splash, main.c) : il le laisse en KD_GRAPHICS + VT_AUTO, et le
+#     noyau y IGNORE tout changement de terminal (change_console, vt_ioctl.c :
+#     « Ignore all switches in KD_GRAPHICS+VT_AUTO mode »). C'est aussi ce
+#     qui avait figé l'assistant le 21 novembre (44842167737, 44843240153).
 #
-# La seule preuve qu'il a rendu le terminal : le PROCESSUS est parti. La
-# réponse de `plymouth quit` ou de `--wait` arrive avant.
+# D'où deux gestes, dans cet ordre : attendre que le PROCESSUS soit parti (la
+# réponse de `plymouth quit` arrive avant), puis rendre le terminal en texte.
 # Appelé par grenos-premier-x et avant lightdm (lightdm.service.d).
 
 set -u
@@ -27,12 +28,33 @@ attendre_sa_fin() { # dixiemes de seconde
     done
     ! vivant
 }
+# Effacé d'abord : en repassant en texte, la console se repeint (KD_GRAPHICS
+# retenait ce qui y avait été écrit). Jamais sous un serveur X qui tourne.
+rendre_le_terminal() {
+    pgrep -x Xorg > /dev/null 2>&1 && return 0
+    timeout 5 python3 -I -c '
+import fcntl, os
+with open("/sys/class/tty/tty0/active") as f:
+    chemin = "/dev/" + f.read().strip()
+t = os.open(chemin, os.O_RDWR | os.O_NOCTTY)
+if fcntl.ioctl(t, 0x4B3B, bytes(4))[0] == 1:   # KDGETMODE : KD_GRAPHICS
+    os.write(t, b"\033[2J\033[H\033[?25l")
+    fcntl.ioctl(t, 0x4B3A, 0)                  # KDSETMODE : KD_TEXT
+    print("grenos: ecran : terminal rendu en texte avant X")
+os.close(t)
+' || echo "grenos: ecran : terminal impossible a rendre en texte" >&2
+}
 
-vivant || exit 0
-timeout 5 plymouth quit > /dev/null 2>&1 || true
-attendre_sa_fin 50 && exit 0
-# Mort, le noyau rend lui-même le terminal (reset_vc).
-echo "grenos: ecran : plymouth ne part pas, arrete de force" >&2
-pkill -KILL -x plymouthd > /dev/null 2>&1 || true
-attendre_sa_fin 20 || echo "grenos: ecran : plymouth est toujours la" >&2
+if vivant; then
+    timeout 5 plymouth quit > /dev/null 2>&1 || true
+    if ! attendre_sa_fin 50; then
+        echo "grenos: ecran : plymouth ne part pas, arrete de force" >&2
+        pkill -KILL -x plymouthd > /dev/null 2>&1 || true
+        if ! attendre_sa_fin 20; then
+            echo "grenos: ecran : plymouth est toujours la" >&2
+            exit 0
+        fi
+    fi
+fi
+rendre_le_terminal
 exit 0

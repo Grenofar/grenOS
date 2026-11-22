@@ -5,5 +5,13 @@
 # se recompile pas, et ses `echo` reviennent à chaque update-grub : son texte
 # ordinaire devient noir sur noir. Les choix du menu (Échap) ont leurs
 # propres couleurs et restent lisibles.
+#
+# L'ESPACE D'ABORD (run 45067830100) : la console EFI de GRUB n'applique une
+# couleur qu'une fois ouverte, et celle retenue avant sa première lettre est
+# perdue (term/efi/console.c, grub_prepare_for_text_output pose la couleur
+# AVANT de se déclarer prête). Une espace l'ouvre sans rien montrer.
 set -e
-echo "set color_normal=black/black"
+cat <<'GRUB'
+echo -n " "
+set color_normal=black/black
+GRUB

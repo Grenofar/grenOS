@@ -1900,6 +1900,16 @@ for programme in /usr/lib/grenos/grenos-ecran-libre /usr/lib/grenos/grenos-demar
         exit 1
     fi
 done
+if [ -x /etc/grub.d/25_bli ]; then
+    echo "grenos: 25_bli est actif : le disque installe afficherait « prohibited by secure boot policy »" >&2
+    exit 1
+fi
+# Les signatures de l antivirus : a la demande seulement (Reglages > Securite).
+arme=$(find /etc/systemd/system -path '*.wants/clamav-freshclam*' 2>/dev/null | head -n 1)
+if [ -n "$arme" ]; then
+    echo "grenos: $arme : l antivirus telechargerait des centaines de Mo au demarrage, sans rien demander" >&2
+    exit 1
+fi
 if ! grep -qs '^ExecStartPre=-/usr/lib/grenos/grenos-ecran-libre' \
         /etc/systemd/system/lightdm.service.d/20-grenos-ecran-libre.conf; then
     echo "grenos: lightdm n attend pas Plymouth : ecran noir au demarrage du disque installe" >&2

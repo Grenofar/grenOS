@@ -71,8 +71,18 @@ fi
 # `clamav-daemon` n'est pas installé du tout : c'est le scanner résident, il
 # garde la base en mémoire — plusieurs centaines de mégaoctets en permanence —
 # et Grenofar a demandé l'inverse (« éviter les processus en trop »).
-systemctl disable clamav-freshclam.service >/dev/null 2>&1 || true
-systemctl stop clamav-freshclam.service >/dev/null 2>&1 || true
+#
+# TROIS UNITÉS, PAS UNE (22 novembre). On ne coupait que le démon ; Debian
+# arme aussi `clamav-freshclam-once`, le service ET son minuteur
+# (dh_installsystemd). Sur le disque installé, il téléchargeait à chaque
+# démarrage, et sans réseau retenait la session graphique 40 s (journal du
+# run 45053914956). Désarmées, une mise à jour de ClamAV ne les rallume pas
+# (deb-systemd-helper, invoke-rc.d) ; le bouton des Réglages lance freshclam
+# lui-même. Essai : linux/tools/essai-antivirus.sh.
+for unite in clamav-freshclam.service clamav-freshclam-once.service clamav-freshclam-once.timer; do
+    systemctl disable "$unite" >/dev/null 2>&1 || true
+    systemctl stop "$unite" >/dev/null 2>&1 || true
+done
 
 # L'écran de chargement reste jusqu'à l'extinction.
 #
@@ -368,9 +378,18 @@ done
 # fichiers ne valent qu'une fois grub.cfg refait, et une machine posée avec
 # la 1719 ne le referait qu'au prochain noyau. Jamais sur la clé, ni pendant
 # la construction (pas de grub.cfg) ; une seule fois, la marque y reste.
+#
+# Et L'ERREUR qui passait à chaque démarrage, en anglais : « prohibited by
+# secure boot policy ». C'est `insmod bli` de 25_bli (GRUB 2.12), un module
+# que l'image signée n'a pas ; il ne sert qu'à systemd-boot. Sans son bit
+# d'exécution, grub-mkconfig le saute ; dpkg garde ce mode aux mises à jour.
+if [ -x /etc/grub.d/25_bli ]; then
+    chmod -x /etc/grub.d/25_bli || true
+fi
 if [ -f /boot/grub/grub.cfg ] && command -v update-grub >/dev/null 2>&1 && \
    ! grep -qw 'boot=live' /proc/cmdline 2>/dev/null && \
-   ! grep -q 'color_normal=black/black' /boot/grub/grub.cfg; then
+   { ! grep -q 'color_normal=black/black' /boot/grub/grub.cfg || \
+     grep -q 'insmod bli' /boot/grub/grub.cfg; }; then
     if update-grub >/dev/null 2>&1; then
         echo "grenos: demarrage sans menu"
     else

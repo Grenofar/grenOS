@@ -42,7 +42,16 @@ rm -f "$ETAT.plymouth" "$ETAT.plymouth-sourd"
 EOF
 cat > "$T/bin/pgrep" <<'EOF'
 #!/bin/sh
-[ -e "$ETAT.plymouth" ]
+case "$*" in
+    *Xorg*) [ -e "$ETAT.xorg" ] ;;
+    *) [ -e "$ETAT.plymouth" ] ;;
+esac
+EOF
+cat > "$T/bin/python3" <<'EOF'
+#!/bin/sh
+case "$*" in
+    *0x4B3A*) if [ -e "$ETAT.plymouth" ]; then echo "texte TROP TOT" >> "$JOURNAL"; else echo "terminal en texte" >> "$JOURNAL"; fi ;;
+esac
 EOF
 cat > "$T/bin/xinit" <<'EOF'
 #!/bin/sh
@@ -145,6 +154,24 @@ jamais "plymouth quit" "cle : Plymouth reste a LightDM"
 : > "$JOURNAL"
 lobby "$T/ligne-cle" "$T/pc-essai"
 attendu "xinit" "machine d integration : le lobby reste jugeable sur l image"
+
+# Plymouth parti laisse le terminal en KD_GRAPHICS + VT_AUTO : le noyau y
+# IGNORE tout changement de terminal, et X attend sans fin (45067830100).
+: > "$JOURNAL"; : > "$ETAT.plymouth"
+lobby "$T/ligne-installe" "$T/pc"
+if [ "$(grep -n -e 'terminal en texte' -e '^xinit' "$JOURNAL" | head -n 1 | grep -c 'terminal en texte')" = 1 ]; then
+    ok "installe : le terminal repasse en texte avant X"
+else
+    faux "installe : le terminal repasse en texte avant X"
+fi
+jamais "TROP TOT" "installe : jamais avant la mort de Plymouth"
+: > "$JOURNAL"; rm -f "$ETAT.plymouth"
+sh "$I/usr/lib/grenos/grenos-ecran-libre" > /dev/null 2>&1 || true
+attendu "terminal en texte" "demarrages : meme si Plymouth etait deja parti"
+: > "$JOURNAL"; : > "$ETAT.xorg"
+sh "$I/usr/lib/grenos/grenos-ecran-libre" > /dev/null 2>&1 || true
+jamais "terminal en texte" "un serveur X a l ecran : son terminal n est pas touche"
+rm -f "$ETAT.xorg"
 
 # Le demarrage SUIVANT (run 45053914956) : lightdm aussi lance X pendant que
 # Plymouth meurt. Il passe donc par le meme geste.
@@ -277,10 +304,16 @@ for mot in loglevel=3 systemd.show_status=false rd.systemd.show_status=false ude
     case "$REGLAGES" in *"$mot"*) ok "ligne du noyau : $mot, comme sur la cle" ;; *) faux "ligne du noyau : $mot, comme sur la cle" ;; esac
 done
 
-if [ "$(sh "$I/etc/grub.d/06_grenos_discret" 2>/dev/null)" = "set color_normal=black/black" ]; then
-    ok "menu : GRUB n ecrit plus a l ecran"
+if [ "$(sh "$I/etc/grub.d/06_grenos_discret" 2>/dev/null)" = 'echo -n " "
+set color_normal=black/black' ]; then
+    ok "menu : GRUB n ecrit plus a l ecran (console ouverte AVANT la couleur)"
 else
-    faux "menu : GRUB n ecrit plus a l ecran"
+    faux "menu : GRUB n ecrit plus a l ecran (console ouverte AVANT la couleur)"
+fi
+if grep -q 'chmod -x /etc/grub.d/25_bli' "$I/usr/lib/grenos/appliquer-systeme"; then
+    ok "menu : plus de « prohibited by secure boot policy » (insmod bli)"
+else
+    faux "menu : plus de « prohibited by secure boot policy » (insmod bli)"
 fi
 DEB="$ICI/make-deb.sh"
 for fichier in etc/default/grub.d/grenos.cfg etc/grub.d/06_grenos_discret \
