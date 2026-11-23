@@ -75,7 +75,9 @@ dans TASK.md ; publier (mise à jour auto). Il est parti, séance autonome.
   qui échoue aussi sans ces changements (il lit les vrais disques de ce PC).
 - Outils posés sur ce PC pour compiler ici : cargo/rustc-web 1.96 (Debian,
   Tauri exige ≥ 1.88), libwebkit2gtk-4.1-dev, nodejs 20, git.
-- [à faire] 1. regarder la CI de ce commit (paquet + dépôt APT + image) ;
+- **PUBLIÉ** : `linux-20261123-0847` (run 45135686165, commit 2525f6d) —
+  paquet, dépôt APT et Release verts, les cinq preuves de démarrage vertes.
+- [à faire] 1. (fait : CI verte, voir ci-dessus) ;
   2. sur son PC : redémarrage, MokManager, deux écrans ; relancer Claude
   Desktop pour charger le nouveau grenos-mcp ; 3. MCP : un `souris_glisser`
   rend la main au pointeur de la personne pendant ~0,6 s — si elle bouge, le
