@@ -117,8 +117,12 @@ chmod +x "$RACINE/usr/local/bin/essai"
 echo "== 4. Le disque : EFI d'Ubuntu (shim de Microsoft, GRUB de Canonical) + Debian"
 work="$OUT/x"; rm -rf "$work"; mkdir -p "$work"
 for p in "$DEBS"/shim-signed_*.deb "$DEBS"/grub-efi-amd64-signed_*.deb; do dpkg-deb -x "$p" "$work"; done
-shim=$(ls "$work"/usr/lib/shim/shimx64.efi.signed.latest "$work"/usr/lib/shim/shimx64.efi.signed 2>/dev/null | head -1)
-grub=$(ls "$work"/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed | head -1)
+shim=""; grub=""
+for f in "$work"/usr/lib/shim/shimx64.efi.signed.latest "$work"/usr/lib/shim/shimx64.efi.signed; do
+    [ -z "$shim" ] && [ -f "$f" ] && shim=$f
+done
+[ -f "$work/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed" ] && grub="$work/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed"
+find "$work" -name '*.efi*' | sed 's/^/fichier EFI : /'
 [ -n "$shim" ] && [ -n "$grub" ] || rate "shim ou GRUB signes introuvables"
 rm -f "$DISQUE"
 truncate -s 3G "$DISQUE"
