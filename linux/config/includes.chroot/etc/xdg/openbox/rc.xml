@@ -176,20 +176,20 @@
     <keybind key="W-d">
       <action name="ToggleShowDesktop"/>
     </keybind>
-    <!-- Capture d'ecran : l'ecran entier d'une touche, une zone choisie si
-         l'on tient Maj. Les deux enregistrent dans le dossier Images.
-         COPIER SEULEMENT (23 novembre, « ajoute copier seulement ») :
-         Win+Maj+S une zone, comme Windows ; Ctrl+Impr l'ecran entier ;
-         Ctrl+Alt+Impr la fenetre active. Rien n'est enregistre, on colle
-         avec Ctrl+V (grenos-capture garde l'image le temps qu'il faut). -->
+    <!-- Capture d'ecran : TOUTES passent par l'apercu de grenos-capture
+         (23 novembre au soir, « un apercu, et choisir entre enregistrer,
+         recadrer ou copier seulement »). Impr. : tous les ecrans ;
+         Maj+Impr. et Win+Maj+S (comme Windows) : une zone ; Alt+Impr. et
+         Ctrl+Alt+Impr. : la fenetre active ; Ctrl+Impr. garde son geste
+         d'avant, l'ecran entier. -->
     <keybind key="Print">
       <action name="Execute">
-        <command>xfce4-screenshooter --fullscreen --save</command>
+        <command>grenos-capture ecran</command>
       </action>
     </keybind>
     <keybind key="S-Print">
       <action name="Execute">
-        <command>xfce4-screenshooter --region</command>
+        <command>grenos-capture zone</command>
       </action>
     </keybind>
     <keybind key="W-S-s">
@@ -200,6 +200,11 @@
     <keybind key="C-Print">
       <action name="Execute">
         <command>grenos-capture ecran</command>
+      </action>
+    </keybind>
+    <keybind key="A-Print">
+      <action name="Execute">
+        <command>grenos-capture fenetre</command>
       </action>
     </keybind>
     <keybind key="C-A-Print">

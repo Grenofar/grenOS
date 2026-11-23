@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""grenos-capture : une capture d'écran COPIÉE SEULEMENT — ni fichier, ni question.
+"""grenos-capture : une capture d'écran, puis un APERÇU qui demande quoi en faire.
 
-Grenofar, le 23 novembre : « au screenshot, ajoute copier seulement ». Comme
-Win+Maj+S sous Windows : on choisit une zone, elle part dans le presse-papier,
-on la colle avec Ctrl+V où l'on veut. Rien n'est écrit dans Images.
+Grenofar, le 23 novembre au soir : « quand on prend un screenshot, fais
+qu'on ait un aperçu et qu'on puisse choisir entre enregistrer, recadrer ou
+copier seulement ». Avant, Impr. écran enregistrait sans rien montrer, et
+Win+Maj+S copiait sans rien montrer : il fallait connaître la touche.
+Maintenant, toutes les captures passent par la même petite fenêtre :
 
-    grenos-capture zone      une zone choisie à la souris   (Win+Maj+S)
-    grenos-capture ecran     l'écran entier                 (Ctrl+Impr. écran)
-    grenos-capture fenetre   la fenêtre active              (Ctrl+Alt+Impr. écran)
+    Enregistrer   dans Images › Captures d'écran, puis la fenêtre se ferme
+    Recadrer      tirer un cadre sur l'aperçu à la souris, Entrée pour garder
+    Copier        dans le presse-papier seulement — rien n'est écrit sur le
+                  disque —, on colle avec Ctrl+V
 
-POURQUOI PAS SIMPLEMENT `xfce4-screenshooter --clipboard`. Essayé le 23 : la
-commande rend la main tout de suite, et l'image disparaît avec elle. Sous X,
-le presse-papier n'est pas une boîte où l'on dépose : c'est le programme qui
-a copié qui GARDE l'image, et la donne à qui la colle. Sans gestionnaire de
-presse-papier (grenOS n'en a pas, il en coûterait un démon de plus), un
-programme qui s'arrête emporte ce qu'il a copié. Ce programme-ci reste donc,
-discret, tant que l'image est dans le presse-papier — et s'arrête dès que
-quelqu'un copie autre chose.
+    grenos-capture zone      une zone choisie à la souris   (Maj+Impr., Win+Maj+S)
+    grenos-capture ecran     tous les écrans                (Impr. écran)
+    grenos-capture fenetre   la fenêtre active              (Alt+Impr. écran)
+
+Raccourcis de l'aperçu : Ctrl+S enregistrer, Ctrl+C copier, R recadrer,
+Échap fermer (ou annuler le recadrage).
+
+POURQUOI LE PROGRAMME RESTE APRÈS « COPIER ». Sous X, le presse-papier
+n'est pas une boîte où l'on dépose : c'est le programme qui a copié qui
+GARDE l'image, et la donne à qui la colle. Sans gestionnaire de
+presse-papier, un programme qui s'arrête emporte ce qu'il a copié. Celui-ci
+reste donc, fenêtre fermée, tant que l'image est dans le presse-papier — et
+s'arrête dès que quelqu'un copie autre chose.
 """
 import os
 import subprocess
@@ -32,18 +40,35 @@ def prevenir(titre, texte):
                    capture_output=True)
 
 
+def dire(texte):
+    subprocess.run(["grenos-dire", "capture : " + texte], capture_output=True)
+
+
+def capturer(mode):
+    """Le fichier PNG de la capture, ou None si on a annulé (Échap)."""
+    dossier = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    image = os.path.join(dossier, "grenos-capture-%d.png" % os.getpid())
+    # --save avec un chemin : xfce4-screenshooter enregistre sans rien demander.
+    subprocess.run(["xfce4-screenshooter", MODES[mode], "--save", image], capture_output=True)
+    return image if os.path.exists(image) else None
+
+
+def dossier_captures(GLib):
+    images = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES) \
+        or os.path.expanduser("~/Images")
+    dossier = os.path.join(images, "Captures d'écran")
+    os.makedirs(dossier, exist_ok=True)
+    return dossier
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "zone"
     if mode not in MODES:
         print("usage : grenos-capture zone|ecran|fenetre", file=sys.stderr)
         return 2
-    dossier = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
-    image = os.path.join(dossier, "grenos-capture-%d.png" % os.getpid())
-    # --save avec un chemin : xfce4-screenshooter enregistre sans rien
-    # demander. On lit le fichier, puis on l'efface aussitôt.
-    subprocess.run(["xfce4-screenshooter", MODES[mode], "--save", image], capture_output=True)
-    if not os.path.exists(image):
-        return 0            # sélection annulée (Échap) : rien à copier
+    fichier = capturer(mode)
+    if not fichier:
+        return 0
 
     import gi
     gi.require_version("Gtk", "3.0")
@@ -51,30 +76,236 @@ def main():
     from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
     try:
-        pixbuf = GdkPixbuf.Pixbuf.new_from_file(image)
+        image = GdkPixbuf.Pixbuf.new_from_file(fichier)
     except GLib.Error as souci:
-        prevenir("Capture non copiée", str(souci))
+        prevenir("Capture impossible", str(souci))
         return 1
     finally:
         try:
-            os.remove(image)
+            os.remove(fichier)
         except OSError:
             pass
 
-    presse = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
-    presse.set_image(pixbuf)
-    pose = time.monotonic()
-
-    def autre_copie(*_):
-        # Notre propre copie déclenche aussi ce signal : on l'ignore. Toute
-        # copie ensuite remplace l'image, on n'a plus rien à garder.
-        if time.monotonic() - pose > 0.5:
-            Gtk.main_quit()
-
-    presse.connect("owner-change", autre_copie)
-    prevenir("Capture copiée", "Colle-la avec Ctrl+V. Elle n'est enregistrée nulle part.")
+    Apercu(image, Gdk, GdkPixbuf, GLib, Gtk)
     Gtk.main()
     return 0
+
+
+class Apercu:
+    def __init__(self, image, Gdk, GdkPixbuf, GLib, Gtk):
+        self.Gdk, self.GdkPixbuf, self.GLib, self.Gtk = Gdk, GdkPixbuf, GLib, Gtk
+        self.image = image
+        self.recadrage = False
+        self.cadre = None          # (x, y, l, h) dans l'image, pendant le recadrage
+        self.depart = None
+        self.copiee = False
+
+        f = self.fenetre = Gtk.Window(title="Capture d'écran")
+        f.set_icon_name("applets-screenshooter")
+        f.set_keep_above(True)
+        f.set_position(Gtk.WindowPosition.CENTER)
+        affichage = Gdk.Display.get_default()
+        ecran = affichage.get_primary_monitor() or affichage.get_monitor(0)
+        zone = ecran.get_workarea()
+        self.max_l, self.max_h = int(zone.width * 0.72), int(zone.height * 0.66)
+        f.connect("destroy", self.fermee)
+        f.connect("key-press-event", self.touche)
+
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        for cote in ("top", "bottom", "start", "end"):
+            getattr(boite, "set_margin_" + cote)(12)
+        f.add(boite)
+
+        self.dessin = Gtk.DrawingArea()
+        self.dessin.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK
+                               | Gdk.EventMask.POINTER_MOTION_MASK)
+        self.dessin.connect("draw", self.dessiner)
+        self.dessin.connect("button-press-event", self.appui)
+        self.dessin.connect("motion-notify-event", self.mouvement)
+        self.dessin.connect("button-release-event", self.relache)
+        boite.pack_start(self.dessin, True, True, 0)
+
+        self.note = Gtk.Label(xalign=0)
+        self.note.get_style_context().add_class("dim-label")
+        boite.pack_start(self.note, False, False, 0)
+
+        rangee = Gtk.Box(spacing=8)
+        boite.pack_start(rangee, False, False, 0)
+        self.b_enregistrer = Gtk.Button(label="Enregistrer")
+        self.b_enregistrer.get_style_context().add_class("suggested-action")
+        self.b_enregistrer.connect("clicked", lambda *_: self.enregistrer())
+        self.b_recadrer = Gtk.Button(label="Recadrer")
+        self.b_recadrer.connect("clicked", lambda *_: self.basculer_recadrage())
+        self.b_copier = Gtk.Button(label="Copier")
+        self.b_copier.connect("clicked", lambda *_: self.copier())
+        self.b_annuler = Gtk.Button(label="Ne pas recadrer")
+        self.b_annuler.connect("clicked", lambda *_: self.basculer_recadrage(False))
+        self.b_garder = Gtk.Button(label="Garder ce cadre")
+        self.b_garder.get_style_context().add_class("suggested-action")
+        self.b_garder.connect("clicked", lambda *_: self.appliquer_cadre())
+        fermer = Gtk.Button(label="Fermer")
+        fermer.connect("clicked", lambda *_: f.destroy())
+        for b in (self.b_enregistrer, self.b_recadrer, self.b_copier, self.b_garder, self.b_annuler):
+            rangee.pack_start(b, False, False, 0)
+        rangee.pack_end(fermer, False, False, 0)
+
+        self.mettre_a_jour()
+        f.show_all()
+        self.mettre_a_jour()
+        f.present()
+        dire("apercu ouvert %dx%d" % (image.get_width(), image.get_height()))
+
+    # ---- L'image à l'échelle de l'aperçu ---------------------------------------
+    def echelle(self):
+        l, h = self.image.get_width(), self.image.get_height()
+        return min(1.0, self.max_l / l, self.max_h / h)
+
+    def mettre_a_jour(self):
+        e = self.echelle()
+        l, h = self.image.get_width(), self.image.get_height()
+        self.dessin.set_size_request(max(1, int(l * e)), max(1, int(h * e)))
+        self.fenetre.resize(1, 1)   # la fenêtre suit la taille de l'image
+        recadre = self.recadrage
+        for b in (self.b_enregistrer, self.b_recadrer, self.b_copier):
+            b.set_visible(not recadre)
+        self.b_garder.set_visible(recadre)
+        self.b_annuler.set_visible(recadre)
+        self.b_garder.set_sensitive(bool(self.cadre and self.cadre[2] > 2 and self.cadre[3] > 2))
+        if recadre:
+            self.note.set_text("Tire un cadre sur l'image avec la souris, puis « Garder ce cadre » (Entrée).")
+        else:
+            self.note.set_text("%d × %d pixels — Ctrl+S enregistrer · R recadrer · Ctrl+C copier · Échap fermer"
+                               % (l, h))
+        self.dessin.queue_draw()
+
+    def dessiner(self, zone, cr):
+        e = self.echelle()
+        cr.save()
+        cr.scale(e, e)
+        self.Gdk.cairo_set_source_pixbuf(cr, self.image, 0, 0)
+        cr.paint()
+        cr.restore()
+        if self.recadrage:
+            l, h = self.image.get_width() * e, self.image.get_height() * e
+            cr.set_source_rgba(0, 0, 0, 0.45)
+            if self.cadre:
+                x, y, cl, ch = (v * e for v in self.cadre)
+                # Quatre bandes autour du cadre : l'image hors du cadre
+                # s'assombrit, le cadre reste net.
+                for bande in ((0, 0, l, y), (0, y + ch, l, h - y - ch), (0, y, x, ch), (x + cl, y, l - x - cl, ch)):
+                    if bande[2] > 0 and bande[3] > 0:
+                        cr.rectangle(*bande)
+                cr.fill()
+                cr.set_source_rgba(1, 1, 1, 0.95)
+                cr.set_line_width(2)
+                cr.rectangle(x + 1, y + 1, max(0, cl - 2), max(0, ch - 2))
+                cr.stroke()
+            else:
+                cr.rectangle(0, 0, l, h)
+                cr.fill()
+        return False
+
+    # ---- Recadrer --------------------------------------------------------------
+    def vers_image(self, ev):
+        e = self.echelle()
+        x = min(max(ev.x / e, 0), self.image.get_width())
+        y = min(max(ev.y / e, 0), self.image.get_height())
+        return x, y
+
+    def appui(self, _zone, ev):
+        if not self.recadrage:
+            # Un clic sur l'image en dehors du recadrage le commence.
+            self.basculer_recadrage(True)
+        self.depart = self.vers_image(ev)
+        self.cadre = (self.depart[0], self.depart[1], 0, 0)
+        self.mettre_a_jour()
+        return True
+
+    def mouvement(self, _zone, ev):
+        if self.depart is None:
+            return False
+        (x0, y0), (x1, y1) = self.depart, self.vers_image(ev)
+        self.cadre = (min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
+        self.mettre_a_jour()
+        return True
+
+    def relache(self, _zone, _ev):
+        self.depart = None
+        return True
+
+    def basculer_recadrage(self, actif=None):
+        self.recadrage = (not self.recadrage) if actif is None else actif
+        self.cadre, self.depart = None, None
+        self.mettre_a_jour()
+
+    def appliquer_cadre(self):
+        if not self.cadre:
+            return
+        x, y, l, h = (int(round(v)) for v in self.cadre)
+        l = min(l, self.image.get_width() - x)
+        h = min(h, self.image.get_height() - y)
+        if l < 3 or h < 3:
+            return
+        self.image = self.image.new_subpixbuf(x, y, l, h).copy()
+        dire("recadree en %dx%d" % (l, h))
+        self.basculer_recadrage(False)
+
+    # ---- Enregistrer, copier ---------------------------------------------------
+    def enregistrer(self):
+        dossier = dossier_captures(self.GLib)
+        nom = time.strftime("Capture du %Y-%m-%d à %H.%M.%S.png")
+        chemin = os.path.join(dossier, nom)
+        try:
+            self.image.savev(chemin, "png", [], [])
+        except self.GLib.Error as souci:
+            self.note.set_text("Pas enregistrée : %s" % souci.message)
+            return
+        dire("enregistree")
+        prevenir("Capture enregistrée", "Images › Captures d'écran › " + nom)
+        self.fenetre.destroy()
+
+    def copier(self):
+        presse = self.Gtk.Clipboard.get(self.Gdk.SELECTION_CLIPBOARD)
+        presse.set_image(self.image)
+        pose = time.monotonic()
+
+        def autre_copie(*_):
+            # Notre propre copie déclenche aussi ce signal : on l'ignore.
+            # Toute copie ensuite remplace l'image : plus rien à garder.
+            if time.monotonic() - pose > 0.5:
+                self.Gtk.main_quit()
+
+        presse.connect("owner-change", autre_copie)
+        self.copiee = True
+        dire("copiee seulement")
+        prevenir("Capture copiée", "Colle-la avec Ctrl+V. Elle n'est enregistrée nulle part.")
+        self.fenetre.destroy()
+
+    def fermee(self, *_):
+        # Copiée : on reste (sans fenêtre) pour garder le presse-papier.
+        if not self.copiee:
+            self.Gtk.main_quit()
+
+    def touche(self, _f, ev):
+        Gdk = self.Gdk
+        ctrl = ev.state & Gdk.ModifierType.CONTROL_MASK
+        k = ev.keyval
+        if k == Gdk.KEY_Escape:
+            if self.recadrage:
+                self.basculer_recadrage(False)
+            else:
+                self.fenetre.destroy()
+        elif self.recadrage and k in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self.appliquer_cadre()
+        elif ctrl and k in (Gdk.KEY_s, Gdk.KEY_S):
+            self.enregistrer()
+        elif ctrl and k in (Gdk.KEY_c, Gdk.KEY_C):
+            self.copier()
+        elif not ctrl and k in (Gdk.KEY_r, Gdk.KEY_R) and not self.recadrage:
+            self.basculer_recadrage(True)
+        else:
+            return False
+        return True
 
 
 if __name__ == "__main__":
