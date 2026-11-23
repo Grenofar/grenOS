@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Préparer le matériel
+Comment=Mettre en place le pilote de la carte graphique
+Exec=grenos-ui preparer
+Icon=grenos-parametres
+Terminal=false
+Categories=System;Settings;
+Keywords=pilote;driver;nvidia;carte graphique;écran;

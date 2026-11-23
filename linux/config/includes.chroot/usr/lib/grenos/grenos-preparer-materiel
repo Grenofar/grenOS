@@ -1,0 +1,52 @@
+#!/bin/sh
+# Le raccourci « Préparer le matériel » sur le bureau (23 novembre).
+#
+# Grenofar : « quand l'installation est terminée, sur le SSD, il redémarre,
+# arrive au bureau, il y a un bouton "Préparer le matériel", et ça installe
+# et met en place les drivers ». Lancé par grenos-session à chaque ouverture
+# de session, il POSE le raccourci quand une carte NVIDIA n'a pas son pilote
+# officiel sur un grenOS installé, et le RETIRE dès que ce pilote tourne.
+# La page elle-même est `grenos-ui preparer` (linux/ui/src/preparer.rs).
+#
+# Il ne revient pas une fois que la personne a fini ou dit « plus tard »
+# (~/.config/grenos/materiel-prepare) : le geste reste dans le menu, et dans
+# Jeux › Installer le pilote NVIDIA.
+#
+# Sur la clé USB, jamais : un pilote installé y disparaîtrait au redémarrage.
+
+grep -qw 'boot=live' /proc/cmdline 2>/dev/null && exit 0
+
+BUREAU="$HOME/Bureau"
+RACCOURCI="$BUREAU/grenos-preparer-materiel.desktop"
+FAIT="$HOME/.config/grenos/materiel-prepare"
+FICHE=/usr/share/applications/grenos-preparer-materiel.desktop
+
+manque=0
+for d in /sys/bus/pci/devices/*; do
+    [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
+    case "$(cat "$d/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
+    pilote=$(basename "$(readlink -f "$d/driver" 2>/dev/null)" 2>/dev/null)
+    [ "$pilote" = nvidia ] || manque=1
+done
+
+if [ "$manque" = 0 ]; then
+    # Rien à préparer, ou c'est fait : le raccourci n'a plus rien à dire.
+    if [ -e "$RACCOURCI" ]; then
+        rm -f "$RACCOURCI"
+        grenos-dire "materiel : pilote en place, raccourci retire" 2>/dev/null
+    fi
+    exit 0
+fi
+[ -e "$FAIT" ] && exit 0
+[ -e "$RACCOURCI" ] && exit 0
+[ -r "$FICHE" ] || exit 0
+
+mkdir -p "$BUREAU" || exit 0
+cp "$FICHE" "$RACCOURCI" && chmod 0755 "$RACCOURCI"
+grenos-dire "materiel : carte NVIDIA sans son pilote, raccourci pose sur le bureau" 2>/dev/null
+# Le bureau vient d'ouvrir : on laisse la barre arriver avant de parler.
+sleep 6
+notify-send --app-name=grenOS --icon=grenos-parametres "Prépare ton matériel" \
+    "Ta carte graphique NVIDIA attend son pilote : le bouton « Préparer le matériel » est sur ton bureau." \
+    2>/dev/null || true
+exit 0

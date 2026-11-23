@@ -297,6 +297,13 @@ echo "$(date -u +%H:%M:%S) $USER" > /tmp/grenos-session 2>/dev/null || true
 # perdu, et une session qui se ferme ferait perdre le travail en cours.
 grenos-veilleur grenos-shell &
 
+# « Préparer le matériel » (23 novembre) : le raccourci du bureau quand une
+# carte NVIDIA attend son pilote officiel sur un grenOS installé ; retiré dès
+# que le pilote tourne.
+if [ -x /usr/lib/grenos/grenos-preparer-materiel ]; then
+    /usr/lib/grenos/grenos-preparer-materiel &
+fi
+
 # L'historique du presse-papier (Win+V, todo G31) : il doit écouter dès le
 # début de la session, sinon les premières copies manqueraient. En mémoire
 # seulement — rien de ce qui est copié n'est écrit sur le disque.

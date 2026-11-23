@@ -1,0 +1,14 @@
+/* Préparer le matériel (23 novembre). */
+body[data-page="preparer"] { overflow: auto; }
+.page-preparer { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 24px 24px 36px; display: flex; flex-direction: column; gap: 16px; }
+.page-preparer .tete .logo svg { width: 22px; height: 22px; }
+.pr-pile { display: flex; flex-direction: column; gap: 14px; }
+.pr-etat { padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+.pr-etat h2 { margin: 0; font-size: 20px; }
+.pr-bien h2 { color: var(--reussi); }
+.pr-etapes { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; color: var(--texte-2); line-height: 1.45; }
+.pr-boutons { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.pr-mok { padding: 18px 22px; display: flex; flex-direction: column; gap: 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.pr-mok-tete { display: flex; align-items: center; gap: 10px; font-size: 15.5px; }
+.pr-code { align-self: flex-start; font: 800 40px/1.1 ui-monospace, "JetBrains Mono", monospace; letter-spacing: .22em; padding: 12px 18px; border-radius: 14px; background: var(--surface-haute); color: var(--texte); user-select: all; }
+.pr-materiel { padding: 16px 20px; }

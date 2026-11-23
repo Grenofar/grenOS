@@ -36,6 +36,7 @@ mod perf;
 mod pont;
 mod steam_compte;
 mod premier;
+mod preparer;
 mod systeme;
 
 use std::collections::HashMap;
@@ -162,7 +163,8 @@ const PAGES: &[(&str, &str, f64, f64)] = &[
     ("jeux", "Jeux", 900.0, 720.0),
     ("grenplace", "GrenPlace", 980.0, 720.0),
     ("hub", "grenHub", 900.0, 660.0),
-    ("taches", "Gestionnaire de tâches", 900.0, 640.0),
+    ("taches", "Gestionnaire de tâches", 1000.0, 700.0),
+    ("preparer", "Préparer le matériel", 820.0, 680.0),
     ("connexions", "Connexions", 560.0, 640.0),
     ("secours", "Mode sans échec de grenOS", 720.0, 560.0),
     ("bienvenue", "Bienvenue dans grenOS", 940.0, 700.0),
@@ -493,6 +495,14 @@ fn main() {
             hub::hub_diagnostic,
             taches::taches_mesure,
             taches::taches_arreter,
+            taches::taches_arreter_groupe,
+            taches::taches_applications,
+            taches::taches_demarrage,
+            taches::taches_demarrage_ajouter,
+            taches::taches_demarrage_retirer,
+            preparer::preparer_etat,
+            preparer::preparer_fini,
+            preparer::preparer_redemarrer,
             connexions::connexions_etat,
             connexions::connexions_wifi_liste,
             connexions::connexions_wifi_radio,

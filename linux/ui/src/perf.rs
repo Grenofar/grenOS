@@ -23,14 +23,26 @@ use std::process::Command;
 use std::sync::Mutex;
 
 /// Jamais fermés ni ralentis depuis grenPerf.
-const PROTEGES: &[&str] = &[
+pub(crate) const PROTEGES: &[&str] = &[
     "systemd", "Xorg", "X", "xinit", "openbox", "lightdm", "dbus-daemon", "dbus-broker",
     "pipewire", "pipewire-pulse", "wireplumber", "pulseaudio", "grenos-shell", "grenos-bureau",
     "grenos-veilleur", "grenos-session", "grenos-ui", "WebKitWebProcess", "WebKitNetworkProcess",
     "at-spi-bus-launcher", "at-spi2-registryd", "gvfsd", "xdg-desktop-portal",
     "xdg-desktop-portal-gtk", "xdg-document-portal", "xdg-permission-store", "polkit-gnome-authentication-agent-1",
     "sh", "bash", "earlyoom", "gamemoded", "lxpolkit", "ssh-agent", "gpg-agent",
+    // Ce que la session de grenOS lance pour fonctionner (23 novembre : le
+    // gestionnaire des tâches les montrait — « à part les process de grenOS,
+    // on ne peut ni les supprimer ni les arrêter »).
+    "gnome-keyring-daemon", "polkit-mate-authentication-agent-1", "xcape", "dunst",
+    "notification-daemon", "xfce4-notifyd", "nm-applet", "dconf-service", "gvfsd-fuse",
+    "gvfsd-metadata", "gvfs-udisks2-volume-monitor", "at-spi2-registr", "xdg-desktop-portal-gnome",
+    "picom", "Xwayland", "Xorg.wrap", "agetty", "login", "plymouthd",
 ];
+
+/// Ce qui exécute un script : c'est le script qu'il faut nommer. Sans cela,
+/// les programmes Python de grenOS (grenos-mcp, grenos-capture…) passaient
+/// pour un « Programme Python » anonyme, et n'étaient pas reconnus.
+const INTERPRETES_PYTHON: &[&str] = &["python", "python3", "python3.13"];
 
 /// Inutile pendant une partie : proposé (et coché) dans le mode jeu.
 /// Chaque entrée dit ce que c'est — un nom de processus ne parle à personne.
@@ -87,6 +99,12 @@ pub struct Instantane {
     charge: String,
     groupes: Vec<Groupe>,
     mode_jeu: bool,
+}
+
+/// Un processus de grenOS lui-même : ni fermé, ni ralenti, ni montré dans le
+/// gestionnaire de tâches (il n'y aurait rien à en faire).
+pub(crate) fn protege(nom: &str) -> bool {
+    PROTEGES.contains(&nom) || nom.starts_with("grenos-") || nom.starts_with("systemd")
 }
 
 pub(crate) fn meminfo() -> HashMap<String, f64> {
@@ -150,7 +168,13 @@ fn lire_proc(pid: u32) -> Option<Proc> {
     }
     // Le nom de /proc/pid/stat est coupé à 15 caractères ; la ligne de
     // commande dit le vrai nom du programme quand c'est le cas.
-    let nom = if nom.len() >= 15 {
+    let nom = if INTERPRETES_PYTHON.contains(&nom.as_str()) {
+        let brut = fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+        let mots: Vec<String> = brut.split(|b| *b == 0).filter(|m| !m.is_empty()).map(|m| String::from_utf8_lossy(m).into_owned()).collect();
+        let mots: Vec<&str> = mots.iter().map(String::as_str).collect();
+        let script = crate::taches::nom_lisible(&mots);
+        if script.is_empty() { nom } else { script }
+    } else if nom.len() >= 15 {
         fs::read(format!("/proc/{pid}/cmdline"))
             .ok()
             .and_then(|c| c.split(|b| *b == 0).next().map(|p| String::from_utf8_lossy(p).into_owned()))
