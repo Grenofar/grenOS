@@ -48,6 +48,53 @@ def journal(texte):
     print("grenos-mcp : " + texte, file=sys.stderr, flush=True)
 
 
+# ---- Retrouver la session graphique ----------------------------------------
+#
+# 23 novembre, première vraie séance de Grenofar depuis grenOS : chaque outil
+# d'écran répondait « pas d'écran X (DISPLAY absent) ». Claude Desktop lance
+# ses serveurs MCP avec un environnement réduit à HOME, LOGNAME, PATH, SHELL
+# et USER — ni DISPLAY, ni XAUTHORITY, ni le bus de session. Le serveur était
+# là, l'écran aussi, ils ne se trouvaient pas.
+#
+# La session grenOS publie ces variables dans le gestionnaire systemd de la
+# personne (`systemctl --user show-environment`) : on les reprend là, et à
+# défaut on prend le premier serveur X local et ~/.Xauthority. Seules les
+# variables absentes sont remplies : un DISPLAY donné exprès reste le sien.
+SESSION = ("DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR",
+           "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "LANG")
+
+
+def retrouver_session():
+    manquantes = [v for v in SESSION if not os.environ.get(v)]
+    if not manquantes:
+        return
+    os.environ.setdefault("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
+    try:
+        r = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True,
+                           text=True, timeout=5)
+        for ligne in r.stdout.splitlines():
+            nom, _, valeur = ligne.partition("=")
+            if nom in manquantes and valeur and not os.environ.get(nom):
+                os.environ[nom] = valeur
+    except (OSError, subprocess.SubprocessError):
+        pass
+    if not os.environ.get("DISPLAY"):
+        try:
+            prises = sorted(p for p in os.listdir("/tmp/.X11-unix") if p.startswith("X"))
+        except OSError:
+            prises = []
+        if prises:
+            os.environ["DISPLAY"] = ":" + prises[0][1:]
+    if not os.environ.get("XAUTHORITY"):
+        cookie = os.path.expanduser("~/.Xauthority")
+        if os.path.exists(cookie):
+            os.environ["XAUTHORITY"] = cookie
+    bus = os.path.join(os.environ["XDG_RUNTIME_DIR"], "bus")
+    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS") and os.path.exists(bus):
+        os.environ["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=" + bus
+    journal("session retrouvee : DISPLAY=%s" % os.environ.get("DISPLAY", "(aucun)"))
+
+
 # ---- L'écran ---------------------------------------------------------------
 
 def _gdk():
@@ -114,6 +161,189 @@ def xdotool(*arguments, sortie=False):
     return r.stdout if sortie else None
 
 
+# ---- Le curseur de Claude, et le pointeur de la personne ---------------------
+#
+# 23 novembre, Grenofar : « fais que c'est pas ma souris qui bouge, mais un
+# curseur identique au mien, en orange, noté "claude" dessus » — comme son
+# MCP PowerShell sous Windows (claude-free-plan-mcp-powershell).
+#
+# Claude a donc SON curseur (grenos-mcp-curseur, une fenêtre que les clics
+# traversent). Il glisse jusqu'au point visé ; le clic lui-même passe par le
+# vrai pointeur, parce qu'une application X ne reçoit un clic que là où est
+# le pointeur : on CACHE le pointeur de la personne (XFixes), on le pose sur
+# le point, on clique (XTest), on le REMET où il était, on le réaffiche. Le
+# tout prend moins d'un dixième de seconde, et la personne ne voit pas sa
+# souris partir. Ni xdotool ici : un programme lancé par geste coûterait
+# plus que le geste lui-même.
+
+class X:
+    """Xlib, XTest et XFixes par ctypes : déjà dans l'image (xdotool en dépend)."""
+
+    def __init__(self):
+        import ctypes
+        self.c = ctypes
+        self.x11 = ctypes.CDLL("libX11.so.6")
+        self.tst = ctypes.CDLL("libXtst.so.6")
+        try:
+            self.fix = ctypes.CDLL("libXfixes.so.3")
+        except OSError:
+            self.fix = None
+        # Une erreur X ne doit JAMAIS tuer le serveur : le gestionnaire par
+        # défaut de Xlib quitte le programme.
+        self._garde = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)(lambda d, e: 0)
+        self.x11.XSetErrorHandler(self._garde)
+        self.x11.XOpenDisplay.restype = ctypes.c_void_p
+        self.x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        self.x11.XDefaultRootWindow.restype = ctypes.c_ulong
+        self.x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+        self.x11.XFlush.argtypes = [ctypes.c_void_p]
+        self.x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self.x11.XQueryPointer.argtypes = [ctypes.c_void_p, ctypes.c_ulong] + [ctypes.c_void_p] * 7
+        self.tst.XTestFakeMotionEvent.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
+        self.tst.XTestFakeButtonEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+        if self.fix is not None:
+            self.fix.XFixesHideCursor.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+            self.fix.XFixesShowCursor.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+        self.d = self.x11.XOpenDisplay(None)
+        if not self.d:
+            raise RuntimeError("pas d'écran X (DISPLAY absent)")
+        self.racine = self.x11.XDefaultRootWindow(self.d)
+        self.cache = 0
+
+    def pointeur(self):
+        c = self.c
+        r, f = c.c_ulong(), c.c_ulong()
+        rx, ry, fx, fy = c.c_int(), c.c_int(), c.c_int(), c.c_int()
+        m = c.c_uint()
+        self.x11.XQueryPointer(self.d, self.racine, c.byref(r), c.byref(f), c.byref(rx), c.byref(ry),
+                               c.byref(fx), c.byref(fy), c.byref(m))
+        return rx.value, ry.value
+
+    def aller(self, x, y):
+        self.tst.XTestFakeMotionEvent(self.d, -1, int(x), int(y), 0)
+        self.x11.XFlush(self.d)
+
+    def bouton(self, numero, appuye):
+        self.tst.XTestFakeButtonEvent(self.d, int(numero), 1 if appuye else 0, 0)
+        self.x11.XFlush(self.d)
+
+    def cacher_pointeur(self, oui):
+        if self.fix is None:
+            return
+        if oui and not self.cache:
+            self.fix.XFixesHideCursor(self.d, self.racine)
+            self.cache = 1
+        elif not oui and self.cache:
+            self.fix.XFixesShowCursor(self.d, self.racine)
+            self.cache = 0
+        self.x11.XFlush(self.d)
+
+
+_X = {}
+
+
+def x_natif():
+    if "x" not in _X:
+        _X["x"] = X()
+    return _X["x"]
+
+
+def pointeur_reel():
+    try:
+        return x_natif().pointeur()
+    except (OSError, RuntimeError):
+        lu = xdotool("getmouselocation", "--shell", sortie=True)
+        valeurs = dict(l.split("=", 1) for l in lu.split() if "=" in l)
+        return int(valeurs.get("X", 0)), int(valeurs.get("Y", 0))
+
+
+def avec_le_vrai_pointeur(x, y, geste):
+    """Pose le pointeur de la personne en (x, y) SANS qu'elle le voie, fait le
+    geste, puis le lui rend là où il était."""
+    xn = x_natif()
+    ici = xn.pointeur()
+    xn.cacher_pointeur(True)
+    try:
+        xn.aller(x, y)
+        time.sleep(0.03)            # le temps que l'application voie le pointeur arriver
+        geste(xn)
+    finally:
+        time.sleep(0.05)
+        xn.aller(*ici)
+        xn.cacher_pointeur(False)
+
+
+class CurseurClaude:
+    """Pilote grenos-mcp-curseur, la fenêtre du curseur orange."""
+
+    def __init__(self):
+        self.proc = None
+        self.x = self.y = None
+        self.refus = False
+
+    def _lancer(self):
+        if self.proc is not None and self.proc.poll() is None:
+            return True
+        if self.refus or os.environ.get("GRENOS_MCP_CURSEUR", "1") == "0":
+            return False
+        programme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "grenos-mcp-curseur")
+        try:
+            self.proc = subprocess.Popen([sys.executable, programme], stdin=subprocess.PIPE,
+                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        except OSError as souci:
+            journal("curseur de Claude impossible : %s" % souci)
+            self.refus = True
+            return False
+        import select
+        pret, _, _ = select.select([self.proc.stdout], [], [], 4)
+        if not pret or not self.proc.stdout.readline().startswith(b"pret"):
+            journal("le curseur de Claude ne s'est pas affiche")
+            self.proc.kill()
+            self.proc, self.refus = None, True
+            return False
+        return True
+
+    def _envoyer(self, **ordre):
+        if not self._lancer():
+            return False
+        try:
+            self.proc.stdin.write((json.dumps(ordre) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+            return True
+        except (OSError, ValueError):
+            self.proc = None
+            return False
+
+    def aller(self, x, y, duree=None, attendre=True):
+        """Le curseur orange glisse jusqu'en (x, y), coordonnées de la racine."""
+        if self.x is None:
+            fx, fy = pointeur_reel()    # première fois : il sort de la souris de la personne
+        else:
+            fx, fy = self.x, self.y
+        if duree is None:
+            distance = ((x - fx) ** 2 + (y - fy) ** 2) ** 0.5
+            duree = min(0.7, max(0.2, 0.15 + distance / 2800))
+        montre = self._envoyer(cmd="aller", x=x, y=y, duree=duree, fx=fx, fy=fy)
+        self.x, self.y = x, y
+        if montre and attendre and duree:
+            time.sleep(duree + 0.03)
+
+    def clic(self):
+        self._envoyer(cmd="clic")
+
+    def signe(self):
+        if self.proc is not None:
+            self._envoyer(cmd="signe")
+
+
+CURSEUR = CurseurClaude()
+
+
+def vers_capture(x, y):
+    e = REPERE["echelle"] or 1.0
+    return int(round((x - REPERE["x"]) * e)), int(round((y - REPERE["y"]) * e))
+
+
 def verifier_arret():
     """L'arrêt d'urgence : pointeur dans le coin en haut à gauche."""
     if ARRET["pose"]:
@@ -121,9 +351,8 @@ def verifier_arret():
             "ARRÊT D'URGENCE : la personne a posé le pointeur dans le coin en haut à gauche. "
             "Plus aucune action souris ou clavier jusqu'à ce que Claude soit relancé.")
     try:
-        lu = xdotool("getmouselocation", "--shell", sortie=True)
-        valeurs = dict(l.split("=", 1) for l in lu.split() if "=" in l)
-        if int(valeurs.get("X", 99)) <= 2 and int(valeurs.get("Y", 99)) <= 2:
+        px, py = pointeur_reel()
+        if px <= 2 and py <= 2:
             ARRET["pose"] = True
             subprocess.run(["notify-send", "--app-name=grenOS", "Claude arrêté",
                             "Plus aucune action souris ou clavier. Relance Claude pour lui rendre la main."],
@@ -174,10 +403,14 @@ def outil_executer(a):
 
 
 def outil_capture(a):
+    CURSEUR.signe()
     numero = a.get("ecran")
     donnees, l, h = capture(None if numero is None else int(numero))
     note = ("Capture %dx%d px. TOUTES les coordonnées des outils souris sont dans le repère de "
             "cette capture." % (l, h))
+    if CURSEUR.x is not None:
+        note += " Le curseur orange « Claude » (le tien) est en (%d, %d) ; l'autre est celui de la personne." % \
+            vers_capture(CURSEUR.x, CURSEUR.y)
     return {"content": [{"type": "image", "data": base64.b64encode(donnees).decode("ascii"),
                          "mimeType": "image/png"}, {"type": "text", "text": note}]}
 
@@ -189,8 +422,13 @@ def outil_ecrans(a):
 def outil_deplacer(a):
     verifier_arret()
     x, y = vers_racine(float(a["x"]), float(a["y"]))
-    xdotool("mousemove", x, y)
-    return texte("Pointeur en (%s, %s)." % (a["x"], a["y"]))
+    CURSEUR.aller(x, y)
+    if a.get("survol"):
+        # Un menu ou une infobulle qui ne s'ouvre qu'au survol : là, le vrai
+        # pointeur y va, et y reste.
+        x_natif().aller(x, y)
+        return texte("Curseur de Claude ET pointeur de la personne en (%s, %s)." % (a["x"], a["y"]))
+    return texte("Curseur de Claude en (%s, %s) ; le pointeur de la personne n'a pas bougé." % (a["x"], a["y"]))
 
 
 def outil_cliquer(a):
@@ -198,7 +436,17 @@ def outil_cliquer(a):
     x, y = vers_racine(float(a["x"]), float(a["y"]))
     bouton = BOUTONS.get(str(a.get("bouton", "left")).lower(), 1)
     fois = 2 if a.get("double") else 1
-    xdotool("mousemove", x, y, "click", "--repeat", fois, bouton)
+    CURSEUR.aller(x, y)
+
+    def geste(xn):
+        for _ in range(fois):
+            xn.bouton(bouton, True)
+            time.sleep(0.02)
+            xn.bouton(bouton, False)
+            time.sleep(0.06)
+
+    avec_le_vrai_pointeur(x, y, geste)
+    CURSEUR.clic()
     return texte("Clic %s en (%s, %s)." % ("double" if fois == 2 else "simple", a["x"], a["y"]))
 
 
@@ -206,11 +454,25 @@ def outil_glisser(a):
     verifier_arret()
     x1, y1 = vers_racine(float(a["x1"]), float(a["y1"]))
     x2, y2 = vers_racine(float(a["x2"]), float(a["y2"]))
-    xdotool("mousemove", x1, y1, "mousedown", 1)
-    time.sleep(0.08)
-    xdotool("mousemove", x2, y2)
-    time.sleep(0.08)
-    xdotool("mouseup", 1)
+    CURSEUR.aller(x1, y1)
+    pas, duree_pas = 30, 0.018
+
+    def geste(xn):
+        xn.bouton(1, True)
+        time.sleep(0.05)
+        # Le curseur orange glisse pendant que le vrai pointeur fait le
+        # glisser, pas à pas : GTK ne commence un glisser qu'après quelques
+        # pixels de mouvement, bouton tenu.
+        CURSEUR.aller(x2, y2, duree=pas * duree_pas, attendre=False)
+        for i in range(1, pas + 1):
+            f = i / pas
+            e = 4 * f ** 3 if f < 0.5 else 1 - (-2 * f + 2) ** 3 / 2
+            xn.aller(x1 + (x2 - x1) * e, y1 + (y2 - y1) * e)
+            time.sleep(duree_pas)
+        time.sleep(0.12)
+        xn.bouton(1, False)
+
+    avec_le_vrai_pointeur(x1, y1, geste)
     return texte("Glissé de (%s, %s) à (%s, %s)." % (a["x1"], a["y1"], a["x2"], a["y2"]))
 
 
@@ -219,7 +481,16 @@ def outil_defiler(a):
     x, y = vers_racine(float(a["x"]), float(a["y"]))
     bouton = {"haut": 4, "up": 4, "bas": 5, "down": 5, "gauche": 6, "left": 6, "droite": 7,
               "right": 7}.get(str(a.get("direction", "bas")).lower(), 5)
-    xdotool("mousemove", x, y, "click", "--repeat", max(1, min(int(a.get("quantite", 3)), 30)), bouton)
+    fois = max(1, min(int(a.get("quantite", 3)), 30))
+    CURSEUR.aller(x, y)
+
+    def geste(xn):
+        for _ in range(fois):
+            xn.bouton(bouton, True)
+            xn.bouton(bouton, False)
+            time.sleep(0.015)
+
+    avec_le_vrai_pointeur(x, y, geste)
     return texte("Défilé.")
 
 
@@ -291,8 +562,9 @@ OUTILS = {
     "capture_ecran": (outil_capture, "Prend une capture de l'écran (tous les écrans, ou celui dont on donne le numéro). Les coordonnées des outils souris suivants sont dans le repère de la DERNIÈRE capture.",
                       schema({"ecran": {"type": "integer", "description": "numéro d'écran (voir lister_ecrans) ; absent : tous"}})),
     "lister_ecrans": (outil_ecrans, "Liste les écrans branchés : numéro, position, taille, principal.", schema({})),
-    "souris_deplacer": (outil_deplacer, "Déplace le pointeur en (x, y), repère de la dernière capture.", schema({"x": NOMBRE, "y": NOMBRE}, ["x", "y"])),
-    "souris_cliquer": (outil_cliquer, "Clique en (x, y), repère de la dernière capture. bouton : left, right ou middle.",
+    "souris_deplacer": (outil_deplacer, "Déplace TON curseur (l'orange « Claude ») en (x, y), repère de la dernière capture ; le pointeur de la personne ne bouge pas. survol=true y pose aussi le vrai pointeur et l'y laisse (menu ou infobulle qui s'ouvre au survol).",
+                        schema({"x": NOMBRE, "y": NOMBRE, "survol": {"type": "boolean"}}, ["x", "y"])),
+    "souris_cliquer": (outil_cliquer, "Clique en (x, y), repère de la dernière capture. bouton : left, right ou middle. Ton curseur orange va au point ; le pointeur de la personne est rendu à sa place après le clic.",
                        schema({"x": NOMBRE, "y": NOMBRE, "bouton": {"type": "string", "enum": ["left", "right", "middle"]},
                                "double": {"type": "boolean"}}, ["x", "y"])),
     "souris_glisser": (outil_glisser, "Appuie en (x1, y1), glisse jusqu'à (x2, y2), relâche.",
@@ -358,6 +630,7 @@ def traiter(message):
 
 
 def main():
+    retrouver_session()
     journal("pret (%d outils)" % len(OUTILS))
     for ligne in sys.stdin:
         ligne = ligne.strip()

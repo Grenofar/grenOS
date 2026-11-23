@@ -525,6 +525,9 @@ fournis = set(sys.builtin_module_names) | {
     "gi", "cairo", "numpy",
     # grenos-mcp (20 novembre) : les captures partent en base64.
     "base64",
+    # grenos-mcp (23 novembre) : XTest et XFixes par ctypes, attente du
+    # curseur de Claude par select. Tous deux dans la bibliotheque standard.
+    "ctypes", "select",
 }
 
 modules = {n[:-3] for n in os.listdir(os.path.join(racine, "usr/lib/grenos"))
