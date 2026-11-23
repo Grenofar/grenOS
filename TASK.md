@@ -4,7 +4,28 @@
 > le travail lit d'abord ce fichier, puis `CLAUDE.md` (local, RÈGLE N°1 :
 > plug and play pour un non-développeur).
 
-## 0000000. À DÉCIDER — 23 novembre soir : NVIDIA sans écran bleu, Secure Boot gardé
+## 0000000. PUBLIÉ — 23 novembre soir : NVIDIA en un bouton, Secure Boot gardé, sans écran bleu
+
+- **linux-20261123-1803** (main 25da8cb, construction 45224717254 verte).
+  Sa clé F: la porte [prouvé : 292 fichiers relus, 0 faute, mode « firmware »
+  et rapports gardés]. Le Samsung : vide le 23 à 12 h 59 avec son accord,
+  puis apparemment réinstallé en 1237 vers 16 h 35 ; il veut tout réinstaller.
+- « Préparer le matériel » / assistant / Jeux → `nvidia-driver-580-open` :
+  `grenos-pilote-signe` pose le noyau d'Ubuntu 26.04 et son pilote 580
+  signé par Canonical, puis le shim et le GRUB d'Ubuntu DANS EFI/debian
+  (fichiers signés de Debian détournés, dpkg-divert) ; noyau de Debian retiré
+  au démarrage suivant ; `suivre` après chaque mise à jour.
+  [prouvé : Pilote signe 45223329963 — 1237 installée, bouton joué, deux
+  démarrages Secure Boot (clés Microsoft) : noyau 7.0.0-44-generic,
+  « NVRM: No NVIDIA GPU found », MokNew vide, aucune ligne « prohibited »,
+  écran de grenOS (assistant) ouvert, noyau Debian retiré].
+- GRUB d'Ubuntu : n'a que efi_gop → `01_grenos-video-signe` redéfinit
+  load_video (sinon « prohibited by secure boot policy » + « Press any key »).
+- [à faire] 1. sur SON PC : RTX 5060 sous 580, deux écrans, 300 Hz ;
+  2. l'essai n'est allé que jusqu'à l'assistant, pas au bureau ;
+  3. rien ne retire les vieux noyaux d'Ubuntu (suivre en ajoute).
+
+## (avant) À DÉCIDER — 23 novembre soir : NVIDIA sans écran bleu, Secure Boot gardé
 
 Grenofar : « garde secure boot et fais tout », « ça fonctionne sur Windows ».
 Windows n'a pas d'écran bleu parce que Microsoft signe le pilote. DKMS signe
