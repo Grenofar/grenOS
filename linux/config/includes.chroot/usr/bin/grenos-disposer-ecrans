@@ -4,7 +4,22 @@
 # j'ai disposé les écrans » — et la disposition se perdait à la session
 # suivante. En sortant d'arandr, l'état de tous les écrans (définition,
 # fréquence, place, principal) est noté, et grenos-session le remet.
+#
+# ET LA FRÉQUENCE N'EST PLUS PERDUE (23 novembre) : arandr applique chaque
+# écran sans `--rate`, donc à 60 Hz, et c'est ce 60 Hz qui était gardé —
+# alors que Grenofar avait réglé 300 Hz une minute avant. On note les
+# fréquences AVANT arandr et on les remet après, pour chaque écran resté à
+# la même définition (ecran.remettre_frequences).
+ENTREE="sys.path.insert(0, '/usr/lib/grenos'); import ecran"
+AVANT=$(python3 -c "import sys, json; $ENTREE; print(json.dumps(ecran.instantane()))" 2>/dev/null)
+[ -n "$AVANT" ] || AVANT='{}'
+export AVANT
 arandr "$@"
-python3 -c 'import sys; sys.path.insert(0, "/usr/lib/grenos"); import ecran; ecran.noter_tout()' 2>/dev/null
+REMIS=$(python3 -c "
+import os, sys, json; $ENTREE
+avant = {k: tuple(v) for k, v in json.loads(os.environ['AVANT']).items()}
+print(', '.join(ecran.remettre_frequences(avant)))
+ecran.noter_tout()" 2>/dev/null)
+[ -n "$REMIS" ] && grenos-dire "ecran : frequence remise apres arandr ($REMIS)"
 grenos-dire "ecran : disposition gardee en sortant d arandr"
 exit 0

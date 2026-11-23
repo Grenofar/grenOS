@@ -1,0 +1,7 @@
+#!/bin/sh
+# Le navigateur principal choisi dans Réglages › Compte (23 novembre), pour
+# les programmes qui demandent « $BROWSER » plutôt que xdg-open. Sans choix,
+# x-www-browser, puis Firefox.
+#
+#   grenos-navigateur [adresse…]
+exec python3 /usr/lib/grenos/navigateur.py "$@"

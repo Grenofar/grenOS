@@ -22,10 +22,11 @@ const PERMISES: &[&str] = &[
     "reglages_ecran", "reglages_ecran_appliquer", "reglages_ecran_garder", "reglages_ecran_revenir", "reglages_composants", "reglages_composants_chercher",
     "reglages_affichage", "reglages_affichage_reessayer", "reglages_affichage_confirmer", "reglages_ecran_proposition",
     "reglages_securite", "reglages_son", "reglages_son_regler", "reglages_heure", "reglages_heure_regler",
-    "reglages_materiel", "reglages_maj",
+    "reglages_materiel", "reglages_maj", "reglages_navigateurs", "reglages_navigateur_choisir",
+    "reglages_partitions", "reglages_partitions_monter",
 ];
 
-pub const PAGES: usize = 10;
+pub const PAGES: usize = 11;
 
 #[tauri::command]
 pub fn reglages_ouvert() {
@@ -92,6 +93,58 @@ pub async fn reglages_signatures() -> Result<Value, String> {
     let mut v = pont::appeler("reglages_securite", json!({}))?;
     if !reussi {
         v["souci"] = json!("Le téléchargement n'a pas abouti.");
+    }
+    Ok(v)
+}
+
+// ---- Partitions ----------------------------------------------------------------
+
+/// Ce qui ÉCRIT sur un disque (23 novembre) : formater, renommer, supprimer,
+/// créer. En administrateur, par `grenos-partitions`, qui revérifie TOUT et
+/// refuse ce qui fait tourner grenOS. Ici, seulement la forme des arguments :
+/// rien de libre n'atteint la ligne de commande.
+pub(crate) fn gestes_partitions(geste: &str, peripherique: &str, systeme: &str, nom: &str, taille: &str) -> Result<Vec<String>, String> {
+    let nom_dev = peripherique.strip_prefix("/dev/").unwrap_or("");
+    if nom_dev.is_empty() || !nom_dev.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("Ce périphérique n'existe pas.".into());
+    }
+    if nom.chars().count() > 16 || !nom.chars().all(|c| c.is_ascii_alphanumeric() || " -_".contains(c)) {
+        return Err("Le nom : 16 caractères au plus, lettres sans accent, chiffres, espaces, - et _.".into());
+    }
+    let fs_valide = matches!(systeme, "ext4" | "exfat" | "ntfs" | "fat32");
+    let mut a = vec![geste.to_string(), peripherique.to_string()];
+    match geste {
+        "formater" if fs_valide => a.extend([systeme.to_string(), nom.to_string()]),
+        "renommer" if !nom.is_empty() => a.push(nom.to_string()),
+        "supprimer" => {}
+        "creer" if fs_valide && taille.chars().all(|c| c.is_ascii_digit()) => {
+            a.extend([systeme.to_string(), nom.to_string()]);
+            if !taille.is_empty() {
+                a.push(taille.to_string());
+            }
+        }
+        _ => return Err("Demande incomplète.".into()),
+    }
+    Ok(a)
+}
+
+#[tauri::command]
+pub async fn reglages_partitions_agir(geste: String, peripherique: String, systeme: Option<String>, nom: Option<String>, taille: Option<String>) -> Result<Value, String> {
+    let arguments = gestes_partitions(&geste, &peripherique, systeme.as_deref().unwrap_or(""), nom.as_deref().unwrap_or(""), taille.as_deref().unwrap_or(""))?;
+    let mut commande: Vec<String> = vec!["600".into()];
+    commande.extend(privilegie());
+    commande.push("/usr/lib/grenos/grenos-partitions".into());
+    commande.extend(arguments);
+    let sortie = Command::new("timeout").args(&commande).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+    let texte = |b: &[u8]| String::from_utf8_lossy(b).trim().lines().last().unwrap_or("").to_string();
+    dire(&format!("reglages partitions : {geste} {peripherique} -> {}", if sortie.status.success() { "fait" } else { "refuse" }));
+    let mut v = pont::appeler("reglages_partitions", json!({}))?;
+    if sortie.status.success() {
+        v["fait"] = json!(texte(&sortie.stdout[..]));
+    } else {
+        let erreur = texte(&sortie.stderr[..]);
+        // pkexec fermé sans mot de passe : code 126, rien d'autre à dire.
+        v["souci"] = json!(if sortie.status.code() == Some(126) || erreur.is_empty() { "Annulé : le mot de passe n'a pas été donné.".to_string() } else { erreur });
     }
     Ok(v)
 }
@@ -513,5 +566,24 @@ mod essais {
     fn seules_les_fonctions_des_reglages() {
         assert!(PERMISES.iter().all(|f| f.starts_with("reglages_")));
         assert!(!PERMISES.contains(&"hub_diagnostic"));
+    }
+}
+
+#[cfg(test)]
+mod tests_partitions {
+    use super::gestes_partitions;
+
+    #[test]
+    fn rien_de_libre_n_atteint_la_commande() {
+        assert_eq!(gestes_partitions("formater", "/dev/sdd1", "exfat", "Cle", "").unwrap(), ["formater", "/dev/sdd1", "exfat", "Cle"]);
+        assert_eq!(gestes_partitions("creer", "/dev/sda", "ext4", "", "5000").unwrap(), ["creer", "/dev/sda", "ext4", "", "5000"]);
+        assert_eq!(gestes_partitions("supprimer", "/dev/nvme0n1p4", "", "", "").unwrap(), ["supprimer", "/dev/nvme0n1p4"]);
+        assert!(gestes_partitions("formater", "/dev/../sda", "ext4", "", "").is_err());
+        assert!(gestes_partitions("formater", "/dev/sda1; rm", "ext4", "", "").is_err());
+        assert!(gestes_partitions("formater", "/dev/sda1", "btrfs", "", "").is_err());
+        assert!(gestes_partitions("formater", "/dev/sda1", "ext4", "$(x)", "").is_err());
+        assert!(gestes_partitions("creer", "/dev/sda", "ext4", "", "12G").is_err());
+        assert!(gestes_partitions("effacer", "/dev/sda", "", "", "").is_err());
+        assert!(gestes_partitions("renommer", "/dev/sda1", "", "", "").is_err());
     }
 }

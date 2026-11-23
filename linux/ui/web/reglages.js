@@ -9,7 +9,7 @@
     ["apparence", "Apparence", "palette"], ["ecran", "Écran", "bureau"], ["son", "Son", "son"],
     ["reseau", "Réseau", "wifi"], ["compte", "Compte", "compte"], ["heure", "Heure et date", "sablier"],
     ["maj", "Mises à jour", "maj"], ["composants", "Mise à jour composant", "cpu"],
-    ["securite", "Sécurité", "bouclier"], ["materiel", "Matériel", "ram"],
+    ["securite", "Sécurité", "bouclier"], ["materiel", "Matériel", "ram"], ["partitions", "Partitions", "disque"],
   ];
   const D = { pages: {} };
   // Ouverte par la session pour proposer la fréquence maximale de l'écran.
@@ -66,8 +66,30 @@
     return null;
   }
 
+  // LE NAVIGATEUR PRINCIPAL (23 novembre). Grenofar : « si je veux me
+  // connecter à Google, je choisis juste mon compte, celui enregistré dans
+  // mon navigateur principal ». Tous les liens — et les « Se connecter avec
+  // Google » de Steam, Heroic ou d'une application — s'ouvrent dans celui-ci.
+  async function carteNavigateur() {
+    const v = await R("reglages_navigateurs").catch(() => ({ navigateurs: [] }));
+    const liste = v.navigateurs || [];
+    if (!liste.length) return carte(ligne("Navigateur principal", el("span.note", "aucun navigateur installé")));
+    const dire = el("p.note");
+    const actuel = liste.find((n) => n.actuel);
+    const options = actuel ? [] : [["", "Choisir…"]];
+    const s = choix([...options, ...liste.map((n) => [n.id, n.nom])], actuel ? actuel.id : "", async (id) => {
+      if (!id) return;
+      const r = await R("reglages_navigateur_choisir", { identifiant: id });
+      const nom = (liste.find((n) => n.id === id) || {}).nom || id;
+      dire.textContent = r.souci || `${nom} ouvre maintenant tous les liens, et les connexions avec Google s'y font avec les comptes que tu y as enregistrés.`;
+    });
+    return carte(ligne("Navigateur principal", s), dire,
+      note("Les liens et les pages de connexion (« Se connecter avec Google », Steam, Heroic…) s'ouvrent dans ce navigateur, là où tes comptes sont déjà enregistrés."));
+  }
+
   // ---- Les pages ---------------------------------------------------------------
   const CONSTRUIRE = {
+    partitions: () => pagePartitions(),
     async apparence() {
       const a = await api.appeler("apparence");
       const dire = el("p.note");
@@ -244,6 +266,7 @@
             c.protege ? bouton("Retirer le mot de passe", "discret", () => faire("reglages_retirer_mot_de_passe")) : null),
           dire,
           note("Un mot de passe protège aussi l'installation de logiciels et les réglages du système.")),
+        await carteNavigateur(),
         await carteCle()];
     },
 
@@ -360,6 +383,144 @@
         carte(el("p.rg-diag", v.explication))];
     },
   };
+
+  // ---- Partitions (23 novembre) ---------------------------------------------
+  // Grenofar : « fais un système de réglage des partitions ». Chaque disque en
+  // barre à l'échelle (partitions et espace libre), et les gestes sans
+  // connaître Linux. Ce qui efface demande une seconde confirmation, et
+  // l'outil administrateur (grenos-partitions) refuse de toute façon ce qui
+  // fait tourner grenOS.
+  const octets = (n) => {
+    if (!n && n !== 0) return "?";
+    const u = ["o", "Ko", "Mo", "Go", "To"];
+    let i = 0; let v = n;
+    while (v >= 1000 && i < u.length - 1) { v /= 1000; i += 1; }
+    return `${v.toLocaleString("fr-FR", { maximumFractionDigits: v < 10 ? 1 : 0 })} ${u[i]}`;
+  };
+  const SYSTEMES = [["ext4", "ext4 — pour grenOS et Linux"], ["exfat", "exFAT — partagé avec Windows et Mac"], ["ntfs", "NTFS — pour Windows"], ["fat32", "FAT32 — vieux appareils (4 Go par fichier au plus)"]];
+  const nomPartition = (p) => p.etiquette || (p.windows ? "Windows" : p.demarrage ? "Démarrage (EFI)" : p.nom);
+
+  function confirmerPuis(texte, genre, action) {
+    // Un premier clic arme, le second agit (et rien après 6 s).
+    const b = bouton(texte, genre, async () => {
+      if (!b.dataset.confirme) {
+        b.dataset.confirme = "1";
+        b.textContent = "Sûr ? Tout sera effacé — cliquer encore";
+        setTimeout(() => { delete b.dataset.confirme; b.textContent = texte; }, 6000);
+        return;
+      }
+      delete b.dataset.confirme;
+      b.disabled = true;
+      await action();
+      b.disabled = false;
+      b.textContent = texte;
+    });
+    return b;
+  }
+
+  async function pagePartitions(etatInitial) {
+    const dire = el("p.note");
+    const v = etatInitial || await R("reglages_partitions");
+    const redessiner = async (r) => {
+      D.pages.partitions.replaceChildren(...(await pagePartitions(r)).filter(Boolean));
+      const d = D.pages.partitions.querySelector(".rg-dire-partitions");
+      if (d) d.textContent = r.souci ? `Refusé : ${r.souci}` : r.fait || "";
+    };
+    const agir = async (geste, peripherique, extra) => {
+      dire.textContent = "En cours… (le mot de passe administrateur peut être demandé)";
+      try { await redessiner(await api.appeler("reglages_partitions_agir", { geste, peripherique, ...(extra || {}) })); }
+      catch (e) { dire.textContent = String(e); }
+    };
+    const monter = async (chemin, oui) => {
+      dire.textContent = oui ? "Montage…" : "Démontage…";
+      try {
+        const r = await R("reglages_partitions_monter", { chemin, monter: oui });
+        await redessiner({ ...r, fait: r.souci ? "" : (oui ? "Montée." : "Démontée : tu peux la retirer sans risque.") });
+      } catch (e) { dire.textContent = String(e); }
+    };
+    // Un petit formulaire déplié sous la ligne : système, nom, (taille).
+    const formulaire = (titreGeste, avecTaille, max, envoyer) => {
+      const fs = choix(SYSTEMES, "ext4", () => {});
+      const nom = el("input.champ.rg-choix", { placeholder: "Nom (facultatif)", maxlength: 16 });
+      const taille = avecTaille ? el("input.champ.rg-choix", { type: "number", min: 16, max: Math.floor(max / 1048576), placeholder: `Taille en Mo (vide = tout, ${octets(max)})` }) : null;
+      const go = confirmerPuis(titreGeste, "danger", () => envoyer(fs.value, nom.value.trim(), taille ? taille.value.trim() : ""));
+      return el("div.rg-part-form", ligne("Système de fichiers", fs), ligne("Nom", nom), taille ? ligne("Taille", taille) : null, go);
+    };
+
+    const carteDisque = (d) => {
+      const barre = el("div.rg-part-barre");
+      const morceaux = [...d.partitions.map((p) => ({ p, debut: p.debut, taille: p.taille })), ...d.libres.map((l) => ({ libre: l, debut: l.debut, taille: l.taille }))].sort((a, b) => a.debut - b.debut);
+      for (const m of morceaux) {
+        const part = el(`div.rg-part-morceau${m.libre ? ".libre" : ""}${m.p && m.p.systeme ? ".systeme" : ""}`,
+          { style: `flex-grow:${Math.max(m.taille / d.taille, 0.012)}`, title: m.libre ? `Espace libre — ${octets(m.taille)}` : `${nomPartition(m.p)} — ${octets(m.taille)}` });
+        if (m.p && m.p.utilise != null && m.p.taille) part.append(el("span.rg-part-rempli", { style: `width:${Math.min(100, 100 * m.p.utilise / m.p.taille)}%` }));
+        barre.append(part);
+      }
+      const lignes = d.partitions.map((p) => {
+        const details = el("div.rg-part-details");
+        details.hidden = true;
+        const ouvrirDetails = (contenu) => { details.replaceChildren(contenu); details.hidden = false; };
+        const etiquettes = [p.systeme_fichiers || "non formatée", octets(p.taille)];
+        if (p.utilise != null) etiquettes.push(`${octets(p.utilise)} utilisés`);
+        if (p.montee) etiquettes.push(`montée sur ${p.montee}`);
+        const gestes = el("div.rg-rangee");
+        if (p.systeme) {
+          gestes.append(el("span.badge", "grenOS tourne dessus — protégée"));
+        } else {
+          if (p.montee) {
+            gestes.append(bouton("Ouvrir", "", () => api.appeler("fichiers_nouvelle_fenetre", { dossier: p.montee }).catch((e) => toast(String(e)))));
+            gestes.append(bouton("Démonter", "", () => monter(p.chemin, false)));
+          } else if (p.systeme_fichiers && !p.chiffree && !p.echange) {
+            gestes.append(bouton("Monter", "", () => monter(p.chemin, true)));
+          }
+          if (p.systeme_fichiers && ["ext4", "ext3", "ext2", "exfat", "ntfs", "vfat"].includes(p.systeme_fichiers)) {
+            gestes.append(bouton("Renommer", "discret", () => {
+              const champ = el("input.champ.rg-choix", { value: p.etiquette, maxlength: 16 });
+              ouvrirDetails(el("div.rg-part-form", ligne("Nouveau nom", champ), bouton("Renommer", "principal", () => agir("renommer", p.chemin, { nom: champ.value.trim() }))));
+            }));
+          }
+          gestes.append(bouton("Formater…", "discret", () => ouvrirDetails(formulaire("Formater (efface tout)", false, 0, (systeme, nom) => agir("formater", p.chemin, { systeme, nom })))));
+          gestes.append(confirmerPuis("Supprimer", "danger", () => agir("supprimer", p.chemin)));
+        }
+        const avertir = p.windows ? note("Partition de Windows : la formater ou la supprimer empêche Windows de démarrer.")
+          : (p.demarrage && !p.systeme) ? note("Partition de démarrage d'un autre système : y toucher peut l'empêcher de démarrer.") : null;
+        return el("div.rg-part-ligne",
+          el("div.rg-part-titre", el("b", nomPartition(p)), el("span.note", ` ${p.chemin} · ${etiquettes.join(" · ")}`)),
+          avertir, gestes, details);
+      });
+      const libres = d.libres.map((l) => {
+        const details = el("div.rg-part-details");
+        details.hidden = true;
+        return el("div.rg-part-ligne.libre",
+          el("div.rg-part-titre", el("b", "Espace libre"), el("span.note", ` ${octets(l.taille)}`)),
+          el("div.rg-rangee", bouton("Créer une partition…", "", () => {
+            details.replaceChildren(formulaire("Créer la partition", true, l.taille, (systeme, nom, taille) => agir("creer", d.chemin, { systeme, nom, taille })));
+            details.hidden = false;
+          })), details);
+      });
+      // Une clé formatée d'un bloc, sans table : le disque est la partition.
+      const entier = d.entier && !d.systeme ? el("div.rg-part-ligne",
+        el("div.rg-part-titre", el("b", "Disque entier"), el("span.note", ` ${d.systeme_fichiers} · ${octets(d.taille)}`)),
+        el("div.rg-rangee", bouton("Formater…", "discret", (ev) => {
+          const zone = ev.target.closest(".rg-part-ligne");
+          zone.append(formulaire("Formater (efface tout)", false, 0, (systeme, nom) => agir("formater", d.chemin, { systeme, nom })));
+        }))) : null;
+      return carte(
+        ligne(`${d.modele}${d.liaison ? " · " + d.liaison : ""}`, el("span.note", `${d.chemin} · ${octets(d.taille)}${d.table ? " · " + d.table.toUpperCase().replace("DOS", "MBR") : ""}${d.systeme ? " · disque de grenOS" : ""}${d.amovible ? " · amovible" : ""}`)),
+        barre, entier, ...lignes, ...libres,
+        !d.partitions.length && !d.libres.length && !d.entier ? note("Ce disque n'a ni partition ni espace libre lisible.") : null);
+    };
+
+    return [titre("Partitions", "Tes disques, ce qu'ils contiennent, et l'espace libre."),
+      carte(el("p.note.rg-dire-partitions"), dire,
+        el("div.rg-rangee",
+          bouton("Actualiser", "", async () => redessiner(await R("reglages_partitions"))),
+          bouton("Redimensionner (GParted)", "discret", () => ouvrirProgramme("gparted")),
+          bouton("Disques (santé, images)", "discret", () => ouvrirProgramme("gnome-disks"))),
+        note("Formater et supprimer effacent tout ce que la partition contient. Ce qui fait tourner grenOS est protégé. Pour agrandir ou réduire une partition, GParted le fait sans rien perdre.")),
+      ...(v.disques || []).map(carteDisque),
+      (v.disques || []).length ? null : carte(note("Aucun disque lisible ici."))];
+  }
 
   async function garnir(cle) {
     if (D.pages[cle].dataset.garnie) return;

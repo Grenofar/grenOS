@@ -87,6 +87,7 @@ const STYLE: &str = r#"
     padding: 0 2px;
 }
 #zone-etat button { padding: 2px 7px; margin: 3px 0; border-radius: 8px; }
+#bouton-coulisses { padding: 2px 8px; margin: 3px 2px; border-radius: 8px; font-size: 13px; }
 .trait {
     background-color: transparent;
     border-radius: 999px;
@@ -183,6 +184,8 @@ struct Barre {
     /// F4 : l'alerte de chaleur a été donnée, en attendant que ça retombe.
     chaleur_prevenue: std::cell::Cell<bool>,
     bouton_maj: gtk::Button,
+    bouton_coulisses: gtk::Button,
+    menu_coulisses: RefCell<Option<gtk::Menu>>,
     epingles: RefCell<Vec<Epingle>>,
     applications: RefCell<Vec<Application>>,
     ecran: Option<Ecran>,
@@ -269,6 +272,78 @@ fn menu_de(gestes: Vec<(&'static str, Box<dyn Fn()>)>, ev: &gdk::EventButton) ->
     menu.show_all();
     menu.popup_at_pointer(Some(&**ev));
     menu
+}
+
+/// Une entrée de menu : icône (si le thème la connaît) et texte.
+fn entree(texte: &str, icone: &str, sous: Option<&gtk::Menu>) -> gtk::MenuItem {
+    let element = gtk::MenuItem::new();
+    let ligne = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    if let Some(i) = image_de(&[icone, "application-x-executable"], 18) {
+        ligne.pack_start(&i, false, false, 0);
+    }
+    let l = gtk::Label::new(Some(texte));
+    l.set_xalign(0.0);
+    ligne.pack_start(&l, true, true, 0);
+    element.add(&ligne);
+    if let Some(s) = sous {
+        element.set_submenu(Some(s));
+    }
+    element
+}
+
+fn ajouter(menu: &gtk::Menu, texte: &str, action: impl Fn() + 'static) {
+    let element = gtk::MenuItem::with_label(texte);
+    element.connect_activate(move |_| action());
+    menu.append(&element);
+}
+
+fn couper(texte: &str, n: usize) -> String {
+    if texte.chars().count() <= n { texte.to_string() } else { format!("{}…", texte.chars().take(n).collect::<String>()) }
+}
+
+/// Un nom de classe brut (« steamwebhelper ») commence par une majuscule.
+fn nom_affiche(nom: &str) -> String {
+    let mut c = nom.chars();
+    c.next().map(|p| p.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+}
+
+/// « com.valvesoftware.Steam » pour une application Flatpak, sinon "".
+fn identifiant_flatpak(a: &Application) -> String {
+    let chemin = a.fichier.to_string_lossy();
+    if !chemin.contains("/flatpak/") {
+        return String::new();
+    }
+    a.fichier.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+/// Les applications Flatpak en cours, une fois chacune.
+fn flatpaks_en_cours() -> Vec<String> {
+    let Ok(sortie) = std::process::Command::new("flatpak").args(["ps", "--columns=application"]).output() else {
+        return Vec::new();
+    };
+    let mut ids: Vec<String> = String::from_utf8_lossy(&sortie.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && l.contains('.') && !l.starts_with("org.freedesktop.") && !l.starts_with("org.gtk."))
+        .collect();
+    ids.dedup();
+    ids
+}
+
+/// Fermer de force : `flatpak kill` pour une Flatpak, sinon le programme
+/// par son nom — jamais un programme de grenOS lui-même.
+fn forcer_arret(programme: &str, flatpak: &str) {
+    if !flatpak.is_empty() {
+        let _ = std::process::Command::new("flatpak").args(["kill", flatpak]).status();
+        return;
+    }
+    let nom = std::path::Path::new(programme).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if nom.is_empty() || nom.starts_with("grenos") || nom == "openbox" || nom == "flatpak" {
+        return;
+    }
+    // pkill compare les 15 premiers caractères du nom du processus.
+    let court: String = nom.chars().take(15).collect();
+    let _ = std::process::Command::new("pkill").args(["-x", court.as_str()]).status();
 }
 
 impl Barre {
@@ -376,6 +451,17 @@ impl Barre {
         zone_etat.pack_start(&bouton_reseau, false, false, 0);
         zone_etat.pack_start(&bouton_son, false, false, 0);
         boite.pack_end(&zone_etat, false, false, 4);
+        // « ^ » (23 novembre), comme la flèche des icônes cachées de
+        // Windows : ce qui tourne — fenêtres ouvertes et applications en
+        // fond (Steam, Heroic… en Flatpak) — et de quoi les fermer.
+        // La flèche du thème (pan-up-symbolic, livrée avec GTK) : un « ⌃ »
+        // tapé dépendrait de la police.
+        let bouton_coulisses = gtk::Button::new();
+        bouton_coulisses.add(&gtk::Image::from_icon_name(Some("pan-up-symbolic"), gtk::IconSize::Button));
+        bouton_coulisses.set_widget_name("bouton-coulisses");
+        bouton_coulisses.set_valign(gtk::Align::Center);
+        poser_infobulle(&bouton_coulisses, "Applications en cours");
+        boite.pack_end(&bouton_coulisses, false, false, 0);
         // Dans le dock, un trait fin sépare les applications de la zone d'état.
         if dock {
             boite.pack_end(&gtk::Separator::new(gtk::Orientation::Vertical), false, false, 0);
@@ -431,6 +517,8 @@ impl Barre {
             batterie_prevenue: std::cell::Cell::new(false),
             chaleur_prevenue: std::cell::Cell::new(false),
             bouton_maj,
+            bouton_coulisses,
+            menu_coulisses: RefCell::new(None),
             epingles: RefCell::new(apps::lire_epingles()),
             applications: RefCell::new(apps::applications()),
             ecran: Ecran::ouvrir(),
@@ -509,6 +597,8 @@ impl Barre {
 
     fn brancher(self: &Rc<Self>) {
         let b = self.clone();
+        self.bouton_coulisses.connect_clicked(move |bouton| b.ouvrir_coulisses(bouton));
+        let b = self.clone();
         self.panneau.connect_realize(move |p| {
             if let (Some(ecran), Some(f)) = (&b.ecran, p.window()) {
                 if let Ok(x) = f.downcast::<gdkx11::X11Window>() {
@@ -542,6 +632,10 @@ impl Barre {
             };
             if let Some(a) = premiere {
                 b.choisir(&a);
+            } else if let Some(r) = apps::reglages_trouves(&b.recherche.text()).first() {
+                // Aucune application, mais un réglage : Entrée l'ouvre.
+                b.fermer_menu();
+                lancer(&r.commande(), false);
             }
         });
         for w in [self.menu.clone().upcast::<gtk::Widget>(), self.recherche.clone().upcast()] {
@@ -1092,6 +1186,98 @@ impl Barre {
         self.refaire();
     }
 
+    // ---- Ce qui tourne (« ^ ») ---------------------------------------------------
+    /// Le menu de la flèche : une entrée par application qui tourne, avec un
+    /// sous-menu — Afficher, Fermer, Forcer l'arrêt. Un gtk::Menu, pas une
+    /// bulle : il prend lui-même le pointeur et se ferme d'un clic à côté.
+    fn ouvrir_coulisses(self: &Rc<Self>, bouton: &gtk::Button) {
+        let applis = self.applications.borrow().clone();
+        let ouvertes = self.ecran.as_ref().map(|e| e.fenetres()).unwrap_or_default();
+        let menu = gtk::Menu::new();
+        classe(&menu, "coulisses");
+        let titre = gtk::MenuItem::with_label("Applications en cours");
+        titre.set_sensitive(false);
+        menu.append(&titre);
+        menu.append(&gtk::SeparatorMenuItem::new());
+
+        // Les fenêtres, groupées par application.
+        let mut groupes: Vec<(String, Vec<Fenetre>)> = Vec::new();
+        for f in ouvertes {
+            let g = if !f.classe.is_empty() { f.classe.clone() } else { f.titre.clone() };
+            match groupes.iter_mut().find(|(x, _)| *x == g) {
+                Some((_, v)) => v.push(f),
+                None => groupes.push((g, vec![f])),
+            }
+        }
+        let mut vues = std::collections::HashSet::new();
+        let mut compte = 0;
+        for (groupe, fenetres) in groupes {
+            let app = apps::application_de(&groupe, &applis);
+            if let Some(a) = app {
+                vues.insert(identifiant_flatpak(a));
+            }
+            let nom = app.map(|a| a.nom.clone()).unwrap_or_else(|| groupe.clone());
+            let icone = app.map(|a| a.icone.clone()).unwrap_or_default();
+            let etiquette = if fenetres.len() > 1 { format!("{nom} ({} fenêtres)", fenetres.len()) } else { nom.clone() };
+            let sous = gtk::Menu::new();
+            for f in fenetres.iter().take(8) {
+                let texte = if f.titre.is_empty() { format!("Afficher {nom}") } else { format!("Afficher : {}", couper(&f.titre, 48)) };
+                let (b, xid) = (self.clone(), f.xid);
+                ajouter(&sous, &texte, move || if let Some(e) = &b.ecran { e.activer(xid, temps()) });
+            }
+            sous.append(&gtk::SeparatorMenuItem::new());
+            let (b, xids) = (self.clone(), fenetres.iter().map(|f| f.xid).collect::<Vec<_>>());
+            ajouter(&sous, "Fermer", move || {
+                if let Some(e) = &b.ecran {
+                    xids.iter().for_each(|x| e.fermer(*x, temps()));
+                }
+            });
+            if let Some(programme) = app.map(|a| apps::programme_de(&a.commande)).filter(|p| !p.is_empty()) {
+                let flatpak = app.map(identifiant_flatpak).unwrap_or_default();
+                ajouter(&sous, "Forcer l'arrêt", move || forcer_arret(&programme, &flatpak));
+            }
+            menu.append(&entree(&nom_affiche(&etiquette), &icone, Some(&sous)));
+            compte += 1;
+        }
+
+        // Les applications Flatpak qui tournent SANS fenêtre (Steam réduit
+        // dans un coin, un lanceur qui télécharge) : sans ce menu, rien ne
+        // les montrait, et rien ne permettait de les fermer.
+        let mut en_fond = Vec::new();
+        for id in flatpaks_en_cours() {
+            if vues.contains(&id) || en_fond.contains(&id) {
+                continue;
+            }
+            en_fond.push(id.clone());
+            let app = applis.iter().find(|a| identifiant_flatpak(a) == id);
+            let nom = app.map(|a| a.nom.clone()).unwrap_or_else(|| id.rsplit('.').next().unwrap_or(id.as_str()).to_string());
+            let icone = app.map(|a| a.icone.clone()).unwrap_or_else(|| id.clone());
+            let sous = gtk::Menu::new();
+            if let Some(a) = app {
+                let commande = a.commande.clone();
+                ajouter(&sous, "Afficher", move || lancer(&commande, false));
+            }
+            let i = id.clone();
+            ajouter(&sous, "Fermer", move || {
+                let _ = std::process::Command::new("flatpak").args(["kill", i.as_str()]).status();
+            });
+            menu.append(&entree(&format!("{nom} — en arrière-plan"), &icone, Some(&sous)));
+            compte += 1;
+        }
+
+        if compte == 0 {
+            let vide = gtk::MenuItem::with_label("Rien ne tourne pour l'instant");
+            vide.set_sensitive(false);
+            menu.append(&vide);
+        }
+        menu.append(&gtk::SeparatorMenuItem::new());
+        ajouter(&menu, "Gestionnaire des tâches…", || lancer("grenos-taches", false));
+        menu.show_all();
+        menu.popup_at_widget(bouton, gdk::Gravity::North, gdk::Gravity::South, None);
+        dire(&format!("coulisses : {compte} application(s) en cours, dont {} en fond", en_fond.len()));
+        *self.menu_coulisses.borrow_mut() = Some(menu);
+    }
+
     // ---- Le menu ---------------------------------------------------------------
     fn enfoncer(&self, etat: bool) {
         if let Some(id) = self.poignee.borrow().as_ref() {
@@ -1193,6 +1379,15 @@ impl Barre {
         for a in apps::visibles(&liste, &filtre).into_iter().take(80) {
             self.contenu.pack_start(&self.ligne(a.clone()), false, false, 0);
         }
+        // Les pages des Réglages qui répondent au mot tapé (23 novembre) :
+        // « partition », « hz », « navigateur »… comme la recherche de Windows.
+        let reglages = if cherche { apps::reglages_trouves(&filtre) } else { Vec::new() };
+        if !reglages.is_empty() {
+            self.contenu.pack_start(&section("RÉGLAGES"), false, false, 0);
+            for r in reglages {
+                self.contenu.pack_start(&self.ligne_reglage(r), false, false, 0);
+            }
+        }
         self.contenu.show_all();
     }
 
@@ -1212,6 +1407,27 @@ impl Barre {
         bouton.connect_clicked(move |_| {
             b.fermer_menu();
             lancer(&commande, false);
+        });
+        bouton
+    }
+
+    fn ligne_reglage(self: &Rc<Self>, r: &'static apps::Reglage) -> gtk::Button {
+        let bouton = gtk::Button::new();
+        classe(&bouton, "entree");
+        let ligne = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        if let Some(i) = image_de(&[r.icone, "preferences-system", "grenos-parametres"], 24) {
+            ligne.pack_start(&i, false, false, 0);
+        }
+        let l = gtk::Label::new(Some(&format!("Réglages › {}", r.nom)));
+        l.set_xalign(0.0);
+        l.set_ellipsize(pango::EllipsizeMode::End);
+        ligne.pack_start(&l, true, true, 0);
+        bouton.add(&ligne);
+        let b = self.clone();
+        bouton.connect_clicked(move |_| {
+            b.fermer_menu();
+            dire(&format!("menu : reglage ouvert depuis la recherche ({})", r.page));
+            lancer(&r.commande(), false);
         });
         bouton
     }

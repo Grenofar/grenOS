@@ -466,6 +466,7 @@ fn main() {
             reglages::reglages_ouvert,
             reglages::reglages,
             reglages::reglages_signatures,
+            reglages::reglages_partitions_agir,
             reglages::reglages_reseau,
             reglages::reglages_compte,
             reglages::reglages_mot_de_passe,

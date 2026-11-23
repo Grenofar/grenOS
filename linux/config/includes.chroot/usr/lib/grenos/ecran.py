@@ -296,6 +296,41 @@ def noter_tout():
     return ""
 
 
+def instantane():
+    """{nom: (définition, fréquence)} de chaque écran allumé, tel qu'il est."""
+    return {s["nom"]: (s["actuelle"], s["taux"]) for s in sorties()
+            if s["allume"] and s["actuelle"] and s["taux"]}
+
+
+def remettre_frequences(avant):
+    """Après arandr, remet la fréquence de chaque écran resté à la MÊME
+    définition (23 novembre).
+
+    Grenofar : « que ça soit bien aux frames mis par l'utilisateur, moi
+    300 Hz ». Il avait gardé 299.56 Hz à 21:53 ; à 21:54, « Disposer les
+    écrans » a tout réécrit à 60 Hz. arandr applique `--mode` SANS `--rate`,
+    et X prend alors la fréquence préférée de l'écran — 60 Hz —, que
+    noter_tout gardait ensuite pour toutes les sessions suivantes. Un écran
+    dont on a changé la définition dans arandr garde, lui, ce qu'arandr a mis.
+    Rendu : la liste des écrans remis.
+    """
+    remis = []
+    for s in sorties():
+        ancien = avant.get(s["nom"])
+        if not ancien or not s["allume"] or s["actuelle"] != ancien[0]:
+            continue
+        try:
+            if abs(float(s["taux"] or 0) - float(ancien[1])) < 0.5:
+                continue
+        except ValueError:
+            continue
+        r = subprocess.run(["xrandr", "--output", s["nom"], "--mode", ancien[0], "--rate", ancien[1]],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            remis.append("%s %s Hz" % (s["nom"], ancien[1]))
+    return remis
+
+
 def _commande_disposition(lignes, branches, places=True):
     commande = ["xrandr"]
     for ligne in lignes:

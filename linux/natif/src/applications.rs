@@ -136,6 +136,88 @@ pub fn visibles<'a>(apps: &'a [Application], filtre: &str) -> Vec<&'a Applicatio
     apps.iter().filter(|a| a.nom.to_lowercase().contains(&f) || a.note.to_lowercase().contains(&f)).collect()
 }
 
+// ---- Les réglages, trouvables depuis la recherche du menu --------------------
+//
+// Grenofar (23 novembre) : « quand on est dans la recherche depuis le dock,
+// on tape partition et tout ». Comme Windows : taper un mot fait aussi
+// apparaître la page des Réglages qui le règle, ouverte directement dessus
+// (`grenos-parametres <page>`).
+
+pub struct Reglage {
+    pub nom: &'static str,
+    pub page: &'static str,
+    pub icone: &'static str,
+    pub mots: &'static [&'static str],
+}
+
+impl Reglage {
+    pub fn commande(&self) -> String {
+        format!("grenos-parametres {}", self.page)
+    }
+}
+
+pub const REGLAGES: &[Reglage] = &[
+    Reglage { nom: "Partitions et disques", page: "partitions", icone: "drive-harddisk",
+        mots: &["partition", "disque", "ssd", "hdd", "nvme", "formater", "formatage", "stockage", "clé usb", "usb", "monter", "démonter", "volume", "ext4", "ntfs", "exfat", "fat32", "espace", "redimensionner"] },
+    Reglage { nom: "Écran — définition et fréquence", page: "ecran", icone: "video-display",
+        mots: &["écran", "ecran", "résolution", "définition", "fréquence", "hz", "hertz", "fps", "images par seconde", "moniteur", "affichage", "rafraîchissement", "plusieurs écrans", "disposer"] },
+    Reglage { nom: "Apparence — thème, fond, effets", page: "apparence", icone: "preferences-desktop-theme",
+        mots: &["apparence", "thème", "theme", "sombre", "clair", "nuit", "jour", "fond d'écran", "fond", "couleur", "accent", "effets", "animation", "taille", "dpi", "barre des tâches", "dock", "police"] },
+    Reglage { nom: "Son", page: "son", icone: "audio-volume-high",
+        mots: &["son", "audio", "volume", "haut-parleur", "casque", "micro", "microphone", "sortie", "entrée"] },
+    Reglage { nom: "Réseau — Wi-Fi et câble", page: "reseau", icone: "network-wireless",
+        mots: &["réseau", "reseau", "wifi", "wi-fi", "internet", "ethernet", "câble", "ip", "dns", "vpn"] },
+    Reglage { nom: "Compte — mot de passe, navigateur principal", page: "compte", icone: "avatar-default",
+        mots: &["compte", "mot de passe", "utilisateur", "session", "navigateur", "navigateur principal", "navigateur par défaut", "google", "connexion", "clé de sécurité", "yubikey"] },
+    Reglage { nom: "Heure et date", page: "heure", icone: "preferences-system-time",
+        mots: &["heure", "date", "fuseau", "horloge", "temps"] },
+    Reglage { nom: "Mises à jour", page: "maj", icone: "system-software-update",
+        mots: &["mise à jour", "mises à jour", "maj", "update", "version"] },
+    Reglage { nom: "Mise à jour des composants", page: "composants", icone: "application-x-firmware",
+        mots: &["composant", "firmware", "micrologiciel", "bios", "uefi", "fwupd"] },
+    Reglage { nom: "Sécurité — antivirus", page: "securite", icone: "security-high",
+        mots: &["sécurité", "securite", "antivirus", "virus", "clamav", "pare-feu", "firewall"] },
+    Reglage { nom: "Matériel — processeur, mémoire, carte graphique", page: "materiel", icone: "computer",
+        mots: &["matériel", "materiel", "processeur", "cpu", "mémoire", "ram", "carte graphique", "gpu", "nvidia", "pilote", "température"] },
+];
+
+/// Sans accents ni majuscules : « Écran » se trouve en tapant « ecran ».
+pub fn plier(texte: &str) -> String {
+    texte
+        .to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'à' | 'â' | 'ä' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'î' | 'ï' => 'i',
+            'ô' | 'ö' => 'o',
+            'ù' | 'û' | 'ü' => 'u',
+            'ç' => 'c',
+            autre => autre,
+        })
+        .collect()
+}
+
+/// Les pages des Réglages qui répondent à ce qu'on tape (deux lettres au
+/// moins : une seule ferait tout sortir).
+pub fn reglages_trouves(filtre: &str) -> Vec<&'static Reglage> {
+    let f = plier(filtre.trim());
+    if f.chars().count() < 2 {
+        return Vec::new();
+    }
+    REGLAGES
+        .iter()
+        .filter(|r| {
+            plier(r.nom).contains(&f)
+                || r.mots.iter().any(|m| {
+                    let m = plier(m);
+                    // « partitions » trouve « partition » ; pas « sonic » → « son ».
+                    m.starts_with(&f) || (m.chars().count() >= 4 && f.starts_with(&m))
+                })
+        })
+        .collect()
+}
+
 // ---- Les épinglées ------------------------------------------------------------
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -218,6 +300,19 @@ pub fn application_de<'a>(groupe: &str, apps: &'a [Application]) -> Option<&'a A
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn la_recherche_trouve_les_reglages() {
+        let pages = |f: &str| reglages_trouves(f).iter().map(|r| r.page).collect::<Vec<_>>();
+        assert_eq!(pages("partition"), vec!["partitions"]);
+        assert_eq!(pages("Partitions"), vec!["partitions"]);
+        assert!(pages("ecran").contains(&"ecran"));
+        assert!(pages("hz").contains(&"ecran"));
+        assert!(pages("navigateur").contains(&"compte"));
+        assert!(pages("formater").contains(&"partitions"));
+        assert!(pages("sonic").is_empty());
+        assert!(pages("p").is_empty());
+    }
 
     #[test]
     fn un_desktop_se_lit() {

@@ -1,0 +1,184 @@
+#!/bin/sh
+# Ce qui ÉCRIT sur un disque, pour Réglages › Partitions (23 novembre).
+#
+# Lancé en administrateur (sudo -n ou pkexec, qui demande le mot de passe).
+# La page n'est jamais crue : chaque argument est revérifié ici, et tout ce
+# qui fait tourner grenOS — monté sur /, /boot, /boot/efi, /home, /usr,
+# /var, l'échange en cours, le support de la clé live — est REFUSÉ, quoi que
+# la page ait affiché.
+#
+#   grenos-partitions formater  /dev/sdX1 ext4|exfat|ntfs|fat32 "Nom"
+#   grenos-partitions renommer  /dev/sdX1 "Nom"
+#   grenos-partitions supprimer /dev/sdX1
+#   grenos-partitions creer     /dev/sdX  ext4|exfat|ntfs|fat32 "Nom" [taille en Mio, vide = tout]
+#
+# Une ligne par refus sur la sortie d'erreur, en français : la page
+# l'affiche telle quelle.
+
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+
+refus() { echo "$*" >&2; exit 1; }
+dire() { echo "grenos: partitions : $*" > /dev/kmsg 2>/dev/null || true; }
+
+[ "$(id -u)" = 0 ] || refus "Il faut les droits d'administrateur."
+
+# Un nom de périphérique simple : /dev/sda1, /dev/nvme0n1p3, /dev/mmcblk0p1.
+peripherique() {
+    case "$1" in
+        /dev/*) ;;
+        *) refus "Ce périphérique n'existe pas." ;;
+    esac
+    nom=${1#/dev/}
+    case "$nom" in
+        ""|*/*|*[!a-zA-Z0-9]*) refus "Ce périphérique n'existe pas." ;;
+    esac
+    [ -b "$1" ] || refus "Ce périphérique n'existe pas (débranché ?)."
+}
+
+# Le nom d'un volume : lettres, chiffres, espace, tiret, souligné ; 16 au plus.
+etiquette() {
+    case "$1" in
+        *[!a-zA-Z0-9\ _-]*) refus "Le nom ne peut contenir que des lettres sans accent, des chiffres, des espaces, - et _." ;;
+    esac
+    [ "${#1}" -le 16 ] || refus "Le nom fait 16 caractères au plus."
+}
+
+systeme_fichiers() {
+    case "$1" in
+        ext4|exfat|ntfs|fat32) ;;
+        *) refus "Système de fichiers inconnu : $1." ;;
+    esac
+}
+
+# Ce périphérique, ou ce qu'il porte (LUKS, LVM), fait-il tourner grenOS ?
+protege() {
+    for point in $(lsblk -nro MOUNTPOINTS "$1" 2>/dev/null); do
+        case "$point" in
+            /|/boot|/boot/efi|/efi|/home|/usr|/var|/run/live/*|"[SWAP]") return 0 ;;
+        esac
+    done
+    # L'échange actif, même sans point de montage affiché.
+    for e in $(lsblk -nrpo NAME "$1" 2>/dev/null); do
+        grep -q "^$e " /proc/swaps 2>/dev/null && return 0
+    done
+    return 1
+}
+
+type_de() { lsblk -dno TYPE "$1" 2>/dev/null | tr -d ' '; }
+
+# Démonter tout ce que porte la partition (une clé ouverte dans Fichiers).
+demonter_tout() {
+    for point in $(lsblk -nro MOUNTPOINTS "$1" 2>/dev/null | sort -r); do
+        [ -n "$point" ] || continue
+        umount "$point" 2>/dev/null || umount -l "$point" 2>/dev/null \
+            || refus "La partition est utilisée (montée sur $point) : ferme ce qui y est ouvert."
+    done
+}
+
+# Le disque parent et le numéro d'une partition.
+parent() { lsblk -ndo PKNAME "$1" 2>/dev/null | tr -d ' '; }
+numero() { cat "/sys/class/block/${1#/dev/}/partition" 2>/dev/null; }
+
+relire_table() {
+    partx -u "$1" 2>/dev/null || partprobe "$1" 2>/dev/null || true
+    udevadm settle --timeout=15 2>/dev/null || sleep 2
+}
+
+formater_bloc() { # périphérique système nom
+    wipefs -a -q "$1" || refus "Impossible d'effacer l'ancienne signature."
+    case "$2" in
+        ext4)  mkfs.ext4 -F -q ${3:+-L "$3"} "$1" ;;
+        exfat) mkfs.exfat ${3:+-L "$3"} "$1" ;;
+        ntfs)  mkfs.ntfs -f -Q ${3:+-L "$3"} "$1" ;;
+        fat32) mkfs.vfat -F 32 ${3:+-n "$(echo "$3" | tr 'a-z' 'A-Z' | cut -c1-11)"} "$1" ;;
+    esac >/dev/null 2>"/run/grenos-partitions.err" || refus "Le formatage a échoué : $(tail -1 /run/grenos-partitions.err 2>/dev/null)"
+    # Une partition ext4 neuve appartient à la personne qui l'a créée.
+    if [ "$2" = ext4 ] && [ -n "${PKEXEC_UID:-${SUDO_UID:-}}" ]; then
+        tmp=$(mktemp -d) && mount "$1" "$tmp" 2>/dev/null \
+            && chown "${PKEXEC_UID:-$SUDO_UID}" "$tmp" && umount "$tmp"
+        rmdir "$tmp" 2>/dev/null
+    fi
+    return 0
+}
+
+geste=${1:-}
+case "$geste" in
+    formater)
+        [ $# -eq 4 ] || refus "Arguments : formater périphérique système nom."
+        peripherique "$2"; systeme_fichiers "$3"; etiquette "$4"
+        case "$(type_de "$2")" in part|disk) ;; *) refus "Ce n'est pas une partition." ;; esac
+        protege "$2" && refus "Cette partition fait tourner grenOS : on ne la formate pas."
+        if [ "$(type_de "$2")" = disk ] && lsblk -nro TYPE "$2" | grep -q part; then
+            refus "C'est un disque entier qui contient des partitions : formate-les une par une."
+        fi
+        demonter_tout "$2"
+        formater_bloc "$2" "$3" "$4"
+        dire "$2 formatee en $3"
+        echo "Formatée en $3."
+        ;;
+    renommer)
+        [ $# -eq 3 ] || refus "Arguments : renommer périphérique nom."
+        peripherique "$2"; etiquette "$3"
+        fs=$(lsblk -ndo FSTYPE "$2" | tr -d ' ')
+        case "$fs" in
+            ext2|ext3|ext4) e2label "$2" "$3" ;;
+            exfat) exfatlabel "$2" "$3" ;;
+            ntfs) ntfslabel "$2" "$3" ;;
+            vfat) fatlabel "$2" "$(echo "$3" | tr 'a-z' 'A-Z' | cut -c1-11)" ;;
+            *) refus "Ce système de fichiers ($fs) ne se renomme pas ici." ;;
+        esac >/dev/null 2>&1 || refus "Le nouveau nom n'a pas pu être écrit (démonte la partition, puis réessaie)."
+        udevadm trigger --name-match="$2" 2>/dev/null || true
+        echo "Renommée « $3 »."
+        ;;
+    supprimer)
+        [ $# -eq 2 ] || refus "Arguments : supprimer périphérique."
+        peripherique "$2"
+        [ "$(type_de "$2")" = part ] || refus "Ce n'est pas une partition."
+        protege "$2" && refus "Cette partition fait tourner grenOS : on ne la supprime pas."
+        disque=/dev/$(parent "$2"); n=$(numero "$2")
+        [ -b "$disque" ] && [ -n "$n" ] || refus "Le disque de cette partition est introuvable."
+        demonter_tout "$2"
+        sfdisk --delete "$disque" "$n" >/dev/null 2>"/run/grenos-partitions.err" \
+            || refus "La suppression a échoué : $(tail -1 /run/grenos-partitions.err 2>/dev/null)"
+        relire_table "$disque"
+        dire "$2 supprimee"
+        echo "Partition supprimée."
+        ;;
+    creer)
+        [ $# -ge 4 ] && [ $# -le 5 ] || refus "Arguments : creer disque système nom [taille]."
+        peripherique "$2"; systeme_fichiers "$3"; etiquette "$4"
+        taille=${5:-}
+        case "$taille" in ""|*[!0-9]*) [ -z "$taille" ] || refus "Taille invalide." ;; esac
+        [ "$(type_de "$2")" = disk ] || refus "Choisis un disque, pas une partition."
+        # Un disque formaté d'un bloc (sans table) : il faudrait tout effacer.
+        table=$(lsblk -ndo PTTYPE "$2" | tr -d ' ')
+        if [ -z "$table" ]; then
+            [ -z "$(lsblk -ndo FSTYPE "$2" | tr -d ' ')" ] \
+                || refus "Ce disque est formaté d'un seul bloc, sans table : formate-le d'abord en entier."
+            echo 'label: gpt' | sfdisk -q "$2" >/dev/null 2>&1 || refus "Impossible de créer la table de partitions."
+            table=gpt
+        fi
+        case "$3:$table" in
+            ext4:*) t=L ;;
+            *:gpt) t=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7 ;; # données Microsoft : lue par Windows
+            exfat:dos|ntfs:dos) t=7 ;;
+            fat32:dos) t=c ;;
+        esac
+        avant=$(lsblk -nrpo NAME "$2")
+        echo ",${taille:+${taille}M},$t" | sfdisk -q --append "$2" >/dev/null 2>"/run/grenos-partitions.err" \
+            || refus "La création a échoué : $(tail -1 /run/grenos-partitions.err 2>/dev/null)"
+        relire_table "$2"
+        # La nouvelle : le nom qui n'existait pas avant.
+        neuve=$(lsblk -nrpo NAME "$2" | grep -vxF "$avant" | head -1)
+        [ -b "$neuve" ] || refus "La partition a été créée, mais n'apparaît pas encore : débranche et rebranche le disque, puis formate-la."
+        formater_bloc "$neuve" "$3" "$4"
+        dire "$neuve creee en $3 sur $2"
+        echo "Partition $neuve créée en $3."
+        ;;
+    *)
+        refus "Geste inconnu : $geste."
+        ;;
+esac
+exit 0

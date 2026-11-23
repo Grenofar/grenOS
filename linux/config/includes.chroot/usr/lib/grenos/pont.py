@@ -585,6 +585,30 @@ def reglages_materiel():
     return {"lignes": lignes, "explication": explication}
 
 
+def reglages_partitions():
+    """Les disques, leurs partitions et l'espace libre (partitions.py)."""
+    import partitions
+    return partitions.etat()
+
+
+def reglages_partitions_monter(chemin, monter=True):
+    import partitions
+    souci = partitions.monter(chemin) if monter else partitions.demonter(chemin)
+    return {"souci": souci, **partitions.etat()}
+
+
+def reglages_navigateurs():
+    """Les navigateurs installés et celui qui ouvre les liens (navigateur.py)."""
+    import navigateur
+    return {"navigateurs": navigateur.liste()}
+
+
+def reglages_navigateur_choisir(identifiant):
+    import navigateur
+    souci = navigateur.choisir(identifiant)
+    return {"souci": souci, "navigateurs": navigateur.liste()}
+
+
 def reglages_maj():
     import maj
     attendus = maj.disponibles()
@@ -624,6 +648,10 @@ FONCTIONS = {
     "reglages_heure_regler": reglages_heure_regler,
     "reglages_materiel": reglages_materiel,
     "reglages_maj": reglages_maj,
+    "reglages_navigateurs": reglages_navigateurs,
+    "reglages_partitions": reglages_partitions,
+    "reglages_partitions_monter": reglages_partitions_monter,
+    "reglages_navigateur_choisir": reglages_navigateur_choisir,
     "jeux_vue": jeux_vue,
     "jeux_paquet_nvidia": jeux_paquet_nvidia,
     "jeux_preparer_rocket": jeux_preparer_rocket,

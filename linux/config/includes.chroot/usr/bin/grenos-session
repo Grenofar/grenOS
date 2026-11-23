@@ -16,6 +16,9 @@ export XDG_SESSION_DESKTOP=grenos
 export XDG_MENU_PREFIX=grenos-
 # Les applications GTK suivent le thème du système, pas leurs propres couleurs.
 export GTK_OVERLAY_SCROLLING=0
+# Les programmes qui lisent $BROWSER ouvrent le navigateur principal
+# (Réglages › Compte), comme xdg-open (23 novembre).
+export BROWSER=grenos-navigateur
 
 # La langue du système. lightdm ne la transmet pas à la session : sans ces
 # lignes, l'horloge de la barre affiche « Fri 18 Sep » au lieu de
@@ -344,12 +347,15 @@ fi
 #     cadence, et un compositeur y coûterait sans rien donner ;
 #   - une VRAIE carte graphique (pilote i915, amdgpu, radeon, nouveau,
 #     nvidia) : sur un rendu logiciel (llvmpipe), picom ralentirait tout ;
-#   - pas en effets « Performance » : ce réglage promet le minimum.
+#   - (plus de condition sur les effets, 23 novembre) : « Performance »
+#     coupait aussi picom, et Grenofar, en Performance sur sa RTX 5060 sous
+#     le pilote officiel, avait le bureau et le défilement à ~40 images par
+#     seconde sur un écran 300 Hz. picom n'ajoute aucun effet : il ne fait
+#     que cadencer les fenêtres sur l'écran, et s'efface devant un jeu.
 # picom ne change pas l'apparence (etc/xdg/picom/grenos.conf). La ligne
 # série dit pourquoi il tourne, ou pourquoi pas.
 compositeur_raison() {
     [ "$(systemd-detect-virt 2>/dev/null || echo none)" = none ] || { echo "machine virtuelle"; return; }
-    [ "$(cat "$CONFIG/effets" 2>/dev/null)" != performance ] || { echo "effets Performance"; return; }
     command -v picom >/dev/null 2>&1 || { echo "picom absent"; return; }
     reconnue=
     for pilote in /sys/class/drm/card*/device/driver; do
@@ -382,7 +388,24 @@ compositeur_raison() {
     esac
 }
 RAISON=$(compositeur_raison)
+# PLUSIEURS ÉCRANS À DES FRÉQUENCES DIFFÉRENTES (23 novembre). Le pilote
+# NVIDIA cale le vsync d'OpenGL sur UN écran ; pour une fenêtre à cheval sur
+# les deux (celle de picom couvre tout le bureau), il peut prendre le plus
+# lent — 60 Hz sur le second écran de Grenofar, et son 300 Hz ne sert plus.
+# On lui désigne l'écran allumé le plus rapide.
+ecran_le_plus_rapide() {
+    xrandr --current 2>/dev/null | awk '
+        / connected/ { nom = $1 }
+        /\*/ { for (i = 2; i <= NF; i++) if ($i ~ /\*/) { t = $i; sub(/[*+]+/, "", t)
+                if (t + 0 > max) { max = t + 0; rapide = nom } } }
+        END { if (rapide != "") print rapide }'
+}
 if [ -z "$RAISON" ]; then
+    RAPIDE=$(ecran_le_plus_rapide)
+    if [ -n "$RAPIDE" ] && [ -z "${__GL_SYNC_DISPLAY_DEVICE:-}" ]; then
+        export __GL_SYNC_DISPLAY_DEVICE="$RAPIDE"
+        grenos-dire "compositeur : vsync cale sur $RAPIDE (l ecran le plus rapide)"
+    fi
     grenos-veilleur picom --config /etc/xdg/picom/grenos.conf &
     grenos-dire "compositeur : picom lance (vsync a la frequence de l ecran)"
 else

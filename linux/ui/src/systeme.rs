@@ -145,15 +145,47 @@ pub fn ecrire_reglage(nom: &str, valeur: &str) -> Result<(), String> {
 /// llvmpipe et coûte plus cher que le rendu logiciel direct. Le rendu par
 /// DMA-BUF, lui, laisse une fenêtre blanche sur plusieurs cartes virtuelles.
 /// On ne force rien si la personne (ou un essai) a déjà choisi.
+///
+/// SUR UNE VRAIE CARTE, LE RENDU PAR LA CARTE (23 novembre). Grenofar :
+/// « quand je scroll dans GrenLaunch, c'est à 20 frames ». Le mode composité
+/// était coupé PARTOUT : chaque image d'un défilement plein écran, vignettes
+/// comprises, était peinte par le processeur — une vingtaine par seconde sur
+/// un écran 300 Hz. Avec un pilote de vraie carte (NVIDIA officiel, AMD,
+/// Intel), WebKit dessine par OpenGL et suit l'écran. `nouveau` reste au
+/// rendu logiciel : son OpenGL sur les RTX 50 est encore trop jeune (voir
+/// grenos-session, le compositeur).
 pub fn preparer_webkit() {
-    for (cle, valeur) in [
-        ("WEBKIT_DISABLE_DMABUF_RENDERER", "1"),
-        ("WEBKIT_DISABLE_COMPOSITING_MODE", "1"),
-    ] {
+    let mut reglages = vec![("WEBKIT_DISABLE_DMABUF_RENDERER", "1")];
+    if !carte_acceleree() {
+        reglages.push(("WEBKIT_DISABLE_COMPOSITING_MODE", "1"));
+    }
+    for (cle, valeur) in reglages {
         if std::env::var_os(cle).is_none() {
             std::env::set_var(cle, valeur);
         }
     }
+}
+
+/// Un pilote de carte graphique dont l'OpenGL est matériel et éprouvé.
+/// Une machine virtuelle n'en a pas (virtio_gpu, vmwgfx, qxl, bochs).
+pub fn carte_acceleree() -> bool {
+    let Ok(cartes) = fs::read_dir("/sys/class/drm") else { return false };
+    cartes.flatten().any(|c| {
+        let nom = c.file_name();
+        let nom = nom.to_string_lossy();
+        if !nom.starts_with("card") || nom.contains('-') {
+            return false;
+        }
+        fs::read_link(c.path().join("device/driver"))
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .map(|pilote| pilote_accelere(&pilote))
+            .unwrap_or(false)
+    })
+}
+
+pub fn pilote_accelere(pilote: &str) -> bool {
+    matches!(pilote, "nvidia" | "amdgpu" | "radeon" | "i915" | "xe")
 }
 
 /// UN SEUL PROCESSUS POUR TOUTES LES FENÊTRES.
@@ -238,7 +270,7 @@ pub const PROGRAMMES: &[&str] = &[
     "grenplace", "grenlaunch", "grenos-jeux", "grenos-connexions", "grenos-parametres",
     "grenos-maj", "grenos-fichiers", "grenos-taches", "grenos-son", "grenos-hub",
     "grenos-perf", "grenos-secours", "grenos-bienvenue", "grenos-arret",
-    "firefox-esr", "x-terminal-emulator", "installer", "pavucontrol", "nm-connection-editor", "arandr", "grenos-disposer-ecrans", "gnome-disks", "gufw", "grenrecovery",
+    "firefox-esr", "x-terminal-emulator", "installer", "pavucontrol", "nm-connection-editor", "arandr", "grenos-disposer-ecrans", "gnome-disks", "gparted", "gufw", "grenrecovery",
 ];
 
 #[tauri::command]
