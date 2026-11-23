@@ -113,6 +113,16 @@ autres=$(dans dpkg-query -W -f '${Package} ${Version}\n' 2>/dev/null | awk '$2 ~
     | grep -vE '^(linux-|nvidia-|libnvidia-|xserver-xorg-video-nvidia-)' || true)
 [ -z "$autres" ] || rate "des paquets d Ubuntu hors du pilote : $autres"
 cp "$VU/boot/grub/grub.cfg" "$OUT/grub.cfg"
+# Chaque « insmod » du menu doit être DANS le GRUB signé d'Ubuntu : un module
+# lu sur le disque est refusé par le Secure Boot (« prohibited by secure boot
+# policy », puis « Press any key to continue… » à l'écran).
+python3 - "$VU/usr/lib/grenos/chaine-ubuntu/grubx64.efi.signed" "$OUT/grub.cfg" <<'PY' | tee "$OUT/modules.txt"
+import re, sys
+b = open(sys.argv[1], "rb").read()
+for m in sorted(set(re.findall(r"insmod\s+([a-z0-9_]+)", open(sys.argv[2]).read()))):
+    print("module", m, "DEDANS" if (b"\x00" + m.encode() + b"\x00") in b else "ABSENT")
+PY
+if grep -q ABSENT "$OUT/modules.txt"; then rate "des modules du menu manquent au GRUB d Ubuntu : $(grep ABSENT "$OUT/modules.txt" | awk '{print $2}' | xargs)"; fi
 grep -E '^set default|^\s*linux\s' "$OUT/grub.cfg" | head -n 6
 mv -f "$VU/etc/resolv.conf.avant" "$VU/etc/resolv.conf" 2>/dev/null || rm -f "$VU/etc/resolv.conf"
 rm -f "$VU/etc/resolv.conf.essai"
@@ -126,7 +136,8 @@ cat > "$VU/usr/local/sbin/grenos-essai-pilote" <<'EOF'
 #!/bin/sh
 n=$(cat /var/lib/grenos-essai-tour 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > /var/lib/grenos-essai-tour
 t=0
-while [ "$t" -lt 150 ] && ! pgrep -x openbox >/dev/null; do sleep 2; t=$((t + 2)); done
+affiche() { pgrep -x openbox >/dev/null || pgrep -f 'grenos-ui premier' >/dev/null; }
+while [ "$t" -lt 150 ] && ! affiche; do sleep 2; t=$((t + 2)); done
 sleep 5
 {
     echo "SONDE $n noyau $(uname -r)"
@@ -134,7 +145,7 @@ sleep 5
     echo "SONDE $n en attente : [$(mokutil --list-new 2>&1 | head -n 1)]"
     echo "SONDE $n nvidia : $(lsmod | awk '$1 == "nvidia" {print "charge"}')"
     dmesg | grep -E 'NVRM|nvidia|rejected' | tail -n 6 | sed "s/^/SONDE $n dmesg /"
-    echo "SONDE $n bureau : $(pgrep -x openbox >/dev/null && echo ouvert || echo ferme) apres ${t}s"
+    echo "SONDE $n bureau : $(affiche && echo ouvert || echo ferme) apres ${t}s ($(pgrep -x openbox >/dev/null && echo bureau || echo assistant))"
     echo "SONDE $n noyaux debian : [$(dpkg-query -W -f '${Package} ${Status}\n' 'linux-image-*' 2>/dev/null | awk '$NF == "installed" && $1 ~ /amd64$/ {print $1}' | tr '\n' ' ')]"
     systemctl --failed --no-legend --plain 2>&1 | sed "s/^/SONDE $n en echec /"
     journalctl -b -o cat --no-pager 2>/dev/null | grep -a 'pilote signe' | sed "s/^/SONDE $n journal /"
@@ -147,7 +158,7 @@ chmod 0755 "$VU/usr/local/sbin/grenos-essai-pilote"
 cat > "$S/grenos-essai-pilote.service" <<'EOF'
 [Unit]
 Description=essai : le pilote signe, a chaque demarrage
-After=multi-user.target
+After=local-fs.target
 [Service]
 Type=simple
 ExecStart=/usr/local/sbin/grenos-essai-pilote
@@ -169,7 +180,9 @@ timeout 1500 qemu-system-x86_64 "${accel[@]}" -machine q35,smm=on \
     -drive if=none,id=ssd,format=raw,file="$DISQUE" \
     -device "ide-hd,drive=ssd,bus=ide.0,model=Samsung SSD 860 EVO 250GB" \
     -nic none -vga std -display none -serial file:"$SERIE" || true
-grep -a 'SONDE' "$SERIE" || { tail -c 3000 "$SERIE"; rate "aucune sonde : le disque n a pas demarre jusqu au systeme"; finir; }
+grep -aE 'SONDE|prohibited|Press any key' "$SERIE" || true
+if grep -aqE 'prohibited by secure boot|Press any key' "$SERIE"; then rate "GRUB ecrit une erreur du Secure Boot et attend une touche"; fi
+grep -aq 'SONDE' "$SERIE" || { tail -c 3000 "$SERIE"; rate "aucune sonde : le disque n a pas demarre jusqu au systeme"; finir; }
 
 etape "5. le jugement"
 for n in 1 2; do
