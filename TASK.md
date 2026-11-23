@@ -6,6 +6,13 @@
 
 ## 0000000. PUBLIÉ — 23 novembre soir : NVIDIA en un bouton, Secure Boot gardé, sans écran bleu
 
+- 20 h 33, sur SON PC (1803 installée) : « Préparer le matériel » →
+  « grenos-pilote-signe: Permission denied ». Écrits sous Windows, ce script
+  et grenos-pilote-refuse étaient 100644 dans Git ; l'essai faisait chmod.
+  Corrigé, verif-shell refuse tout script 100644, l'essai garde les droits
+  de Git [prouvé : Pilote signe 45250830111]. **PUBLIÉ : linux-20261123-2027**
+  (main d1916c4, construction 45250825746 verte), par mise à jour depuis grenOS.
+
 - **linux-20261123-1803** (main 25da8cb, construction 45224717254 verte).
   Sa clé F: la porte [prouvé : 292 fichiers relus, 0 faute, mode « firmware »
   et rapports gardés]. Le Samsung : vide le 23 à 12 h 59 avec son accord,
