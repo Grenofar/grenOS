@@ -1,8 +1,76 @@
 # TASK.md — ce qui est planifié, dans l'ordre
 
-> Tenu par Claude. Mis à jour le 2026-11-22. Une session qui reprend
+> Tenu par Claude. Mis à jour le 2026-11-23. Une session qui reprend
 > le travail lit d'abord ce fichier, puis `CLAUDE.md` (local, RÈGLE N°1 :
 > plug and play pour un non-développeur).
+
+## 00000. FAIT le 23 novembre au matin — première séance DEPUIS grenOS
+
+Grenofar travaille désormais sur grenOS installé (« je ne vais plus revenir
+sur Windows ») : RTX 5060 (GB206, 10de:2d05), Secure Boot actif, deux écrans.
+Demandes, dans l'ordre : 2e écran noir ; glisser une app vers bureau/dock
+« carré noir sans plus » ; essayer le MCP d'écran ; « Préparer le matériel »
+après l'installation ; curseur de Claude séparé ; gestionnaire des tâches
+(Processus, Performance, Jeu, Démarrage, « à part les process de grenOS ») ;
+capture « copier seulement » ; documentation sur grenos.vercel.app ; tout
+dans TASK.md ; publier (mise à jour auto). Il est parti, séance autonome.
+
+- **2e écran noir** [diagnostiqué] : `nouveau` écarté (`choix garde (ecran
+  juge illisible ici)` au démarrage), X sur fbdev/efifb = UNE sortie. Grenofar
+  a ensuite posé LUI-MÊME le pilote officiel (les 3 commandes manuelles, 07:25)
+  : `nvidia-kernel-open-dkms` 620.70.06 compilé et signé pour 7.3.4, clé
+  grenOS EN ATTENTE d'inscription (`mokutil --list-new`). [à voir sur son PC]
+  au redémarrage : écran bleu MokManager (code donné dans son terminal), puis
+  deux écrans. `affichage-reessai` est aussi armé (Réglages, 07:19) : sans
+  effet si `nvidia` prend la carte (nouveau en liste noire par son paquet).
+- **MCP grenos** [écrit, essayé] : Claude Desktop lance ses serveurs MCP avec
+  HOME/LOGNAME/PATH/SHELL/USER SEULEMENT → « pas d'écran X ». `grenos-mcp`
+  reprend DISPLAY, XAUTHORITY, bus… de `systemctl --user show-environment`
+  (repli : /tmp/.X11-unix + ~/.Xauthority). Essayé avec l'environnement réduit.
+- **Curseur de Claude** [écrit, vu à l'écran] : `grenos-mcp-curseur` (fenêtre
+  POPUP découpée SHAPE, forme d'entrée VIDE = clics traversants) dessine la
+  flèche du thème de curseurs de la personne (Breeze_Light ici) repeinte en
+  orange #D97757 + étiquette « Claude ». Clic/glisser/défiler : pointeur de la
+  personne CACHÉ (XFixes), posé (XTest), geste, RENDU à sa place — vérifié au
+  pixel près pendant que Grenofar bougeait sa souris. `souris_deplacer` ne
+  bouge plus que le curseur orange (`survol=true` pour un menu au survol).
+  Inspiré de claude-free-plan-mcp-powershell (même protocole JSON par ligne).
+- **Glisser menu → bureau/dock** [écrit, vu] : au début du glisser, le menu
+  relâchait SON attrape (`siege.ungrab()`), ce qui coupait celle de GTK
+  (une seule attrape par client X) → icône plantée. `Attrape::ceder`. Le dock
+  accepte maintenant le dépôt (épingle), l'icône suivie est celle de l'app.
+- **Bulle d'aperçu bloquée au-dessus du dock** [écrit, vu] : `close()` est
+  ignoré par GTK tant qu'une attrape GTK existe (menu contextuel, glisser) ;
+  la bulle était oubliée mais restait. `hide()` + `destroy()`.
+- **Clic dans le dock** : Grenofar « en fait ça fonctionne » — rien changé.
+- **Capture « copier seulement »** [écrit, essayé] : `xfce4-screenshooter -c`
+  perd l'image à sa sortie (pas de gestionnaire de presse-papier).
+  `grenos-capture zone|ecran|fenetre` garde l'image jusqu'à la copie suivante.
+  Meta+Maj+S (zone), Ctrl+Impr (écran), Ctrl+Alt+Impr (fenêtre).
+- **Gestionnaire des tâches** [écrit, vu] : 4 onglets sur les mesures de
+  grenPerf. Processus regroupés, TOUT sauf grenOS (PROTEGES élargi, scripts
+  Python nommés par leur script) ; arrêter un groupe système = UNE demande
+  pkexec. Performance : courbes 2 min. Démarrage : couper / retirer /
+  « Ajouter une application » (copie de la fiche dans ~/.config/autostart),
+  fiches de grenOS masquées. Jeu : libérer la RAM (mesuré) + mode jeu.
+- **Préparer le matériel** [écrit, vu, PAS cliqué] : `grenos-ui preparer`
+  + `grenos-preparer-materiel` (session) qui pose le raccourci du bureau sur
+  un grenOS installé dont une NVIDIA n'a pas `nvidia`, et le retire ensuite.
+  Installe par `installer` (dépôt NVIDIA, DKMS, `--apres`), affiche le code
+  MokManager EN GRAND et les étapes, bouton Redémarrer.
+- **Documentation** [écrit] : grenos-web-download `/documentation` (FR/EN),
+  lien en-tête/pied/Télécharger, sitemap. typecheck et build verts.
+- Vérifié en local : natif 34 essais, grenos-ui 76, verif-accents/fenetres/
+  shell/recherches et les essais de linux.yml verts SAUF essai-installer.sh,
+  qui échoue aussi sans ces changements (il lit les vrais disques de ce PC).
+- Outils posés sur ce PC pour compiler ici : cargo/rustc-web 1.96 (Debian,
+  Tauri exige ≥ 1.88), libwebkit2gtk-4.1-dev, nodejs 20, git.
+- [à faire] 1. regarder la CI de ce commit (paquet + dépôt APT + image) ;
+  2. sur son PC : redémarrage, MokManager, deux écrans ; relancer Claude
+  Desktop pour charger le nouveau grenos-mcp ; 3. MCP : un `souris_glisser`
+  rend la main au pointeur de la personne pendant ~0,6 s — si elle bouge, le
+  glisser bouge (dit dans la doc) ; 4. la page Préparer n'a pas d'essai
+  automatique de l'installation (pas de carte NVIDIA en CI).
 
 ## 0000. EN COURS — 22 novembre au soir : le disque installé démarre droit
 
@@ -627,7 +695,10 @@ Dev. Section K3 constructions reproductibles. Voir `todo.md`.
 
 ## Outils à disposition
 
-- MCP `powershell-local` : captures d'écran et contrôle du PC (navigateur,
+- Depuis le 23 novembre, Grenofar est SUR grenOS : MCP `grenos` (captures,
+  curseur orange de Claude, souris, clavier, fenêtres, bash). Arrêt
+  d'urgence : pointeur dans le coin en haut à gauche.
+- (Windows, avant) MCP `powershell-local` : captures d'écran et contrôle du PC (navigateur,
   VirtualBox pour essayer l'ISO). **Aucun son.**
 - Aperçu des pages grenos-ui : `.claude/launch.json` → `grenos-ui-apercu`
   (port 8765, données factices dans `linux/ui/web/apercu.js`).
