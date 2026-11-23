@@ -186,6 +186,12 @@ struct Barre {
     bouton_maj: gtk::Button,
     bouton_coulisses: gtk::Button,
     menu_coulisses: RefCell<Option<gtk::Menu>>,
+    /// Le bouton gauche est enfoncé sur une tuile (depuis quand) : on ne la
+    /// refait pas. Au-delà de 3 s (un glisser, un relâchement perdu), on
+    /// n'attend plus — la barre ne doit jamais se figer.
+    appui: std::cell::Cell<Option<std::time::Instant>>,
+    /// Ce que montraient les tuiles la dernière fois (voir `refaire`).
+    signature_tuiles: RefCell<String>,
     epingles: RefCell<Vec<Epingle>>,
     applications: RefCell<Vec<Application>>,
     ecran: Option<Ecran>,
@@ -519,6 +525,8 @@ impl Barre {
             bouton_maj,
             bouton_coulisses,
             menu_coulisses: RefCell::new(None),
+            appui: std::cell::Cell::new(None),
+            signature_tuiles: RefCell::new(String::new()),
             epingles: RefCell::new(apps::lire_epingles()),
             applications: RefCell::new(apps::applications()),
             ecran: Ecran::ouvrir(),
@@ -780,6 +788,35 @@ impl Barre {
 
     // ---- Les tuiles ----------------------------------------------------------
     fn refaire(self: &Rc<Self>) {
+        // UN CLIC EN COURS N'EST JAMAIS COUPÉ (23 novembre). Grenofar :
+        // « quand je clique sur le logo de l'app ouverte dans le dock, ça
+        // n'ouvre pas, en tout cas pas toutes les apps ». Refaire les tuiles
+        // DÉTRUIT leurs boutons ; entre l'appui et le relâchement, le bouton
+        // n'existait plus et le clic se perdait. On attend le relâchement.
+        if self.appui.get().map(|t| t.elapsed() < Duration::from_secs(3)).unwrap_or(false) {
+            let b = self.clone();
+            glib::timeout_add_local_once(Duration::from_millis(120), move || b.refaire());
+            return;
+        }
+        let (ouvertes, active) = match &self.ecran {
+            Some(e) => (e.fenetres(), e.active()),
+            None => (Vec::new(), None),
+        };
+        // ET ON NE REFAIT QUE CE QUI A CHANGÉ À L'ÉCRAN. Steam, un navigateur,
+        // Discord changent sans cesse leurs états et l'ordre des fenêtres :
+        // chaque changement refaisait toute la barre, et un clic tombait
+        // souvent au milieu. Les tuiles ne dépendent que de ceci.
+        let signature = format!(
+            "{:?}|{:?}|{}|{}",
+            ouvertes.iter().map(|f| (f.xid, &f.classe, f.reduite)).collect::<Vec<_>>(),
+            active.filter(|a| ouvertes.iter().any(|f| f.xid == *a)),
+            self.epingles.borrow().iter().map(|e| e.commande.as_str()).collect::<Vec<_>>().join(","),
+            self.applications.borrow().len()
+        );
+        if *self.signature_tuiles.borrow() == signature {
+            return;
+        }
+        *self.signature_tuiles.borrow_mut() = signature;
         // Les tuiles vont être refaites : une bulle ouverte pointerait sur
         // des fenêtres qui ont peut-être changé (celle qu'on vient de fermer).
         if !self.survol_apercu.get() {
@@ -788,10 +825,6 @@ impl Barre {
         for enfant in self.tuiles.children() {
             self.tuiles.remove(&enfant);
         }
-        let (ouvertes, active) = match &self.ecran {
-            Some(e) => (e.fenetres(), e.active()),
-            None => (Vec::new(), None),
-        };
         let applis = self.applications.borrow().clone();
         let mut prises = std::collections::HashSet::new();
         let mut rejointes = Vec::new();
@@ -916,11 +949,22 @@ impl Barre {
         }
         let b = self.clone();
         bouton.connect_button_press_event(move |_, ev| {
+            if ev.button() == 1 {
+                b.appui.set(Some(std::time::Instant::now()));
+            }
             if ev.button() != 3 {
                 return glib::Propagation::Proceed;
             }
             b.menu_tuile(&t, ev);
             glib::Propagation::Stop
+        });
+        // Relâché (sur la tuile ou à côté) : la barre peut se refaire.
+        let b = self.clone();
+        bouton.connect_button_release_event(move |_, ev| {
+            if ev.button() == 1 {
+                b.appui.set(None);
+            }
+            glib::Propagation::Proceed
         });
         boite
     }
@@ -1131,14 +1175,28 @@ impl Barre {
             lancer(&t.commande, false);
             return;
         }
+        // La liste vivante, pas celle du moment où la tuile a été faite :
+        // une fenêtre fermée depuis ne répondrait plus.
+        let vivantes: Vec<u32> = ecran.fenetres().iter().map(|f| f.xid).collect();
+        let miennes: Vec<u32> = t.fenetres.iter().map(|f| f.xid).filter(|x| vivantes.contains(x)).collect();
+        if miennes.is_empty() {
+            lancer(&t.commande, false);
+            return;
+        }
         let active = ecran.active();
-        if active.map(|a| t.fenetres.iter().any(|f| f.xid == a)).unwrap_or(false) {
-            for f in &t.fenetres {
-                ecran.reduire(f.xid);
+        if active.map(|a| miennes.contains(&a)).unwrap_or(false) {
+            for x in &miennes {
+                ecran.reduire(*x);
             }
             return;
         }
-        ecran.activer(t.fenetres[0].xid, temps());
+        // La DERNIÈRE utilisée, comme Windows — la plus haute dans l'ordre
+        // d'empilement —, et pas la première ouverte : la première de Steam
+        // ou d'un navigateur est souvent une fenêtre secondaire.
+        let pile = ecran.empilement();
+        let choisie = pile.iter().rev().find(|x| miennes.contains(x)).copied().unwrap_or(miennes[0]);
+        ecran.activer(choisie, temps());
+        dire(&format!("tuile : {} affichee ({} fenetre(s))", t.nom, miennes.len()));
     }
 
     fn menu_tuile(self: &Rc<Self>, t: &Rc<Tuile>, ev: &gdk::EventButton) {

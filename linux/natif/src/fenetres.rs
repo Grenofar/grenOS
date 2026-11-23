@@ -112,6 +112,12 @@ impl Ecran {
             .filter(|&x| x != 0)
     }
 
+    /// Toutes les fenêtres, de la plus basse à la plus haute (la dernière
+    /// est celle du dessus).
+    pub fn empilement(&self) -> Vec<u32> {
+        self.propriete32(self.racine, self.a("_NET_CLIENT_LIST_STACKING"), AtomEnum::WINDOW.into(), 4096)
+    }
+
     /// Les fenêtres qui ont droit à une tuile, dans l'ordre d'ouverture.
     pub fn fenetres(&self) -> Vec<Fenetre> {
         let liste = self.propriete32(self.racine, self.a("_NET_CLIENT_LIST"), AtomEnum::WINDOW.into(), 4096);
