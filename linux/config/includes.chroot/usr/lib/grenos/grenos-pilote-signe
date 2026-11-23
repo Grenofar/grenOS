@@ -128,6 +128,26 @@ poser_chaine() {
     fi
 }
 
+# Le GRUB signé d'Ubuntu n'embarque, pour l'image, QUE efi_gop. Le menu de
+# Debian (00_header) charge all_video, ou efi_uga, vbe, vga… : lus sur le
+# disque, le Secure Boot les refuse, et GRUB écrit « error: prohibited by
+# secure boot policy. » puis « Press any key to continue… » à CHAQUE démarrage
+# (run 45221748293). Ce morceau, joué juste après 00_header, redéfinit
+# load_video : la dernière définition est celle qu'appellent les entrées.
+VIDEO=/etc/grub.d/01_grenos-video-signe
+poser_video() {
+    cat > "$VIDEO" <<'FIN'
+#!/bin/sh
+# grenos-pilote-signe : le GRUB signé d'Ubuntu n'a que efi_gop (voir ce script).
+cat <<'MENU'
+function load_video {
+  insmod efi_gop
+}
+MENU
+FIN
+    chmod 0755 "$VIDEO"
+}
+
 # Debian ne doit plus être démarré : son noyau par défaut tant qu'il reste.
 noyau_par_defaut() { # abi
     u=$(uuid_racine)
@@ -140,6 +160,7 @@ noyau_par_defaut() { # abi
 GRUB_DISABLE_SUBMENU=y
 GRUB_DEFAULT="gnulinux-$1-advanced-$u"
 EOF
+    poser_video
     update-grub >/dev/null 2>&1 || rate "update-grub echoue"
     grep -q "gnulinux-$1-advanced-$u" /boot/grub/grub.cfg || rate "l entree du noyau $1 manque au menu"
 }
@@ -192,6 +213,10 @@ au-demarrage)
     if [ -f "$ESP/EFI/debian/grub.cfg" ] && ! cmp -s "$ESP/EFI/debian/grub.cfg" "$ESP/EFI/ubuntu/grub.cfg"; then
         install -d "$ESP/EFI/ubuntu" && cp -f "$ESP/EFI/debian/grub.cfg" "$ESP/EFI/ubuntu/grub.cfg"
     fi
+    if [ ! -x "$VIDEO" ]; then
+        poser_video
+        update-grub >/dev/null 2>&1 || true
+    fi
     paquets=$(noyaux_debian)
     if [ -n "$paquets" ]; then
         # shellcheck disable=SC2086
@@ -235,7 +260,7 @@ annuler)
             --bootloader-id=debian --force $nvram || true
         rm -rf "$ESP/EFI/ubuntu"
     fi
-    rm -f "$MARQUE" "$GRUB_D"
+    rm -f "$MARQUE" "$GRUB_D" "$VIDEO"
     rm -rf "$ICI"
     update-grub >/dev/null 2>&1 || true
     dire "chaine de Debian remise"

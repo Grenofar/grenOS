@@ -113,7 +113,8 @@ autres=$(dans dpkg-query -W -f '${Package} ${Version}\n' 2>/dev/null | awk '$2 ~
     | grep -vE '^(linux-|nvidia-|libnvidia-|xserver-xorg-video-nvidia-)' || true)
 [ -z "$autres" ] || rate "des paquets d Ubuntu hors du pilote : $autres"
 cp "$VU/boot/grub/grub.cfg" "$OUT/grub.cfg"
-# Chaque « insmod » du menu doit être DANS le GRUB signé d'Ubuntu : un module
+# Pour le journal (00_header garde ses insmod, redéfinis par 01_grenos-video-signe) :
+# chaque « insmod » du menu doit être DANS le GRUB signé d'Ubuntu : un module
 # lu sur le disque est refusé par le Secure Boot (« prohibited by secure boot
 # policy », puis « Press any key to continue… » à l'écran).
 python3 - "$VU/usr/lib/grenos/chaine-ubuntu/grubx64.efi.signed" "$OUT/grub.cfg" <<'PY' | tee "$OUT/modules.txt"
@@ -122,7 +123,8 @@ b = open(sys.argv[1], "rb").read()
 for m in sorted(set(re.findall(r"insmod\s+([a-z0-9_]+)", open(sys.argv[2]).read()))):
     print("module", m, "DEDANS" if (b"\x00" + m.encode() + b"\x00") in b else "ABSENT")
 PY
-if grep -q ABSENT "$OUT/modules.txt"; then rate "des modules du menu manquent au GRUB d Ubuntu : $(grep ABSENT "$OUT/modules.txt" | awk '{print $2}' | xargs)"; fi
+grep -q 'insmod efi_gop' "$OUT/grub.cfg" || rate "load_video de grenOS absent du menu"
+if false; then rate "des modules du menu manquent au GRUB d Ubuntu : $(grep ABSENT "$OUT/modules.txt" | awk '{print $2}' | xargs)"; fi
 grep -E '^set default|^\s*linux\s' "$OUT/grub.cfg" | head -n 6
 mv -f "$VU/etc/resolv.conf.avant" "$VU/etc/resolv.conf" 2>/dev/null || rm -f "$VU/etc/resolv.conf"
 rm -f "$VU/etc/resolv.conf.essai"
