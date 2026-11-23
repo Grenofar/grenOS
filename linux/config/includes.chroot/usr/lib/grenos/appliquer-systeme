@@ -37,7 +37,8 @@ for service in grenos-premier.service grenos-preuve.service grenos-maj-verif.tim
                grenos-video.service grenos-sonde-session.service \
                grenos-windows.service grenos-affichage-firmware.service \
                grenos-rapport-cle.service grenos-affichage-garde.service \
-               grenos-revenir-ici.service grenos-demarrage.service; do
+               grenos-revenir-ici.service grenos-demarrage.service \
+               grenos-pilote-refuse.service; do
     systemctl enable "$service" >/dev/null 2>&1 || true
 done
 

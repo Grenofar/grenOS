@@ -1,0 +1,103 @@
+#!/bin/sh
+# UN PILOTE QUE LE SECURE BOOT REFUSE NE DOIT JAMAIS LAISSER UN ÉCRAN NOIR
+# (23 novembre).
+#
+# Grenofar, sur son grenOS installé : le pilote NVIDIA 620 (DKMS) posé, signé
+# par la clé de grenOS, et cette clé EN ATTENTE de l'écran bleu MokManager.
+# Au redémarrage, il a fait « Continue boot » : pas de code sous la main. La
+# clé n'est donc pas inscrite, le Secure Boot refuse le module, le pilote
+# libre est écarté par le paquet de NVIDIA — et grenOS ne montrait plus que
+# trois lignes, puis plus rien, à CHAQUE démarrage (« grenos veut plus
+# démarrer à cause d'un driver »). Réparé ce jour-là depuis Windows par la
+# partition EFI ; ce service fait la même chose tout seul, sur toutes les
+# machines.
+#
+# À chaque démarrage d'un grenOS installé, AVANT l'affichage : si le Secure
+# Boot est actif, qu'un module NVIDIA de DKMS est compilé pour ce noyau, et
+# que la clé qui le signe n'est PAS inscrite, alors le module ne peut pas
+# se charger. L'écran bleu a été passé (ou a expiré) : on le prend pour un
+# refus. On retire la demande MokManager (plus d'écran bleu), le pilote et
+# son dépôt, puis on redémarre : la machine revient exactement à l'état
+# d'avant, écran compris. « Préparer le matériel » permet de réessayer.
+#
+# Il ne fait RIEN quand la clé est inscrite, sans Secure Boot (le module se
+# charge sans signature), sur la clé USB, ou sans pilote NVIDIA de DKMS.
+
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH DEBIAN_FRONTEND=noninteractive
+MOK_CERT=/var/lib/dkms/mok.pub
+TEMOIN=/var/lib/grenos/pilote-refuse
+
+dire() {
+    echo "grenos: pilote : $*" > /dev/kmsg 2>/dev/null || true
+    echo "pilote : $*"
+}
+
+grep -qw 'boot=live' /proc/cmdline 2>/dev/null && exit 0
+
+secure_boot() {
+    for v in /sys/firmware/efi/efivars/SecureBoot-*; do
+        [ -f "$v" ] || continue
+        [ "$(od -An -t u1 -j 4 -N 1 "$v" 2>/dev/null | tr -d ' ')" = 1 ] && return 0
+    done
+    return 1
+}
+secure_boot || exit 0
+[ -f "$MOK_CERT" ] || exit 0
+command -v dkms >/dev/null 2>&1 || exit 0
+command -v mokutil >/dev/null 2>&1 || exit 0
+dkms status -m nvidia -k "$(uname -r)" 2>/dev/null | grep -q installed || exit 0
+
+etat=$(mokutil --test-key "$MOK_CERT" 2>&1)
+if echo "$etat" | grep -qiE 'already enrolled|is already in'; then
+    exit 0
+fi
+dire "Secure Boot actif, module nvidia de DKMS, cle de signature NON inscrite ($etat)"
+
+# Un module qui se charge malgré tout (clé inscrite par un autre chemin) :
+# on ne retire rien.
+if grep -q '^nvidia ' /proc/modules 2>/dev/null; then
+    dire "le module nvidia est pourtant charge : rien n est retire"
+    exit 0
+fi
+
+if [ -n "${GRENOS_ESSAI_SANS_AGIR:-}" ]; then
+    dire "essai : on retirerait le pilote ici"
+    exit 0
+fi
+
+plymouth display-message --text="Le pilote NVIDIA n'a pas été autorisé : retour à l'écran d'avant…" 2>/dev/null || true
+
+# 1. Le pilote et ce qui l'accompagne, SAUF les firmwares (le pilote libre en
+# a besoin). Refusé si apt voulait emporter grenOS, X ou le noyau.
+paquets=$(dpkg-query -W -f '${Package} ${Status}\n' 2>/dev/null \
+    | awk '$NF == "installed" && $1 ~ /nvidia|cuda/ && $1 !~ /^firmware-/ {print $1}' | tr '\n' ' ')
+dire "paquets retires : $paquets"
+if [ -n "$paquets" ]; then
+    # shellcheck disable=SC2086
+    if apt-get -s purge $paquets 2>/dev/null | awk '/^(Purg|Remv) / {print $2}' \
+            | grep -qE '^(grenos|lightdm|xserver-xorg-core|linux-image|systemd|openbox)'; then
+        dire "REFUS : apt emporterait grenOS, X ou le noyau — rien n est retire"
+        exit 0
+    fi
+    # 2. Plus d'écran bleu au prochain démarrage — seulement quand le pilote
+    # part vraiment : sinon la personne garderait sa chance d'inscrire la clé.
+    mokutil --revoke-import >/dev/null 2>&1 && dire "demande MokManager retiree"
+    # shellcheck disable=SC2086
+    if ! timeout 900 apt-get purge -y -q -o Dpkg::Options::=--force-confdef \
+            -o Dpkg::Options::=--force-confold $paquets; then
+        dire "le retrait a echoue — on n insiste pas (pas de boucle de redemarrage)"
+        exit 0
+    fi
+fi
+rm -f /etc/apt/sources.list.d/nvidia-driver.list /etc/apt/preferences.d/nvidia-driver.pref
+update-initramfs -u -k "$(uname -r)" >/dev/null 2>&1 || true
+
+# 3. La session le dira (grenos-preparer-materiel), et le raccourci revient.
+mkdir -p "$(dirname "$TEMOIN")"
+date +%s > "$TEMOIN"
+sync
+dire "pilote retire, redemarrage sur l ecran d avant"
+systemctl reboot
+exit 0

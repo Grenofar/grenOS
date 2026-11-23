@@ -4,6 +4,36 @@
 > le travail lit d'abord ce fichier, puis `CLAUDE.md` (local, RÈGLE N°1 :
 > plug and play pour un non-développeur).
 
+## 000000. EN COURS — 23 novembre midi : grenOS ne démarrait plus (pilote NVIDIA)
+
+Grenofar, depuis Windows : « grenos veut plus démarrer à cause d'un driver ».
+À l'écran : MokManager, logo grenOS, trois lignes, puis plus rien. Il a fait
+« Continue boot » à l'écran bleu, sans le code (« j'ai pas le code »).
+
+- Cause [déduite, journaux à lire] : `nvidia-kernel-open-dkms` 620 posé à la
+  main le matin, signé par la clé de grenOS EN ATTENTE ; écran bleu passé,
+  clé pas inscrite, le Secure Boot refuse le module, `nouveau` est écarté
+  par le paquet NVIDIA. Contraire à la RÈGLE N°1 : un écran bleu à passer
+  sans faute, sinon plus de bureau.
+- Son Samsung [écrit, posé et relu depuis Windows, pas encore démarré] :
+  sur la partition EFI, `grenos-reparation/` + un `EFI/debian/grub.cfg` qui
+  démarre UNE fois avec `systemd.run=` (deux essais au plus, comptés dans un
+  grubenv) : journaux des trois démarrages d'avant copiés sur l'EFI, demande
+  MokManager retirée, paquets nvidia/cuda purgés (firmwares gardés, refus si
+  apt emportait grenOS/X/noyau), dépôt NVIDIA retiré, grub.cfg remis, reboot.
+  Puis `grenos-apres-reparation` écrit `apres.log` et le journal du démarrage
+  normal sur l'EFI (lisibles depuis Windows) et se retire. Sources :
+  %USERPROFILE%\grenos-reparation.
+- Pour tous [écrit, essayé avec de faux outils, 3 cas] :
+  `grenos-pilote-refuse.service`, avant l'affichage : Secure Boot + module
+  nvidia de DKMS + clé non inscrite + module pas chargé → purge, demande
+  MokManager retirée, redémarrage sur l'écran d'avant ; la session le dit
+  (« Pilote NVIDIA retiré ») et remet « Préparer le matériel ».
+- [à faire] 1. lire `reparation.log`, `journal-1.log`, `apres.log` sur l'EFI
+  du Samsung : la vraie raison de l'écran noir ; 2. publication de la garde
+  en CI ; 3. un pilote NVIDIA sous Secure Boot SANS écran bleu n'existe pas
+  avec DKMS : décider avec Grenofar (le geste reste, mais il ne casse plus).
+
 ## 00000. FAIT le 23 novembre au matin — première séance DEPUIS grenOS
 
 Grenofar travaille désormais sur grenOS installé (« je ne vais plus revenir

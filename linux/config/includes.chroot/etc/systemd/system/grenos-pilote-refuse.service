@@ -1,0 +1,19 @@
+# Un pilote refusé par le Secure Boot (clé MokManager pas inscrite) ne laisse
+# pas d'écran noir : il est retiré avant l'affichage, et la machine redémarre
+# comme avant (voir /usr/lib/grenos/grenos-pilote-refuse, 23 novembre).
+[Unit]
+Description=grenOS : retirer un pilote NVIDIA que le Secure Boot refuse
+After=local-fs.target
+Before=grenos-maj-demarrage.service grenos-affichage-firmware.service grenos-affichage-garde.service
+Before=grenos-premier.service lightdm.service display-manager.service
+ConditionKernelCommandLine=!boot=live
+ConditionPathExists=/var/lib/dkms/mok.pub
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-pilote-refuse
+TimeoutStartSec=1000
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

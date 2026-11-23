@@ -37,6 +37,18 @@ if [ "$manque" = 0 ]; then
     fi
     exit 0
 fi
+# LE PILOTE REFUSÉ AU DÉMARRAGE (23 novembre) : l'écran bleu MokManager a été
+# passé sans code, grenos-pilote-refuse a retiré le pilote pour que l'écran
+# revienne. On le dit une fois, et le raccourci revient pour réessayer.
+REFUS=/var/lib/grenos/pilote-refuse
+VU="$HOME/.config/grenos/pilote-refuse-vu"
+if [ -r "$REFUS" ] && [ "$(cat "$REFUS" 2>/dev/null)" != "$(cat "$VU" 2>/dev/null)" ]; then
+    mkdir -p "$(dirname "$VU")" && cat "$REFUS" > "$VU"
+    rm -f "$FAIT"
+    (sleep 8; notify-send --app-name=grenOS --icon=grenos-parametres "Pilote NVIDIA retiré" \
+        "L'écran bleu du démarrage a été passé sans son code : le pilote ne pouvait pas s'ouvrir, grenOS l'a retiré et ton écran marche comme avant. Pour réessayer : « Préparer le matériel », sur ton bureau." \
+        2>/dev/null) &
+fi
 [ -e "$FAIT" ] && exit 0
 [ -e "$RACCOURCI" ] && exit 0
 [ -r "$FICHE" ] || exit 0
