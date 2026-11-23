@@ -184,7 +184,45 @@ def rassembler():
     return chemins
 
 
+def sans_droit_d_executer():
+    """Les scripts (#!) de usr/lib/grenos et usr/bin que Git garde en 100644.
+
+    23 novembre : grenos-pilote-signe, écrit sous Windows, est arrivé dans
+    l'image sans son bit d'exécution — « Permission denied » au clic de
+    Grenofar sur « Préparer le matériel ». L'essai en CI ne l'avait pas vu :
+    il faisait lui-même chmod. Les .py se lancent par python3, pas par eux-mêmes.
+    """
+    import subprocess
+    try:
+        sortie = subprocess.run(
+            ["git", "ls-files", "-s", "--", "linux/config/includes.chroot/usr/lib/grenos",
+             "linux/config/includes.chroot/usr/bin"],
+            cwd=RACINE, capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    fautes = []
+    for ligne in sortie.splitlines():
+        mode, _, chemin = ligne.split(None, 2)
+        chemin = chemin.split("\t", 1)[-1]
+        if mode != "100644" or chemin.endswith(".py"):
+            continue
+        try:
+            with open(os.path.join(RACINE, chemin), "rb") as f:
+                if f.read(2) == b"#!":
+                    fautes.append(chemin)
+        except OSError:
+            pass
+    return fautes
+
+
 def main():
+    non_executables = [] if sys.argv[1:] else sans_droit_d_executer()
+    for chemin in non_executables:
+        print("%s : script sans droit d'execution dans Git (100644) — "
+              "« Permission denied » sur la machine. git update-index --chmod=+x"
+              % chemin, file=sys.stderr)
+    if non_executables:
+        return 1
     chemins = sys.argv[1:] or rassembler()
     fautes = juger(chemins)
     for chemin, numero, colonne, texte in fautes:

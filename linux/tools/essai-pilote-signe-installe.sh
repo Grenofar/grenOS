@@ -82,10 +82,11 @@ for f in usr/lib/grenos/grenos-pilote-signe usr/lib/grenos/grenos-depot-editeur 
          usr/share/grenos/depots/nvidia-driver-580-open.gpg usr/share/grenos/depots/nvidia-driver-580-open.list \
          usr/share/grenos/depots/nvidia-driver-580-open.pref usr/share/grenos/depots/nvidia-driver-580-open.avec \
          usr/share/grenos/depots/nvidia-driver-580-open.signe; do
-    install -D "$DEPOT/$f" "$VU/$f"
+    # Les droits de Git, tels quels : un script sans bit d'exécution doit
+    # échouer ICI comme chez Grenofar (23 novembre, « Permission denied »).
+    mkdir -p "$(dirname "$VU/$f")"
+    cp --preserve=mode "$DEPOT/$f" "$VU/$f"
 done
-chmod 0755 "$VU"/usr/lib/grenos/grenos-pilote-signe "$VU"/usr/lib/grenos/grenos-depot-editeur \
-    "$VU"/usr/lib/grenos/grenos-pilote-refuse "$VU"/usr/lib/grenos/grenos-maj-demarrage "$VU"/usr/lib/grenos/appliquer-systeme
 mount --bind /dev "$VU/dev"; mount --bind /dev/pts "$VU/dev/pts"
 mount -t proc proc "$VU/proc"; mount -t sysfs sys "$VU/sys"
 cp -L /etc/resolv.conf "$VU/etc/resolv.conf.essai"
