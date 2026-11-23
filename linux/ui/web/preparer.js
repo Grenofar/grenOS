@@ -51,27 +51,25 @@
         el("div.carte.verre.pr-etat", el("h2", "Plus qu'un redémarrage"),
           el("p.sous", "Le pilote NVIDIA est installé. Il se charge au prochain démarrage."),
           el("div.pr-boutons", el("button.bouton.principal", { onclick: redemarrer }, svg("redemarrer"), "Redémarrer maintenant"))),
-        e.secure_boot === "actif" || e.cle_en_attente ? etapesMok(code) : "");
+        e.cle_en_attente ? etapesMok(code) : "");
     }
     return el("div.carte.verre.pr-etat",
       el("h2", "Le pilote de ta carte graphique"),
       el("p.sous", `${e.carte || "Ta carte NVIDIA"} tourne sans son pilote officiel : un seul écran, à 60 Hz, et pas de 3D. Le pilote de NVIDIA la gère entièrement — tous tes écrans, leur vraie fréquence, et les jeux.`),
       el("ol.pr-etapes",
-        el("li", "grenOS branche le dépôt officiel de NVIDIA (sa clé est vérifiée)."),
-        el("li", "Il télécharge le pilote et le compile pour ton noyau — quelques minutes, ne coupe pas la machine."),
-        e.secure_boot === "actif" ? el("li", "Secure Boot est actif : grenOS signe le pilote et te donne un code à taper une seule fois au redémarrage.") : "",
-        el("li", "Tu redémarres : c'est prêt.")),
+        el("li", "grenOS télécharge le pilote NVIDIA déjà signé, avec le noyau qui va avec — quelques minutes, ne coupe pas la machine."),
+        el("li", "Tu redémarres : c'est prêt. Rien à taper, même avec le Secure Boot.")),
       el("div.pr-boutons",
         D.bouton = el("button.bouton.principal.grand", { onclick: preparer }, svg("eclair"), "Préparer le matériel"),
         el("button.bouton.discret", { onclick: plusTard }, "Plus tard")),
-      el("p.note", "Il faut Internet. Si la compilation échoue, grenOS remet le pilote libre tout seul : rien ne casse."));
+      el("p.note", "Il faut Internet. Si quelque chose manque, grenOS remet tout comme avant : rien ne casse."));
   }
 
   async function preparer() {
     D.bouton.disabled = true;
     let fin = "";
     api.ecouter("installation", (a) => { if (a.fin && a.texte) fin = a.texte; });
-    const bien = await installer({ nom: "Pilote NVIDIA", source: "apt", identifiant: "nvidia-driver", depuis: "le dépôt de NVIDIA" });
+    const bien = await installer({ nom: "Pilote NVIDIA", source: "apt", identifiant: "nvidia-driver-580-open", depuis: "les paquets signés d'Ubuntu" });
     const code = (fin.match(/\b(\d{8})\b/) || [])[1] || "";
     if (code) noterCode(code);
     api.appeler("premier_dire", { texte: `preparer : pilote nvidia ${bien ? "installe" : "echec"}${code ? ", code MOK donne" : ""}` }).catch(() => {});

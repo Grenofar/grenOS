@@ -1,0 +1,3 @@
+# Pilote déjà SIGNÉ par Canonical, pour le noyau d'Ubuntu : rien à compiler,
+# rien à inscrire (pas d'écran bleu MokManager). grenos-depot-editeur passe
+# alors par /usr/lib/grenos/grenos-pilote-signe.

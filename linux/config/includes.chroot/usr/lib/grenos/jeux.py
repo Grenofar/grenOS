@@ -156,14 +156,13 @@ def pilote_propose():
         # Le Secure Boot actif est DIT avant le clic (20 novembre, « pas de
         # réglage MokManager ») : le pilote reste possible, mais personne ne
         # découvre un écran bleu au redémarrage sans l'avoir choisi.
-        return ("nvidia-driver",
+        # 23 novembre : le pilote SIGNÉ de Canonical, avec son noyau — plus
+        # d'écran bleu MokManager, même avec le Secure Boot (grenos-pilote-signe).
+        return ("nvidia-driver-580-open",
                 "Le pilote libre fait marcher le bureau. Pour les jeux exigeants, le "
-                "pilote officiel de NVIDIA, pris dans son dépôt, gère la carte "
-                "entièrement, RTX 50 comprises. Il s'installe sur grenOS installé sur "
-                "le disque et demande de redémarrer. Avec le Secure Boot actif, il "
-                "faudra aussi, une seule fois, taper un code sur un écran bleu "
-                "(MokManager) au redémarrage — c'est la règle du Secure Boot pour un "
-                "pilote qui ne vient pas de Debian.")
+                "pilote officiel de NVIDIA gère la carte entièrement, RTX 50 comprises. "
+                "Il arrive déjà signé : il passe le Secure Boot sans rien à taper. Il "
+                "s'installe sur grenOS installé sur le disque et demande de redémarrer.")
     if "amd" in minuscules or "radeon" in minuscules:
         return ("", "Le pilote libre d'AMD fait tourner les jeux sans rien installer.")
     if "intel" in minuscules:

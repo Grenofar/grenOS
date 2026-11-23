@@ -72,7 +72,10 @@ pub async fn preparer_etat() -> Etat {
     let pilotes = cartes_nvidia(Path::new("/sys"));
     let nvidia = !pilotes.is_empty();
     let tourne = pilotes.iter().any(|p| p == "nvidia");
-    let pose = paquet_installe("nvidia-kernel-open-dkms") || paquet_installe("nvidia-kernel-dkms");
+    // Le pilote signé de Canonical (23 novembre), ou l'ancien, compilé par DKMS.
+    let pose = paquet_installe("nvidia-driver-580-open")
+        || paquet_installe("nvidia-kernel-open-dkms")
+        || paquet_installe("nvidia-kernel-dkms");
     let ligne = fs::read_to_string("/proc/cmdline").unwrap_or_default();
     let a_installer = crate::premier::pilote_nvidia_a_proposer(Path::new("/sys"), &ligne) && !pose;
     let cle_en_attente = !sortie("mokutil", &["--list-new"]).trim().is_empty();

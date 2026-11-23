@@ -215,6 +215,9 @@ def jeux_paquet_nvidia():
     import os
     import re
     import subprocess
+    # 23 novembre : le pilote signé de Canonical d'abord (aucun écran bleu).
+    if os.path.isfile("/usr/share/grenos/depots/nvidia-driver-580-open.signe"):
+        return {"paquet": "nvidia-driver-580-open"}
     if os.path.isfile("/usr/share/grenos/depots/nvidia-driver.list"):
         return {"paquet": "nvidia-driver"}
     try:

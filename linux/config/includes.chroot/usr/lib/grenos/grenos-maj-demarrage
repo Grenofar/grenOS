@@ -264,6 +264,12 @@ if [ "$RESULTAT" = ok ]; then
     dire "termine en ${DUREE}s, $POSES paquets poses"
     # Rebrancher services, menus, icônes et réglages partagés : c'est le même
     # travail qu'après une mise à jour depuis la fenêtre.
+    # Le pilote NVIDIA signé de Canonical (23 novembre) : un noyau neuf
+    # d'Ubuntu ne vient QU'AVEC son pilote signé, jamais seul.
+    if [ -x /usr/lib/grenos/grenos-pilote-signe ]; then
+        /usr/lib/grenos/grenos-pilote-signe suivre >> "$DOSSIER/maj-journal" 2>&1 \
+            || dire "pilote signe : le noyau neuf attendra"
+    fi
     etape "Réglages du système" 88
     [ -x /usr/lib/grenos/appliquer-systeme ] && /usr/lib/grenos/appliquer-systeme >/dev/null 2>&1
     printf 'ok %s\n' "$POSES" > "$DOSSIER/maj-resultat"

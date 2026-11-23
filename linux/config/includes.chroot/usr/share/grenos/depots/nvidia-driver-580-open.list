@@ -1,0 +1,5 @@
+# Le noyau et le pilote NVIDIA SIGNÉS par Canonical (23 novembre) : Ubuntu
+# 26.04 « resolute ». Seuls ces paquets en viennent (nvidia-driver-580-open.pref).
+deb [signed-by=/usr/share/keyrings/nvidia-driver-580-open-archive-keyring.gpg] http://archive.ubuntu.com/ubuntu resolute main restricted
+deb [signed-by=/usr/share/keyrings/nvidia-driver-580-open-archive-keyring.gpg] http://archive.ubuntu.com/ubuntu resolute-updates main restricted
+deb [signed-by=/usr/share/keyrings/nvidia-driver-580-open-archive-keyring.gpg] http://security.ubuntu.com/ubuntu resolute-security main restricted

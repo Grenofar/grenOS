@@ -58,6 +58,19 @@ secure_boot() {
 }
 
 if [ -n "$apres" ]; then
+    # UN PILOTE DÉJÀ SIGNÉ (23 novembre) : rien à compiler ni à inscrire. On
+    # vérifie, puis on pose la chaîne de démarrage d'Ubuntu ; au moindre
+    # doute, tout revient comme avant.
+    if [ -f "$DEPOTS/$paquet.signe" ]; then
+        if /usr/lib/grenos/grenos-pilote-signe verifier; then
+            exit 0
+        fi
+        echo "Retour au pilote libre : on retire ce qui vient d'etre installe." >&2
+        /usr/lib/grenos/grenos-pilote-signe annuler >&2 || true
+        apt-get purge -y "$paquet" $(cat "$DEPOTS/$paquet.avec" 2>/dev/null) >&2 || true
+        rm -f "/etc/apt/sources.list.d/$paquet.list" "/etc/apt/preferences.d/$paquet.pref"
+        exit 1
+    fi
     [ -f "$DEPOTS/$paquet.dkms" ] || exit 0
     module=$(tr -d ' \n' < "$DEPOTS/$paquet.dkms")
     noyau=$(uname -r)
@@ -105,7 +118,7 @@ if [ -n "$apres" ]; then
     exit 1
 fi
 
-if [ -f "$DEPOTS/$paquet.dkms" ]; then
+if [ -f "$DEPOTS/$paquet.dkms" ] || [ -f "$DEPOTS/$paquet.signe" ]; then
     if grep -q 'boot=live' /proc/cmdline 2>/dev/null; then
         echo "Le pilote s'installe sur grenOS INSTALLE sur le disque : sur la cle USB, il disparaitrait au redemarrage." >&2
         exit 3
@@ -113,7 +126,7 @@ if [ -f "$DEPOTS/$paquet.dkms" ]; then
     # Avec le Secure Boot, le module doit être SIGNÉ. DKMS signe avec
     # /var/lib/dkms/mok.key et mok.pub s'ils existent (ses chemins par
     # défaut) : on les crée avant que le pilote ne se compile.
-    if secure_boot && [ ! -f "$MOK_CLE" ]; then
+    if [ -f "$DEPOTS/$paquet.dkms" ] && secure_boot && [ ! -f "$MOK_CLE" ]; then
         install -d -m 0700 /var/lib/dkms
         openssl req -new -x509 -nodes -days 36500 -subj "/CN=grenOS - signature des modules/" \
             -newkey rsa:2048 -keyout "$MOK_CLE" -outform DER -out "$MOK_CERT" 2>/dev/null
@@ -136,6 +149,12 @@ if [ -f "$DEPOTS/$paquet.pref" ]; then
     install -D -m 0644 "$DEPOTS/$paquet.pref" "/etc/apt/preferences.d/$paquet.pref"
 fi
 echo "grenos: depot de l editeur branche pour $paquet"
+
+# Le pilote signé de Canonical : son noyau, et la chaîne de démarrage qui le
+# démarre en Secure Boot (grenos-pilote-signe).
+if [ -f "$DEPOTS/$paquet.signe" ]; then
+    exec /usr/lib/grenos/grenos-pilote-signe preparer
+fi
 
 # Un module du noyau se compile pour le noyau EN COURS. `linux-headers-amd64`
 # (dans <paquet>.avec) suit le plus récent : si un noyau plus neuf attend le

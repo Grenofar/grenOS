@@ -9,6 +9,10 @@ on:
     branches: ["nvidia/**"]
     paths:
       - "linux/tools/essai-pilote-signe.sh"
+      - "linux/tools/essai-pilote-signe-installe.sh"
+      - "linux/config/includes.chroot/usr/lib/grenos/grenos-pilote-signe"
+      - "linux/config/includes.chroot/usr/lib/grenos/grenos-depot-editeur"
+      - "linux/config/includes.chroot/usr/share/grenos/depots/nvidia-driver-580-open.*"
       - ".github/workflows/pilote-signe.yml"
   workflow_dispatch:
 
@@ -28,3 +32,40 @@ jobs:
       - name: Journal de la console
         if: always()
         run: sudo tail -c 20000 "$RUNNER_TEMP/essai/serie.log" || true
+
+  # Le bouton de bout en bout : la version publiée installée sur un disque
+  # virtuel, les fichiers du dépôt par-dessus, le bouton joué, puis deux
+  # démarrages en Secure Boot (linux/tools/essai-pilote-signe-installe.sh).
+  installe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Outils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq squashfs-tools xorriso dosfstools fdisk e2fsprogs qemu-system-x86 ovmf python3
+          sudo chmod 666 /dev/kvm 2>/dev/null || true
+      - name: La derniere version publiee
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release list -R "$GITHUB_REPOSITORY" -L 20 --json tagName,isLatest -q '.[] | select(.isLatest) | .tagName')
+          echo "version : $tag"
+          gh release download "$tag" -R "$GITHUB_REPOSITORY" -p 'grenos-linux-*.iso' -D "$RUNNER_TEMP"
+          ls -la "$RUNNER_TEMP"/*.iso
+      - name: Un bouton, deux demarrages en Secure Boot
+        run: sudo bash linux/tools/essai-pilote-signe-installe.sh "$RUNNER_TEMP"/grenos-linux-*.iso "$RUNNER_TEMP/installe"
+      - name: Journaux
+        if: always()
+        run: |
+          sudo tail -n 80 "$RUNNER_TEMP/installe/bouton.log" || true
+          sudo grep -a SONDE "$RUNNER_TEMP/installe/serie.log" || sudo tail -c 6000 "$RUNNER_TEMP/installe/serie.log" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pilote-signe-installe
+          path: |
+            ${{ runner.temp }}/installe/*.log
+            ${{ runner.temp }}/installe/*.txt
+            ${{ runner.temp }}/installe/grub.cfg

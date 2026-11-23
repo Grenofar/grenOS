@@ -1,0 +1,248 @@
+#!/bin/sh
+# LE PILOTE NVIDIA EN UN BOUTON, SECURE BOOT GARDÉ, SANS ÉCRAN BLEU
+# (23 novembre).
+#
+# Grenofar : « juste un bouton, et rien d'autre », « garde secure boot »,
+# « ça fonctionne sur Windows ». Windows n'a pas d'écran bleu parce que
+# Microsoft SIGNE le pilote. Le pilote que grenOS compilait (DKMS) était signé
+# par une clé à nous : MokManager à chaque installation, et le matin même un
+# écran bleu passé sans code a laissé son grenOS sans bureau.
+#
+# Canonical, lui, publie le pilote NVIDIA 580 « open » COMPILÉ ET SIGNÉ pour
+# chacun de ses noyaux, et son shim est signé par Microsoft : le PC lui fait
+# déjà confiance. Prouvé en CI (Pilote signe, run 45211185451) : un Debian
+# trixie démarré par cette chaîne, Secure Boot actif avec les clés de
+# Microsoft, refuse un module sans signature et charge nvidia.ko de Canonical
+# sans aucune inscription.
+#
+# Sur un grenOS INSTALLÉ qui a une carte NVIDIA, ce script pose donc :
+#   - le noyau d'Ubuntu 26.04 et le pilote signé POUR CE NOYAU (le dépôt
+#     d'Ubuntu ne sert qu'à eux : usr/share/grenos/depots/nvidia-driver-580-open.pref) ;
+#   - le shim et le GRUB signés d'Ubuntu, DANS EFI/debian : l'entrée « grenOS »
+#     du micrologiciel, le chemin de secours et grenos-demarrage ne changent
+#     pas. Les fichiers signés de Debian sont détournés (dpkg-divert) : une
+#     mise à jour de GRUB recopie ceux d'Ubuntu, jamais ceux de Debian, qui ne
+#     sauraient pas démarrer ce noyau ;
+#   - au démarrage suivant (noyau d'Ubuntu en marche), le noyau de Debian est
+#     retiré : le GRUB d'Ubuntu refuserait de le démarrer.
+# Tout le reste de grenOS reste Debian.
+#
+#   grenos-pilote-signe preparer     avant le pilote : dépôt branché, noyau posé
+#   grenos-pilote-signe verifier     après : tout est-il là ? puis la chaîne
+#   grenos-pilote-signe au-demarrage à chaque démarrage (grenos-pilote-refuse.service)
+#   grenos-pilote-signe suivre       après une mise à jour : le noyau neuf ET son pilote
+#   grenos-pilote-signe annuler      tout remettre comme avant
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH DEBIAN_FRONTEND=noninteractive LC_ALL=C
+
+ESP=${GRENOS_ESP:-/boot/efi}
+ICI=/usr/lib/grenos/chaine-ubuntu
+MARQUE=/etc/grenos/pilote-signe
+GRUB_D=/etc/default/grub.d/90-grenos-noyau-signe.cfg
+META=linux-modules-nvidia-580-open-generic
+# Les fichiers signés que grub-install recopie sur la partition EFI.
+DETOURNES="/usr/lib/shim/shimx64.efi.signed /usr/lib/shim/mmx64.efi.signed /usr/lib/shim/fbx64.efi.signed /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed"
+
+dire() { echo "grenos: pilote signe : $*"; echo "grenos: pilote signe : $*" > /dev/kmsg 2>/dev/null || true; }
+rate() { echo "grenos: pilote signe : $*" >&2; exit 1; }
+
+sur_la_cle() { grep -qw 'boot=live' /proc/cmdline 2>/dev/null; }
+
+# Le noyau d'Ubuntu qui a son pilote signé, le plus récent du dépôt.
+abi_du_depot() {
+    apt-cache depends "$META" 2>/dev/null \
+        | sed -n 's/.*Depends: linux-modules-nvidia-580-open-\([0-9][0-9.]*-[0-9]*-generic\)$/\1/p' | head -n 1
+}
+# Le plus récent des noyaux d'Ubuntu installés, avec son pilote.
+abi_installe() {
+    for m in /lib/modules/*-generic/kernel/nvidia-580-open/nvidia.ko*; do
+        [ -e "$m" ] || continue
+        m=${m#/lib/modules/}
+        echo "${m%%/*}"
+    done | sort -V | tail -n 1
+}
+# Celui que 10_linux met dans l'identifiant des entrées du menu.
+uuid_racine() {
+    grub-probe --target=fs_uuid / 2>/dev/null || findmnt -no UUID / 2>/dev/null | head -n 1
+}
+
+poser_noyau() { # abi
+    [ -n "$1" ] || rate "aucun noyau d Ubuntu n a de pilote NVIDIA signe dans le depot"
+    dire "noyau d Ubuntu $1 et son pilote signe"
+    apt-get install -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+        "linux-image-$1" "linux-modules-$1" "linux-modules-nvidia-580-open-$1" "$META"
+}
+
+# Le shim et le GRUB d'Ubuntu : téléchargés (jamais installés comme paquets,
+# ils remplaceraient ceux de Debian dans dpkg), leurs fichiers posés ici.
+chercher_chaine() {
+    t=$(mktemp -d)
+    for p in shim-signed grub-efi-amd64-signed; do
+        v=$(apt-cache madison "$p" 2>/dev/null | awk -F'|' '/ubuntu\.com/ {gsub(/ /, "", $2); print $2; exit}')
+        [ -n "$v" ] || { rm -rf "$t"; rate "$p d Ubuntu introuvable dans le depot"; }
+        (cd "$t" && apt-get download -q "$p=$v") || { rm -rf "$t"; rate "$p=$v ne se telecharge pas"; }
+        dpkg-deb -x "$t"/"$p"_*.deb "$t/x"
+        dire "$p $v d Ubuntu"
+    done
+    for f in usr/lib/shim/shimx64.efi.signed.latest usr/lib/shim/mmx64.efi usr/lib/shim/fbx64.efi \
+             usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed; do
+        [ -s "$t/x/$f" ] || { rm -rf "$t"; rate "$f manque dans les paquets d Ubuntu"; }
+    done
+    install -d "$ICI"
+    install -m 0644 "$t/x/usr/lib/shim/shimx64.efi.signed.latest" "$ICI/shimx64.efi.signed"
+    install -m 0644 "$t/x/usr/lib/shim/mmx64.efi" "$ICI/mmx64.efi.signed"
+    install -m 0644 "$t/x/usr/lib/shim/fbx64.efi" "$ICI/fbx64.efi.signed"
+    install -m 0644 "$t/x/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed" "$ICI/grubx64.efi.signed"
+    rm -rf "$t"
+}
+
+# Les fichiers de Debian détournés vers <fichier>.debian, ceux d'Ubuntu à leur place.
+detourner() {
+    for f in $DETOURNES; do
+        if [ "$(dpkg-divert --truename "$f")" != "$f.debian" ]; then
+            dpkg-divert --local --rename --divert "$f.debian" --add "$f" >/dev/null
+        fi
+        install -D -m 0644 "$ICI/$(basename "$f")" "$f"
+    done
+}
+
+# La chaîne d'Ubuntu sur la partition EFI, par le même chemin que l'installation.
+poser_chaine() {
+    nvram=""
+    # GRENOS_SANS_NVRAM : l'essai en CI ne touche pas au micrologiciel de la machine qui le lance.
+    if [ ! -d /sys/firmware/efi/efivars ] || [ -n "${GRENOS_SANS_NVRAM:-}" ]; then nvram=--no-nvram; fi
+    # shellcheck disable=SC2086
+    /usr/lib/grenos/grenos-grub-install --target=x86_64-efi --efi-directory="$ESP" \
+        --bootloader-id=debian --force $nvram
+    # Le GRUB d'Ubuntu lit sa configuration dans EFI/ubuntu (son préfixe) ;
+    # sans ce dossier, il irait chercher /.disk/info — et démarrerait une clé
+    # USB grenOS branchée.
+    install -d "$ESP/EFI/ubuntu"
+    cp -f "$ESP/EFI/debian/grub.cfg" "$ESP/EFI/ubuntu/grub.cfg"
+    for f in shimx64.efi:shimx64.efi.signed grubx64.efi:grubx64.efi.signed mmx64.efi:mmx64.efi.signed; do
+        cmp -s "$ESP/EFI/debian/${f%%:*}" "$ICI/${f#*:}" || rate "EFI/debian/${f%%:*} n est pas celui d Ubuntu"
+    done
+    if [ -f "$ESP/EFI/BOOT/BOOTX64.EFI" ] && ! ls -d "$ESP"/[Ee][Ff][Ii]/[Mm]icrosoft >/dev/null 2>&1; then
+        cmp -s "$ESP/EFI/BOOT/BOOTX64.EFI" "$ICI/shimx64.efi.signed" || rate "le chemin de secours n a pas le shim d Ubuntu"
+    fi
+}
+
+# Debian ne doit plus être démarré : son noyau par défaut tant qu'il reste.
+noyau_par_defaut() { # abi
+    u=$(uuid_racine)
+    [ -n "$u" ] || rate "UUID de la racine illisible"
+    install -d "$(dirname "$GRUB_D")"
+    cat > "$GRUB_D" <<EOF
+# grenos-pilote-signe : le noyau d'Ubuntu, signé, avec son pilote NVIDIA. Le
+# GRUB d'Ubuntu ne démarrerait pas celui de Debian. Retiré dès que le noyau de
+# Debian n'est plus là (au démarrage suivant).
+GRUB_DISABLE_SUBMENU=y
+GRUB_DEFAULT="gnulinux-$1-advanced-$u"
+EOF
+    update-grub >/dev/null 2>&1 || rate "update-grub echoue"
+    grep -q "gnulinux-$1-advanced-$u" /boot/grub/grub.cfg || rate "l entree du noyau $1 manque au menu"
+}
+
+noyaux_debian() {
+    dpkg-query -W -f '${Package} ${Status}\n' 2>/dev/null \
+        | awk '$NF == "installed" && $1 ~ /^linux-(image|headers)-(amd64|[0-9].*-amd64)$/ {print $1}' | tr '\n' ' '
+}
+
+case "${1:-}" in
+preparer)
+    sur_la_cle && rate "le pilote s installe sur grenOS installe sur le disque, pas sur la cle USB"
+    [ "$(id -u)" = 0 ] || rate "il faut etre root"
+    apt-get update -q || true
+    abi=$(abi_du_depot)
+    poser_noyau "$abi"
+    chercher_chaine
+    ;;
+verifier)
+    abi=$(abi_installe)
+    [ -n "$abi" ] || rate "aucun noyau d Ubuntu avec son pilote n est installe"
+    signataire=$(modinfo -k "$abi" -F signer nvidia 2>/dev/null || true)
+    case "$signataire" in
+        *Canonical*) dire "nvidia.ko de $abi signe par « $signataire »" ;;
+        *) rate "nvidia.ko de $abi n est pas signe par Canonical (« $signataire »)" ;;
+    esac
+    module=$(modinfo -k "$abi" -F version nvidia 2>/dev/null || true)
+    biblio=$(dpkg-query -W -f '${Version}' libnvidia-gl-580 2>/dev/null || true)
+    case "$biblio" in
+        "$module"-*) dire "pilote $module : module et bibliotheques a la meme version" ;;
+        *) rate "module $module et bibliotheques $biblio : versions differentes, l ecran ne s allumerait pas" ;;
+    esac
+    [ -s "$ICI/shimx64.efi.signed" ] || chercher_chaine
+    detourner
+    poser_chaine
+    noyau_par_defaut "$abi"
+    install -d "$(dirname "$MARQUE")"
+    echo "$abi" > "$MARQUE"
+    sync
+    dire "chaine d Ubuntu posee, noyau $abi par defaut"
+    echo "grenos-a-faire: Redémarre : grenOS démarrera avec le pilote NVIDIA, sans rien à taper."
+    ;;
+au-demarrage)
+    [ -f "$MARQUE" ] || exit 0
+    case "$(uname -r)" in
+        *-generic) ;;
+        *) dire "noyau $(uname -r) en marche, la chaine d Ubuntu attend toujours"; exit 0 ;;
+    esac
+    # Une mise à jour de GRUB a pu réécrire EFI/debian/grub.cfg.
+    if [ -f "$ESP/EFI/debian/grub.cfg" ] && ! cmp -s "$ESP/EFI/debian/grub.cfg" "$ESP/EFI/ubuntu/grub.cfg"; then
+        install -d "$ESP/EFI/ubuntu" && cp -f "$ESP/EFI/debian/grub.cfg" "$ESP/EFI/ubuntu/grub.cfg"
+    fi
+    paquets=$(noyaux_debian)
+    if [ -n "$paquets" ]; then
+        # shellcheck disable=SC2086
+        if apt-get -s purge $paquets 2>/dev/null | awk '/^(Purg|Remv) / {print $2}' \
+                | grep -qE '^(grenos|lightdm|xserver-xorg-core|systemd|openbox)'; then
+            dire "REFUS : retirer le noyau de Debian emporterait grenOS — il reste"
+            exit 0
+        fi
+        # shellcheck disable=SC2086
+        apt-get purge -y -q $paquets && dire "noyau de Debian retire : $paquets"
+    fi
+    if [ -z "$(noyaux_debian)" ] && [ -f "$GRUB_D" ]; then
+        rm -f "$GRUB_D"
+        update-grub >/dev/null 2>&1 || true
+    fi
+    ;;
+suivre)
+    [ -f "$MARQUE" ] || exit 0
+    abi=$(abi_du_depot)
+    [ -n "$abi" ] || exit 0
+    if [ ! -e "/lib/modules/$abi/kernel/nvidia-580-open" ]; then
+        poser_noyau "$abi"
+    fi
+    [ -f "$GRUB_D" ] && noyau_par_defaut "$(abi_installe)"
+    echo "$(abi_installe)" > "$MARQUE"
+    ;;
+annuler)
+    # Sans noyau de Debian, la chaîne de Debian ne démarrerait plus rien.
+    [ -n "$(noyaux_debian)" ] || rate "le noyau de Debian n est plus la : la chaine d Ubuntu reste"
+    for f in $DETOURNES; do
+        if [ "$(dpkg-divert --truename "$f")" = "$f.debian" ]; then
+            rm -f "$f"
+            dpkg-divert --local --rename --divert "$f.debian" --remove "$f" >/dev/null
+        fi
+    done
+    if [ -f "$MARQUE" ] || [ -d "$ESP/EFI/ubuntu" ]; then
+        nvram=""
+        if [ ! -d /sys/firmware/efi/efivars ] || [ -n "${GRENOS_SANS_NVRAM:-}" ]; then nvram=--no-nvram; fi
+        # shellcheck disable=SC2086
+        /usr/lib/grenos/grenos-grub-install --target=x86_64-efi --efi-directory="$ESP" \
+            --bootloader-id=debian --force $nvram || true
+        rm -rf "$ESP/EFI/ubuntu"
+    fi
+    rm -f "$MARQUE" "$GRUB_D"
+    rm -rf "$ICI"
+    update-grub >/dev/null 2>&1 || true
+    dire "chaine de Debian remise"
+    ;;
+*)
+    echo "usage : grenos-pilote-signe preparer | verifier | au-demarrage | suivre | annuler" >&2
+    exit 2
+    ;;
+esac
+exit 0

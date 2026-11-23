@@ -7,11 +7,13 @@ After=local-fs.target
 Before=grenos-maj-demarrage.service grenos-affichage-firmware.service grenos-affichage-garde.service
 Before=grenos-premier.service lightdm.service display-manager.service
 ConditionKernelCommandLine=!boot=live
-ConditionPathExists=/var/lib/dkms/mok.pub
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/grenos/grenos-pilote-refuse
+# Le pilote signé de Canonical (grenos-pilote-signe) : au démarrage qui suit
+# son installation, le noyau de Debian, qui ne démarrerait plus, est retiré.
+ExecStart=-/usr/lib/grenos/grenos-pilote-signe au-demarrage
 TimeoutStartSec=1000
 StandardOutput=journal
 

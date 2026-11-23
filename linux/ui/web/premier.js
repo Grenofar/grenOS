@@ -49,13 +49,11 @@
       // Déjà choisis dans l'installateur (22 novembre) : on ne les redemande pas.
       .filter((e) => !(infos.installe && ["langue", "clavier", "compte"].includes(e.cle)))
       // « Pilotes » : seulement sur grenOS installé, avec une carte NVIDIA
-      // sans le pilote officiel (premier.rs le décide). Et PAS de MokManager
-      // hors du parcours Dev (Grenofar, 20 novembre : « pas de réglage
-      // MokManager ») : avec le Secure Boot actif, le pilote NVIDIA exige un
-      // code à taper sur un écran bleu au redémarrage. Ailleurs, la carte
-      // garde le pilote libre, qui s'installe tout seul.
-      .filter((e) => e.cle !== "pilotes" || (infos.pilote_nvidia
-        && (infos.secure_boot !== "actif" || p === "dev")))
+      // sans le pilote officiel (premier.rs le décide). Dans TOUS les
+      // parcours depuis le 23 novembre : le pilote signé de Canonical se
+      // charge en Secure Boot sans MokManager (grenos-pilote-signe), il n'y a
+      // plus d'écran bleu à cacher à qui n'a pas choisi Dev.
+      .filter((e) => e.cle !== "pilotes" || infos.pilote_nvidia)
       .map((e) => e.cle);
   }
   const titreDe = (c) => (infos.donnees.ecrans.find((e) => e.cle === c) || {}).titre || "";
@@ -523,7 +521,7 @@
   // LE PILOTE NVIDIA AU PREMIER DÉMARRAGE (20 novembre). Grenofar : « quand
   // on installe, il redémarre sur le SSD et affiche une page pour mettre /
   // activer les pilotes ». La même installation que Jeux et GrenPlace (dépôt
-  // de NVIDIA, module compilé puis vérifié, signé si le Secure Boot est actif).
+  // signé de Canonical et son noyau, vérifiés, voir grenos-pilote-signe).
   let piloteEtat = "";
   ecrans.pilotes = () => {
     const carte = (infos.materiel[2] || {}).valeur || "ta carte NVIDIA";
@@ -533,7 +531,7 @@
       onclick: async () => {
         bouton.disabled = true;
         D.suite.disabled = true;
-        const bien = await installer({ nom: "Pilote NVIDIA", source: "apt", identifiant: "nvidia-driver", depuis: "le dépôt de NVIDIA" });
+        const bien = await installer({ nom: "Pilote NVIDIA", source: "apt", identifiant: "nvidia-driver-580-open", depuis: "les paquets signés d'Ubuntu" });
         piloteEtat = bien
           ? "C'est installé. Il prendra effet au redémarrage, à la fin de l'assistant."
           : "L'installation n'a pas abouti : le pilote libre reste en place. Tu pourras réessayer depuis Jeux.";
@@ -546,9 +544,7 @@
     return [entete("Matériel", "Le pilote de ta carte graphique",
       `${carte} tourne avec le pilote libre. Le pilote officiel de NVIDIA la gère entièrement : la fréquence de ton écran, plusieurs écrans, et les jeux exigeants (3D complète, DLSS).`),
       el("div.carte.verre.ligne-option", el("div", el("b", "Pilote officiel NVIDIA"),
-        el("small.note", infos.secure_boot === "actif"
-          ? " — depuis le dépôt de NVIDIA. Secure Boot actif (parcours Dev) : au redémarrage, un écran bleu (MokManager) demandera le code donné à la fin de l'installation."
-          : " — depuis le dépôt de NVIDIA. Rien d'autre à faire : il prend effet au redémarrage.")), bouton),
+        el("small.note", " — déjà signé, il passe le Secure Boot tel quel. Rien d'autre à faire : il prend effet au redémarrage.")), bouton),
       dire,
       el("p.note", "Tu peux aussi passer : il reste dans Jeux › Installer le pilote NVIDIA.")];
   };
