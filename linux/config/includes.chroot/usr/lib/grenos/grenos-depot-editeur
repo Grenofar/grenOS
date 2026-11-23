@@ -73,9 +73,20 @@ if [ -n "$apres" ]; then
         # un code : on en tire un au hasard et on le donne à la personne —
         # ce n'est pas un mot de passe à elle, c'est un code d'un seul usage.
         if secure_boot && [ -f "$MOK_CERT" ]; then
-            if mokutil --test-key "$MOK_CERT" 2>&1 | grep -qi "already enrolled"; then
+            etat_cle=$(mokutil --test-key "$MOK_CERT" 2>&1)
+            if echo "$etat_cle" | grep -qi "already enrolled"; then
                 echo "grenos: cle de signature des modules deja inscrite"
             else
+                # UN DEUXIÈME PASSAGE (23 novembre) : la clé attend déjà
+                # l'écran bleu (« already in the enrollment request »).
+                # `mokutil --import` l'ignore alors (« SKIP ») et GARDE le code
+                # du premier passage — le code neuf affiché plus bas aurait
+                # été faux. On retire la demande en attente, et on en pose une
+                # neuve : le code affiché est toujours celui qui marche.
+                if echo "$etat_cle" | grep -qi "enrollment request"; then
+                    mokutil --revoke-import >/dev/null 2>&1 || true
+                    echo "grenos: demande d inscription precedente remplacee (nouveau code ci-dessous)"
+                fi
                 code=$(printf '%08d' $(( $(od -An -N4 -tu4 /dev/urandom | tr -d ' ') % 100000000 )))
                 empreinte=$(mktemp)
                 mokutil --generate-hash="$code" > "$empreinte"

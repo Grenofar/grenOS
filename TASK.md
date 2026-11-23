@@ -58,6 +58,12 @@ dans TASK.md ; publier (mise à jour auto). Il est parti, séance autonome.
   un grenOS installé dont une NVIDIA n'a pas `nvidia`, et le retire ensuite.
   Installe par `installer` (dépôt NVIDIA, DKMS, `--apres`), affiche le code
   MokManager EN GRAND et les étapes, bouton Redémarrer.
+- **Code MokManager faux au 2e passage** [écrit, essayé avec un faux mokutil] :
+  `grenos-depot-editeur --apres` ne reconnaissait que « already enrolled ».
+  Clé déjà EN ATTENTE → `mokutil --import` fait « SKIP » et garde l'ancien
+  code, mais un code neuf était affiché. Il retire la demande
+  (`--revoke-import`) et en pose une neuve. Pas exécuté sur le PC de Grenofar
+  (sa demande en attente garde le code de son terminal).
 - **Documentation** [écrit] : grenos-web-download `/documentation` (FR/EN),
   lien en-tête/pied/Télécharger, sitemap. typecheck et build verts.
 - Vérifié en local : natif 34 essais, grenos-ui 76, verif-accents/fenetres/
