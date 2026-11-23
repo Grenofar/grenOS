@@ -4,6 +4,27 @@
 > le travail lit d'abord ce fichier, puis `CLAUDE.md` (local, RÈGLE N°1 :
 > plug and play pour un non-développeur).
 
+## 0000000. À DÉCIDER — 23 novembre soir : NVIDIA sans écran bleu, Secure Boot gardé
+
+Grenofar : « garde secure boot et fais tout », « ça fonctionne sur Windows ».
+Windows n'a pas d'écran bleu parce que Microsoft signe le pilote. DKMS signe
+avec une clé à nous : MokManager est inévitable (présence physique exigée).
+
+- PROUVÉ (Pilote signe, run 45211185451, branche nvidia/signe) : un Debian
+  trixie démarré par la chaîne d'Ubuntu 26.04 (shim signé Microsoft, GRUB et
+  noyau 7.0.0-44 signés Canonical), QEMU en Secure Boot avec les clés de
+  Microsoft, aucune clé en attente : un module sans signature est refusé
+  (« Key was rejected by service ») et `nvidia.ko` 580-open de Canonical
+  (« Canonical Ltd. Kernel Module Signing ») se charge : « NVRM: No NVIDIA
+  GPU found. » (pas de carte dans QEMU). Aucun écran bleu.
+- Ce que ça demande [à faire, plusieurs jours] : sur grenOS INSTALLÉ, la
+  chaîne de démarrage et le noyau d'Ubuntu (dépôt resolute épinglé aux seuls
+  paquets du noyau, shim/GRUB posés sur l'EFI par nous), le pilote
+  linux-modules-nvidia-580-open-<noyau> et ses bibliothèques à la même
+  version, posés par l'installateur quand une NVIDIA est là ; les mises à
+  jour du noyau tirent le module signé du même noyau. Preuve en CI avant
+  tout ; la vraie preuve sur la RTX 5060 (580 la connaît).
+
 ## 000000. EN COURS — 23 novembre midi : grenOS ne démarrait plus (pilote NVIDIA)
 
 Grenofar, depuis Windows : « grenos veut plus démarrer à cause d'un driver ».
