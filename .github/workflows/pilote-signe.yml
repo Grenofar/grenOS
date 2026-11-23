@@ -1,0 +1,30 @@
+# Le pilote NVIDIA déjà signé (Canonical) se charge-t-il en Secure Boot SANS
+# écran bleu MokManager ? (linux/tools/essai-pilote-signe.sh, 23 novembre)
+#
+# À part de linux.yml, exprès : ni image à attendre, ni construction annulée.
+name: Pilote signe
+
+on:
+  push:
+    branches: ["nvidia/**"]
+    paths:
+      - "linux/tools/essai-pilote-signe.sh"
+      - ".github/workflows/pilote-signe.yml"
+  workflow_dispatch:
+
+jobs:
+  essai:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Outils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq debootstrap qemu-system-x86 ovmf dosfstools e2fsprogs fdisk zstd python3 rsync
+          sudo chmod 666 /dev/kvm 2>/dev/null || true
+      - name: Un Debian demarre par la chaine d Ubuntu charge nvidia.ko en Secure Boot
+        run: sudo bash linux/tools/essai-pilote-signe.sh "$RUNNER_TEMP/essai"
+      - name: Journal de la console
+        if: always()
+        run: sudo tail -c 20000 "$RUNNER_TEMP/essai/serie.log" || true
