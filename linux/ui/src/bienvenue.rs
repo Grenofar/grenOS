@@ -43,11 +43,12 @@ const INSTALLER: Geste = g(
     "disque",
 );
 
-const ASTUCES: [&str; 5] = [
+const ASTUCES: [&str; 6] = [
     "Clic droit sur le bureau : créer un dossier, un fichier, changer le fond.",
     "Glisser une application du menu vers le bureau en fait un raccourci ; clic droit sur une icône de la barre pour l'y épingler ou l'en retirer.",
     "Alt+Tab passe d'une fenêtre à l'autre, Alt+F4 ferme celle du dessus.",
     "Impr. écran capture tout l'écran, Maj+Impr. écran une zone choisie ; les images vont dans le dossier Images.",
+    "Copier seulement, sans fichier : Meta+Maj+S une zone, Ctrl+Impr. écran tout l'écran — puis Ctrl+V pour coller.",
     "Ctrl+Maj+Échap ouvre le gestionnaire de tâches, Ctrl+Alt+Échap le mode jeu, Meta+I les Réglages, Meta+E tes fichiers, Meta+T bascule jour et nuit.",
 ];
 
