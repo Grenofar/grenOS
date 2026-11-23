@@ -391,6 +391,20 @@ impl Attrape {
             siege.ungrab();
         }
     }
+
+    /// Laisser la place à l'attrape d'un GLISSER de GTK, sans rien lâcher.
+    ///
+    /// 23 novembre, Grenofar : glisser une application du menu vers le
+    /// bureau « affiche un carré noir sans plus ». X ne garde qu'UNE attrape
+    /// du pointeur par programme : au début d'un glisser, GTK prend la sienne
+    /// et elle REMPLACE celle du menu. `lacher` à ce moment-là (le menu se
+    /// fermait au début du glisser) relâchait donc celle de GTK : le glisser
+    /// ne recevait plus rien, et son icône restait plantée à l'écran. Ici, on
+    /// oublie seulement la nôtre ; GTK relâchera la sienne au dépôt.
+    pub fn ceder(&self) {
+        self.fini.set(true);
+        self.siege.borrow_mut().take();
+    }
 }
 
 /// Un signal Unix (SIGUSR1, SIGUSR2) dans la boucle GTK.

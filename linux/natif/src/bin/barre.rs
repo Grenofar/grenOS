@@ -519,6 +519,13 @@ impl Barre {
             }
         });
 
+        // Lâcher une application sur le dock l'épingle. Pas de HIGHLIGHT : le
+        // cadre que GTK dessinerait autour jurerait avec le dock arrondi.
+        self.panneau.drag_dest_set(gtk::DestDefaults::MOTION | gtk::DestDefaults::DROP, &[], gdk::DragAction::COPY);
+        self.panneau.drag_dest_add_uri_targets();
+        let b = self.clone();
+        self.panneau.connect_drag_data_received(move |_, _, _, _, donnees, _, _| b.recevoir_sur_le_dock(donnees));
+
         let b = self.clone();
         let id = self.bouton_menu.connect_clicked(move |bouton| {
             if bouton.is_active() { b.ouvrir_menu() } else { b.fermer_menu() }
@@ -841,10 +848,20 @@ impl Barre {
         *self.minuteur_apercu.borrow_mut() = Some(id);
     }
 
+    /// LA BULLE BLOQUÉE (23 novembre, capture de Grenofar : l'aperçu de
+    /// Claude restait au-dessus du dock, pointeur parti depuis longtemps).
+    /// `close()` ne ferme pas : il envoie une demande de fermeture, et GTK
+    /// l'IGNORE en silence tant qu'une autre fenêtre tient une attrape GTK —
+    /// un menu contextuel ouvert (« Retirer de la barre »), un glisser en
+    /// cours. La bulle était déjà oubliée ici, plus rien ne la fermait. On la
+    /// cache donc tout de suite, et on la détruit.
     fn fermer_apercu(&self) {
         self.survol_apercu.set(false);
         if let Some(f) = self.apercu.borrow_mut().take() {
-            f.close();
+            f.hide();
+            // SAFETY : plus aucune référence à cette bulle n'est gardée (son
+            // guet compare un clone, qui voit seulement qu'elle a changé).
+            unsafe { f.destroy() };
         }
     }
 
@@ -1124,6 +1141,33 @@ impl Barre {
         dire("menu ferme");
     }
 
+    /// Le menu se ferme au début d'un glisser — sans relâcher le pointeur,
+    /// que GTK tient désormais pour le glisser (voir `Attrape::ceder`).
+    fn fermer_menu_pour_glisser(&self) {
+        if let Some(a) = self.attrape.borrow_mut().take() {
+            a.ceder();
+        }
+        self.menu.hide();
+        self.enfoncer(false);
+        dire("menu ferme pour un glisser");
+    }
+
+    /// Une application lâchée sur le dock y est épinglée (23 novembre :
+    /// « déplacer un raccourci d'app vers le bureau ou dock est buggé »).
+    /// Elle vient du menu, ou d'un raccourci .desktop d'ailleurs.
+    fn recevoir_sur_le_dock(self: &Rc<Self>, donnees: &gtk::SelectionData) {
+        for adresse in donnees.uris() {
+            let Ok((chemin, _)) = glib::filename_from_uri(&adresse) else { continue };
+            if chemin.extension().map(|e| e != "desktop").unwrap_or(true) {
+                continue;
+            }
+            if let Some(a) = apps::lire_desktop(&chemin) {
+                dire(&format!("epinglee par glisser : {}", a.nom));
+                self.epingler(&a.nom, &a.commande, &a.icone);
+            }
+        }
+    }
+
     fn remplir(self: &Rc<Self>) {
         for enfant in self.contenu.children() {
             self.contenu.remove(&enfant);
@@ -1203,9 +1247,14 @@ impl Barre {
             *b.menu_contextuel.borrow_mut() = Some(menu_de(gestes, ev));
             glib::Propagation::Stop
         });
-        // Glisser une application vers le bureau l'y pose.
+        // Glisser une application vers le bureau l'y pose ; vers le dock,
+        // l'y épingle. L'icône qui suit le pointeur est celle de l'application
+        // (l'icône par défaut de GTK, sans compositeur, faisait un carré).
         bouton.drag_source_set(gdk::ModifierType::BUTTON1_MASK, &[], gdk::DragAction::COPY);
         bouton.drag_source_add_uri_targets();
+        if let Some(p) = natif::pixbuf_de(&[&a.icone], 48) {
+            bouton.drag_source_set_icon_pixbuf(&p);
+        }
         let aa = a.clone();
         bouton.connect_drag_data_get(move |_, _, donnees, _, _| {
             if let Ok(uri) = glib::filename_to_uri(&aa.fichier, None) {
@@ -1213,7 +1262,7 @@ impl Barre {
             }
         });
         let b = self.clone();
-        bouton.connect_drag_begin(move |_, _| b.fermer_menu());
+        bouton.connect_drag_begin(move |_, _| b.fermer_menu_pour_glisser());
         bouton
     }
 

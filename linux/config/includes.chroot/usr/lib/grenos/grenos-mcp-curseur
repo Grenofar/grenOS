@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""grenos-mcp-curseur : le curseur de Claude, à côté de celui de la personne.
+
+Grenofar, le 23 novembre, en regardant Claude cliquer dans son dock : « fais
+que c'est pas ma souris qui bouge, mais un curseur identique au mien, en
+orange, noté dessus "claude" en blanc sur un petit fond orange opaque —
+inspire-toi de claude-free-plan-mcp-powershell ». Sous Windows, son MCP
+PowerShell dessinait déjà ce curseur ; ceci en est la version grenOS.
+
+CE QUE C'EST. Une petite fenêtre sans cadre, au-dessus de tout, que les clics
+TRAVERSENT (forme d'entrée vide) : la flèche du thème de curseurs de la
+personne — la même, à la même taille —, repeinte en orange, et une étiquette
+« Claude ». grenos-mcp la lance et la pilote par l'entrée standard, un ordre
+JSON par ligne :
+
+    {"cmd": "aller", "x": 640, "y": 400, "duree": 0.3, "fx": 10, "fy": 20}
+    {"cmd": "clic"}       un anneau qui s'élargit sous la pointe
+    {"cmd": "signe"}      activité : le curseur reste (ou revient) affiché
+    {"cmd": "cacher"}
+
+Fin de l'entrée (grenos-mcp arrêté) : le curseur disparaît avec lui. Une
+minute sans ordre : il se cache, et revient au suivant.
+
+SANS COMPOSITEUR (grenOS n'en a pas), une fenêtre n'a pas de transparence :
+on la DÉCOUPE à la forme de l'image (extension SHAPE de X), comme les coins
+arrondis de nos panneaux. Avec un compositeur, la transparence vraie est
+prise à la place.
+"""
+import json
+import math
+import os
+import sys
+import time
+
+import gi
+
+gi.require_version("Gdk", "3.0")
+gi.require_version("Gtk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+import cairo  # noqa: E402
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
+
+ORANGE = (0xD9 / 255, 0x77 / 255, 0x57 / 255)   # l'orange de Claude
+SOMBRE = (0.10, 0.06, 0.05)
+INACTIF = 60          # secondes sans ordre avant de se cacher
+MARGE = 18            # place autour de la pointe pour l'anneau du clic
+
+
+def journal(texte):
+    print("grenos-mcp-curseur : " + texte, file=sys.stderr, flush=True)
+
+
+def fleche_de_la_personne():
+    """La flèche du thème de curseurs, à la taille de l'écran, et sa pointe."""
+    affichage = Gdk.Display.get_default()
+    for nom in ("default", "left_ptr", "arrow"):
+        curseur = Gdk.Cursor.new_from_name(affichage, nom)
+        image = curseur.get_image() if curseur else None
+        if image is not None:
+            hx = int(image.get_option("x_hot") or 0)
+            hy = int(image.get_option("y_hot") or 0)
+            return image, hx, hy
+    return None, 0, 0
+
+
+def luminance(r, g, b):
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
+def repeindre_en_orange(image):
+    """La même flèche, en orange : le CORPS prend l'orange, le contour reste.
+
+    Breeze (corps blanc, contour noir) comme Adwaita (corps noir, contour
+    blanc) : le corps est la teinte la plus fréquente des points opaques.
+    """
+    if not image.get_has_alpha():
+        image = image.add_alpha(False, 0, 0, 0)
+    largeur, hauteur = image.get_width(), image.get_height()
+    pas, canaux = image.get_rowstride(), image.get_n_channels()
+    points = bytearray(image.get_pixels())
+    clairs = sombres = 0
+    for y in range(hauteur):
+        for x in range(largeur):
+            i = y * pas + x * canaux
+            if points[i + 3] > 200:
+                if luminance(points[i], points[i + 1], points[i + 2]) > 127:
+                    clairs += 1
+                else:
+                    sombres += 1
+    corps_clair = clairs >= sombres
+    o = [int(c * 255) for c in ORANGE]
+    blanc, noir = (255, 255, 255), [int(c * 255) for c in SOMBRE]
+    for y in range(hauteur):
+        for x in range(largeur):
+            i = y * pas + x * canaux
+            if points[i + 3] == 0:
+                continue
+            t = luminance(points[i], points[i + 1], points[i + 2]) / 255
+            if corps_clair:      # clair -> orange, sombre -> contour sombre
+                haut, bas = o, noir
+            else:                # sombre -> orange, clair -> contour blanc
+                haut, bas = blanc, o
+            for k in range(3):
+                points[i + k] = int(bas[k] + (haut[k] - bas[k]) * t)
+    return GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(bytes(points)), GdkPixbuf.Colorspace.RGB,
+                                           True, 8, largeur, hauteur, pas)
+
+
+class Curseur:
+    def __init__(self):
+        fleche, self.hx, self.hy = fleche_de_la_personne()
+        # Aucun thème de curseurs : une flèche dessinée, comme sous Windows.
+        self.fleche = repeindre_en_orange(fleche) if fleche is not None else None
+        self.tampon = b""
+        tf = self.fleche.get_height() if self.fleche else 24
+        lf = self.fleche.get_width() if self.fleche else 16
+        # L'étiquette : sous la flèche, à droite, comme les curseurs à
+        # plusieurs d'un éditeur partagé.
+        self.etiquette = (MARGE + lf * 0.55, MARGE + tf * 0.70)
+        self.largeur = int(MARGE + lf * 0.55 + 66)
+        self.hauteur = int(MARGE + tf * 0.70 + 22 + 2)
+        self.x = self.y = None
+        self.visible = False
+        self.anim = None
+        self.anneau = 0
+        self.dernier = time.time()
+
+        self.fenetre = Gtk.Window(type=Gtk.WindowType.POPUP)
+        self.fenetre.set_title("grenos-curseur-claude")
+        self.fenetre.set_app_paintable(True)
+        self.fenetre.set_decorated(False)
+        self.fenetre.set_accept_focus(False)
+        self.fenetre.set_keep_above(True)
+        self.fenetre.set_skip_taskbar_hint(True)
+        self.fenetre.set_skip_pager_hint(True)
+        self.fenetre.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)
+        self.fenetre.set_default_size(self.largeur, self.hauteur)
+        self.fenetre.set_size_request(self.largeur, self.hauteur)
+        ecran = self.fenetre.get_screen()
+        self.transparent = bool(ecran.is_composited() and ecran.get_rgba_visual())
+        if self.transparent:
+            self.fenetre.set_visual(ecran.get_rgba_visual())
+        self.fenetre.connect("draw", self.dessiner)
+        self.fenetre.connect("realize", self.decouper)
+        self.fenetre.move(-10000, -10000)
+        self.fenetre.show_all()
+        GLib.timeout_add(700, self.veiller)
+
+    # ---- Le dessin ----------------------------------------------------------
+    def image(self):
+        """Tout le curseur dans une image avec transparence."""
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.largeur, self.hauteur)
+        cr = cairo.Context(surface)
+        if self.anneau:
+            rayon = 4 + self.anneau * 1.6
+            cr.set_source_rgb(*ORANGE)
+            cr.set_line_width(3)
+            cr.arc(MARGE, MARGE, rayon, 0, 2 * math.pi)
+            cr.stroke()
+        ex, ey = self.etiquette
+        cr.select_font_face("Inter", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(11.5)
+        mesure = cr.text_extents("Claude")
+        lt, ht = mesure.x_advance + 14, 19
+        rayon = 6
+        cr.new_sub_path()
+        cr.arc(ex + lt - rayon, ey + rayon, rayon, -math.pi / 2, 0)
+        cr.arc(ex + lt - rayon, ey + ht - rayon, rayon, 0, math.pi / 2)
+        cr.arc(ex + rayon, ey + ht - rayon, rayon, math.pi / 2, math.pi)
+        cr.arc(ex + rayon, ey + rayon, rayon, math.pi, 3 * math.pi / 2)
+        cr.close_path()
+        cr.set_source_rgb(*ORANGE)
+        cr.fill()
+        cr.set_source_rgb(1, 1, 1)
+        cr.move_to(ex + 7, ey + 13.5)
+        cr.show_text("Claude")
+        if self.fleche is not None:
+            Gdk.cairo_set_source_pixbuf(cr, self.fleche, MARGE - self.hx, MARGE - self.hy)
+            cr.paint()
+        else:
+            points = [(0, 0), (0, 22), (6, 17), (10, 26), (14, 24), (10, 15), (17, 15)]
+            cr.move_to(MARGE + points[0][0], MARGE + points[0][1])
+            for px, py in points[1:]:
+                cr.line_to(MARGE + px, MARGE + py)
+            cr.close_path()
+            cr.set_source_rgb(*ORANGE)
+            cr.fill_preserve()
+            cr.set_source_rgb(1, 1, 1)
+            cr.set_line_width(1.5)
+            cr.stroke()
+        return surface
+
+    def dessiner(self, fenetre, cr):
+        surface = self.image()
+        cr.set_operator(cairo.OPERATOR_SOURCE)
+        if not self.transparent:
+            # Sans transparence, les bords adoucis se posent sur du sombre :
+            # c'est la couleur du contour de la flèche, le bord reste net.
+            cr.set_source_rgb(*SOMBRE)
+            cr.paint()
+            cr.set_operator(cairo.OPERATOR_OVER)
+        cr.set_source_surface(surface, 0, 0)
+        cr.paint()
+        return True
+
+    def decouper(self, *_):
+        """La forme de la fenêtre = l'image ; et AUCUNE forme pour la souris."""
+        fenetre = self.fenetre.get_window()
+        if fenetre is None:
+            return
+        fenetre.input_shape_combine_region(cairo.Region(), 0, 0)
+        if not self.transparent:
+            fenetre.shape_combine_region(Gdk.cairo_region_create_from_surface(self.image()), 0, 0)
+
+    # ---- Le mouvement -------------------------------------------------------
+    def poser(self, x, y):
+        self.x, self.y = x, y
+        self.fenetre.move(int(round(x)) - MARGE, int(round(y)) - MARGE)
+
+    def montrer(self):
+        if not self.visible:
+            self.visible = True
+            if self.x is not None:
+                self.poser(self.x, self.y)
+        fenetre = self.fenetre.get_window()
+        if fenetre is not None:
+            fenetre.raise_()
+
+    def cacher(self):
+        self.visible = False
+        self.fenetre.move(-10000, -10000)
+
+    def pas_anim(self):
+        if not self.anim:
+            return False
+        x0, y0, x1, y1, t0, duree = self.anim
+        f = 1.0 if duree <= 0 else min(1.0, (time.time() - t0) / duree)
+        e = 4 * f ** 3 if f < 0.5 else 1 - (-2 * f + 2) ** 3 / 2   # part et freine en douceur
+        self.poser(x0 + (x1 - x0) * e, y0 + (y1 - y0) * e)
+        if f < 1:
+            return True
+        self.anim = None
+        return False
+
+    def aller(self, ordre):
+        x1, y1 = float(ordre["x"]), float(ordre["y"])
+        duree = float(ordre.get("duree", 0.3))
+        if self.x is None:
+            # Première apparition : il SORT de la souris de la personne.
+            x0, y0 = float(ordre.get("fx", x1)), float(ordre.get("fy", y1))
+        else:
+            x0, y0 = self.x, self.y
+        if not self.visible:
+            self.poser(x0, y0)
+        self.montrer()
+        if duree <= 0 or (abs(x1 - x0) < 1 and abs(y1 - y0) < 1):
+            self.anim = None
+            self.poser(x1, y1)
+            return
+        en_cours = self.anim is not None
+        self.anim = (x0, y0, x1, y1, time.time(), duree)
+        if not en_cours:
+            GLib.timeout_add(10, self.pas_anim)
+
+    def pas_anneau(self):
+        self.anneau += 1
+        if self.anneau > 9:
+            self.anneau = 0
+        self.decouper()
+        self.fenetre.queue_draw()
+        return self.anneau != 0
+
+    def clic(self):
+        self.montrer()
+        self.anneau = 1
+        GLib.timeout_add(22, self.pas_anneau)
+
+    def veiller(self):
+        if self.visible:
+            if time.time() - self.dernier > INACTIF:
+                self.cacher()
+            else:
+                # Openbox remonte ses fenêtres au clic : on reste au-dessus.
+                fenetre = self.fenetre.get_window()
+                if fenetre is not None:
+                    fenetre.raise_()
+        return True
+
+    # ---- Les ordres ---------------------------------------------------------
+    def lire(self, canal, condition):
+        # os.read et non readline : readline garderait dans SON tampon les
+        # lignes arrivées ensemble, et la veille de GLib ne se réveillerait
+        # plus pour elles (rien de neuf sur le descripteur).
+        try:
+            morceau = os.read(sys.stdin.fileno(), 65536) if condition & GLib.IO_IN else b""
+        except OSError:
+            morceau = b""
+        if not morceau:
+            Gtk.main_quit()
+            return False
+        self.tampon += morceau
+        while b"\n" in self.tampon:
+            ligne, self.tampon = self.tampon.split(b"\n", 1)
+            if not self.executer(ligne):
+                Gtk.main_quit()
+                return False
+        return True
+
+    def executer(self, ligne):
+        try:
+            ordre = json.loads(ligne)
+        except ValueError:
+            return True
+        self.dernier = time.time()
+        commande = ordre.get("cmd")
+        if commande == "aller":
+            self.aller(ordre)
+        elif commande == "clic":
+            self.clic()
+        elif commande == "signe":
+            if self.x is not None:
+                self.montrer()
+        elif commande == "cacher":
+            self.cacher()
+        elif commande == "quitter":
+            return False
+        return True
+
+
+def main():
+    if Gdk.Display.get_default() is None:
+        journal("pas d'ecran X")
+        return 1
+    curseur = Curseur()
+    GLib.io_add_watch(GLib.IOChannel.unix_new(sys.stdin.fileno()),
+                      GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, curseur.lire)
+    print("pret", flush=True)
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

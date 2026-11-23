@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""grenos-capture : une capture d'écran COPIÉE SEULEMENT — ni fichier, ni question.
+
+Grenofar, le 23 novembre : « au screenshot, ajoute copier seulement ». Comme
+Win+Maj+S sous Windows : on choisit une zone, elle part dans le presse-papier,
+on la colle avec Ctrl+V où l'on veut. Rien n'est écrit dans Images.
+
+    grenos-capture zone      une zone choisie à la souris   (Win+Maj+S)
+    grenos-capture ecran     l'écran entier                 (Ctrl+Impr. écran)
+    grenos-capture fenetre   la fenêtre active              (Ctrl+Alt+Impr. écran)
+
+POURQUOI PAS SIMPLEMENT `xfce4-screenshooter --clipboard`. Essayé le 23 : la
+commande rend la main tout de suite, et l'image disparaît avec elle. Sous X,
+le presse-papier n'est pas une boîte où l'on dépose : c'est le programme qui
+a copié qui GARDE l'image, et la donne à qui la colle. Sans gestionnaire de
+presse-papier (grenOS n'en a pas, il en coûterait un démon de plus), un
+programme qui s'arrête emporte ce qu'il a copié. Ce programme-ci reste donc,
+discret, tant que l'image est dans le presse-papier — et s'arrête dès que
+quelqu'un copie autre chose.
+"""
+import os
+import subprocess
+import sys
+import time
+
+MODES = {"zone": "--region", "ecran": "--fullscreen", "fenetre": "--window"}
+
+
+def prevenir(titre, texte):
+    subprocess.run(["notify-send", "--app-name=grenOS", "--icon=applets-screenshooter", titre, texte],
+                   capture_output=True)
+
+
+def main():
+    mode = sys.argv[1] if len(sys.argv) > 1 else "zone"
+    if mode not in MODES:
+        print("usage : grenos-capture zone|ecran|fenetre", file=sys.stderr)
+        return 2
+    dossier = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    image = os.path.join(dossier, "grenos-capture-%d.png" % os.getpid())
+    # --save avec un chemin : xfce4-screenshooter enregistre sans rien
+    # demander. On lit le fichier, puis on l'efface aussitôt.
+    subprocess.run(["xfce4-screenshooter", MODES[mode], "--save", image], capture_output=True)
+    if not os.path.exists(image):
+        return 0            # sélection annulée (Échap) : rien à copier
+
+    import gi
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("Gdk", "3.0")
+    from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
+
+    try:
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file(image)
+    except GLib.Error as souci:
+        prevenir("Capture non copiée", str(souci))
+        return 1
+    finally:
+        try:
+            os.remove(image)
+        except OSError:
+            pass
+
+    presse = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+    presse.set_image(pixbuf)
+    pose = time.monotonic()
+
+    def autre_copie(*_):
+        # Notre propre copie déclenche aussi ce signal : on l'ignore. Toute
+        # copie ensuite remplace l'image, on n'a plus rien à garder.
+        if time.monotonic() - pose > 0.5:
+            Gtk.main_quit()
+
+    presse.connect("owner-change", autre_copie)
+    prevenir("Capture copiée", "Colle-la avec Ctrl+V. Elle n'est enregistrée nulle part.")
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
