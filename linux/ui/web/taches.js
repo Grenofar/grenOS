@@ -338,6 +338,11 @@
       el("header.tc-tete.carte.verre", D.cpu.bloc, D.mem.bloc, D.jeu),
       D.onglets, D.corps));
     await api.appeler("perf_instantane");          // la base des pourcentages
+    // LA PREUVE DE LA CI (23 novembre) : ci-demarrage.sh ouvre cette fenêtre
+    // par Ctrl+Maj+Échap et attend « taches ouvert » au journal, que dit
+    // taches_mesure à son premier appel. Les onglets lisent grenPerf ; sans
+    // cet appel, la fenêtre marchait et la CI ne le savait pas (run 45129195984).
+    api.appeler("taches_mesure").catch(() => {});
     await new Promise((r) => setTimeout(r, 700));
     await rafraichir();
     await montrer();

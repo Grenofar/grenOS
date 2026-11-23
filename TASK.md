@@ -64,6 +64,10 @@ dans TASK.md ; publier (mise à jour auto). Il est parti, séance autonome.
   code, mais un code neuf était affiché. Il retire la demande
   (`--revoke-import`) et en pose une neuve. Pas exécuté sur le PC de Grenofar
   (sa demande en attente garde le code de son terminal).
+- **CI rouge run 45129195984** (« taches ouvert » jamais venu) : le nouveau
+  gestionnaire lisait grenPerf et n'appelait plus `taches_mesure`, qui dit
+  cette preuve. Rappelé une fois à l'ouverture [écrit]. Le dépôt APT de ce
+  run était PUBLIÉ (étape 34 verte) ; seule la Release a attendu.
 - **Documentation** [écrit] : grenos-web-download `/documentation` (FR/EN),
   lien en-tête/pied/Télécharger, sitemap. typecheck et build verts.
 - Vérifié en local : natif 34 essais, grenos-ui 76, verif-accents/fenetres/
