@@ -114,7 +114,6 @@ def fenetre(fermer_popup=None):
     f.set_icon_name(HEROIC)
     f.set_keep_above(True)
     f.set_position(Gtk.WindowPosition.CENTER)
-    f.set_default_size(520, -1)
     f.connect("destroy", Gtk.main_quit)
 
     boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
