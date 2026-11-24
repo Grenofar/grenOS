@@ -181,7 +181,7 @@ et l'ordre de travail (en fin de fichier) est public, donc discutable.
 | G20 | **Visionneuse d'images** | **[écrit]** (18 nov.) — Ristretto livré |
 | G21 | **Lecteur vidéo et audio** façon VLC | **[écrit]** (18 nov.) — Celluloid (mpv) livré ; VLC dans GrenPlace |
 | G22 | **Bluetooth** | [à faire] — la page Connexions existe, le matériel n'est pas prouvé |
-| G23 | **Support manette** | **[écrit]** (18 nov.) — `steam-devices` : les règles udev qui ouvrent les manettes Xbox, PlayStation, Switch et Steam à un compte ordinaire. Aucune manette dans la machine d'essai |
+| G23 | **Support manette** | **[écrit]** (18 nov.) — `steam-devices` : les règles udev qui ouvrent les manettes Xbox, PlayStation, Switch et Steam à un compte ordinaire. 24 nov. : Xbox en Bluetooth — bluez réglé pour qu'elles se reconnectent (`0200-grenos-manettes`) ; pas l'adaptateur sans fil (pilote xone hors Debian). Aucune manette dans la machine d'essai |
 | G24 | **Client SSH** | **[écrit]** (18 nov.) — openssh-client livré |
 | G25 | **Outils de diagnostic réseau** | **[écrit]** (18 nov.) — mtr, traceroute, dig livrés |
 | G26 | **VPN** | **[écrit]** (18 nov.) — OpenVPN dans la fenêtre des connexions, WireGuard compris par NetworkManager |

@@ -867,9 +867,11 @@ impl Barre {
         }
 
         for (groupe, fenetres) in restantes {
-            let app = apps::application_de(&groupe, &applis);
+            // Un jeu (« steam_app_252950 ») : son raccourci ou son titre, et
+            // l'icône de sa fenêtre — plus jamais Steam (24 novembre).
+            let app = apps::application_de_fenetre(&groupe, &fenetres[0].titre, &applis);
             let t = Tuile {
-                nom: app.map(|a| a.nom.clone()).unwrap_or_else(|| groupe.clone()),
+                nom: apps::nom_de_fenetre(&groupe, &fenetres[0].titre, app),
                 commande: app.map(|a| a.commande.clone()).unwrap_or_default(),
                 icone: app.map(|a| a.icone.clone()).unwrap_or_default(),
                 epinglee: false,
@@ -1271,11 +1273,12 @@ impl Barre {
         let mut vues = std::collections::HashSet::new();
         let mut compte = 0;
         for (groupe, fenetres) in groupes {
-            let app = apps::application_de(&groupe, &applis);
+            let app = apps::application_de_fenetre(&groupe, &fenetres[0].titre, &applis);
             if let Some(a) = app {
                 vues.insert(identifiant_flatpak(a));
             }
-            let nom = app.map(|a| a.nom.clone()).unwrap_or_else(|| groupe.clone());
+            let jeu = apps::est_un_jeu(&groupe);
+            let nom = apps::nom_de_fenetre(&groupe, &fenetres[0].titre, app);
             let icone = app.map(|a| a.icone.clone()).unwrap_or_default();
             let etiquette = if fenetres.len() > 1 { format!("{nom} ({} fenêtres)", fenetres.len()) } else { nom.clone() };
             let sous = gtk::Menu::new();
@@ -1289,11 +1292,14 @@ impl Barre {
             // fenêtres d'abord, puis tout son arbre de processus — sinon
             // Steam, Discord… restaient dans leur coin (natif::processus).
             let xids = fenetres.iter().map(|f| f.xid).collect::<Vec<_>>();
-            let flatpak = app.map(identifiant_flatpak).unwrap_or_default();
-            let programme = app.map(|a| apps::programme_de(&a.commande)).unwrap_or_default();
+            // Un jeu : ses processus à lui (SteamAppId), jamais son lanceur —
+            // Heroic ou Steam restent ouverts.
+            let flatpak = if jeu { String::new() } else { app.map(identifiant_flatpak).unwrap_or_default() };
+            let programme = if jeu { String::new() } else { app.map(|a| apps::programme_de(&a.commande)).unwrap_or_default() };
             // Une Flatpak : `flatpak kill` suffit, et le pid de ses fenêtres
             // est celui du bac à sable — on ne s'en sert pas.
             let mut pids: Vec<u32> = match (&self.ecran, flatpak.is_empty()) {
+                _ if jeu => processus::du_jeu(&groupe),
                 (Some(e), true) => xids
                     .iter()
                     .filter_map(|x| e.pid(*x))

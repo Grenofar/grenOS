@@ -71,6 +71,39 @@ pub fn ressemble(nom: &str, chemin: &str, indices: &[&str]) -> bool {
     })
 }
 
+/// Les processus d'un jeu (classe « steam_app_252950 » ou « jeu.exe »).
+///
+/// Le `_NET_WM_PID` d'un jeu Proton lancé par Heroic (Flatpak) est un pid du
+/// bac à sable. Mais Proton/umu donnent à tout le jeu `SteamAppId=252950` —
+/// le numéro de la classe : on le lit dans /proc/*/environ (nos processus
+/// seulement, les autres ne se lisent pas). Un jeu Wine sans Proton : son
+/// processus porte le nom du programme (« rocketleague.ex », 15 lettres).
+pub fn du_jeu(classe: &str) -> Vec<u32> {
+    let c = classe.to_lowercase();
+    if let Some(id) = c.strip_prefix("steam_app_").filter(|i| !i.is_empty() && i.chars().all(|x| x.is_ascii_digit())) {
+        return tous()
+            .iter()
+            .filter(|p| {
+                std::fs::read(format!("/proc/{}/environ", p.pid)).is_ok_and(|e| environ_du_jeu(&e, id))
+            })
+            .map(|p| p.pid)
+            .collect();
+    }
+    if c.ends_with(".exe") {
+        let court: String = c.chars().take(15).collect();
+        return tous().iter().filter(|p| p.nom.to_lowercase() == court).map(|p| p.pid).collect();
+    }
+    Vec::new()
+}
+
+/// Cet environnement (entrées séparées par des zéros) est-il celui du jeu `id` ?
+pub fn environ_du_jeu(environ: &[u8], id: &str) -> bool {
+    environ.split(|&b| b == 0).any(|e| {
+        let e = String::from_utf8_lossy(e);
+        ["SteamAppId=", "SteamGameId="].iter().any(|cle| e.strip_prefix(cle) == Some(id))
+    })
+}
+
 /// Tous les processus de la machine.
 pub fn tous() -> Vec<Processus> {
     let Ok(dossier) = std::fs::read_dir("/proc") else { return Vec::new() };
@@ -197,6 +230,15 @@ mod tests {
         let s = "1234 (Web Content (x)) S 1200 1234 1234 0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 98765 0 0";
         let pr = analyser_stat(s).unwrap();
         assert_eq!((pr.pid, pr.parent, pr.nom.as_str(), pr.debut), (1234, 1200, "Web Content (x)", 98765));
+    }
+
+    #[test]
+    fn le_jeu_se_reconnait_a_son_environnement() {
+        let e = b"HOME=/home/x\0SteamAppId=252950\0SteamGameId=252950\0";
+        assert!(environ_du_jeu(e, "252950"));
+        assert!(!environ_du_jeu(e, "25295"));
+        // Le lanceur de Heroic porte SteamAppId=0 : ce n'est pas le jeu.
+        assert!(!environ_du_jeu(b"SteamAppId=0\0SteamGameId=heroic-rocketleague\0", "252950"));
     }
 
     #[test]

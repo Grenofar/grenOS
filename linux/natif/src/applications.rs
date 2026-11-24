@@ -270,12 +270,78 @@ pub fn vrai_programme(nom: &str) -> String {
         .unwrap_or_else(|| nom.to_string())
 }
 
+// ---- Les jeux (24 novembre) ---------------------------------------------------
+//
+// Grenofar : « fais que Rocket League et les jeux s'affichent dans mon dock ».
+// Un jeu lancé par Proton (Heroic, Lutris, Steam) a pour classe
+// « steam_app_252950 » : la barre la rapprochait de Steam (« steam » y est
+// contenu) et montrait le nom et l'icône de Steam à la place du jeu — et la
+// flèche aurait fermé Steam au lieu du jeu. Un jeu lancé par Wine seul a pour
+// classe le nom de son programme (« rocketleague.exe »). Pour l'un comme pour
+// l'autre : le nom vient du titre de la fenêtre, l'icône de la fenêtre.
+
+/// Une fenêtre de jeu Windows (Proton, umu, Wine) ?
+pub fn est_un_jeu(classe: &str) -> bool {
+    let c = classe.to_lowercase();
+    c.starts_with("steam_app_") || c.ends_with(".exe")
+}
+
+/// « Rocket League (64-bit, DX11, Cooked) » → « Rocket League ». Sans titre :
+/// la classe, sans « .exe ».
+pub fn nom_de_jeu(titre: &str, classe: &str) -> String {
+    let mut nom = titre.trim();
+    if let Some(i) = nom.find(" (") {
+        if nom[..i].trim().chars().count() >= 3 {
+            nom = &nom[..i];
+        }
+    }
+    let nom: String = nom.chars().filter(|c| !matches!(c, '®' | '™' | '©')).collect();
+    let nom = nom.trim();
+    if !nom.is_empty() {
+        return nom.to_string();
+    }
+    let c = classe.trim_end_matches(".exe").trim_end_matches(".EXE");
+    if c.to_lowercase().starts_with("steam_app_") { "Jeu".to_string() } else { c.to_string() }
+}
+
+/// Le raccourci du jeu, s'il y en a un (Heroic, Lutris et Steam en créent
+/// à son nom) : « Rocket League® » pour la fenêtre « Rocket League (64-bit…) ».
+pub fn application_du_jeu<'a>(titre: &str, classe: &str, apps: &'a [Application]) -> Option<&'a Application> {
+    let voulu = plier(&nom_de_jeu(titre, classe));
+    if voulu.chars().count() < 3 {
+        return None;
+    }
+    apps.iter().find(|a| plier(&nom_de_jeu(&a.nom, "")) == voulu)
+}
+
+/// L'application d'une fenêtre : son jeu, ou l'application de sa classe.
+pub fn application_de_fenetre<'a>(groupe: &str, titre: &str, apps: &'a [Application]) -> Option<&'a Application> {
+    if est_un_jeu(groupe) {
+        application_du_jeu(titre, groupe, apps)
+    } else {
+        application_de(groupe, apps)
+    }
+}
+
+/// Le nom d'une tuile : celui de l'application, d'un jeu, ou la classe.
+pub fn nom_de_fenetre(groupe: &str, titre: &str, app: Option<&Application>) -> String {
+    match app {
+        Some(a) => a.nom.clone(),
+        None if est_un_jeu(groupe) => nom_de_jeu(titre, groupe),
+        None => groupe.to_string(),
+    }
+}
+
 /// Cette fenêtre (classe, titre) appartient-elle à cette commande ?
 /// Comparaison imparfaite mais identique à celle de grenos-shell.
 pub fn meme_application(groupe: &str, titre: &str, commande: &str, apps: &[Application]) -> bool {
     let programme = programme_de(commande);
     if programme.is_empty() {
         return false;
+    }
+    // Un jeu ne rejoint que SON raccourci épinglé, jamais Steam ou Heroic.
+    if est_un_jeu(groupe) {
+        return application_du_jeu(titre, groupe, apps).is_some_and(|a| a.commande == commande);
     }
     let groupe = groupe.to_lowercase();
     let titre = titre.to_lowercase();
@@ -290,6 +356,9 @@ pub fn meme_application(groupe: &str, titre: &str, commande: &str, apps: &[Appli
 
 /// L'application du système qui correspond à une classe de fenêtre.
 pub fn application_de<'a>(groupe: &str, apps: &'a [Application]) -> Option<&'a Application> {
+    if est_un_jeu(groupe) {
+        return None;
+    }
     let g = groupe.to_lowercase();
     apps.iter().find(|a| {
         let c = a.classe.to_lowercase();
@@ -312,6 +381,34 @@ mod tests {
         assert!(pages("formater").contains(&"partitions"));
         assert!(pages("sonic").is_empty());
         assert!(pages("p").is_empty());
+    }
+
+    #[test]
+    fn un_jeu_n_est_pas_steam() {
+        let app = |nom: &str, commande: &str, classe: &str| Application {
+            nom: nom.into(), note: String::new(), commande: commande.into(), icone: String::new(),
+            classe: classe.into(), fichier: PathBuf::new(), cache: false, terminal: false,
+        };
+        let apps = vec![
+            app("Steam", "steam", "steam"),
+            app("Heroic", "flatpak run com.heroicgameslauncher.hgl", "com.heroicgameslauncher.hgl"),
+            app("Rocket League®", "xdg-open heroic://launch/legendary/Sugar", ""),
+        ];
+        let titre = "Rocket League (64-bit, DX11, Cooked)";
+        assert!(est_un_jeu("steam_app_252950"));
+        assert!(est_un_jeu("RocketLeague.exe"));
+        assert!(!est_un_jeu("steam"));
+        assert!(application_de("steam_app_252950", &apps).is_none());
+        assert!(!meme_application("steam_app_252950", titre, "steam", &apps));
+        assert_eq!(nom_de_jeu(titre, "steam_app_252950"), "Rocket League");
+        assert_eq!(nom_de_jeu("", "eldenring.exe"), "eldenring");
+        let a = application_de_fenetre("steam_app_252950", titre, &apps).unwrap();
+        assert_eq!(a.nom, "Rocket League®");
+        assert!(meme_application("steam_app_252950", titre, "xdg-open heroic://launch/legendary/Sugar", &apps));
+        // Sans raccourci : le nom vient du titre.
+        assert_eq!(nom_de_fenetre("steam_app_1", "Hades II", None), "Hades II");
+        // Steam lui-même reste Steam.
+        assert_eq!(application_de("steam", &apps).map(|a| a.nom.as_str()), Some("Steam"));
     }
 
     #[test]

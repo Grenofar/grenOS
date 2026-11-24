@@ -1,0 +1,42 @@
+#!/bin/sh
+# Les manettes Xbox (24 novembre). Grenofar : « fais que les manettes Xbox
+# soient compatibles ».
+#
+# Câblées (USB) : le pilote `xpad` du noyau les prend, vibrations comprises,
+# et `steam-devices` (package-lists) les ouvre à un compte ordinaire. Rien à
+# faire de plus.
+#
+# Sans fil, en Bluetooth (Xbox One S, Series X|S, Elite 2) : le noyau les
+# comprend (hid-microsoft), mais les réglages par défaut de bluez les perdent.
+# La manette s'appaire, puis refuse de se reconnecter au rallumage — ou se
+# connecte et se déconnecte en boucle. Elle change d'adresse et ré-appaire en
+# « Just Works » : bluez doit l'accepter (JustWorksRepairing), et la suivre
+# (Privacy = device). FastConnectable écourte la reconnexion.
+#
+# main.conf n'a pas de dossier .d : on change les lignes en place (elles y
+# sont toutes, commentées, dans le fichier livré par bluez).
+#
+# Pas l'adaptateur sans fil Xbox (la clé USB) : il lui faut le pilote « xone »,
+# hors du noyau et de Debian, et un micrologiciel de Microsoft qu'on n'a pas le
+# droit de redistribuer. Une manette Series s'y passe très bien du Bluetooth.
+
+set -e
+
+CONF=/etc/bluetooth/main.conf
+[ -f "$CONF" ] || { echo "grenOS manettes : pas de $CONF, bluez absent ?"; exit 0; }
+
+regler() {
+    cle="$1"; valeur="$2"
+    if grep -qE "^[#[:space:]]*${cle}[[:space:]]*=" "$CONF"; then
+        # La première occurrence seulement : celle de [General].
+        sed -i -E "0,/^[#[:space:]]*${cle}[[:space:]]*=.*/s//${cle} = ${valeur}/" "$CONF"
+    else
+        sed -i -E "/^\[General\]/a ${cle} = ${valeur}" "$CONF"
+    fi
+}
+
+regler Privacy device
+regler JustWorksRepairing always
+regler FastConnectable true
+
+echo "grenOS manettes : $(grep -E '^(Privacy|JustWorksRepairing|FastConnectable) =' "$CONF" | tr '\n' ' ')"
