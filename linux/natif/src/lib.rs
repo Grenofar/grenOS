@@ -6,6 +6,7 @@ pub mod applications;
 pub mod batterie;
 pub mod dispositions;
 pub mod historique;
+pub mod processus;
 pub mod thermique;
 pub mod fenetres;
 pub mod theme;

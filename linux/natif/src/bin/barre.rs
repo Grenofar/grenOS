@@ -22,6 +22,7 @@ use gtk::{gdk, gdk_pixbuf, glib, pango};
 
 use natif::applications::{self as apps, Application, Epingle};
 use natif::fenetres::{Ecran, Fenetre};
+use natif::processus;
 use natif::{classe, dire, image_de, lancer, poser_infobulle};
 
 const HAUTEUR: i32 = 52;
@@ -1284,15 +1285,45 @@ impl Barre {
                 ajouter(&sous, &texte, move || if let Some(e) = &b.ecran { e.activer(xid, temps()) });
             }
             sous.append(&gtk::SeparatorMenuItem::new());
-            let (b, xids) = (self.clone(), fenetres.iter().map(|f| f.xid).collect::<Vec<_>>());
+            // « Fermer » quitte l'application entière (24 novembre) : ses
+            // fenêtres d'abord, puis tout son arbre de processus — sinon
+            // Steam, Discord… restaient dans leur coin (natif::processus).
+            let xids = fenetres.iter().map(|f| f.xid).collect::<Vec<_>>();
+            let flatpak = app.map(identifiant_flatpak).unwrap_or_default();
+            let programme = app.map(|a| apps::programme_de(&a.commande)).unwrap_or_default();
+            // Une Flatpak : `flatpak kill` suffit, et le pid de ses fenêtres
+            // est celui du bac à sable — on ne s'en sert pas.
+            let mut pids: Vec<u32> = match (&self.ecran, flatpak.is_empty()) {
+                (Some(e), true) => xids
+                    .iter()
+                    .filter_map(|x| e.pid(*x))
+                    .filter(|p| processus::est_de(*p, &[groupe.as_str(), programme.as_str()]))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            pids.sort();
+            pids.dedup();
+            let (b, p, fp, prog) = (self.clone(), pids.clone(), flatpak.clone(), programme.clone());
             ajouter(&sous, "Fermer", move || {
                 if let Some(e) = &b.ecran {
                     xids.iter().for_each(|x| e.fermer(*x, temps()));
                 }
+                if p.is_empty() && fp.is_empty() {
+                    // Aucune fenêtre ne dit son processus : par son nom.
+                    let prog = prog.clone();
+                    glib::timeout_add_local_once(Duration::from_millis(1500), move || forcer_arret(&prog, ""));
+                } else {
+                    processus::quitter(p.clone(), fp.clone(), Duration::from_millis(1500), false);
+                }
             });
-            if let Some(programme) = app.map(|a| apps::programme_de(&a.commande)).filter(|p| !p.is_empty()) {
-                let flatpak = app.map(identifiant_flatpak).unwrap_or_default();
-                ajouter(&sous, "Forcer l'arrêt", move || forcer_arret(&programme, &flatpak));
+            if !pids.is_empty() || !flatpak.is_empty() || !programme.is_empty() {
+                ajouter(&sous, "Forcer l'arrêt", move || {
+                    if pids.is_empty() && flatpak.is_empty() {
+                        forcer_arret(&programme, "");
+                    } else {
+                        processus::quitter(pids.clone(), flatpak.clone(), Duration::ZERO, true);
+                    }
+                });
             }
             menu.append(&entree(&nom_affiche(&etiquette), &icone, Some(&sous)));
             compte += 1;

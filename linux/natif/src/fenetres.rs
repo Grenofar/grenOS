@@ -51,7 +51,7 @@ const NOMS: &[&str] = &[
     "_NET_WM_STRUT", "_NET_WM_STRUT_PARTIAL",
     "_NET_CURRENT_DESKTOP", "_NET_WM_DESKTOP",
     "_NET_FRAME_EXTENTS", "_NET_MOVERESIZE_WINDOW", "_NET_WM_STATE_MAXIMIZED_VERT",
-    "_NET_WM_STATE_MAXIMIZED_HORZ",
+    "_NET_WM_STATE_MAXIMIZED_HORZ", "_NET_WM_PID",
 ];
 
 /// Une fenêtre a-t-elle sa tuile sur ce bureau ? Celles « de tous les
@@ -210,6 +210,11 @@ impl Ecran {
     /// Réduire : WM_CHANGE_STATE IconicState (ICCCM 4.1.4).
     pub fn reduire(&self, xid: u32) {
         self.message(xid, self.a("WM_CHANGE_STATE"), [3, 0, 0, 0, 0]);
+    }
+
+    /// Le processus de la fenêtre (`_NET_WM_PID`), s'il le dit.
+    pub fn pid(&self, xid: u32) -> Option<u32> {
+        self.propriete32(xid, self.a("_NET_WM_PID"), AtomEnum::CARDINAL.into(), 1).first().copied().filter(|&p| p > 1)
     }
 
     pub fn fermer(&self, xid: u32, temps: u32) {

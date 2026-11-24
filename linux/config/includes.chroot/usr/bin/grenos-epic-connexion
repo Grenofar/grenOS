@@ -13,8 +13,11 @@ n'importe quel navigateur. Donc :
   1. la page de connexion d'Epic s'ouvre dans le navigateur principal — là,
      « Se connecter avec Google » propose les comptes déjà enregistrés ;
   2. Epic affiche ensuite une petite page de texte qui contient
-     "authorizationCode" : on la copie (Ctrl+A, Ctrl+C), cette fenêtre la
-     reconnaît toute seule dans le presse-papier ;
+     "authorizationCode". Rien à copier (24 novembre, Grenofar : « il faut
+     copier etc, règle ça ») : grenOS reconnaît l'onglet à son titre
+     (« …/id/api/redirect… »), le copie lui-même (xdotool : Ctrl+A,
+     Ctrl+C), lit le code dans le presse-papier, puis ferme l'onglet.
+     Copier à la main ou coller dans la fenêtre reste possible ;
   3. grenOS la donne au legendary de Heroic, et relance Heroic : connecté.
 
 Le code ne quitte jamais la machine : il va du presse-papier à legendary,
@@ -42,7 +45,13 @@ CLIENT = "34a02cf8f4414e29b15921876da36f9a"
 PAGE = ("https://www.epicgames.com/id/login?redirectUrl="
         "https%3A%2F%2Fwww.epicgames.com%2Fid%2Fapi%2Fredirect%3FclientId%3D" + CLIENT
         + "%26responseType%3Dcode")
-CODE = re.compile(r'"authorizationCode"\s*:\s*"([0-9a-f]{32})"')
+# Le JSON brut (Chromium, Opera) ou la vue de Firefox, qui copie
+# « authorizationCode	"…" » sans guillemets autour de la clé.
+CODE = re.compile(r'authorizationCode[^0-9a-f]{0,8}([0-9a-f]{32})')
+# Le titre de l'onglet de cette page : son adresse, faute de <title>.
+TITRE_PAGE = "id/api/redirect"
+# Où HEROIC range le compte Epic, pas le dossier de legendary seul.
+DOSSIER = os.path.expanduser("~/.var/app/%s/config/heroic/legendaryConfig/legendary" % HEROIC)
 CODE_SEUL = re.compile(r"^\s*([0-9a-f]{32})\s*$")
 
 
@@ -81,19 +90,51 @@ def connecter(code):
     """Donne le code au legendary de Heroic. Rendu : "" ou la raison du refus."""
     r = subprocess.run(
         ["flatpak", "run", "--command=" + LEGENDARY,
-         # Le dossier où HEROIC range le compte Epic, pas celui de legendary seul.
-         "--env=LEGENDARY_CONFIG_PATH=" + os.path.expanduser(
-             "~/.var/app/%s/config/heroic/legendaryConfig/legendary" % HEROIC),
+         "--env=LEGENDARY_CONFIG_PATH=" + DOSSIER,
          HEROIC, "auth", "--code", code],
         capture_output=True, text=True, timeout=120)
     sortie = (r.stdout + r.stderr)
     if r.returncode == 0 and "Successfully logged in" in sortie:
         nom = re.search(r'Successfully logged in as "([^"]+)"', sortie)
         return "", (nom.group(1) if nom else "")
+    # Déjà connecté (legendary garde son compte) : ce n'est pas un échec —
+    # avant, cette phrase s'affichait comme une erreur.
+    if "credentials are still valid" in sortie:
+        return "", compte_enregistre()
     if "expired" in sortie.lower() or "invalid" in sortie.lower():
         return "Ce code a déjà servi ou a expiré (il ne vaut que quelques minutes) : rouvre la page et recopie-la.", ""
     derniere = [l for l in sortie.splitlines() if l.strip()]
     return (derniere[-1] if derniere else "La connexion a échoué."), ""
+
+
+def compte_enregistre():
+    """Le nom du compte Epic que legendary garde déjà, ou ""."""
+    try:
+        with open(os.path.join(DOSSIER, "user.json"), encoding="utf-8") as f:
+            return json.load(f).get("displayName", "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def onglets_du_code():
+    """Les fenêtres du navigateur qui montrent la page du code."""
+    r = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", TITRE_PAGE],
+                       capture_output=True, text=True)
+    return r.stdout.split()
+
+
+def copier_onglet(xid):
+    """Ctrl+A, Ctrl+C dans cette fenêtre : la page arrive au presse-papier."""
+    subprocess.run(["xdotool", "windowactivate", "--sync", xid,
+                    "key", "--clearmodifiers", "ctrl+a", "ctrl+c"], capture_output=True, timeout=10)
+
+
+def fermer_onglet(xid):
+    """Ferme l'onglet du code, s'il est toujours celui qu'on voit."""
+    titre = subprocess.run(["xdotool", "getwindowname", xid], capture_output=True, text=True).stdout
+    if TITRE_PAGE in titre:
+        subprocess.run(["xdotool", "windowactivate", "--sync", xid,
+                        "key", "--clearmodifiers", "ctrl+w"], capture_output=True, timeout=10)
 
 
 def relancer_heroic():
@@ -128,9 +169,9 @@ def fenetre(fermer_popup=None):
     etapes.set_markup(
         "1. La page d'Epic Games s'est ouverte dans ton <b>navigateur principal</b> : "
         "connecte-toi (« Se connecter avec Google » y propose tes comptes enregistrés).\n"
-        "2. Epic affiche ensuite une page de texte avec <tt>authorizationCode</tt> : "
-        "fais <b>Ctrl+A</b> puis <b>Ctrl+C</b>.\n"
-        "3. C'est tout : grenOS le voit et connecte Heroic.")
+        "2. C'est tout : quand Epic affiche sa page de texte (<tt>authorizationCode</tt>), "
+        "grenOS la lit lui-même, ferme l'onglet et connecte Heroic.\n"
+        "Si rien ne se passe : sur cette page, <b>Ctrl+A</b> puis <b>Ctrl+C</b>.")
     boite.pack_start(etapes, False, False, 0)
 
     champ = Gtk.Entry(placeholder_text="…ou colle ici le texte de la page (Ctrl+V)")
@@ -142,20 +183,25 @@ def fenetre(fermer_popup=None):
 
     rangee = Gtk.Box(spacing=8)
     rouvrir = Gtk.Button(label="Rouvrir la page")
-    rouvrir.connect("clicked", lambda *_: ouvrir_page())
+    def rouvrir_page(*_):
+        vu["essais"].clear()  # le nouvel onglet sera relu
+        ouvrir_page()
+
+    rouvrir.connect("clicked", rouvrir_page)
     fermer = Gtk.Button(label="Fermer")
     fermer.connect("clicked", lambda *_: f.destroy())
     rangee.pack_start(rouvrir, False, False, 0)
     rangee.pack_end(fermer, False, False, 0)
     boite.pack_start(rangee, False, False, 0)
 
-    vu = {"code": "", "fini": False}
+    vu = {"code": "", "fini": False, "onglet": "", "essais": {}, "en_cours": False}
 
     def essayer(texte):
         code = code_de(texte)
         if not code or code == vu["code"] or vu["fini"]:
             return
         vu["code"] = code
+        vu["en_cours"] = True
         etat.set_text("Code reçu, connexion de Heroic à Epic…")
         dire("code d'autorisation recu, connexion")
 
@@ -167,11 +213,14 @@ def fenetre(fermer_popup=None):
         threading.Thread(target=faire, daemon=True).start()
 
     def fini(souci, nom):
+        vu["en_cours"] = False
         if souci:
             etat.set_text(souci)
             dire("refus : " + souci)
             return False
         vu["fini"] = True
+        if vu["onglet"]:
+            fermer_onglet(vu["onglet"])
         # Le code n'a plus de valeur, mais on ne le laisse pas traîner.
         Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text("", -1)
         dire("connecte" + (" (" + nom + ")" if nom else ""))
@@ -190,7 +239,27 @@ def fenetre(fermer_popup=None):
         presse.request_text(lambda _p, t: essayer(t or ""))
         return True
 
+    def chercher_onglet():
+        """La page du code est-elle ouverte ? Alors on la copie nous-mêmes —
+        trois fois au plus par fenêtre (une page encore en chargement)."""
+        if vu["fini"]:
+            return False
+        if vu["en_cours"]:
+            return True
+        for xid in onglets_du_code():
+            if vu["essais"].get(xid, 0) >= 3:
+                continue
+            vu["essais"][xid] = vu["essais"].get(xid, 0) + 1
+            vu["onglet"] = xid
+            etat.set_text("Page d'Epic trouvée, lecture du code…")
+            dire("page du code vue dans le navigateur, copie automatique")
+            copier_onglet(xid)
+            f.present()
+            break
+        return True
+
     GLib.timeout_add(800, regarder)
+    GLib.timeout_add(1500, chercher_onglet)
     champ.connect("changed", lambda c: essayer(c.get_text()))
     f.show_all()
     f.present()
