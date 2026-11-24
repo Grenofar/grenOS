@@ -35,7 +35,11 @@
     <name>grenOS</name>
     <titleLayout>NLIMC</titleLayout>
     <keepBorder>yes</keepBorder>
-    <animateIconify>yes</animateIconify>
+    <!-- PAS D'ANIMATION A LA REDUCTION (24 novembre). Grenofar : « l'animation
+         quand on appuie sur le - est buggee, fais pas d'animation ». Celle
+         d'openbox dessine des cadres en fil de fer par-dessus l'ecran, sans
+         compositeur : ils restaient visibles ou clignotaient. -->
+    <animateIconify>no</animateIconify>
     <font place="ActiveWindow">
       <name>Inter</name>
       <size>9</size>

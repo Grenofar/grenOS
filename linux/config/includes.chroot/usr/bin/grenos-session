@@ -307,6 +307,13 @@ if [ -x /usr/lib/grenos/grenos-preparer-materiel ]; then
     /usr/lib/grenos/grenos-preparer-materiel &
 fi
 
+# LA CONNEXION D'EPIC DANS LE NAVIGATEUR PRINCIPAL (24 novembre) : quand
+# Heroic ouvre sa fenêtre de connexion (vierge, sans les comptes Google
+# enregistrés), grenOS propose de le faire dans le navigateur principal.
+if [ -x /usr/bin/grenos-epic-connexion ] && command -v xdotool >/dev/null 2>&1; then
+    grenos-veilleur nice -n 10 grenos-epic-connexion --guetter &
+fi
+
 # L'historique du presse-papier (Win+V, todo G31) : il doit écouter dès le
 # début de la session, sinon les premières copies manqueraient. En mémoire
 # seulement — rien de ce qui est copié n'est écrit sur le disque.

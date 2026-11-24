@@ -122,7 +122,7 @@
     if (j.source === "heroic") {
       if (!vue.heroic) return boutonFlatpak("com.heroicgameslauncher.hgl", "Installer Heroic d'abord");
       return el("button.bouton.principal.petit", { onclick: async () => {
-        try { await api.appeler("lance_ouvrir", { plateforme: "heroic" }); toast("Dans Heroic : connecte ton compte Epic, puis installe le jeu. Il apparaîtra ici."); }
+        try { await api.appeler("lance_ouvrir", { plateforme: "heroic" }); toast("Dans Heroic : connecte ton compte Epic (grenOS propose ton navigateur principal), puis installe le jeu. Il apparaîtra ici."); }
         catch (e) { toast(String(e)); }
       } }, svg("paquet"), "Obtenir dans Heroic");
     }
