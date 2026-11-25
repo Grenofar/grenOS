@@ -42,13 +42,11 @@ curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$T/pilote.cab" "$UR
 [ "$(sha256sum "$T/pilote.cab" | cut -d' ' -f1)" = "$SOMME_CAB" ] \
     || rate "l'archive téléchargée n'est pas celle attendue — refus"
 
-# cabextract (grenos-systeme le dépend), ou 7z, ou bsdtar : le premier là.
+# cabextract (grenos-systeme le dépend), ou 7z (7zip, dans l'image aussi).
 if command -v cabextract >/dev/null; then
     cabextract -q -d "$T" -F FW_ACC_00U.bin "$T/pilote.cab" >/dev/null
 elif command -v 7z >/dev/null; then
     7z e -y -o"$T" "$T/pilote.cab" FW_ACC_00U.bin >/dev/null
-elif command -v bsdtar >/dev/null; then
-    bsdtar -xf "$T/pilote.cab" -C "$T" FW_ACC_00U.bin
 else
     rate "il faut cabextract pour ouvrir l'archive (sudo apt install cabextract)"
 fi
