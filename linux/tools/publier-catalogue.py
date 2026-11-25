@@ -65,8 +65,9 @@ RETIRES = {
     "inxi", "lm-sensors", "mc", "ncdu", "rsync", "tree",
     # 25 novembre, Grenofar : « enlève Opera et Opera GX de GrenPlace ». En
     # Flatpak, avec le compositeur, ils se déplacent à 3 images/s sur sa
-    # RTX 5060, quoi qu'on règle (7139c3b).
-    "opera", "opera-gx",
+    # RTX 5060, quoi qu'on règle (7139c3b). Opera GX est revenu le jour même,
+    # depuis le dépôt d'Opera (source apt, opera-gx-stable) : seul Opera part.
+    "opera",
 }
 
 

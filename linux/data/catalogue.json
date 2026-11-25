@@ -487,6 +487,17 @@
       "site": "https://claude.com/download"
     },
     {
+      "slug": "opera-gx",
+      "nom": "Opera GX",
+      "rayon": "Internet",
+      "editeur": "Opera",
+      "description": "Le navigateur pensé pour les joueurs : limites de processeur, de mémoire et de réseau, Discord et Twitch dans la barre latérale. La version d'Opera, depuis son propre dépôt.",
+      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.opera.opera-gx.png",
+      "source": "apt",
+      "identifiant": "opera-gx-stable",
+      "site": "https://www.opera.com/gx"
+    },
+    {
       "slug": "jan",
       "nom": "Jan",
       "rayon": "Intelligence artificielle",
