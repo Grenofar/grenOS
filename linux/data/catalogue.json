@@ -465,28 +465,6 @@
       "site": "https://apps.gnome.org/Weather"
     },
     {
-      "slug": "opera",
-      "nom": "Opera",
-      "rayon": "Internet",
-      "editeur": "Opera",
-      "description": "Un navigateur avec VPN intégré, bloqueur de publicités et barre latérale.",
-      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.opera.Opera.png",
-      "source": "flatpak",
-      "identifiant": "com.opera.Opera",
-      "site": "https://www.opera.com"
-    },
-    {
-      "slug": "opera-gx",
-      "nom": "Opera GX",
-      "rayon": "Internet",
-      "editeur": "Opera",
-      "description": "Le navigateur pensé pour les joueurs : limites de processeur, de mémoire et de réseau, Discord et Twitch dans la barre latérale.",
-      "logo": "https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.opera.opera-gx.png",
-      "source": "flatpak",
-      "identifiant": "com.opera.opera-gx",
-      "site": "https://www.opera.com/gx"
-    },
-    {
       "slug": "alpaca",
       "nom": "Alpaca",
       "rayon": "Intelligence artificielle",
