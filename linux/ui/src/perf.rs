@@ -99,6 +99,83 @@ pub struct Instantane {
     charge: String,
     groupes: Vec<Groupe>,
     mode_jeu: bool,
+    /// La carte graphique (25 novembre) : None si on ne sait pas la lire.
+    carte: Option<Carte>,
+}
+
+/// LA CARTE GRAPHIQUE DANS LE GESTIONNAIRE (25 novembre). Grenofar :
+/// « ajoute la quantité de VRAM et de 3D utilisée dans Ctrl+Maj+Échap »,
+/// comme l'onglet Performance de Windows. « 3D » : l'occupation du moteur
+/// graphique, en pourcentage ; « VRAM » : la mémoire de la carte.
+///
+/// NVIDIA (pilote officiel) : `nvidia-smi`, 40 ms sur une RTX 5060, sous
+/// `timeout` — un pilote bloqué ne doit pas figer la fenêtre. AMD : le
+/// noyau le dit dans /sys (gpu_busy_percent, mem_info_vram_*). Ailleurs
+/// (Intel, `nouveau`), aucun chiffre honnête n'est disponible : rien ne
+/// s'affiche plutôt qu'un zéro faux.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Carte {
+    nom: String,
+    trois_d: f64,
+    vram_utilisee_go: f64,
+    vram_totale_go: f64,
+}
+
+fn carte_graphique() -> Option<Carte> {
+    carte_nvidia().or_else(carte_amd)
+}
+
+fn carte_nvidia() -> Option<Carte> {
+    let sortie = Command::new("timeout")
+        .args(["2", "nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"])
+        .output()
+        .ok()?;
+    if !sortie.status.success() {
+        return None;
+    }
+    lire_nvidia(&String::from_utf8_lossy(&sortie.stdout))
+}
+
+/// « NVIDIA GeForce RTX 5060, 12, 2053, 8151 » : nom, 3D en %, VRAM utilisée
+/// et totale en Mio. La première carte seulement.
+fn lire_nvidia(texte: &str) -> Option<Carte> {
+    let ligne = texte.lines().next()?;
+    let champs: Vec<&str> = ligne.split(',').map(str::trim).collect();
+    if champs.len() < 4 {
+        return None;
+    }
+    let nombre = |t: &str| t.parse::<f64>().ok();
+    Some(Carte {
+        nom: champs[0].to_string(),
+        trois_d: nombre(champs[1])?,
+        vram_utilisee_go: nombre(champs[2])? / 1024.0,
+        vram_totale_go: nombre(champs[3])? / 1024.0,
+    })
+}
+
+fn carte_amd() -> Option<Carte> {
+    let mut cartes: Vec<PathBuf> = fs::read_dir("/sys/class/drm").ok()?.flatten().map(|e| e.path()).collect();
+    cartes.sort();
+    for carte in cartes {
+        let nom = carte.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        // « card0 », pas « card0-DP-1 » (un connecteur).
+        if !nom.starts_with("card") || nom.contains('-') {
+            continue;
+        }
+        let d = carte.join("device");
+        let lire_nombre = |f: &str| fs::read_to_string(d.join(f)).ok()?.trim().parse::<f64>().ok();
+        let (Some(occupe), Some(utilisee), Some(totale)) =
+            (lire_nombre("gpu_busy_percent"), lire_nombre("mem_info_vram_used"), lire_nombre("mem_info_vram_total"))
+        else {
+            continue;
+        };
+        if totale <= 0.0 {
+            continue;
+        }
+        let go = 1024.0 * 1024.0 * 1024.0;
+        return Some(Carte { nom: "Carte graphique AMD".into(), trois_d: occupe, vram_utilisee_go: utilisee / go, vram_totale_go: totale / go });
+    }
+    None
 }
 
 /// Un processus de grenOS lui-même : ni fermé, ni ralenti, ni montré dans le
@@ -295,6 +372,7 @@ pub async fn perf_instantane(etat: tauri::State<'_, Etat>) -> Result<Instantane,
         charge: lire("/proc/loadavg").split_whitespace().take(3).collect::<Vec<_>>().join(" "),
         groupes,
         mode_jeu: chemin_mode_jeu().exists(),
+        carte: carte_graphique(),
     })
 }
 
@@ -532,4 +610,22 @@ pub async fn perf_mode_jeu(app: tauri::AppHandle, actif: bool, fermer: Vec<Strin
         ralentis: a_ralentir.len(),
         fermes,
     })
+}
+
+#[cfg(test)]
+mod essais_carte {
+    use super::*;
+
+    #[test]
+    fn nvidia_smi_se_lit() {
+        let c = lire_nvidia("NVIDIA GeForce RTX 5060, 12, 2053, 8151\n").unwrap();
+        assert_eq!(c.nom, "NVIDIA GeForce RTX 5060");
+        assert_eq!(c.trois_d, 12.0);
+        assert!((c.vram_utilisee_go - 2.0048).abs() < 0.001);
+        assert!((c.vram_totale_go - 7.9600).abs() < 0.001);
+        // Une carte qui ne sait pas dire son occupation (« [N/A] ») : rien.
+        assert_eq!(lire_nvidia("NVIDIA Quadro, [N/A], 10, 100"), None);
+        assert_eq!(lire_nvidia(""), None);
+        assert_eq!(lire_nvidia("NVIDIA, 1, 2"), None);
+    }
 }

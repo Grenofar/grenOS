@@ -16,7 +16,7 @@
   if (!ONGLETS.some(([c]) => c === onglet)) onglet = "processus";
   let dernier = null;
   const POINTS = 80;                                   // 80 × 1,5 s = 2 minutes
-  const histo = { cpu: [], ram: [] };
+  const histo = { cpu: [], ram: [], gpu: [] };
   let filtre = "";
   let tri = { cle: "cpu", sens: -1 };
   let choisi = null;
@@ -43,6 +43,19 @@
     D.mem.valeur.textContent = `${Math.round(part)} %`;
     D.mem.barre.style.width = `${Math.min(100, part)}%`;
     D.mem.detail.textContent = `${nombre(utilisee)} Go sur ${nombre(s.memoire_totale_go)} Go`;
+    // La carte graphique (25 novembre) : la 3D et la VRAM, comme Windows.
+    // Pas de carte lisible (Intel, pilote libre) : les jauges disparaissent.
+    const g = s.carte;
+    D.gpu.bloc.hidden = D.vram.bloc.hidden = !g;
+    if (g) {
+      D.gpu.valeur.textContent = `${Math.round(g.trois_d)} %`;
+      D.gpu.barre.style.width = `${Math.min(100, g.trois_d)}%`;
+      D.gpu.detail.textContent = g.nom;
+      const partVram = g.vram_utilisee_go / Math.max(0.01, g.vram_totale_go) * 100;
+      D.vram.valeur.textContent = `${nombre(g.vram_utilisee_go)} Go`;
+      D.vram.barre.style.width = `${Math.min(100, partVram)}%`;
+      D.vram.detail.textContent = `sur ${nombre(g.vram_totale_go)} Go · ${Math.round(partVram)} %`;
+    }
     D.jeu.classList.toggle("actif", s.mode_jeu);
     D.jeu.replaceChildren(svg("manette"), s.mode_jeu ? "Mode jeu actif" : "Mode jeu");
   }
@@ -140,10 +153,14 @@
   function performance(s) {
     D.courbeCpu = el("canvas.tc-courbe", { width: 900, height: 180, "aria-label": "Processeur sur deux minutes" });
     D.courbeRam = el("canvas.tc-courbe", { width: 900, height: 180, "aria-label": "Mémoire sur deux minutes" });
+    D.courbeGpu = el("canvas.tc-courbe", { width: 900, height: 180, "aria-label": "Carte graphique (3D) sur deux minutes" });
     D.tuilesPerf = el("section.tc-tuiles");
     const corps = [D.tuilesPerf,
       el("div.carte.verre.tc-graphe", el("div.tc-graphe-tete", el("b", "Processeur"), el("span.note", "deux dernières minutes")), D.courbeCpu),
       el("div.carte.verre.tc-graphe", el("div.tc-graphe-tete", el("b", "Mémoire"), el("span.note", "deux dernières minutes")), D.courbeRam)];
+    if (s.carte) {
+      corps.push(el("div.carte.verre.tc-graphe", el("div.tc-graphe-tete", el("b", "Carte graphique (3D)"), el("span.note", s.carte.nom)), D.courbeGpu));
+    }
     majPerformance(s);
     return corps;
   }
@@ -159,8 +176,16 @@
       tuile("Mémoire", `${nombre(utilisee)} Go`, `sur ${nombre(s.memoire_totale_go)} Go · ${nombre(s.memoire_cache_go)} Go de cache`, partRam, partRam > 0.88),
       tuile("Échange", s.echange_total_go > 0 ? `${nombre(s.echange_utilise_go)} Go` : "aucun", s.echange_total_go > 0 ? `sur ${nombre(s.echange_total_go)} Go` : "pas de mémoire d'échange", echange, echange > 0.5),
       tuile("Applications", String(applis), `${s.groupes.reduce((n, g) => n + g.nombre, 0)} processus en tout`, 0, false));
+    const g = s.carte;
+    if (g) {
+      const partVram = g.vram_utilisee_go / Math.max(0.01, g.vram_totale_go);
+      D.tuilesPerf.append(
+        tuile("3D", `${Math.round(g.trois_d)} %`, g.nom, g.trois_d / 100, g.trois_d > 90),
+        tuile("VRAM", `${nombre(g.vram_utilisee_go)} Go`, `sur ${nombre(g.vram_totale_go)} Go de mémoire vidéo`, partVram, partVram > 0.9));
+    }
     courbe(D.courbeCpu, histo.cpu, "--accent");
     courbe(D.courbeRam, histo.ram, "--reussi");
+    if (g) courbe(D.courbeGpu, histo.gpu, "--alerte");
   }
 
   function courbe(toile, valeurs, couleur) {
@@ -310,6 +335,7 @@
     try { dernier = await api.appeler("perf_instantane"); } catch (e) { return; }
     histo.cpu.push(dernier.cpu);
     histo.ram.push((1 - dernier.memoire_dispo_go / Math.max(0.01, dernier.memoire_totale_go)) * 100);
+    histo.gpu.push(dernier.carte ? dernier.carte.trois_d : 0);
     for (const h of Object.values(histo)) while (h.length > POINTS) h.shift();
     tete(dernier);
     if (onglet === "processus") remplirTable();
@@ -328,6 +354,9 @@
     document.body.append(aurore());
     D.cpu = jauge("Processeur");
     D.mem = jauge("Mémoire");
+    D.gpu = jauge("3D");
+    D.vram = jauge("VRAM");
+    D.gpu.bloc.hidden = D.vram.bloc.hidden = true;
     D.jeu = el("button.bouton.mode-jeu", { onclick: () => { onglet = "jeu"; montrer(); } });
     D.onglets = el("nav.onglets", { role: "tablist" });
     for (const [cle, titre, icone] of ONGLETS) {
@@ -335,7 +364,7 @@
     }
     D.corps = el("section.tc-corps");
     document.body.append(el("div.page-taches",
-      el("header.tc-tete.carte.verre", D.cpu.bloc, D.mem.bloc, D.jeu),
+      el("header.tc-tete.carte.verre", D.cpu.bloc, D.mem.bloc, D.gpu.bloc, D.vram.bloc, D.jeu),
       D.onglets, D.corps));
     await api.appeler("perf_instantane");          // la base des pourcentages
     // LA PREUVE DE LA CI (23 novembre) : ci-demarrage.sh ouvre cette fenêtre
