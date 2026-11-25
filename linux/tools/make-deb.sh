@@ -365,6 +365,8 @@ install -m 0644 "$DEDANS/etc/polkit-1/rules.d/49-grenos-administration.rules" \
 install -d "$BUILD/etc/sysctl.d" "$BUILD/etc/udev/rules.d" "$BUILD/etc/xdg/dunst/dunstrc.d"
 install -m 0644 "$DEDANS/etc/sysctl.d/50-grenos-durcissement.conf" "$BUILD/etc/sysctl.d/"
 install -m 0644 "$DEDANS/etc/udev/rules.d/90-grenos-branchement.rules" "$BUILD/etc/udev/rules.d/"
+# L'adaptateur sans fil Xbox (25 novembre) : branché, son pilote démarre.
+install -m 0644 "$DEDANS/etc/udev/rules.d/71-grenos-adaptateur-xbox.rules" "$BUILD/etc/udev/rules.d/"
 install -m 0644 "$DEDANS/etc/xdg/dunst/dunstrc.d/50-grenos.conf" "$BUILD/etc/xdg/dunst/dunstrc.d/"
 install -m 0644 "$DEDANS/usr/share/grenos/flathub.flatpakrepo" "$BUILD/usr/share/grenos/"
 # Le crochet de veille (J9) : systemd l'appelle avant et après chaque veille.

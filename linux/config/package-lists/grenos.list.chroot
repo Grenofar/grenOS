@@ -693,6 +693,9 @@ btrfsmaintenance
 ## Xbox, PlayStation, Switch et Steam à un compte ordinaire. Sans elles, un
 ## jeu ne voit la manette qu'en root. Un paquet de règles, rien qui tourne.
 steam-devices
+## L'adaptateur sans fil Xbox (25 novembre) : son firmware arrive dans une
+## archive .cab de Microsoft (grenos-adaptateur-xbox-firmware).
+cabextract
 ## B6 chiffrer un fichier (explorateur › clic droit › Chiffrer…) : GnuPG,
 ## AES-256 avec une phrase de passe. Lisible ailleurs, Windows compris
 ## (Gpg4win) — un format à nous ne se rouvrirait que chez nous.

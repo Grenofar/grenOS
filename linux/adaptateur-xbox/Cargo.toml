@@ -1,0 +1,25 @@
+[package]
+name = "grenos-adaptateur-xbox"
+version = "0.1.0"
+edition = "2021"
+description = "Le pilote de l'adaptateur sans fil Xbox (clé USB 045e:02fe), en programme ordinaire : rien à signer pour le Secure Boot"
+# GPL : c'est une réécriture de xow (Medusalix), qui l'est. Le reste de grenOS
+# est en MIT ; ce programme est à part, dans sa propre caisse, pour que la
+# frontière soit nette (LICENSE à côté).
+license = "GPL-2.0-or-later"
+
+# AUCUNE DÉPENDANCE (25 novembre). L'USB passe par usbfs (/dev/bus/usb) et la
+# manette virtuelle par uinput : deux interfaces du noyau, quelques ioctl. Pas
+# de libusb, pas de caisse à télécharger : ce qui tourne en permanence reste
+# petit, et la construction ne dépend de rien d'extérieur.
+
+[[bin]]
+name = "grenos-adaptateur-xbox"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

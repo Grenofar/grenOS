@@ -30,8 +30,9 @@ docker run --rm -v "$PWD:/work" -w /work \
         libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev \
         build-essential pkg-config >/dev/null
       # grenos-ui (Tauri), grenos-coins (x11rb, le démon qui arrondit les
-      # fenêtres d openbox), linux/natif (gtk-rs : barre, bureau, son).
-      for caisse in ui coins natif; do
+      # fenêtres d openbox), linux/natif (gtk-rs : barre, bureau, son),
+      # linux/adaptateur-xbox (le pilote de la clé sans fil Xbox, GPL).
+      for caisse in ui coins natif adaptateur-xbox; do
         cd /work/linux/$caisse
         [ "$ESSAIS" = 1 ] && cargo test --release --locked
         cargo build --release --locked
@@ -48,12 +49,17 @@ for prog in grenos-shell-natif grenos-bureau-natif grenos-son-natif grenos-press
     sudo install -m 0755 "linux/natif/target/release/$prog" \
         "linux/config/includes.chroot/usr/lib/grenos/$prog"
 done
+# Le pilote de l'adaptateur sans fil Xbox (25 novembre) : lancé par udev.
+sudo install -m 0755 linux/adaptateur-xbox/target/release/grenos-adaptateur-xbox \
+    linux/config/includes.chroot/usr/lib/grenos/grenos-adaptateur-xbox
 ls -l linux/config/includes.chroot/usr/bin/grenos-ui \
     linux/config/includes.chroot/usr/bin/grenos-coins \
-    linux/config/includes.chroot/usr/lib/grenos/grenos-*-natif
+    linux/config/includes.chroot/usr/lib/grenos/grenos-*-natif \
+    linux/config/includes.chroot/usr/lib/grenos/grenos-adaptateur-xbox
 sha256sum linux/config/includes.chroot/usr/bin/grenos-ui \
     linux/config/includes.chroot/usr/bin/grenos-coins \
-    linux/config/includes.chroot/usr/lib/grenos/grenos-*-natif
+    linux/config/includes.chroot/usr/lib/grenos/grenos-*-natif \
+    linux/config/includes.chroot/usr/lib/grenos/grenos-adaptateur-xbox
 # La place compte : l'image en demande beaucoup plus loin.
-sudo rm -rf linux/ui/target linux/coins/target linux/natif/target
+sudo rm -rf linux/ui/target linux/coins/target linux/natif/target linux/adaptateur-xbox/target
 docker image rm "$RUST" >/dev/null 2>&1 || true

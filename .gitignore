@@ -28,6 +28,9 @@ Cargo.lock
 !linux/ui/Cargo.lock
 !linux/natif/Cargo.lock
 !linux/coins/Cargo.lock
+# Le pilote de l'adaptateur sans fil Xbox (25 novembre) : aucune dépendance,
+# mais --locked l'exige aussi.
+!linux/adaptateur-xbox/Cargo.lock
 # Et le créateur de clé (21 novembre) : le .exe publié doit être celui du
 # commit, pas celui des dépendances du jour.
 !createur/Cargo.lock
@@ -79,6 +82,7 @@ linux/config/includes.chroot/usr/bin/grenos-coins
 linux/ui/gen/
 linux/config/includes.chroot/usr/lib/grenos/grenos-shell-natif
 linux/config/includes.chroot/usr/lib/grenos/grenos-bureau-natif
+linux/config/includes.chroot/usr/lib/grenos/grenos-adaptateur-xbox
 linux/config/includes.chroot/etc/grenos/date-construction
 
 # Les schémas générés par tauri-build à chaque compilation du créateur.

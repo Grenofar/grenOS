@@ -304,6 +304,83 @@ poser gtk-settings.ini          /etc/gtk-3.0/settings.ini
 poser fonts-local.conf          /etc/fonts/local.conf
 poser xfce4-terminal.xml        /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-terminal.xml
 
+# ---- Les manettes Xbox en Bluetooth (24 novembre) ---------------------------
+#
+# Grenofar : « fais que les manettes Xbox soient compatibles ». Câblées, le
+# pilote `xpad` du noyau suffit (et `steam-devices` les ouvre au compte). En
+# Bluetooth (One S, Series X|S, Elite 2), le noyau les comprend, mais les
+# réglages par défaut de bluez les perdent : la manette s'appaire, puis refuse
+# de se reconnecter au rallumage, ou se connecte et se déconnecte en boucle.
+# Elle change d'adresse et ré-appaire en « Just Works » : bluez doit l'accepter
+# (JustWorksRepairing) et la suivre (Privacy = device). FastConnectable écourte
+# la reconnexion.
+#
+# D'abord écrit en hook de construction : une mise à jour ne le rejouait pas,
+# et la machine de Grenofar, à jour, gardait les réglages de bluez. Ici, il
+# passe à chaque installation et à chaque mise à jour.
+#
+# main.conf appartient à bluez et n'a pas de dossier .d : on change ses
+# lignes en place (elles y sont toutes, commentées), la première seulement —
+# celle de [General].
+#
+# L'adaptateur sans fil Xbox (la clé USB 045e:02fe) a son propre pilote,
+# grenos-adaptateur-xbox : voir plus bas.
+regler_bluetooth () {
+    conf=/etc/bluetooth/main.conf
+    [ -f "$conf" ] || return 0
+    if grep -qE "^[#[:space:]]*$1[[:space:]]*=" "$conf"; then
+        sed -i -E "0,/^[#[:space:]]*$1[[:space:]]*=.*/s//$1 = $2/" "$conf" || true
+    else
+        sed -i -E "/^\[General\]/a $1 = $2" "$conf" || true
+    fi
+}
+if [ -f /etc/bluetooth/main.conf ]; then
+    avant=$(md5sum /etc/bluetooth/main.conf)
+    regler_bluetooth Privacy device
+    regler_bluetooth JustWorksRepairing always
+    regler_bluetooth FastConnectable true
+    # bluetoothd ne relit pas son fichier : on le relance s'il a changé
+    # (try-restart : rien dans l'image en construction, où il ne tourne pas).
+    if [ "$avant" != "$(md5sum /etc/bluetooth/main.conf)" ]; then
+        systemctl try-restart bluetooth.service >/dev/null 2>&1 || true
+    fi
+fi
+
+# ---- L'adaptateur sans fil Xbox (25 novembre) ---------------------------------
+#
+# Son pilote (grenos-adaptateur-xbox) démarre quand udev voit la clé. Une
+# règle udev neuve n'est lue qu'au rechargement, et une clé DÉJÀ branchée au
+# moment de la mise à jour n'aurait rien déclenché : on recharge, et on
+# rejoue le branchement pour elle seule. Dans l'image en construction, rien
+# de tout cela ne tourne : les `|| true` le laissent passer.
+modprobe uinput >/dev/null 2>&1 || true
+# Le pilote Wi-Fi du noyau (mt76x2u) déjà chargé reprend la clé à chaque
+# branchement, règle modprobe ou pas : la règle n'agit qu'au chargement. On
+# le retire s'il ne tient QUE des clés Xbox (une vraie clé Wi-Fi MediaTek
+# garde son pilote). La clé, elle, doit être rebranchée une fois : sa puce
+# garde le firmware Wi-Fi tant qu'elle est sous tension.
+if [ -d /sys/bus/usb/drivers/mt76x2u ]; then
+    autre=0
+    seulement_xbox=0
+    for lien in /sys/bus/usb/drivers/mt76x2u/*:*; do
+        [ -e "$lien" ] || continue
+        appareil=$(dirname "$(readlink -f "$lien")")
+        if [ "$(cat "$appareil/idVendor" 2>/dev/null)" = 045e ]; then
+            seulement_xbox=1
+        else
+            autre=1
+        fi
+    done
+    if [ "$seulement_xbox" = 1 ] && [ "$autre" = 0 ]; then
+        modprobe -r mt76x2u >/dev/null 2>&1 || true
+    fi
+fi
+udevadm control --reload-rules >/dev/null 2>&1 || true
+for produit in 02e6 02fe 091e; do
+    udevadm trigger --action=add --subsystem-match=usb \
+        --attr-match=idVendor=045e --attr-match=idProduct="$produit" >/dev/null 2>&1 || true
+done
+
 # ---- Le droit de faire du son sans hoquet -----------------------------------
 #
 # Les limites de `/etc/security/limits.d/95-grenos-audio.conf` sont données au

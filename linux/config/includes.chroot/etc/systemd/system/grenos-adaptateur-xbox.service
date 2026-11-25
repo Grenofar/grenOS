@@ -1,0 +1,29 @@
+# L'adaptateur sans fil Xbox (25 novembre).
+#
+# Lancé par udev quand la clé est branchée (71-grenos-adaptateur-xbox.rules),
+# y compris au démarrage si elle l'est déjà : rien à activer. Débranchée, le
+# programme s'arrête de lui-même, sans erreur.
+#
+# En administrateur : il retire la clé au pilote Wi-Fi du noyau, et crée les
+# manettes dans /dev/uinput. Rien d'autre ne lui est ouvert en écriture que
+# le dossier du firmware.
+[Unit]
+Description=grenOS : adaptateur sans fil Xbox
+# Sans réseau au premier branchement, le firmware ne vient pas : on
+# réessaie toutes les 30 secondes, sans limite.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/lib/grenos/grenos-adaptateur-xbox-firmware --si-absent
+ExecStart=/usr/lib/grenos/grenos-adaptateur-xbox
+Restart=on-failure
+RestartSec=30
+ProtectSystem=full
+ReadWritePaths=-/usr/lib/firmware
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes

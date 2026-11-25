@@ -1,0 +1,4 @@
+# L'adaptateur sans fil Xbox (25 novembre) : branché, son pilote démarre.
+# 02e6 : l'adaptateur d'origine ; 02fe : le petit (« pour Windows ») ;
+# 091e : celui de la Surface Book 2.
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="045e", ATTR{idProduct}=="02e6|02fe|091e", TAG+="systemd", ENV{SYSTEMD_WANTS}+="grenos-adaptateur-xbox.service"

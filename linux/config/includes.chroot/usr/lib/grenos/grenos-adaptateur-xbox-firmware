@@ -1,0 +1,58 @@
+#!/bin/sh
+# Le firmware de l'adaptateur sans fil Xbox (25 novembre).
+#
+# La clé USB de Microsoft (045e:02fe, et l'ancienne 045e:02e6) ne fait rien
+# tant qu'on ne lui a pas envoyé son firmware. Ce fichier appartient à
+# Microsoft (conditions d'utilisation : https://www.microsoft.com/legal/terms-of-use) :
+# on n'a pas le droit de le mettre dans grenOS, alors on le prend où Microsoft
+# le publie, dans le pilote Windows de 2017, et on n'en garde que lui.
+#
+# Le serveur de Windows Update ne sert ce fichier qu'en HTTP (son certificat
+# HTTPS ne porte pas ce nom) : les DEUX empreintes SHA-256 — l'archive et le
+# firmware — sont vérifiées, ce qui vaut mieux qu'un HTTPS.
+#
+#   grenos-adaptateur-xbox-firmware              le télécharge (administrateur)
+#   grenos-adaptateur-xbox-firmware --si-absent  seulement s'il manque
+#
+# Même chemin que xow et xone : un firmware déjà posé par eux sert tel quel.
+set -eu
+
+FICHIER=/lib/firmware/xow_dongle.bin
+URL="http://download.windowsupdate.com/c/msdownload/update/driver/drvs/2017/07/1cd6a87c-623f-4407-a52d-c31be49e925c_e19f60808bdcbfbd3c3df6be3e71ffc52e43261e.cab"
+SOMME_CAB=65736a84ff4036645b8f8ec602bed91ab6353019c9cb3233decab9feec0f6f04
+SOMME=48084d9fa53b9bb04358f3bb127b7495dc8f7bb0b3ca1437bd24ef2b6eabdf66
+
+dire() { echo "grenos: firmware de l'adaptateur Xbox : $*"; }
+rate() { echo "grenos: firmware de l'adaptateur Xbox : $*" >&2; exit 1; }
+
+bon() { [ -f "$1" ] && [ "$(sha256sum "$1" | cut -d' ' -f1)" = "$SOMME" ]; }
+
+if [ "${1:-}" = "--si-absent" ] && bon "$FICHIER"; then
+    exit 0
+fi
+[ "$(id -u)" -eq 0 ] || rate "il faut être administrateur (sudo)"
+command -v curl >/dev/null || rate "curl manque"
+
+T=$(mktemp -d)
+trap 'rm -rf "$T"' EXIT
+
+dire "téléchargement chez Microsoft"
+curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$T/pilote.cab" "$URL" \
+    || rate "téléchargement impossible (pas de réseau ?)"
+[ "$(sha256sum "$T/pilote.cab" | cut -d' ' -f1)" = "$SOMME_CAB" ] \
+    || rate "l'archive téléchargée n'est pas celle attendue — refus"
+
+# cabextract (grenos-systeme le dépend), ou 7z, ou bsdtar : le premier là.
+if command -v cabextract >/dev/null; then
+    cabextract -q -d "$T" -F FW_ACC_00U.bin "$T/pilote.cab" >/dev/null
+elif command -v 7z >/dev/null; then
+    7z e -y -o"$T" "$T/pilote.cab" FW_ACC_00U.bin >/dev/null
+elif command -v bsdtar >/dev/null; then
+    bsdtar -xf "$T/pilote.cab" -C "$T" FW_ACC_00U.bin
+else
+    rate "il faut cabextract pour ouvrir l'archive (sudo apt install cabextract)"
+fi
+bon "$T/FW_ACC_00U.bin" || rate "le firmware extrait n'est pas celui attendu — refus"
+
+install -D -m 0644 "$T/FW_ACC_00U.bin" "$FICHIER"
+dire "posé dans $FICHIER"
