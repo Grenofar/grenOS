@@ -362,7 +362,19 @@ fi
 # picom ne change pas l'apparence (etc/xdg/picom/grenos.conf). La ligne
 # série dit pourquoi il tourne, ou pourquoi pas.
 compositeur_raison() {
-    [ "$(systemd-detect-virt 2>/dev/null || echo none)" = none ] || { echo "machine virtuelle"; return; }
+    # LE CHOIX DE LA PERSONNE PASSE AVANT TOUT (25 novembre). Grenofar,
+    # après essais : avec picom, Opera (Chromium en Flatpak) se déplace à
+    # 3 images/s sur sa RTX 5060 ; sans, tout va à 300 Hz, au prix d'une
+    # traînée derrière les fenêtres déplacées — « à 300 avec les traînées ».
+    # ~/.config/grenos/compositeur contenant « non » : pas de picom.
+    [ "$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/grenos/compositeur" 2>/dev/null)" = non ] \
+        && { echo "coupe par la personne (~/.config/grenos/compositeur)"; return; }
+    # systemd-detect-virt écrit « none » ET sort en erreur sur une vraie
+    # machine : `$(systemd-detect-virt || echo none)` valait « none none »,
+    # jamais « none », et picom ne démarrait sur AUCUN vrai PC (trouvé le
+    # 25 novembre — d'où la traînée derrière les fenêtres déplacées).
+    virt=$(systemd-detect-virt 2>/dev/null)
+    [ -z "$virt" ] || [ "$virt" = none ] || { echo "machine virtuelle ($virt)"; return; }
     command -v picom >/dev/null 2>&1 || { echo "picom absent"; return; }
     reconnue=
     for pilote in /sys/class/drm/card*/device/driver; do
@@ -407,30 +419,6 @@ ecran_le_plus_rapide() {
                 if (t + 0 > max) { max = t + 0; rapide = nom } } }
         END { if (rapide != "") print rapide }'
 }
-# OPENGL PAS ENCORE PRÊT N'EST PAS UNE RAISON DE RENONCER (25 novembre).
-# Grenofar : « quand on déplace une fenêtre on voit une traînée ». picom ne
-# tournait pas, alors que tout y était (RTX 5060, pilote officiel, OpenGL
-# sur la carte, glxinfo en 0,12 s) : juste après la connexion, le pilote
-# NVIDIA met parfois plus de 5 s à répondre, `glxinfo` était coupé, et la
-# session entière restait sans compositeur — d'où la traînée derrière chaque
-# fenêtre déplacée. Lancé à la main, picom a tenu sans erreur. Ce cas-là,
-# et lui seul, se réessaie : 12 fois toutes les 5 s, en arrière-plan.
-if [ "$RAISON" = "OpenGL ne repond pas" ]; then
-    grenos-dire "compositeur : OpenGL ne repond pas encore, nouvel essai dans 5 s"
-    (
-        for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            sleep 5
-            [ -n "$(compositeur_raison)" ] && continue
-            RAPIDE=$(ecran_le_plus_rapide)
-            [ -n "$RAPIDE" ] && [ -z "${__GL_SYNC_DISPLAY_DEVICE:-}" ] && export __GL_SYNC_DISPLAY_DEVICE="$RAPIDE"
-            grenos-veilleur picom --config /etc/xdg/picom/grenos.conf &
-            grenos-dire "compositeur : picom lance apres attente d OpenGL"
-            exit 0
-        done
-        grenos-dire "compositeur : non (OpenGL ne repond toujours pas apres une minute)"
-    ) &
-    RAISON="OpenGL pas encore pret (essais en arriere-plan)"
-fi
 if [ -z "$RAISON" ]; then
     RAPIDE=$(ecran_le_plus_rapide)
     if [ -n "$RAPIDE" ] && [ -z "${__GL_SYNC_DISPLAY_DEVICE:-}" ]; then
