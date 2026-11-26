@@ -26,7 +26,19 @@
 set -euo pipefail
 ISO=$1
 OUT=$2
-VARIANTE=${3:-${GRENOS_PILOTE:-580-open}}
+# Sans variante nommée : les DEUX, l'une après l'autre, chacune dans son
+# dossier (le workflow d'avant le 26 novembre n'en passe aucune).
+if [ -z "${3:-}" ] && [ -z "${GRENOS_PILOTE:-}" ]; then
+    rc=0
+    for v in 580 580-open; do
+        echo "######## variante $v ########"
+        bash "$0" "$ISO" "$OUT/$v" "$v" || rc=1
+        # La place du runner : un disque installé pèse plusieurs Go.
+        rm -f "$OUT/$v/disque.img"
+    done
+    exit $rc
+fi
+VARIANTE=${3:-$GRENOS_PILOTE}
 case "$VARIANTE" in 580|580-open) ;; *) echo "variante inconnue : $VARIANTE" >&2; exit 2 ;; esac
 PAQUET=nvidia-driver-$VARIANTE
 META=linux-modules-nvidia-$VARIANTE-generic

@@ -1746,7 +1746,15 @@ impl Barre {
     }
 
     /// Les deux positions que la CI vise : le menu et le son.
+    ///
+    /// 26 novembre : dites UNE fois, au départ. Depuis que chaque fenêtre de
+    /// grenOS a sa tuile (6c42f75), le dock s'élargit pendant l'essai et se
+    /// recentre : le son passait de 813 à 895, et la CI cliquait sur la
+    /// flèche « ^ » (run 45852578942, capture regardée). On redit donc une
+    /// position dès qu'elle change (regardée toutes les deux secondes).
     fn dire_les_boutons(&self) {
+        static DITES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+        let mut lignes = Vec::new();
         for (nom, bouton) in [("grenos", self.bouton_menu.clone().upcast::<gtk::Widget>()), ("son", self.bouton_son.clone().upcast())] {
             let zone = bouton.allocation();
             let x = zone.x() + zone.width() / 2;
@@ -1758,8 +1766,15 @@ impl Barre {
                 (self.ox + MARGE_DOCK, self.oy + self.hauteur_ecran - HAUTEUR - MARGE_DOCK)
             };
             let (x, y) = (px + x, py + zone.y() + zone.height() / 2);
-            dire(&format!("bouton {nom} en {x},{y}"));
+            lignes.push(format!("bouton {nom} en {x},{y}"));
         }
+        let mut dites = DITES.lock().unwrap_or_else(|e| e.into_inner());
+        for (i, ligne) in lignes.iter().enumerate() {
+            if dites.get(i) != Some(ligne) {
+                dire(ligne);
+            }
+        }
+        *dites = lignes;
     }
 }
 
@@ -2056,7 +2071,14 @@ fn main() {
 
     dire(&format!("barre prete, {} epinglees (native{})", barre.epingles.borrow().len(), if barre.dock { ", dock" } else { "" }));
     let b = barre.clone();
-    glib::timeout_add_seconds_local_once(3, move || b.dire_les_boutons());
+    glib::timeout_add_seconds_local_once(3, move || {
+        b.dire_les_boutons();
+        // Et chaque fois qu'ils bougent (le dock se recentre, voir dire_les_boutons).
+        glib::timeout_add_seconds_local(2, move || {
+            b.dire_les_boutons();
+            glib::ControlFlow::Continue
+        });
+    });
     // grenos-menu (Ctrl+Échap, touche Windows) : ouvrir le menu.
     let b = barre.clone();
     natif::sur_signal(natif::SIGUSR2, move || b.ouvrir_menu());
