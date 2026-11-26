@@ -1223,6 +1223,9 @@ impl Barre {
         } else {
             gestes.push(("Épingler à la barre", Box::new(move || b.epingler(&tt.nom, &tt.commande, &tt.icone))));
         }
+        if let Some(g) = self.application_de_commande(&t.commande).and_then(|a| self.geste_desinstaller(&a)) {
+            gestes.push(g);
+        }
         if !t.fenetres.is_empty() {
             let (b, tt) = (self.clone(), t.clone());
             gestes.push(("Fermer", Box::new(move || {
@@ -1245,6 +1248,72 @@ impl Barre {
         self.epingles.borrow_mut().retain(|e| e.commande != commande);
         apps::ecrire_epingles(&self.epingles.borrow());
         self.refaire();
+    }
+
+    // ---- Désinstaller (26 novembre) -------------------------------------------
+    // Grenofar : « fais qu'on puisse désinstaller des apps, depuis paramètres
+    // ou clic droit sur le dock quand on appuie sur Windows ». Le clic droit
+    // d'une application du menu (liste ou épinglée) et du dock propose
+    // « Désinstaller… », qui ouvre Réglages › Applications sur elle, sa
+    // confirmation dépliée : rien ne part sans ce second clic, et ce qui fait
+    // grenOS n'est même pas proposé (apps::desinstallation).
+
+    fn application_de_commande(&self, commande: &str) -> Option<Application> {
+        if commande.is_empty() {
+            return None;
+        }
+        self.applications.borrow().iter().find(|a| a.commande == commande).cloned()
+    }
+
+    fn geste_desinstaller(self: &Rc<Self>, a: &Application) -> Option<(&'static str, Box<dyn Fn()>)> {
+        let commande = apps::desinstallation(a)?;
+        let (b, nom) = (self.clone(), a.nom.clone());
+        let action: Box<dyn Fn()> = Box::new(move || {
+            if b.menu.is_visible() {
+                b.fermer_menu();
+            }
+            dire(&format!("desinstaller : {nom}, ouvert dans les reglages"));
+            lancer(&commande, false);
+        });
+        Some(("Désinstaller…", action))
+    }
+
+    /// Relit les applications ; celles qui ont disparu (désinstallées, d'ici
+    /// ou d'ailleurs) quittent les épinglées, comme sous Windows.
+    fn relire_applications(self: &Rc<Self>) {
+        let nouvelles = apps::applications();
+        let parties = apps::commandes_parties(&self.applications.borrow(), &nouvelles);
+        *self.applications.borrow_mut() = nouvelles;
+        if parties.is_empty() {
+            return;
+        }
+        let avant = self.epingles.borrow().len();
+        self.epingles.borrow_mut().retain(|e| !parties.contains(&e.commande));
+        let retirees = avant - self.epingles.borrow().len();
+        if retirees > 0 {
+            apps::ecrire_epingles(&self.epingles.borrow());
+            dire(&format!("desinstaller : {retirees} epinglee(s) retiree(s), leur application est partie"));
+        }
+        // Le menu, s'il est ouvert, se refait au prochain passage ; la barre, tout de suite.
+        let b = self.clone();
+        glib::idle_add_local_once(move || b.refaire());
+    }
+
+    /// Une installation ou une désinstallation change l'heure d'un dossier
+    /// d'applications : on relit alors, quatre secondes plus tard (le temps
+    /// que Flatpak ou dpkg aient fini d'écrire).
+    fn surveiller_applications(self: &Rc<Self>) {
+        let derniere = RefCell::new(apps::empreinte_dossiers());
+        let b = self.clone();
+        glib::timeout_add_seconds_local(10, move || {
+            let e = apps::empreinte_dossiers();
+            if *derniere.borrow() != e {
+                *derniere.borrow_mut() = e;
+                let b = b.clone();
+                glib::timeout_add_seconds_local_once(4, move || b.relire_applications());
+            }
+            glib::ControlFlow::Continue
+        });
     }
 
     // ---- Ce qui tourne (« ^ ») ---------------------------------------------------
@@ -1387,7 +1456,7 @@ impl Barre {
         self.menu.set_size_request(l, h);
         let (mx, my) = (((self.largeur - l) / 2).max(8), (self.hauteur_ecran - self.bande() - h - 8).max(8));
         self.menu.move_(self.ox + mx, self.oy + my);
-        *self.applications.borrow_mut() = apps::applications();
+        self.relire_applications();
         self.recherche.set_text("");
         self.remplir();
         self.menu.show_all();
@@ -1503,6 +1572,22 @@ impl Barre {
             b.fermer_menu();
             lancer(&commande, false);
         });
+        let (b, commande) = (self.clone(), e.commande.clone());
+        bouton.connect_button_press_event(move |_, ev| {
+            if ev.button() != 3 {
+                return glib::Propagation::Proceed;
+            }
+            let (b1, c1) = (b.clone(), commande.clone());
+            let mut gestes: Vec<(&'static str, Box<dyn Fn()>)> = vec![("Désépingler", Box::new(move || {
+                b1.retirer(&c1);
+                b1.remplir();
+            }))];
+            if let Some(g) = b.application_de_commande(&commande).and_then(|a| b.geste_desinstaller(&a)) {
+                gestes.push(g);
+            }
+            *b.menu_contextuel.borrow_mut() = Some(menu_de(gestes, ev));
+            glib::Propagation::Stop
+        });
         bouton
     }
 
@@ -1548,13 +1633,16 @@ impl Barre {
             }
             let (b1, a1) = (b.clone(), aa.clone());
             let a2 = aa.clone();
-            let gestes: Vec<(&'static str, Box<dyn Fn()>)> = vec![
+            let mut gestes: Vec<(&'static str, Box<dyn Fn()>)> = vec![
                 ("Épingler à la barre des tâches", Box::new(move || {
                     b1.epingler(&a1.nom, &a1.commande, &a1.icone);
                     b1.remplir();
                 })),
                 ("Ajouter au bureau", Box::new(move || poser_sur_le_bureau(&a2))),
             ];
+            if let Some(g) = b.geste_desinstaller(&aa) {
+                gestes.push(g);
+            }
             *b.menu_contextuel.borrow_mut() = Some(menu_de(gestes, ev));
             glib::Propagation::Stop
         });
@@ -1935,6 +2023,7 @@ fn main() {
     let style = natif::Style::poser(STYLE);
     let barre = Barre::nouvelle();
     barre.panneau.show_all();
+    barre.surveiller_applications();
     // grenos-theme : le thème ou l'accent a changé (toutes les barres).
     natif::sur_signal(natif::SIGUSR1, move || style.repeindre());
 

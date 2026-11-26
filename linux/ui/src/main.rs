@@ -20,6 +20,7 @@ mod agenda;
 mod horloge;
 mod fichiers;
 mod reglages;
+mod desinstaller;
 mod jeux;
 mod grenplace;
 mod hub;
@@ -467,6 +468,9 @@ fn main() {
             reglages::reglages,
             reglages::reglages_signatures,
             reglages::reglages_partitions_agir,
+            desinstaller::reglages_applications,
+            desinstaller::reglages_desinstaller_apercu,
+            desinstaller::reglages_desinstaller,
             reglages::reglages_reseau,
             reglages::reglages_compte,
             reglages::reglages_mot_de_passe,

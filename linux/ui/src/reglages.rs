@@ -1,4 +1,4 @@
-//! Les Réglages : tout ce qui se règle, au même endroit — dix pages.
+//! Les Réglages : tout ce qui se règle, au même endroit — douze pages.
 //!
 //! Repris de `grenos-parametres` (Python) le 18 novembre. Ce que la fenêtre
 //! change, elle le change pour de vrai : la définition par RandR (ecran.py),
@@ -26,7 +26,7 @@ const PERMISES: &[&str] = &[
     "reglages_partitions", "reglages_partitions_monter",
 ];
 
-pub const PAGES: usize = 11;
+pub const PAGES: usize = 12;
 
 #[tauri::command]
 pub fn reglages_ouvert() {

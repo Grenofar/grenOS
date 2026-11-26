@@ -218,7 +218,7 @@ fn dossiers_applications() -> Vec<std::path::PathBuf> {
     ]
 }
 
-fn champ(texte: &str, cle: &str) -> String {
+pub(crate) fn champ(texte: &str, cle: &str) -> String {
     // La section [Desktop Entry] seulement : les « Actions » ont aussi un Name.
     let mut dans = false;
     for l in texte.lines() {
@@ -236,7 +236,7 @@ fn champ(texte: &str, cle: &str) -> String {
     String::new()
 }
 
-fn nom_de(texte: &str) -> String {
+pub(crate) fn nom_de(texte: &str) -> String {
     let fr = champ(texte, "Name[fr]");
     if fr.is_empty() { champ(texte, "Name") } else { fr }
 }

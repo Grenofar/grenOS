@@ -5,7 +5,7 @@
 //! grenos-shell : la CI (`verif-recherches.py`) vérifie la règle du menu
 //! contre ces mêmes champs, il ne fallait pas en inventer une autre.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -171,6 +171,8 @@ pub const REGLAGES: &[Reglage] = &[
         mots: &["compte", "mot de passe", "utilisateur", "session", "navigateur", "navigateur principal", "navigateur par défaut", "google", "connexion", "clé de sécurité", "yubikey"] },
     Reglage { nom: "Heure et date", page: "heure", icone: "preferences-system-time",
         mots: &["heure", "date", "fuseau", "horloge", "temps"] },
+    Reglage { nom: "Applications — désinstaller", page: "applications", icone: "system-software-install",
+        mots: &["application", "applications", "app", "apps", "désinstaller", "desinstaller", "désinstallation", "supprimer une application", "retirer une application", "programme", "programmes", "logiciel", "logiciels", "flatpak"] },
     Reglage { nom: "Mises à jour", page: "maj", icone: "system-software-update",
         mots: &["mise à jour", "mises à jour", "maj", "update", "version"] },
     Reglage { nom: "Mise à jour des composants", page: "composants", icone: "application-x-firmware",
@@ -216,6 +218,134 @@ pub fn reglages_trouves(filtre: &str) -> Vec<&'static Reglage> {
                 })
         })
         .collect()
+}
+
+// ---- Désinstaller, depuis le clic droit (26 novembre) -------------------------
+//
+// Grenofar : « fais qu'on puisse désinstaller des apps, depuis paramètres ou
+// clic droit sur le dock quand on appuie sur Windows ». Le clic droit ne
+// désinstalle rien lui-même : « Désinstaller… » ouvre Réglages › Applications
+// sur l'application, sa confirmation dépliée (grenos-ui, desinstaller.rs) —
+// c'est là qu'apt simule le retrait et refuse ce qui emporterait grenOS. Ici,
+// on ne fait que NE PAS PROPOSER ce que la page refuserait : la même règle.
+
+/// Un nom de fichier qui passe tel quel dans `sh -c`.
+fn nom_sain(nom: &str) -> bool {
+    !nom.is_empty() && !nom.starts_with(['-', '.']) && nom.chars().all(|c| c.is_ascii_alphanumeric() || "._+-".contains(c))
+}
+
+/// Les noms d'un champ Depends/Recommends : « a (>= 1), b | c, d:any » → a, b, c, d.
+pub fn noms_dependances(texte: &str) -> HashSet<String> {
+    texte
+        .split([',', '|', '\n'])
+        .filter_map(|d| d.split_whitespace().next())
+        .map(|d| d.split(':').next().unwrap_or(d).to_string())
+        .filter(|d| nom_sain(d))
+        .collect()
+}
+
+/// Les paquets qu'apt a posés comme dépendances (« Auto-Installed: 1 »).
+pub fn auto_installes(texte: &str) -> HashSet<String> {
+    texte
+        .split("\n\n")
+        .filter(|b| b.lines().any(|l| l.trim() == "Auto-Installed: 1"))
+        .filter_map(|b| b.lines().find_map(|l| l.strip_prefix("Package:")).map(|n| n.trim().to_string()))
+        .collect()
+}
+
+/// Les paquets qui posent un fichier : « a[:arch][, b]: /chemin » (`dpkg-query -S`).
+pub fn proprietaires(texte: &str) -> Vec<String> {
+    texte
+        .lines()
+        .filter(|l| !l.starts_with("diversion"))
+        .filter_map(|l| l.split_once(": /").map(|(p, _)| p))
+        .flat_map(|p| p.split(','))
+        .map(|p| p.trim().split(':').next().unwrap_or("").to_string())
+        .filter(|p| nom_sain(p))
+        .collect()
+}
+
+/// Ce que la page Applications propose de retirer : ni un morceau de grenOS
+/// (ce que grenos-systeme et grenos-desktop nomment), ni une dépendance.
+pub fn paquet_retirable(paquet: &str, proteges: &HashSet<String>, auto: &HashSet<String>) -> bool {
+    !paquet.starts_with("grenos") && !proteges.contains(paquet) && !auto.contains(paquet)
+}
+
+fn sortie(programme: &str, arguments: &[&str]) -> String {
+    std::process::Command::new(programme)
+        .args(arguments)
+        .stderr(std::process::Stdio::null())
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default()
+}
+
+/// La commande de « Désinstaller… » pour cette application
+/// (`grenos-parametres applications:gimp.desktop`), ou rien si la page la
+/// refuserait. Lue au clic droit seulement : deux `dpkg-query`, pas à
+/// chaque ouverture du menu.
+pub fn desinstallation(a: &Application) -> Option<String> {
+    let nom = a.fichier.file_name()?.to_str()?.to_string();
+    if !nom.ends_with(".desktop") || !nom_sain(&nom) || nom.starts_with("gren") {
+        return None;
+    }
+    let maison = crate::maison();
+    let flatpak = [PathBuf::from("/var/lib/flatpak/exports/share/applications"), maison.join(".local/share/flatpak/exports/share/applications")];
+    let systeme = Path::new("/usr/share/applications");
+    let dossier = a.fichier.parent()?;
+    // Une copie dans ~/.local/share/applications (Claude s'en pose une)
+    // masque celle de l'installation : c'est l'installée qu'on regarde.
+    let copie = dossier == maison.join(".local/share/applications");
+    let retirable = if flatpak.iter().any(|d| d == dossier || (copie && d.join(&nom).exists())) {
+        true
+    } else if dossier == systeme || (copie && systeme.join(&nom).exists()) {
+        let chemin = systeme.join(&nom).to_string_lossy().into_owned();
+        let paquets = proprietaires(&sortie("dpkg-query", &["-S", &chemin]));
+        !paquets.is_empty() && {
+            let proteges = noms_dependances(&sortie("dpkg-query", &["-W", "-f=${Depends}, ${Recommends}\n", "grenos-systeme", "grenos-desktop"]));
+            let auto = auto_installes(&std::fs::read_to_string("/var/lib/apt/extended_states").unwrap_or_default());
+            paquets.iter().any(|p| paquet_retirable(p, &proteges, &auto))
+        }
+    } else {
+        false
+    };
+    retirable.then(|| format!("grenos-parametres applications:{nom}"))
+}
+
+/// UNE APPLICATION DÉSINSTALLÉE QUITTE LE DOCK (26 novembre), comme sous
+/// Windows : la commande d'une entrée du menu dont le FICHIER a disparu, et
+/// que plus aucune entrée ne lance. Sur le fichier, pas sur la commande : une
+/// mise à jour qui change la ligne Exec= ne désépingle rien.
+pub fn commandes_parties(avant: &[Application], apres: &[Application]) -> HashSet<String> {
+    if apres.is_empty() {
+        // Une lecture ratée ne vide pas le dock.
+        return HashSet::new();
+    }
+    let fichiers: HashSet<&std::ffi::OsStr> = apres.iter().filter_map(|a| a.fichier.file_name()).collect();
+    let commandes: HashSet<&str> = apres.iter().map(|a| a.commande.as_str()).collect();
+    avant
+        .iter()
+        .filter(|a| a.fichier.file_name().is_some_and(|n| !fichiers.contains(n)))
+        .map(|a| a.commande.as_str())
+        .filter(|c| !commandes.contains(c))
+        .map(String::from)
+        .collect()
+}
+
+/// L'heure de dernière modification de chaque dossier d'applications : une
+/// installation ou une désinstallation la change.
+pub fn empreinte_dossiers() -> Vec<Option<std::time::SystemTime>> {
+    let maison = crate::maison();
+    [
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
+        maison.join(".local/share/applications"),
+        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+        maison.join(".local/share/flatpak/exports/share/applications"),
+    ]
+    .iter()
+    .map(|d| std::fs::metadata(d).and_then(|m| m.modified()).ok())
+    .collect()
 }
 
 // ---- Les épinglées ------------------------------------------------------------
@@ -381,6 +511,60 @@ mod tests {
         assert!(pages("formater").contains(&"partitions"));
         assert!(pages("sonic").is_empty());
         assert!(pages("p").is_empty());
+    }
+
+    #[test]
+    fn la_recherche_trouve_les_applications() {
+        let pages = |f: &str| reglages_trouves(f).iter().map(|r| r.page).collect::<Vec<_>>();
+        assert!(pages("désinstaller").contains(&"applications"));
+        assert!(pages("desinstaller").contains(&"applications"));
+        assert!(pages("applications").contains(&"applications"));
+    }
+
+    #[test]
+    fn desinstaller_ne_propose_jamais_grenos() {
+        let proteges = noms_dependances("grenos-systeme (= 1), firefox-esr, python3:any, a | b\nflatpak");
+        let auto = auto_installes("Package: openvpn\nAuto-Installed: 1\n\nPackage: gimp\nAuto-Installed: 0\n");
+        assert!(paquet_retirable("gimp", &proteges, &auto));
+        assert!(!paquet_retirable("firefox-esr", &proteges, &auto));
+        assert!(!paquet_retirable("flatpak", &proteges, &auto));
+        assert!(!paquet_retirable("grenos-desktop", &proteges, &auto));
+        assert!(!paquet_retirable("openvpn", &proteges, &auto));
+        assert_eq!(proprietaires("gimp: /usr/share/applications/gimp.desktop\n"), vec!["gimp"]);
+        assert_eq!(proprietaires("libfoo:amd64, bar: /usr/share/applications/foo.desktop\n"), vec!["libfoo", "bar"]);
+        assert!(proprietaires("dpkg-query: no path found matching pattern /x.desktop\n").is_empty());
+        assert!(proprietaires("diversion by x from: /usr/share/applications/z.desktop\n").is_empty());
+        let app = |fichier: &str| Application {
+            nom: "X".into(), note: String::new(), commande: "x".into(), icone: String::new(),
+            classe: String::new(), fichier: PathBuf::from(fichier), cache: false, terminal: false,
+        };
+        // Une Flatpak : proposée, sans rien lancer.
+        assert_eq!(desinstallation(&app("/var/lib/flatpak/exports/share/applications/com.discordapp.Discord.desktop")).as_deref(),
+            Some("grenos-parametres applications:com.discordapp.Discord.desktop"));
+        let maison = crate::maison().to_string_lossy().into_owned();
+        assert!(desinstallation(&app(&format!("{maison}/.local/share/flatpak/exports/share/applications/org.gimp.GIMP.desktop"))).is_some());
+        // Les fenêtres de grenOS, un raccourci fait à la main, un nom piégé : jamais.
+        assert!(desinstallation(&app("/var/lib/flatpak/exports/share/applications/grenplace.desktop")).is_none());
+        assert!(desinstallation(&app(&format!("{maison}/.local/share/applications/grenos-essai-inexistant.desktop"))).is_none());
+        assert!(desinstallation(&app("/opt/jeu/jeu.desktop")).is_none());
+        assert!(desinstallation(&app("/var/lib/flatpak/exports/share/applications/a;reboot.desktop")).is_none());
+        assert!(desinstallation(&app("/var/lib/flatpak/exports/share/applications/x y.desktop")).is_none());
+    }
+
+    #[test]
+    fn une_application_partie_quitte_le_dock() {
+        let app = |fichier: &str, commande: &str| Application {
+            nom: "X".into(), note: String::new(), commande: commande.into(), icone: String::new(),
+            classe: String::new(), fichier: PathBuf::from(fichier), cache: false, terminal: false,
+        };
+        let discord = app("/var/lib/flatpak/exports/share/applications/com.discordapp.Discord.desktop", "flatpak run com.discordapp.Discord");
+        let gimp = app("/usr/share/applications/gimp.desktop", "gimp");
+        let avant = vec![gimp.clone(), discord, app("/usr/share/applications/vlc.desktop", "vlc --started-from-file")];
+        // Discord est parti ; VLC a changé sa ligne Exec= en se mettant à jour : il reste.
+        let apres = vec![gimp, app("/usr/share/applications/vlc.desktop", "vlc")];
+        assert_eq!(commandes_parties(&avant, &apres), HashSet::from(["flatpak run com.discordapp.Discord".to_string()]));
+        // Une lecture vide ne retire rien.
+        assert!(commandes_parties(&avant, &[]).is_empty());
     }
 
     #[test]

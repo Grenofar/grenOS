@@ -1,4 +1,4 @@
-// Les Réglages : dix pages dans un volet, et rien qui demande de connaître
+// Les Réglages : douze pages dans un volet, et rien qui demande de connaître
 // Linux. Toutes se remplissent dès l'ouverture, une par une (la page visible
 // d'abord) : la fenêtre s'affiche tout de suite, et les lignes que la CI
 // attend de chaque page arrivent quand même.
@@ -8,10 +8,16 @@
   const PAGES = [
     ["apparence", "Apparence", "palette"], ["ecran", "Écran", "bureau"], ["son", "Son", "son"],
     ["reseau", "Réseau", "wifi"], ["compte", "Compte", "compte"], ["heure", "Heure et date", "sablier"],
-    ["maj", "Mises à jour", "maj"], ["composants", "Mise à jour composant", "cpu"],
+    ["applications", "Applications", "paquet"], ["maj", "Mises à jour", "maj"], ["composants", "Mise à jour composant", "cpu"],
     ["securite", "Sécurité", "bouclier"], ["materiel", "Matériel", "ram"], ["partitions", "Partitions", "disque"],
   ];
   const D = { pages: {} };
+  // « applications:gimp.desktop » : la page, puis ce qu'elle vise (le clic
+  // droit « Désinstaller… » du menu Démarrer). Les autres n'ont que la page.
+  const lireOnglet = (o) => {
+    const t = String(o || ""); const i = t.indexOf(":");
+    return i < 0 ? [t, ""] : [t.slice(0, i), t.slice(i + 1)];
+  };
   // Ouverte par la session pour proposer la fréquence maximale de l'écran.
   const PROPOSER_MAX = window.GRENOS_ONGLET === "ecran-max";
   const R = (fonction, arguments_) => api.appeler("reglages", { fonction, arguments: arguments_ || {} });
@@ -90,6 +96,7 @@
   // ---- Les pages ---------------------------------------------------------------
   const CONSTRUIRE = {
     partitions: () => pagePartitions(),
+    applications: () => pageApplications(),
     async apparence() {
       const a = await api.appeler("apparence");
       const dire = el("p.note");
@@ -522,6 +529,110 @@
       (v.disques || []).length ? null : carte(note("Aucun disque lisible ici."))];
   }
 
+  // ---- Applications (26 novembre) ---------------------------------------------
+  // Grenofar : « fais qu'on puisse désinstaller des apps, depuis paramètres ou
+  // clic droit sur le dock quand on appuie sur Windows ». Ce que la personne a
+  // ajouté (desinstaller.rs : les Flatpak, et les paquets Debian qui ont une
+  // entrée dans le menu), un bouton par application, et une confirmation qui
+  // dit ce qui partira avec. Ce qui fait grenOS est rangé à part, sans bouton.
+  // Le clic droit du menu Démarrer ouvre cette page sur l'application, sa
+  // confirmation déjà dépliée.
+  async function pageApplications() {
+    const v = await api.appeler("reglages_applications");
+    const cible = D.cibleAppli || "";
+    D.cibleAppli = "";
+    const dire = el("p.note.rg-note");
+    const compte = el("span.note");
+    const liste = el("div.rg-apps");
+    const lignes = [];
+    const compter = () => {
+      // Dans la liste, pas « dans la page » : à la construction, rien ne l'est encore.
+      const n = lignes.filter((l) => l.bloc.parentNode === liste).length;
+      compte.textContent = n ? `${n} application${n > 1 ? "s" : ""}` : "";
+      if (!n) liste.replaceChildren(note("Rien d'installé en plus de grenOS pour l'instant : ce que tu ajoutes depuis GrenPlace apparaîtra ici."));
+    };
+
+    const ligneAppli = (a) => {
+      const zone = el("div.rg-app-confirmer");
+      zone.hidden = true;
+      const meta = [a.source === "flatpak" ? "Flatpak" : "Paquet Debian", a.taille, a.version ? `version ${a.version}` : ""].filter(Boolean).join(" · ");
+      const bloc = el("div.rg-app-bloc");
+      const deplier = async () => {
+        zone.hidden = false;
+        zone.replaceChildren(note("Ce qui partirait avec…"));
+        const ap = await api.appeler("reglages_desinstaller_apercu", { source: a.source, identifiant: a.identifiant, installation: a.installation })
+          .catch((e) => ({ refus: String(e) }));
+        if (ap.refus) { zone.replaceChildren(note(ap.refus)); return; }
+        const donnees = ap.donnees ? el("input", { type: "checkbox" }) : null;
+        const direIci = el("p.note.rg-note");
+        const go = bouton(`Désinstaller ${a.nom}`, "danger", async () => {
+          go.disabled = annuler.disabled = true;
+          direIci.textContent = a.source === "apt" ? "Désinstallation… le mot de passe administrateur peut être demandé." : "Désinstallation…";
+          try {
+            const r = await api.appeler("reglages_desinstaller", {
+              source: a.source, identifiant: a.identifiant, installation: a.installation, donnees: !!(donnees && donnees.checked),
+            });
+            if (r.fait) {
+              bloc.remove();
+              dire.textContent = r.fait + (r.raccourcis ? " Son raccourci sur le bureau aussi." : "");
+              toast(r.fait);
+              compter();
+              return;
+            }
+            direIci.textContent = r.souci;
+            zone.querySelector("details")?.remove();
+            if (r.detail) zone.append(el("details", el("summary", "Voir le détail"), el("pre.journal.rg-journal", r.detail)));
+          } catch (e) { direIci.textContent = String(e); }
+          go.disabled = annuler.disabled = false;
+        });
+        const annuler = bouton("Annuler", "discret", () => { zone.hidden = true; });
+        zone.replaceChildren(...[
+          el("p.rg-note", el("b", `Désinstaller ${a.nom} ?`), " ",
+            a.source === "flatpak" ? "L'application part, avec les bibliothèques que plus rien n'utilise." : "Le programme part ; tes documents restent."),
+          ap.avec && ap.avec.length ? note(`Partira avec : ${ap.avec.join(", ")}.`) : null,
+          donnees ? el("label.rg-app-case", donnees,
+            el("span", `Supprimer aussi ses données${ap.taille_donnees ? ` (${ap.taille_donnees})` : ""} : ses réglages, les comptes qui y sont connectés, et ce qu'elle a téléchargé.`)) : null,
+          el("div.rg-rangee", go, annuler), direIci].filter(Boolean));
+      };
+      const icone = a.icone ? el("img.rg-app-icone", { src: a.icone, alt: "" }) : el("span.rg-app-icone.vide", svg("paquet"));
+      bloc.append(
+        el("div.rg-app", icone,
+          el("div.rg-app-texte", el("b", a.nom), a.description ? el("span.note", a.description) : null, el("span.note.rg-app-meta", meta)),
+          bouton("Désinstaller", "", () => (zone.hidden ? deplier() : (zone.hidden = true)))),
+        zone);
+      lignes.push({ a, bloc, deplier });
+      return bloc;
+    };
+
+    liste.append(...(v.applications || []).map(ligneAppli));
+    compter();
+    const recherche = el("input.champ.rg-choix", { type: "search", placeholder: "Rechercher une application" });
+    recherche.addEventListener("input", () => {
+      const f = recherche.value.trim().toLowerCase();
+      for (const l of lignes) l.bloc.hidden = !!f && !`${l.a.nom} ${l.a.description} ${l.a.identifiant}`.toLowerCase().includes(f);
+    });
+
+    if (cible) {
+      const l = lignes.find((x) => (x.a.entrees || []).includes(cible));
+      if (l) {
+        l.bloc.classList.add("vise");
+        setTimeout(() => l.bloc.scrollIntoView({ block: "center" }), 60);
+        l.deplier();
+      } else {
+        dire.textContent = (v.livrees_entrees || []).includes(cible)
+          ? "Cette application fait partie de grenOS : elle ne se désinstalle pas, le bureau en dépend."
+          : "Cette application ne se désinstalle pas d'ici : elle n'a été installée ni par GrenPlace, ni par Flatpak, ni par apt.";
+      }
+    }
+    const livrees = v.livrees || [];
+    return [titre("Applications", "Ce que tu as installé, et de quoi le désinstaller."),
+      carte(el("div.rg-ligne", recherche, compte), dire, liste),
+      livrees.length ? carte(el("details", el("summary", `Livrées avec grenOS (${livrees.length})`), el("p.rg-diag", livrees.join(" · "))),
+        note("Elles font partie de grenOS : le bureau, la barre ou l'installation en dépendent. Elles se mettent à jour avec le système, mais ne se désinstallent pas.")) : null,
+      carte(ligne("Installer d'autres applications", bouton("Ouvrir GrenPlace", "", () => ouvrirProgramme("grenplace"))),
+        note("Un clic droit sur une application du menu Démarrer propose aussi « Désinstaller… »."))];
+  }
+
   async function garnir(cle) {
     if (D.pages[cle].dataset.garnie) return;
     D.pages[cle].dataset.garnie = "1";
@@ -538,7 +649,13 @@
     garnir(cle);
   }
 
-  window.grenosOnglet = (cle) => { if (D.pages[cle]) montrer(cle); };
+  window.grenosOnglet = (onglet) => {
+    const [cle, cible] = lireOnglet(onglet);
+    if (!D.pages[cle]) return;
+    // Fenêtre déjà ouverte, une autre application visée : la page se refait.
+    if (cible) { D.cibleAppli = cible; delete D.pages[cle].dataset.garnie; }
+    montrer(cle);
+  };
 
   // LA CLÉ DE SÉCURITÉ (19 novembre) : une clé FIDO2/U2F (YubiKey…) qu'on
   // touche au lieu de taper son mot de passe. Facultative, jamais
@@ -585,8 +702,10 @@
       D.contenu.append(D.pages[cle]);
     }
     document.body.append(el("div.page-reglages", volet, D.contenu));
+    const [demande, cible] = lireOnglet(window.GRENOS_ONGLET);
+    if (cible) D.cibleAppli = cible;
     const depart = PROPOSER_MAX ? "ecran"
-      : PAGES.some((p) => p[0] === window.GRENOS_ONGLET) ? window.GRENOS_ONGLET : "apparence";
+      : PAGES.some((p) => p[0] === demande) ? demande : "apparence";
     montrer(depart);
     pret();
     api.appeler("reglages_ouvert");

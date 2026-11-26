@@ -191,6 +191,24 @@
       case "grenai_claude_code": return null;
       case "grenai_mcp_etat": return { branche: !!window.APERCU_MCP, desktop: false, code_installe: false, serveur: true };
       case "grenai_mcp": window.APERCU_MCP = a && a.brancher; return a && a.brancher ? "C'est branché : Claude peut maintenant voir l'écran, piloter la souris et le clavier, et lancer des commandes sur cette machine." : "grenOS est débranché de Claude.";
+      // Réglages › Applications (26 novembre) : ce que desinstaller.rs rend.
+      case "reglages_applications": await attendre(400); return {
+        applications: (window.APERCU_APPLIS = window.APERCU_APPLIS || [
+          { source: "flatpak", identifiant: "com.discordapp.Discord", nom: "Discord", description: "Discutez avec vos amis et communautés", version: "1.0.171", taille: "599,2 Mo", installation: "system", icone: "", entrees: ["com.discordapp.Discord.desktop"] },
+          { source: "flatpak", identifiant: "org.libreoffice.LibreOffice", nom: "LibreOffice", description: "La suite bureautique", version: "26.8.3.1", taille: "804,2 Mo", installation: "system", icone: "", entrees: ["org.libreoffice.LibreOffice.desktop", "org.libreoffice.LibreOffice.calc.desktop"] },
+          { source: "apt", identifiant: "opera-gx-stable", nom: "Opera GX", description: "Le navigateur pour les joueurs", version: "140.0.6074.73", taille: "450 Mo", installation: "", icone: "", entrees: ["opera-gx.desktop"] },
+          { source: "flatpak", identifiant: "com.valvesoftware.Steam", nom: "Steam", description: "Lanceur de jeux vidéo", version: "1.0.0.87", taille: "53,9 Mo", installation: "system", icone: "", entrees: ["com.valvesoftware.Steam.desktop"] },
+        ]),
+        livrees: ["Disques", "Firefox ESR", "GParted", "Mousepad", "Terminal Xfce"],
+        livrees_entrees: ["firefox-esr.desktop", "gparted.desktop"] };
+      case "reglages_desinstaller_apercu": await attendre(300);
+        if (a.identifiant === "opera-gx-stable") return { avec: ["opera-gx-ffmpeg-codecs"], donnees: false };
+        return { avec: [], donnees: a.identifiant === "com.valvesoftware.Steam", taille_donnees: "212,4 Go" };
+      case "reglages_desinstaller": await attendre(1200);
+        if (a.identifiant === "opera-gx-stable") return { fait: "", souci: "Le mot de passe administrateur n'a pas été donné : rien n'a été retiré.", detail: "Error executing command as another user: Not authorized" };
+        { const nom = (window.APERCU_APPLIS.find((x) => x.identifiant === a.identifiant) || {}).nom || a.identifiant;
+          window.APERCU_APPLIS = window.APERCU_APPLIS.filter((x) => x.identifiant !== a.identifiant);
+          return { fait: `${nom} est désinstallée.`, souci: "", raccourcis: a.identifiant === "com.discordapp.Discord" ? 1 : 0 }; }
       case "reglages_dispositions_lire": return true;
       case "reglages_dispositions": return "En faisant glisser une fenêtre vers le haut, la barre des dispositions apparaît.";
       case "reglages_barre_lire": return window.APERCU_BARRE || "dock";

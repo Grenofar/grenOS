@@ -5,7 +5,9 @@
   const PAGES = ["premier", "maj", "perf", "lance", "arret", "recuperation", "grenai", "agenda", "horloge", "fichiers", "reglages", "jeux", "grenplace", "hub", "taches", "connexions", "secours", "bienvenue", "installation", "preparer"];
   // Dans l'aperçu, « #reglages:ecran » ouvre aussi l'onglet, comme Rust le
   // fait avec GRENOS_ONGLET (« grenos-ui reglages:ecran »).
-  const [ancre, onglet] = location.hash.slice(1).split(":");
+  // « #reglages:applications:gimp.desktop » : tout ce qui suit la page est l'onglet.
+  const h = location.hash.slice(1); const i = h.indexOf(":");
+  const [ancre, onglet] = i < 0 ? [h, ""] : [h.slice(0, i), h.slice(i + 1)];
   let page = window.GRENOS_PAGE || ancre || "premier";
   if (!PAGES.includes(page)) page = "premier";
   if (!window.GRENOS_PAGE && onglet) window.GRENOS_ONGLET = onglet;
