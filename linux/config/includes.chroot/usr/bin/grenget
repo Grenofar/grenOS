@@ -14,6 +14,7 @@ par `grenget installer <nom>`, et inversement.
     grenget info obs
     grenget maj
     grenget proposer          → https://grenos.vercel.app/grenget
+    grenget temprep ouvrir    → des commandes envoyées d'un autre PC (voir /usr/lib/grenos/temprep)
 
 LA RÈGLE DE SÛRETÉ, reprise telle quelle de GrenPlace : le catalogue vient du
 réseau, il dit QUOI installer, jamais COMMENT. La commande est construite ici,
@@ -68,6 +69,7 @@ V = {
     "chercher": _("search", "chercher"), "installer": _("install", "installer"),
     "enlever": _("remove", "enlever"), "liste": _("list", "liste"), "info": "info",
     "maj": _("update", "maj"), "proposer": _("suggest", "proposer"), "aide": _("help", "aide"),
+    "temprep": "temprep",
 }
 
 COULEUR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
@@ -306,6 +308,17 @@ def proposer(_args):
     return 0
 
 
+def temprep(args):
+    """Des commandes envoyées à un autre PC du réseau, et leur sortie en retour
+    (26 novembre). Un programme à part, en Python seul : copié tel quel sur un
+    PC qui n'a pas encore la mise à jour, il marche aussi."""
+    chemin = "/usr/lib/grenos/temprep"
+    if not os.path.isfile(chemin):
+        # Lancé depuis le dépôt (linux/config/includes.chroot/usr/bin/grenget).
+        chemin = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../lib/grenos/temprep")
+    os.execv(sys.executable, [sys.executable, chemin] + list(args))
+
+
 def aide(_args):
     print(c(VIOLET, "● ") + c(BLANC, _("grenget — grenOS apps", "grenget — les applications de grenOS"), True))
     mot, nom = _("<word>", "<mot>"), _("<name>", "<nom>")
@@ -315,7 +328,8 @@ def aide(_args):
                          (V["liste"], _("what's installed", "ce qui est installé")),
                          (f"info {nom}", _("its page", "sa fiche")),
                          (V["maj"], _("update the apps", "mettre les applications à jour")),
-                         (V["proposer"], _("suggest an app for the catalog", "proposer une application au catalogue"))):
+                         (V["proposer"], _("suggest an app for the catalog", "proposer une application au catalogue")),
+                         (_("temprep open|send", "temprep ouvrir|envoyer"), _("commands sent to another PC on your network", "des commandes envoyées à un autre PC de ton réseau"))):
         print(f"  {c(BLEU, ('grenget ' + verbe).ljust(26))} {texte}")
     print(c(GRIS, _(f"\n  The catalog is GrenPlace's. How it works: {PAGE}", f"\n  Le catalogue est celui de GrenPlace. Comment ça marche : {PAGE}")))
     print(c(GRIS, _("  The French verbs work too (installer, chercher…).", "  Les verbes anglais marchent aussi (install, search…).")))
@@ -323,7 +337,7 @@ def aide(_args):
 
 
 COMMANDES = {"chercher": chercher, "installer": installer, "enlever": enlever, "liste": liste,
-             "info": info, "maj": maj, "proposer": proposer, "aide": aide}
+             "info": info, "maj": maj, "proposer": proposer, "aide": aide, "temprep": temprep}
 # Les deux langues marchent toujours, quelle que soit celle de grenOS : un
 # tutoriel écrit en français reste juste sur une machine en anglais.
 SYNONYMES = {"search": "chercher", "install": "installer", "remove": "enlever", "uninstall": "enlever",
