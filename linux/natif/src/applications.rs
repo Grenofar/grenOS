@@ -444,6 +444,63 @@ pub fn application_du_jeu<'a>(titre: &str, classe: &str, apps: &'a [Application]
     apps.iter().find(|a| plier(&nom_de_jeu(&a.nom, "")) == voulu)
 }
 
+// ---- Les fenêtres de grenOS (26 novembre) ---------------------------------------
+//
+// Grenofar : « explorateur dans le dock on voit paramètre ». grenos-ui est UN
+// processus pour toutes les fenêtres de grenOS, donc UNE classe X
+// (« Grenos-ui ») pour les Réglages, l'Explorateur, GrenPlace… La barre les
+// rangeait en une seule tuile, au nom de la première application trouvée :
+// l'Explorateur ouvert montrait l'engrenage des Réglages. Le titre, posé par
+// grenos-ui (main.rs, PAGES ; « dossier — Explorateur de fichiers »), dit
+// laquelle c'est.
+
+/// Le titre (sa fin) d'une fenêtre de grenos-ui, et la commande de son lanceur.
+const FENETRES_GRENOS: &[(&str, &str)] = &[
+    ("Explorateur de fichiers", "grenos-fichiers"),
+    ("Réglages de grenOS", "grenos-parametres"),
+    ("Gestionnaire de tâches", "grenos-taches"),
+    ("GrenPlace", "grenplace"),
+    ("GrenLaunch", "grenlaunch"),
+    ("GrenAI", "grenai"),
+    ("grenPerf", "grenos-perf"),
+    ("grenHub", "grenos-hub"),
+    ("grenRecovery", "grenrecovery"),
+    ("Mises à jour", "grenos-maj"),
+    ("Fin de session", "grenos-arret"),
+    ("Agenda", "grenos-agenda"),
+    ("Horloge", "grenos-horloge"),
+    ("Jeux", "grenos-jeux"),
+    ("Connexions", "grenos-connexions"),
+    ("Préparer le matériel", "grenos-ui preparer"),
+    ("Mode sans échec de grenOS", "grenos-secours"),
+    ("Bienvenue dans grenOS", "grenos-bienvenue"),
+];
+
+/// Une fenêtre de grenos-ui ?
+pub fn de_grenos_ui(classe: &str) -> bool {
+    classe.eq_ignore_ascii_case("grenos-ui")
+}
+
+/// Le lanceur d'une fenêtre de grenos-ui, d'après son titre.
+pub fn lanceur_grenos(classe: &str, titre: &str) -> Option<&'static str> {
+    if !de_grenos_ui(classe) {
+        return None;
+    }
+    let titre = titre.trim();
+    FENETRES_GRENOS.iter().find(|(t, _)| titre.ends_with(t)).map(|(_, c)| *c)
+}
+
+/// Ce qui range une fenêtre avec d'autres dans la barre : sa classe — ou,
+/// pour une fenêtre de grenos-ui, son lanceur. Sans classe, son titre.
+pub fn groupe_de(classe: &str, titre: &str) -> String {
+    match lanceur_grenos(classe, titre) {
+        Some(l) => l.to_string(),
+        None if !classe.is_empty() => classe.to_string(),
+        None if !titre.is_empty() => titre.to_string(),
+        None => "?".into(),
+    }
+}
+
 /// L'application d'une fenêtre : son jeu, ou l'application de sa classe.
 pub fn application_de_fenetre<'a>(groupe: &str, titre: &str, apps: &'a [Application]) -> Option<&'a Application> {
     if est_un_jeu(groupe) {
@@ -458,6 +515,8 @@ pub fn nom_de_fenetre(groupe: &str, titre: &str, app: Option<&Application>) -> S
     match app {
         Some(a) => a.nom.clone(),
         None if est_un_jeu(groupe) => nom_de_jeu(titre, groupe),
+        // Une fenêtre de grenOS qu'on ne connaît pas encore : son titre.
+        None if de_grenos_ui(groupe) && !titre.is_empty() => titre.to_string(),
         None => groupe.to_string(),
     }
 }
@@ -473,6 +532,10 @@ pub fn meme_application(groupe: &str, titre: &str, commande: &str, apps: &[Appli
     if est_un_jeu(groupe) {
         return application_du_jeu(titre, groupe, apps).is_some_and(|a| a.commande == commande);
     }
+    // Une fenêtre de grenOS ne rejoint que l'épinglée de SON lanceur.
+    if de_grenos_ui(groupe) {
+        return lanceur_grenos(groupe, titre).is_some_and(|l| l == commande || (programme_de(l) == programme && programme != "grenos-ui"));
+    }
     let groupe = groupe.to_lowercase();
     let titre = titre.to_lowercase();
     let mut candidats = vec![programme.to_lowercase(), vrai_programme(&programme).to_lowercase()];
@@ -487,6 +550,13 @@ pub fn meme_application(groupe: &str, titre: &str, commande: &str, apps: &[Appli
 /// L'application du système qui correspond à une classe de fenêtre.
 pub fn application_de<'a>(groupe: &str, apps: &'a [Application]) -> Option<&'a Application> {
     if est_un_jeu(groupe) {
+        return None;
+    }
+    // Le lanceur d'une fenêtre de grenOS (groupe_de) : son entrée du menu.
+    if let Some((_, l)) = FENETRES_GRENOS.iter().find(|(_, l)| *l == groupe) {
+        return apps.iter().find(|a| a.commande == *l).or_else(|| apps.iter().find(|a| programme_de(&a.commande) == programme_de(l) && programme_de(l) != "grenos-ui"));
+    }
+    if de_grenos_ui(groupe) {
         return None;
     }
     let g = groupe.to_lowercase();
@@ -601,6 +671,40 @@ mod tests {
         assert_eq!(c.get("Name[fr]").map(String::as_str), Some("Web"));
         assert_eq!(c.get("Name").map(String::as_str), Some("Firefox"));
         assert_eq!(nettoyer_exec(c.get("Exec").unwrap()), "firefox-esr");
+    }
+
+    #[test]
+    fn chaque_fenetre_de_grenos_a_sa_tuile() {
+        let app = |nom: &str, commande: &str| Application {
+            nom: nom.into(), note: String::new(), commande: commande.into(), icone: String::new(),
+            classe: programme_de(commande), fichier: PathBuf::new(), cache: false, terminal: false,
+        };
+        let apps = vec![
+            app("Explorateur de fichiers", "grenos-fichiers"),
+            app("Préparer le matériel", "grenos-ui preparer"),
+            app("Réglages", "grenos-parametres"),
+            app("GrenPlace", "grenplace"),
+        ];
+        let explorateur = "grnfr — Explorateur de fichiers";
+        // Le bug : les deux fenêtres avaient le même groupe, « Grenos-ui ».
+        assert_eq!(groupe_de("Grenos-ui", explorateur), "grenos-fichiers");
+        assert_eq!(groupe_de("Grenos-ui", "Réglages de grenOS"), "grenos-parametres");
+        assert_eq!(application_de_fenetre(&groupe_de("Grenos-ui", explorateur), explorateur, &apps).map(|a| a.nom.as_str()), Some("Explorateur de fichiers"));
+        assert_eq!(application_de_fenetre("grenos-parametres", "Réglages de grenOS", &apps).map(|a| a.nom.as_str()), Some("Réglages"));
+        assert_eq!(application_de_fenetre("grenos-ui preparer", "Préparer le matériel", &apps).map(|a| a.nom.as_str()), Some("Préparer le matériel"));
+        // L'Explorateur rejoint l'épinglée « Fichiers », et elle seule.
+        assert!(meme_application("Grenos-ui", explorateur, "grenos-fichiers", &apps));
+        assert!(!meme_application("Grenos-ui", "Réglages de grenOS", "grenos-fichiers", &apps));
+        assert!(!meme_application("Grenos-ui", explorateur, "grenos-ui preparer", &apps));
+        assert!(meme_application("Grenos-ui", "GrenPlace", "grenplace", &apps));
+        // Une fenêtre de grenOS inconnue : ni l'application « Préparer », ni une épinglée.
+        assert_eq!(groupe_de("Grenos-ui", "Nouvelle"), "Grenos-ui");
+        assert!(application_de("Grenos-ui", &apps).is_none());
+        assert_eq!(nom_de_fenetre("Grenos-ui", "Nouvelle", None), "Nouvelle");
+        assert!(!meme_application("Grenos-ui", "Nouvelle", "grenos-ui preparer", &apps));
+        // Les autres fenêtres ne changent pas.
+        assert_eq!(groupe_de("Firefox-esr", "Accueil"), "Firefox-esr");
+        assert_eq!(groupe_de("", "Sans classe"), "Sans classe");
     }
 
     #[test]

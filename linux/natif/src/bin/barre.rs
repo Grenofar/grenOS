@@ -847,7 +847,7 @@ impl Barre {
         // Ce qui tourne sans être épinglé, groupé par classe, dans l'ordre.
         let mut restantes: Vec<(String, Vec<Fenetre>)> = Vec::new();
         for f in ouvertes.iter().filter(|f| !prises.contains(&f.xid)) {
-            let groupe = if !f.classe.is_empty() { f.classe.clone() } else if !f.titre.is_empty() { f.titre.clone() } else { "?".into() };
+            let groupe = apps::groupe_de(&f.classe, &f.titre);
             match restantes.iter_mut().find(|(g, _)| *g == groupe) {
                 Some((_, v)) => v.push(f.clone()),
                 None => restantes.push((groupe, vec![f.clone()])),
@@ -1333,7 +1333,7 @@ impl Barre {
         // Les fenêtres, groupées par application.
         let mut groupes: Vec<(String, Vec<Fenetre>)> = Vec::new();
         for f in ouvertes {
-            let g = if !f.classe.is_empty() { f.classe.clone() } else { f.titre.clone() };
+            let g = apps::groupe_de(&f.classe, &f.titre);
             match groupes.iter_mut().find(|(x, _)| *x == g) {
                 Some((_, v)) => v.push(f),
                 None => groupes.push((g, vec![f])),
@@ -1363,11 +1363,16 @@ impl Barre {
             let xids = fenetres.iter().map(|f| f.xid).collect::<Vec<_>>();
             // Un jeu : ses processus à lui (SteamAppId), jamais son lanceur —
             // Heroic ou Steam restent ouverts.
-            let flatpak = if jeu { String::new() } else { app.map(identifiant_flatpak).unwrap_or_default() };
-            let programme = if jeu { String::new() } else { app.map(|a| apps::programme_de(&a.commande)).unwrap_or_default() };
+            // Une fenêtre de grenOS : ses fenêtres seulement. Son processus,
+            // grenos-ui, porte TOUTES les autres (Réglages, Explorateur…) :
+            // le quitter les fermerait toutes (26 novembre).
+            let partage = apps::de_grenos_ui(&fenetres[0].classe);
+            let flatpak = if jeu || partage { String::new() } else { app.map(identifiant_flatpak).unwrap_or_default() };
+            let programme = if jeu || partage { String::new() } else { app.map(|a| apps::programme_de(&a.commande)).unwrap_or_default() };
             // Une Flatpak : `flatpak kill` suffit, et le pid de ses fenêtres
             // est celui du bac à sable — on ne s'en sert pas.
             let mut pids: Vec<u32> = match (&self.ecran, flatpak.is_empty()) {
+                _ if partage => Vec::new(),
                 _ if jeu => processus::du_jeu(&groupe),
                 (Some(e), true) => xids
                     .iter()
