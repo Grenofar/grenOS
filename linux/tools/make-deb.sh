@@ -532,6 +532,11 @@ fournis = set(sys.builtin_module_names) | {
     # grenos-mcp (23 novembre) : XTest et XFixes par ctypes, attente du
     # curseur de Claude par select. Tous deux dans la bibliotheque standard.
     "ctypes", "select",
+    # temprep (26 novembre) : TLS 1.3 a cle pre-partagee, le reseau local,
+    # le code tire au hasard, la sortie des commandes au fil de l eau, la
+    # recherche du PC en parallele. Tous dans la bibliotheque standard : c est
+    # ce qui lui permet de marcher copie seul sur un PC pas encore a jour.
+    "ssl", "ipaddress", "secrets", "selectors", "codecs", "concurrent",
 }
 
 modules = {n[:-3] for n in os.listdir(os.path.join(racine, "usr/lib/grenos"))
