@@ -1,0 +1,742 @@
+#!/usr/bin/env python3
+"""temprep — envoyer des commandes à un autre PC du réseau, et recevoir leur
+sortie (26 novembre).
+
+Grenofar : « il permet d'envoyer des commandes à distance, toi tu les envoies
+sur un autre PC et tu reçois les output ». Le premier usage : réparer, depuis
+le PC de Grenofar, un grenOS installé sur un autre PC (une GT 1030) où un
+pilote douteux avait été posé.
+
+Sur le PC qu'on aide, la personne ouvre la séance avec un code :
+
+    sudo grenget temprep ouvrir K7Q2-M9XA-P4TD
+
+Depuis le PC qui aide (une personne, ou Claude dans son terminal) :
+
+    grenget temprep envoyer K7Q2-M9XA-P4TD -- lspci -nnk
+    grenget temprep envoyer K7Q2-M9XA-P4TD < script.sh
+    grenget temprep poser   K7Q2-M9XA-P4TD pilote.deb /tmp/pilote.deb
+    grenget temprep prendre K7Q2-M9XA-P4TD /var/log/Xorg.0.log
+    grenget temprep fermer  K7Q2-M9XA-P4TD
+
+LES RÈGLES, parce qu'un PC qui exécute les commandes d'un autre est une porte :
+
+- TEMPORAIRE (le « temp » du nom). Ouvert tant que la fenêtre l'est : Ctrl+C,
+  `fermer`, ou deux heures sans commande, et c'est fini. Rien ne reste : ni
+  service, ni règle de pare-feu (celle qu'on pose vit dans le noyau seulement
+  et part à la fermeture).
+- LE CODE EST LA CLÉ. 12 caractères tirés au hasard (60 bits), d'où scrypt
+  tire la clé pré-partagée de TLS 1.3. Sans le code, pas de connexion ; avec,
+  tout passe chiffré. Un PC qui se ferait passer pour l'autre devrait
+  présenter un certificat : il est refusé (`connecter`).
+- LE RÉSEAU LOCAL SEULEMENT. Une connexion venue d'ailleurs que des réseaux du
+  PC est fermée avant le moindre échange.
+- TOUT S'AFFICHE sur le PC aidé : chaque commande, d'où elle vient, son code
+  de retour. La personne voit ce qu'on fait chez elle.
+- Python et sa bibliothèque standard, rien d'autre : copié tel quel sur un PC
+  qui n'a pas encore la mise à jour, il marche.
+"""
+import base64
+import codecs
+import hashlib
+import ipaddress
+import json
+import os
+import pwd
+import secrets
+import selectors
+import signal
+import socket
+import ssl
+import subprocess
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+VERSION = 1
+PORT = 47811
+IDENTITE = "grenos-temprep-1"
+SEL = b"grenos-temprep-1"
+# Crockford : ni I, ni L, ni O, ni U — rien qui se confonde à la main.
+ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+INACTIVITE = 2 * 3600          # secondes sans commande avant fermeture
+DELAI_COMMANDE = 30 * 60       # une commande qui dépasse est arrêtée
+TAILLE_MAX = 96 * 1024 * 1024  # une ligne du protocole (poser un .deb)
+CACHE = os.path.expanduser("~/.cache/grenos/temprep.json")
+
+
+# ---- La langue, comme grenget (et celle de la personne quand on est sous sudo)
+def _langue():
+    maisons = [os.path.expanduser("~")]
+    if os.environ.get("SUDO_USER"):
+        try:
+            maisons.insert(0, pwd.getpwnam(os.environ["SUDO_USER"]).pw_dir)
+        except KeyError:
+            pass
+    for maison in maisons:
+        try:
+            with open(os.path.join(maison, ".config/grenos/langue"), encoding="utf-8") as f:
+                v = f.read().strip()
+            if v in ("en", "fr"):
+                return v
+        except OSError:
+            pass
+    return "fr" if os.environ.get("LANG", "").startswith("fr") else "en"
+
+
+FR = _langue() == "fr"
+
+
+def _(en, fr):
+    return fr if FR else en
+
+
+COULEUR = sys.stderr.isatty() and os.environ.get("NO_COLOR") is None
+BLEU, VIOLET, GRIS, VERT, ROUGE, JAUNE = "96;165;250", "167;139;250", "148;161;186", "43;196;138", "239;77;94", "250;204;21"
+
+
+def c(rvb, texte, gras=False):
+    if not COULEUR:
+        return texte
+    return f"\033[{'1;' if gras else ''}38;2;{rvb}m{texte}\033[0m"
+
+
+ECRAN = threading.Lock()
+
+
+def dire(texte):
+    """Ce que voit la personne. Sur stderr : stdout reste la sortie distante."""
+    with ECRAN:
+        print(texte, file=sys.stderr, flush=True)
+
+
+def non(texte):
+    dire(c(ROUGE, "✗ ") + texte)
+
+
+class Refus(Exception):
+    pass
+
+
+# ---- Le code et la clé -----------------------------------------------------------
+def nouveau_code():
+    s = "".join(secrets.choice(ALPHABET) for _i in range(12))
+    return f"{s[0:4]}-{s[4:8]}-{s[8:12]}"
+
+
+def normaliser(code):
+    """« k7q2 m9xa-p4td » → « K7Q2M9XAP4TD » ; None si ce n'est pas un code."""
+    s = code.upper().replace("-", "").replace(" ", "").translate(str.maketrans("OIL", "011"))
+    if len(s) != 12 or any(ch not in ALPHABET for ch in s):
+        return None
+    return s
+
+
+def cle(code):
+    return hashlib.scrypt(code.encode(), salt=SEL, n=2 ** 14, r=8, p=1, dklen=32)
+
+
+def empreinte(psk):
+    """Ce qu'on garde en cache pour retrouver le PC : jamais le code."""
+    return hashlib.sha256(b"cache" + psk).hexdigest()[:16]
+
+
+def contexte_serveur(psk):
+    if not getattr(ssl, "HAS_PSK", False):
+        raise Refus(_("this Python has no TLS-PSK", "ce Python n'a pas TLS-PSK"))
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+    ctx.set_psk_server_callback(lambda identite: psk if identite == IDENTITE else b"")
+    return ctx
+
+
+def contexte_client(psk):
+    if not getattr(ssl, "HAS_PSK", False):
+        raise Refus(_("this Python has no TLS-PSK", "ce Python n'a pas TLS-PSK"))
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+    # L'authentification est la clé pré-partagée, pas un certificat...
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.set_psk_client_callback(lambda _indice: (IDENTITE, psk))
+    return ctx
+
+
+# ---- Le réseau local -------------------------------------------------------------
+def reseaux_locaux():
+    """Les réseaux IPv4 de ce PC (192.168.68.0/22…), sans la boucle locale."""
+    reseaux = []
+    try:
+        sortie = subprocess.run(["ip", "-4", "-o", "addr", "show", "scope", "global"],
+                                capture_output=True, text=True, timeout=5).stdout
+        for ligne in sortie.splitlines():
+            mots = ligne.split()
+            if "inet" in mots:
+                reseaux.append(ipaddress.ip_interface(mots[mots.index("inet") + 1]))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    if not reseaux:
+        # Sans `ip` : l'adresse de sortie, et son /24.
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("192.0.2.1", 9))
+                reseaux.append(ipaddress.ip_interface(s.getsockname()[0] + "/24"))
+        except OSError:
+            pass
+    return reseaux
+
+
+def de_chez_nous(adresse, reseaux):
+    try:
+        ip = ipaddress.ip_address(adresse)
+    except ValueError:
+        return False
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return ip.is_loopback or any(ip in r.network for r in reseaux)
+
+
+# ---- Le protocole : une ligne JSON par message, dans TLS ---------------------------
+def ecrire(flux, message):
+    flux.write(json.dumps(message, ensure_ascii=False).encode("utf-8") + b"\n")
+    flux.flush()
+
+
+def lire(flux):
+    ligne = flux.readline(TAILLE_MAX + 1)
+    if not ligne:
+        return None
+    if len(ligne) > TAILLE_MAX:
+        raise Refus(_("message too large", "message trop gros"))
+    return json.loads(ligne.decode("utf-8"))
+
+
+# ==== LE PC QU'ON AIDE : `ouvrir` ====================================================
+class Seance:
+    def __init__(self, psk, inactivite):
+        self.psk = psk
+        self.inactivite = inactivite
+        self.derniere = time.monotonic()
+        self.en_cours = 0
+        self.verrou = threading.Lock()
+        self.fin = threading.Event()
+        self.reseaux = reseaux_locaux()
+
+    def activite(self, delta=0):
+        with self.verrou:
+            self.en_cours += delta
+            self.derniere = time.monotonic()
+
+    def endormie(self):
+        with self.verrou:
+            return self.en_cours == 0 and time.monotonic() - self.derniere > self.inactivite
+
+
+def environnement():
+    env = dict(os.environ)
+    env.update(DEBIAN_FRONTEND="noninteractive", TERM="dumb", PAGER="cat", SYSTEMD_PAGER="cat",
+               APT_LISTCHANGES_FRONTEND="none", NO_COLOR="1", SYSTEMD_COLORS="0")
+    env.setdefault("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+    return env
+
+
+def executer(envoyer, commande, delai):
+    """La commande dans bash, sa sortie renvoyée au fil de l'eau. Si l'autre PC
+    s'en va, elle continue jusqu'au bout (un apt coupé au milieu casse plus
+    qu'il ne répare) : sa sortie est seulement perdue."""
+    p = subprocess.Popen(["/bin/bash", "-c", commande], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         start_new_session=True, env=environnement(), cwd="/")
+    sel = selectors.DefaultSelector()
+    for nom, tube in (("o", p.stdout), ("e", p.stderr)):
+        os.set_blocking(tube.fileno(), False)
+        sel.register(tube, selectors.EVENT_READ, (nom, codecs.getincrementaldecoder("utf-8")("replace")))
+    debut = time.monotonic()
+    fini_a = None
+    trop_long = False
+    while sel.get_map():
+        maintenant = time.monotonic()
+        if maintenant - debut > delai:
+            trop_long = True
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            break
+        if p.poll() is not None:
+            # Un processus lancé en arrière-plan garde les tubes ouverts : on
+            # n'attend pas sa fin, deux secondes après celle de la commande.
+            fini_a = fini_a or maintenant
+            if maintenant - fini_a > 2:
+                break
+        for cle_sel, _evt in sel.select(timeout=0.5):
+            nom, decodeur = cle_sel.data
+            try:
+                morceau = os.read(cle_sel.fileobj.fileno(), 65536)
+            except BlockingIOError:
+                continue
+            if not morceau:
+                sel.unregister(cle_sel.fileobj)
+                texte = decodeur.decode(b"", final=True)
+            else:
+                texte = decodeur.decode(morceau)
+            if texte:
+                envoyer({"t": nom, "d": texte})
+    sel.close()
+    for tube in (p.stdout, p.stderr):
+        tube.close()
+    try:
+        code = p.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        code = None
+    if trop_long:
+        envoyer({"t": "e", "d": _(f"\n[temprep] stopped after {delai} s\n", f"\n[temprep] arrêtée après {delai} s\n")})
+        code = 124
+    return 255 if code is None else (code if code >= 0 else 128 - code)
+
+
+def servir(seance, conn, adresse, ctx):
+    qui = adresse[0]
+    try:
+        conn.settimeout(15)
+        with ctx.wrap_socket(conn, server_side=True) as tls:
+            tls.settimeout(None)
+            flux = tls.makefile("rwb")
+            parti = False
+
+            def envoyer(message):
+                nonlocal parti
+                if parti:
+                    return
+                try:
+                    ecrire(flux, message)
+                except OSError:
+                    parti = True
+
+            demande = lire(flux)
+            if not isinstance(demande, dict):
+                return
+            action = demande.get("action")
+            seance.activite(+1)
+            try:
+                if action == "bonjour":
+                    envoyer({"t": "bonjour", "version": VERSION, "hote": socket.gethostname(),
+                             "utilisateur": pwd.getpwuid(os.geteuid()).pw_name, "racine": os.geteuid() == 0})
+                elif action == "commande":
+                    commande = str(demande.get("commande", ""))
+                    delai = max(1, min(int(demande.get("delai", DELAI_COMMANDE)), 6 * 3600))
+                    apercu = commande.strip().replace("\n", " ⏎ ")
+                    dire(c(VIOLET, "▶ ") + c(GRIS, time.strftime("%H:%M:%S") + f" {qui} ") + (apercu[:300] + ("…" if len(apercu) > 300 else "")))
+                    debut = time.monotonic()
+                    code = executer(envoyer, commande, delai)
+                    duree = time.monotonic() - debut
+                    envoyer({"t": "fin", "code": code})
+                    marque = c(VERT, "  ✓") if code == 0 else c(JAUNE, "  ●")
+                    dire(marque + c(GRIS, _(f" exit code {code} · {duree:.1f} s", f" code de retour {code} · {duree:.1f} s".replace(".", ","))))
+                elif action == "poser":
+                    chemin = str(demande.get("chemin", ""))
+                    donnees = base64.b64decode(demande.get("donnees", ""), validate=True)
+                    if not os.path.isabs(chemin):
+                        envoyer({"t": "fin", "code": 2, "erreur": _("absolute path required", "chemin absolu exigé")})
+                    else:
+                        provisoire = f"{chemin}.temprep-{secrets.token_hex(4)}"
+                        with open(provisoire, "wb") as f:
+                            f.write(donnees)
+                        os.chmod(provisoire, int(demande.get("mode", 0o644)) & 0o7777)
+                        os.replace(provisoire, chemin)
+                        dire(c(VIOLET, "▶ ") + c(GRIS, time.strftime("%H:%M:%S") + f" {qui} ")
+                             + _(f"file received: {chemin} ({len(donnees)} bytes)", f"fichier reçu : {chemin} ({len(donnees)} octets)"))
+                        envoyer({"t": "fin", "code": 0})
+                elif action == "prendre":
+                    chemin = str(demande.get("chemin", ""))
+                    with open(chemin, "rb") as f:
+                        donnees = f.read(TAILLE_MAX // 2)
+                    dire(c(VIOLET, "▶ ") + c(GRIS, time.strftime("%H:%M:%S") + f" {qui} ")
+                         + _(f"file sent: {chemin}", f"fichier envoyé : {chemin}"))
+                    envoyer({"t": "fichier", "donnees": base64.b64encode(donnees).decode()})
+                    envoyer({"t": "fin", "code": 0})
+                elif action == "fermer":
+                    envoyer({"t": "ferme"})
+                    dire(c(VIOLET, "■ ") + _(f"closed from {qui}", f"fermé depuis {qui}"))
+                    seance.fin.set()
+                else:
+                    envoyer({"t": "fin", "code": 2, "erreur": f"action ? {action}"})
+            except (OSError, ValueError) as e:
+                envoyer({"t": "fin", "code": 1, "erreur": str(e)})
+            finally:
+                seance.activite(-1)
+    except (ssl.SSLError, OSError, ValueError, Refus):
+        # Mauvais code, ou quelqu'un qui frappe à la porte : rien à dire de plus.
+        pass
+    finally:
+        try:
+            conn.close()
+        except OSError:
+            pass
+
+
+def ufw_actif():
+    try:
+        with open("/etc/ufw/ufw.conf", encoding="utf-8") as f:
+            return any(l.strip().lower() in ("enabled=yes", "enabled=\"yes\"") for l in f)
+    except OSError:
+        return False
+
+
+def ouvrir_pare_feu(reseaux):
+    """Une règle iptables par réseau local, dans le noyau seulement : ni ufw ni
+    son fichier ne sont touchés, et un redémarrage l'efface de toute façon."""
+    if os.geteuid() != 0:
+        return []
+    regles = []
+    for r in reseaux:
+        regle = ["-p", "tcp", "--dport", str(PORT), "-s", str(r.network),
+                 "-m", "comment", "--comment", "grenos-temprep", "-j", "ACCEPT"]
+        try:
+            if subprocess.run(["iptables", "-I", "INPUT", "1", *regle], capture_output=True, timeout=10).returncode == 0:
+                regles.append(regle)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return regles
+
+
+def fermer_pare_feu(regles):
+    for regle in regles:
+        try:
+            subprocess.run(["iptables", "-D", "INPUT", *regle], capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+
+def ouvrir(args):
+    code = None
+    inactivite = INACTIVITE
+    reste = list(args)
+    while reste:
+        a = reste.pop(0)
+        if a in ("--duree", "--idle") and reste:
+            inactivite = max(60, int(float(reste.pop(0)) * 60))
+        elif code is None and not a.startswith("-"):
+            code = a
+        else:
+            non(_(f"unknown option {a}", f"option inconnue {a}"))
+            return 2
+    if code is None:
+        code = nouveau_code()
+    propre = normaliser(code)
+    if propre is None:
+        non(_("A code is 12 letters or digits, like K7Q2-M9XA-P4TD.", "Un code fait 12 lettres ou chiffres, comme K7Q2-M9XA-P4TD."))
+        return 2
+    affiche = f"{propre[0:4]}-{propre[4:8]}-{propre[8:12]}"
+    seance = Seance(cle(propre), inactivite)
+    ctx = contexte_serveur(seance.psk)
+    try:
+        serveur = socket.create_server(("0.0.0.0", PORT))
+    except OSError as e:
+        non(_(f"Port {PORT} is taken ({e}): is temprep already open?", f"Le port {PORT} est pris ({e}) : temprep est-il déjà ouvert ?"))
+        return 1
+    serveur.settimeout(0.5)
+    racine = os.geteuid() == 0
+    regles = ouvrir_pare_feu(seance.reseaux)
+
+    def arreter(*_a):
+        seance.fin.set()
+    for s in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(s, arreter)
+
+    adresses = ", ".join(str(r.ip) for r in seance.reseaux) or "?"
+    dire(c(VIOLET, "● ") + c(BLEU, _("temprep is open on this PC", "temprep est ouvert sur ce PC"), True))
+    dire(f"  {c(GRIS, _('Code    ', 'Code    '))} {c(BLEU, affiche, True)}")
+    dire(f"  {c(GRIS, _('Address ', 'Adresse '))} {adresses}  {c(GRIS, '(' + _('port', 'port') + f' {PORT})')}")
+    dire(f"  {c(GRIS, _('Runs as ', 'En tant que'))} {pwd.getpwuid(os.geteuid()).pw_name}"
+         + ("" if racine else c(JAUNE, _("  — without sudo, no repairs that need root", "  — sans sudo, pas de réparation qui demande root"))))
+    if not racine and ufw_actif():
+        dire(c(JAUNE, "  ! ") + _("This PC's firewall is on: start temprep with sudo so it opens for the session.",
+                                  "Le pare-feu de ce PC est actif : lance temprep avec sudo pour qu'il s'ouvre le temps de la séance."))
+    dire(c(GRIS, _("  Whoever has this code, on your network, runs commands here. Every one shows below.",
+                   "  Celui qui a ce code, sur ton réseau, exécute des commandes ici. Chacune s'affiche ci-dessous.")))
+    dire(c(GRIS, _(f"  Ctrl+C closes it. It closes by itself after {inactivite // 60} min without a command.",
+                   f"  Ctrl+C le ferme. Il se ferme tout seul après {inactivite // 60} min sans commande.")))
+    try:
+        while not seance.fin.is_set():
+            if seance.endormie():
+                dire(c(VIOLET, "■ ") + _("closed: nothing for a while", "fermé : plus rien depuis longtemps"))
+                break
+            try:
+                conn, adresse = serveur.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                continue
+            if not de_chez_nous(adresse[0], seance.reseaux):
+                conn.close()
+                continue
+            threading.Thread(target=servir, args=(seance, conn, adresse, ctx), daemon=True).start()
+    except KeyboardInterrupt:
+        dire("")
+        dire(c(VIOLET, "■ ") + _("temprep closed.", "temprep fermé."))
+    finally:
+        serveur.close()
+        fermer_pare_feu(regles)
+        # Une commande encore en route finit son travail (un apt ne se coupe pas).
+        attente = time.monotonic()
+        while seance.en_cours and time.monotonic() - attente < 600:
+            time.sleep(0.5)
+    return 0
+
+
+# ==== LE PC QUI AIDE : `envoyer`, `poser`, `prendre`, `fermer`, `trouver` ==========
+def lire_cache():
+    try:
+        with open(CACHE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def garder_cache(psk, adresse):
+    donnees = lire_cache()
+    donnees[empreinte(psk)] = adresse
+    try:
+        os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+        with open(CACHE, "w", encoding="utf-8") as f:
+            json.dump(donnees, f)
+    except OSError:
+        pass
+
+
+def connecter(psk, adresse, delai=6):
+    brut = socket.create_connection((adresse, PORT), timeout=delai)
+    try:
+        tls = contexte_client(psk).wrap_socket(brut)
+    except (ssl.SSLError, OSError):
+        brut.close()
+        raise
+    # ...donc un PC qui présente un certificat n'a pas pris la clé : ce
+    # n'est pas celui qui a ouvert la séance, quoi qu'il dise.
+    if tls.getpeercert(binary_form=True):
+        tls.close()
+        raise Refus(_("that PC showed a certificate instead of the code", "ce PC a présenté un certificat au lieu du code"))
+    return tls
+
+
+def bonjour(psk, adresse, delai=3):
+    try:
+        with connecter(psk, adresse, delai) as tls:
+            tls.settimeout(delai)
+            flux = tls.makefile("rwb")
+            ecrire(flux, {"action": "bonjour"})
+            reponse = lire(flux)
+            return reponse if isinstance(reponse, dict) and reponse.get("t") == "bonjour" else None
+    except (OSError, ssl.SSLError, ValueError, Refus):
+        return None
+
+
+def port_ouvert(adresse):
+    try:
+        with socket.create_connection((adresse, PORT), timeout=0.6):
+            return adresse
+    except OSError:
+        return None
+
+
+def candidats():
+    vus = set()
+    for r in reseaux_locaux():
+        reseau = r.network if r.network.prefixlen >= 22 else ipaddress.ip_network(f"{r.ip}/24", strict=False)
+        for ip in reseau.hosts():
+            if str(ip) not in vus:
+                vus.add(str(ip))
+                yield str(ip)
+
+
+def trouver_pc(psk, bavard=True):
+    """L'adresse du PC qui a ouvert la séance : celle du cache si elle répond,
+    sinon on frappe au port de temprep sur tout le réseau local."""
+    connue = lire_cache().get(empreinte(psk))
+    if connue and bonjour(psk, connue):
+        return connue
+    if bavard:
+        dire(c(GRIS, _("Looking for the PC on your network…", "Recherche du PC sur ton réseau…")))
+    with ThreadPoolExecutor(max_workers=128) as pool:
+        ouverts = [a for a in pool.map(port_ouvert, candidats()) if a]
+    for adresse in ouverts:
+        if bonjour(psk, adresse):
+            garder_cache(psk, adresse)
+            return adresse
+    return None
+
+
+def options_client(args):
+    """(code, adresse, délai, reste) — les options se placent avant `--`."""
+    code, adresse, delai, reste = None, None, DELAI_COMMANDE, []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--":
+            reste.extend(args[i + 1:])
+            break
+        if a in ("--a", "--adresse", "--address", "-a") and i + 1 < len(args):
+            adresse = args[i + 1]
+            i += 2
+            continue
+        if a in ("--delai", "--timeout", "-t") and i + 1 < len(args):
+            delai = int(args[i + 1])
+            i += 2
+            continue
+        if code is None:
+            code = a
+        else:
+            reste.append(a)
+        i += 1
+    return code, adresse, delai, reste
+
+
+def preparer(args):
+    code, adresse, delai, reste = options_client(args)
+    propre = normaliser(code or "")
+    if propre is None:
+        raise Refus(_("give the code shown on the other PC, like K7Q2-M9XA-P4TD", "donne le code affiché sur l'autre PC, comme K7Q2-M9XA-P4TD"))
+    psk = cle(propre)
+    if adresse is None:
+        adresse = trouver_pc(psk)
+        if adresse is None:
+            raise Refus(_("no PC on your network has temprep open with this code (is it open, on the same network?)",
+                          "aucun PC de ton réseau n'a temprep ouvert avec ce code (est-il ouvert, sur le même réseau ?)"))
+    return psk, adresse, delai, reste
+
+
+def echanger(psk, adresse, demande, sur_fichier=None):
+    """Envoie une demande, recopie la sortie au fil de l'eau, rend le code."""
+    with connecter(psk, adresse) as tls:
+        tls.settimeout(None)
+        flux = tls.makefile("rwb")
+        ecrire(flux, demande)
+        while True:
+            m = lire(flux)
+            if m is None:
+                non(_("the other PC hung up before the end", "l'autre PC a raccroché avant la fin"))
+                return 255
+            t = m.get("t")
+            if t == "o":
+                sys.stdout.write(m.get("d", ""))
+                sys.stdout.flush()
+            elif t == "e":
+                sys.stderr.write(m.get("d", ""))
+                sys.stderr.flush()
+            elif t == "fichier" and sur_fichier:
+                sur_fichier(base64.b64decode(m.get("donnees", "")))
+            elif t == "ferme":
+                return 0
+            elif t == "fin":
+                if m.get("erreur"):
+                    non(m["erreur"])
+                return int(m.get("code", 1))
+
+
+def envoyer(args):
+    psk, adresse, delai, reste = preparer(args)
+    commande = " ".join(reste) if reste else sys.stdin.read()
+    if not commande.strip():
+        raise Refus(_("no command to send", "aucune commande à envoyer"))
+    return echanger(psk, adresse, {"action": "commande", "commande": commande, "delai": delai})
+
+
+def poser(args):
+    psk, adresse, _delai, reste = preparer(args)
+    if len(reste) != 2:
+        raise Refus(_("usage: temprep put CODE <local file> <absolute path over there>",
+                      "usage : temprep poser CODE <fichier d'ici> <chemin absolu là-bas>"))
+    with open(reste[0], "rb") as f:
+        donnees = f.read()
+    mode = os.stat(reste[0]).st_mode & 0o777
+    return echanger(psk, adresse, {"action": "poser", "chemin": reste[1], "mode": mode,
+                                   "donnees": base64.b64encode(donnees).decode()})
+
+
+def prendre(args):
+    psk, adresse, _delai, reste = preparer(args)
+    if len(reste) not in (1, 2):
+        raise Refus(_("usage: temprep get CODE <path over there> [<local file>]",
+                      "usage : temprep prendre CODE <chemin là-bas> [<fichier d'ici>]"))
+    cible = reste[1] if len(reste) == 2 else None
+
+    def recu(donnees):
+        if cible:
+            with open(cible, "wb") as f:
+                f.write(donnees)
+        else:
+            sys.stdout.buffer.write(donnees)
+            sys.stdout.flush()
+    return echanger(psk, adresse, {"action": "prendre", "chemin": reste[0]}, recu)
+
+
+def fermer(args):
+    psk, adresse, _delai, _reste = preparer(args)
+    return echanger(psk, adresse, {"action": "fermer"})
+
+
+def trouver(args):
+    psk, adresse, _delai, _reste = preparer(args)
+    info = bonjour(psk, adresse) or {}
+    print(f"{adresse}\t{info.get('hote', '?')}\t{info.get('utilisateur', '?')}")
+    return 0
+
+
+def code(_args):
+    print(nouveau_code())
+    return 0
+
+
+def aide(_args):
+    dire(c(VIOLET, "● ") + c(BLEU, _("temprep — commands sent to another PC on your network", "temprep — des commandes envoyées à un autre PC de ton réseau"), True))
+    lignes = (
+        (_("open [CODE]", "ouvrir [CODE]"), _("on the PC to help: accept commands (with sudo for repairs)", "sur le PC à aider : accepter des commandes (avec sudo pour réparer)")),
+        (_("send CODE -- <command>", "envoyer CODE -- <commande>"), _("run it there, see its output here (or a script on stdin)", "l'exécuter là-bas, voir sa sortie ici (ou un script sur l'entrée)")),
+        (_("put CODE <file> <path>", "poser CODE <fichier> <chemin>"), _("copy a file there", "copier un fichier là-bas")),
+        (_("get CODE <path> [<file>]", "prendre CODE <chemin> [<fichier>]"), _("bring a file back", "rapatrier un fichier")),
+        (_("find CODE", "trouver CODE"), _("the other PC's address", "l'adresse de l'autre PC")),
+        (_("close CODE", "fermer CODE"), _("end the session over there", "finir la séance là-bas")),
+        ("code", _("draw a new code", "tirer un code neuf")),
+    )
+    for verbe, texte in lignes:
+        dire(f"  {c(BLEU, ('grenget temprep ' + verbe).ljust(46))} {texte}")
+    dire(c(GRIS, _("  Options: --address IP (skip the search), --timeout SECONDS (default 1800).",
+                   "  Options : --adresse IP (sans recherche), --delai SECONDES (1800 par défaut).")))
+    return 0
+
+
+ACTIONS = {"ouvrir": ouvrir, "envoyer": envoyer, "poser": poser, "prendre": prendre,
+           "fermer": fermer, "trouver": trouver, "code": code, "aide": aide}
+SYNONYMES = {"open": "ouvrir", "send": "envoyer", "run": "envoyer", "put": "poser", "get": "prendre",
+             "close": "fermer", "find": "trouver", "help": "aide", "-h": "aide", "--help": "aide"}
+
+
+def main(args):
+    if not args:
+        return aide([])
+    action = SYNONYMES.get(args[0], args[0])
+    if action not in ACTIONS:
+        non(_(f"“{args[0]}” isn't a temprep action.", f"« {args[0]} » n'est pas une action de temprep."))
+        aide([])
+        return 2
+    try:
+        return ACTIONS[action](args[1:])
+    except Refus as e:
+        non(str(e))
+        return 255
+    except (ssl.SSLError, ConnectionError, socket.timeout) as e:
+        non(_(f"connection refused ({e}): wrong code, or temprep closed over there",
+              f"connexion refusée ({e}) : mauvais code, ou temprep fermé là-bas"))
+        return 255
+    except OSError as e:
+        non(str(e))
+        return 255
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.exit(130)
