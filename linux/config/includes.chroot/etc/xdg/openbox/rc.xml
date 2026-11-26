@@ -242,6 +242,14 @@
       <action name="Execute"><command>grenos-presse</command></action>
     </keybind>
 
+    <!-- Win+G : GrenLaunch, tous les jeux (26 novembre). Grenofar : « fais
+         qu'il y a un raccourci clavier qu'on peut faire pour ouvrir
+         GrenLaunch ». Win+G est la touche des jeux sous Windows (la Game
+         Bar) : la même place, pour la même chose. -->
+    <keybind key="W-g">
+      <action name="Execute"><command>grenlaunch</command></action>
+    </keybind>
+
     <!-- G11 — les bureaux virtuels, avec les raccourcis de Windows (18
          novembre). Deux bureaux existaient depuis septembre, mais AUCUN
          raccourci n'y menait : ils étaient inatteignables.
