@@ -1,4 +1,4 @@
-// L'Explorateur de fichiers : « Accès rapide » puis « Ce PC », un fil
+// L'Explorateur de fichiers : « Accès rapide » puis la page « Ce PC », un fil
 // d'Ariane qui devient une barre d'adresse (F4, Ctrl+L), des onglets (Ctrl+T,
 // Ctrl+W, Ctrl+Tab), et les raccourcis de Windows relus sur sa page « Keyboard
 // shortcuts » — Retour arrière y veut dire PRÉCÉDENT, Alt+Haut le parent.
@@ -20,6 +20,14 @@
   const base = (c) => c.replace(/\/+$/, "").split("/").pop() || "/";
   const parent = (c) => { const p = c.replace(/\/+$/, "").split("/").slice(0, -1).join("/"); return p || "/"; };
   const joindre = (d, n) => (d === "/" ? "/" : d + "/") + n;
+  // CE PC, UNE PAGE (26 novembre). Grenofar : « dans explorateur ajoute une
+  // page Ce PC où on peut voir les trucs Windows (enlève donc de la gauche),
+  // une page, pas juste une catégorie à gauche ». Comme sous Windows : les
+  // dossiers, ceux de Windows, puis chaque disque avec sa jauge de place
+  // libre. C'est un « dossier » de plus pour les onglets et l'historique.
+  const CE_PC = "ce-pc:";
+  const enCePc = () => onglet().dossier === CE_PC;
+  const nomDe = (c) => (c === CE_PC ? "Ce PC" : base(c));
   const ICONES = { dossier: "dossier", image: "image", video: "film", audio: "son", archive: "paquet", pdf: "texte", texte: "texte", code: "code", programme: "terminal", fichier: "fichier" };
 
   function taille(o) {
@@ -41,7 +49,7 @@
   function dessinerOnglets() {
     D.onglets.hidden = S.onglets.length <= 1;
     D.onglets.replaceChildren(...S.onglets.map((o, i) =>
-      el(`button${i === S.actif ? ".actif" : ""}`, { onclick: () => { S.actif = i; changerDOnglet(); } }, base(o.dossier))),
+      el(`button${i === S.actif ? ".actif" : ""}`, { onclick: () => { S.actif = i; changerDOnglet(); } }, nomDe(o.dossier))),
       el("button.fx-fermer-onglet", { title: "Fermer cet onglet (Ctrl+W)", onclick: fermerOnglet }, "×"));
   }
 
@@ -52,7 +60,7 @@
     await aller(onglet().dossier, false);
     dessinerOnglets();
     D.liste.focus();
-    dire(`fichiers : onglets — ${S.onglets.length}, actif « ${base(onglet().dossier)} »`);
+    dire(`fichiers : onglets — ${S.onglets.length}, actif « ${nomDe(onglet().dossier)} »`);
   }
   function ouvrirOnglet() { S.onglets.splice(S.actif + 1, 0, nouvelOnglet(onglet().dossier)); S.actif++; changerDOnglet(); }
   function fermerOnglet() {
@@ -70,9 +78,15 @@
 
   // ---- Navigation --------------------------------------------------------------
   async function aller(chemin, memoriser = true) {
-    let liste;
-    try { liste = await api.appeler("fichiers_lister", { dossier: chemin, caches: S.montrerCaches }); }
-    catch (e) { etat(String(e)); return false; }
+    const cePc = chemin === CE_PC;
+    let liste = { elements: [], caches: 0 };
+    try {
+      if (cePc) await dessinerCePc();
+      else liste = await api.appeler("fichiers_lister", { dossier: chemin, caches: S.montrerCaches });
+    } catch (e) { etat(String(e)); return false; }
+    D.liste.hidden = cePc;
+    D.cePc.hidden = !cePc;
+    D.entreeCePc?.classList.toggle("actif", cePc);
     const o = onglet();
     o.dossier = chemin;
     if (memoriser) { o.histoire.splice(o.rang + 1); o.histoire.push(chemin); o.rang = o.histoire.length - 1; }
@@ -84,8 +98,8 @@
     dessinerFil();
     D.precedent.disabled = o.rang <= 0;
     D.suivant.disabled = o.rang + 1 >= o.histoire.length;
-    D.parent.disabled = chemin === "/";
-    api.appeler("fichiers_titre", { titre: `${chemin === "/" ? "Système de fichiers" : base(chemin)} — Explorateur de fichiers` });
+    D.parent.disabled = cePc;
+    api.appeler("fichiers_titre", { titre: `${cePc ? "Ce PC" : chemin === "/" ? "Système de fichiers" : base(chemin)} — Explorateur de fichiers` });
     dessinerOnglets();
     return true;
   }
@@ -97,7 +111,13 @@
   }
   function precedent() { const o = onglet(); if (o.rang > 0) { o.rang--; aller(o.histoire[o.rang], false); } }
   function suivant() { const o = onglet(); if (o.rang + 1 < o.histoire.length) { o.rang++; aller(o.histoire[o.rang], false); } }
-  function auParent() { const d = onglet().dossier; if (d !== "/") aller(parent(d)); }
+  // Au-dessus de la racine d'un disque, ou de « / », il y a Ce PC (Windows aussi).
+  function auParent() {
+    const d = onglet().dossier;
+    if (d === CE_PC) return;
+    if (d === "/" || S.cePc.some((x) => x.chemin === d && x.icone !== "compte")) aller(CE_PC);
+    else aller(parent(d));
+  }
 
   // ---- La liste ------------------------------------------------------------------
   function visibles() {
@@ -114,6 +134,12 @@
   }
 
   function dessiner() {
+    if (enCePc()) {
+      const n = D.cePc.querySelectorAll(".fx-tuile.disque").length;
+      etat(`${n} disque${n > 1 ? "s" : ""}`);
+      apercu();
+      return;
+    }
     const v = visibles();
     D.corps.replaceChildren(...v.map((e, i) => {
       const tr = el(`tr${S.choisis.has(e.chemin) ? ".choisi" : ""}`, { "data-i": i },
@@ -202,18 +228,28 @@
   function dessinerFil() {
     const d = onglet().dossier;
     let morceaux, reste, courant;
-    if (d === S.maison || d.startsWith(S.maison + "/")) {
+    // Le disque qui porte ce dossier (le plus profond) : « Ce PC › Windows › Users ».
+    const lecteur = S.cePc
+      .filter((x) => x.chemin && x.chemin !== "/" && x.icone !== "compte" && (d === x.chemin || d.startsWith(x.chemin + "/")))
+      .sort((a, b) => b.chemin.length - a.chemin.length)[0];
+    if (d === CE_PC) {
+      morceaux = [["Ce PC", CE_PC]]; reste = ""; courant = "";
+    } else if (d === S.maison || d.startsWith(S.maison + "/")) {
       morceaux = [[S.cePc[0]?.nom || "Dossier personnel", S.maison]]; reste = d.slice(S.maison.length); courant = S.maison;
+    } else if (lecteur) {
+      morceaux = [["Ce PC", CE_PC], [nomDisque(lecteur), lecteur.chemin]]; reste = d.slice(lecteur.chemin.length); courant = lecteur.chemin;
     } else {
-      morceaux = [["Système de fichiers", "/"]]; reste = d; courant = "";
+      morceaux = [["Ce PC", CE_PC], ["Système de fichiers", "/"]]; reste = d; courant = "";
     }
     for (const m of reste.split("/").filter(Boolean)) { courant = `${courant}/${m}`; morceaux.push([m, courant]); }
+    // replaceChildren écrit « null » en toutes lettres : la première miette
+    // n'a pas de flèche, elle n'a rien du tout (« null grnfr », 26 novembre).
     D.fil.replaceChildren(...morceaux.flatMap(([t, c], i) => [
       i ? el("span.fx-fleche", "›") : null,
-      el("button.fx-miette", { onclick: (ev) => { ev.stopPropagation(); aller(c); } }, t)]));
+      el("button.fx-miette", { onclick: (ev) => { ev.stopPropagation(); aller(c); } }, t)]).filter(Boolean));
   }
   function ouvrirAdresse() {
-    D.adresse.value = onglet().dossier;
+    D.adresse.value = enCePc() ? "" : onglet().dossier;
     D.fil.hidden = true; D.adresse.hidden = false;
     D.adresse.focus(); D.adresse.select();
   }
@@ -228,33 +264,83 @@
   }
 
   // ---- Volet ---------------------------------------------------------------------
+  // L'accès rapide, puis UNE entrée « Ce PC » : les disques et les dossiers
+  // de Windows sont sur sa page, plus dans le volet (26 novembre).
   async function dessinerVolet() {
     const rapides = await api.appeler("fichiers_rapides");
     S.cePc = await api.appeler("fichiers_ce_pc");
     const ligne = (nom, icone, action) => el("button.fx-entree", { onclick: action }, svg(icone), el("span", nom));
+    D.entreeCePc = ligne("Ce PC", "disque", () => aller(CE_PC));
+    D.entreeCePc.classList.toggle("actif", S.onglets.length > 0 && enCePc());
     D.volet.replaceChildren(
       el("div.etiquette", "Accès rapide"),
-      ...rapides.filter((r) => r.groupe !== "windows").map((r) => ligne(r.nom, r.icone === "telechargement" ? "fleche" : (ICONES[r.icone] || r.icone), () => aller(r.chemin))),
-      // Les dossiers de Windows (lecture seule, voir grenos-windows) sous leur titre.
-      ...(rapides.some((r) => r.groupe === "windows") ? [el("div.etiquette", "Windows · lecture seule")] : []),
-      ...rapides.filter((r) => r.groupe === "windows").map((r) => {
-        const b = ligne(r.nom, r.icone === "telechargement" ? "fleche" : (ICONES[r.icone] || r.icone), () => aller(r.chemin));
-        b.title = "Fichiers de Windows, en lecture seule : copie-les dans grenOS pour les modifier.";
-        return b;
-      }),
-      el("div.etiquette", "Ce PC"),
-      ...S.cePc.map((d) => {
-        const b = ligne(d.nom, d.icone, async () => {
-          if (d.chemin) { await aller(d.chemin); if (d.conseil) etat(d.conseil); return; }
-          if (!d.peripherique) { etat("Ce disque ne peut pas être ouvert d'ici."); return; }
-          etat("Ouverture du disque…");
-          try { const ou = await api.appeler("fichiers_monter", { peripherique: d.peripherique }); await aller(ou); dessinerVolet(); if (d.conseil) etat(d.conseil); }
-          catch (e) { etat(String(e)); }
-        });
-        // A9 : le format se voit AVANT d'ouvrir, et le conseil au survol.
-        if (d.conseil) { b.append(el("small.fx-fs", d.fs === "vfat" ? "FAT32" : d.fs.toUpperCase())); b.title = d.conseil; }
-        return b;
-      }));
+      ...rapides.filter((r) => r.groupe !== "windows").map((r) => ligne(r.nom, iconeRapide(r), () => aller(r.chemin))),
+      el("hr.fx-separation"),
+      D.entreeCePc);
+  }
+
+  // ---- Ce PC -----------------------------------------------------------------------
+  const iconeRapide = (r) => (r.icone === "telechargement" ? "fleche" : (ICONES[r.icone] || r.icone));
+  const nomDisque = (d) => (d.chemin === "/" ? "grenOS" : d.windows ? "Windows" : d.nom);
+  const FORMATS = { vfat: "FAT32", ntfs: "NTFS", ntfs3: "NTFS", exfat: "exFAT", ext4: "ext4", btrfs: "Btrfs", "crypto_LUKS": "chiffré" };
+
+  async function ouvrirLecteur(d) {
+    if (d.chemin) { await aller(d.chemin); if (d.conseil) etat(d.conseil); return; }
+    if (!d.peripherique) { etat("Ce disque ne peut pas être ouvert d'ici."); return; }
+    etat("Ouverture du disque…");
+    try {
+      const ou = await api.appeler("fichiers_monter", { peripherique: d.peripherique });
+      S.cePc = await api.appeler("fichiers_ce_pc");
+      await aller(ou);
+      if (d.conseil) etat(d.conseil);
+    } catch (e) { etat(String(e)); }
+  }
+
+  // Une tuile s'ouvre d'un double-clic, ou d'Entrée quand elle a le focus,
+  // comme dans le Ce PC de Windows ; un clic la choisit.
+  function tuile(nom, icone, lignes, action, classes = "") {
+    const b = el(`button.fx-tuile${classes}`, { title: nom, "data-nom": nom.toLowerCase() },
+      el("span.fx-tuile-icone", svg(icone)), el("span.fx-tuile-texte", el("b", nom), ...lignes.filter(Boolean)));
+    b.addEventListener("click", (e) => { if (e.detail === 0) action(); });
+    b.addEventListener("dblclick", action);
+    return b;
+  }
+
+  // La place prise et la place libre ; un disque pas encore ouvert n'a que sa taille.
+  function jauge(d) {
+    if (!d.taille) return [];
+    if (d.libre == null) return [el("small.fx-tuile-note", `${taille(d.taille)} — pas encore ouvert`)];
+    const pris = Math.max(0, Math.min(100, (100 * (d.taille - d.libre)) / d.taille));
+    return [el(`span.fx-jauge${pris >= 90 ? ".pleine" : ""}`, el("i", { style: `width:${pris.toFixed(1)}%` })),
+      el("small.fx-tuile-note", `${taille(d.libre)} libres sur ${taille(d.taille)}`)];
+  }
+
+  async function dessinerCePc() {
+    const [rapides, lecteurs] = await Promise.all([api.appeler("fichiers_rapides"), api.appeler("fichiers_ce_pc")]);
+    S.cePc = lecteurs;
+    const section = (titre, note, grille) => (grille.children.length
+      ? el("section.fx-section", el("h3.etiquette", titre), note ? el("p.note.fx-section-note", note) : null, grille) : null);
+    const grille = (classes, tuiles) => el(`div.fx-grille${classes}`, ...tuiles);
+    const disques = lecteurs.filter((d) => d.icone !== "compte").map((d) => {
+      const genre = d.windows ? "Windows · lecture seule" : d.chemin === "/" ? "Système de fichiers" : FORMATS[d.fs] || d.fs || "";
+      const t = tuile(nomDisque(d), "disque", [genre ? el("small.fx-tuile-note", genre) : null, ...jauge(d)],
+        () => ouvrirLecteur(d), `.disque${d.windows ? ".windows" : ""}`);
+      if (d.conseil) t.title = `${nomDisque(d)} — ${d.conseil}`;
+      return t;
+    });
+    D.cePc.replaceChildren(...[
+      section("Dossiers", "", grille("", rapides.filter((r) => r.groupe !== "windows").map((r) => tuile(r.nom, iconeRapide(r), [], () => aller(r.chemin))))),
+      section("Windows · lecture seule", "Les fichiers de Windows : copie-les dans grenOS pour les modifier.",
+        grille("", rapides.filter((r) => r.groupe === "windows").map((r) => tuile(r.nom, iconeRapide(r), [], () => aller(r.chemin), ".windows")))),
+      section("Disques et lecteurs", "", grille(".disques", disques)),
+    ].filter(Boolean));
+    filtrerCePc();
+  }
+
+  function filtrerCePc() {
+    const f = D.cherche.value.trim().toLowerCase();
+    for (const t of D.cePc.querySelectorAll(".fx-tuile")) t.hidden = !!f && !t.dataset.nom.includes(f);
+    for (const s of D.cePc.querySelectorAll(".fx-section")) s.hidden = ![...s.querySelectorAll(".fx-tuile")].some((t) => !t.hidden);
   }
 
   // ---- Boîtes ----------------------------------------------------------------------
@@ -296,6 +382,7 @@
 
   // ---- Gestes ------------------------------------------------------------------------
   async function nouveauDossier() {
+    if (enCePc()) return;
     const nom = await demander("Nouveau dossier", "Nom du dossier :", "Nouveau dossier");
     if (!nom) return;
     try {
@@ -321,7 +408,7 @@
     etat(couper ? `${S.pressePapier.length} élément(s) prêt(s) à être déplacé(s).` : `${S.pressePapier.length} élément(s) copié(s).`);
   }
   async function coller() {
-    if (!S.pressePapier.length) return;
+    if (!S.pressePapier.length || enCePc()) return;
     const r = await api.appeler("fichiers_coller", { sources: S.pressePapier, dossier: onglet().dossier, couper: S.couper });
     if (S.couper) { S.pressePapier = []; S.couper = false; }
     await rafraichir();
@@ -470,6 +557,7 @@
   }
 
   function filtrer() {
+    if (enCePc()) return filtrerCePc();
     dessiner();
     const f = D.cherche.value.trim();
     if (f) dire(`fichiers : recherche « ${f} » -> ${visibles().length} element(s)`);
@@ -505,7 +593,9 @@
     D.liste.addEventListener("mousedown", (ev) => { if (!ev.target.closest("tr[data-i]") && !ev.target.closest("th") && ev.button === 0) { S.choisis.clear(); dessiner(); } });
     D.etat = el("footer.fx-etat");
     D.apercu = el("aside.fx-apercu", { hidden: true });
-    D.milieu = el("div.fx-milieu", D.volet, D.liste, D.apercu);
+    D.cePc = el("div.fx-cepc", { hidden: true, tabindex: "-1" });
+    D.cePc.addEventListener("contextmenu", (ev) => ev.preventDefault());
+    D.milieu = el("div.fx-milieu", D.volet, D.liste, D.cePc, D.apercu);
     const boutonApercu = el("button.fx-outil", { title: "Volet d'aperçu (Alt+P)", onclick: basculerApercu }, svg("oeil"));
     document.body.append(el("div.page-fichiers",
       el("header.fx-barre", D.precedent, D.suivant, D.parent, el("div.fx-adresse-cadre", D.fil, D.adresse), D.cherche, boutonApercu),
@@ -517,6 +607,6 @@
     if (!(await aller(depart))) await aller(S.maison);
     D.liste.focus();
     pret();
-    dire(`fichiers ouvert, ${S.elements.length} element(s) dans ${base(onglet().dossier)}, ${S.cePc.length} entree(s) dans Ce PC`);
+    dire(`fichiers ouvert, ${S.elements.length} element(s) dans ${nomDe(onglet().dossier)}, ${S.cePc.length} entree(s) dans Ce PC`);
   })();
 })();

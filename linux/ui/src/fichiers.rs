@@ -207,19 +207,48 @@ pub fn dossiers_windows(racine: &Path) -> Vec<Rapide> {
     liste
 }
 
+/// La taille et la place libre d'un dossier monté, en octets (`df`). Borné :
+/// un partage réseau tombé ne fige pas la page Ce PC.
+fn espace(chemin: &str) -> Option<(u64, u64)> {
+    let o = std::process::Command::new("timeout").args(["3", "df", "-B1", "--output=size,avail", "--", chemin]).output().ok()?;
+    espace_de(&String::from_utf8_lossy(&o.stdout))
+}
+
+/// « 1B-blocks Avail\n244465692672 131881185280 » → (taille, libre).
+pub(crate) fn espace_de(texte: &str) -> Option<(u64, u64)> {
+    let mut l = texte.lines().nth(1)?.split_whitespace();
+    Some((l.next()?.parse().ok()?, l.next()?.parse().ok()?))
+}
+
+/// La taille d'un disque pas encore ouvert, lue par lsblk (sans root).
+#[cfg(target_os = "linux")]
+fn taille_bloc(peripherique: &str) -> Option<u64> {
+    let o = std::process::Command::new("lsblk").args(["-bdno", "SIZE", peripherique]).output().ok()?;
+    String::from_utf8_lossy(&o.stdout).trim().parse().ok()
+}
+
 /// « Ce PC » : le dossier personnel, la racine, puis les volumes que GIO
 /// montre (ceux que l'explorateur doit proposer — un disque branché,
 /// une partition interne). Commande synchrone : elle tourne sur le fil
 /// principal, celui de la boucle GLib que le moniteur de volumes attend.
+///
+/// Depuis le 26 novembre, une PAGE de l'explorateur (« Ce PC », comme
+/// Windows) : chaque disque y a sa jauge — « taille » et « libre » en
+/// octets — et celui de Windows est désigné (« windows »).
 #[tauri::command]
 pub fn fichiers_ce_pc() -> Vec<Value> {
     let id = crate::systeme::identite();
     let nom = if id["nom"].is_empty() { id["login"].clone() } else { id["nom"].clone() };
+    let jauge = |chemin: &str| espace(chemin).map(|(t, l)| (json!(t), json!(l))).unwrap_or((Value::Null, Value::Null));
+    let (t_maison, l_maison) = jauge(&maison().to_string_lossy());
+    let (t_racine, l_racine) = jauge("/");
     #[allow(unused_mut)]
     let mut liste = vec![
-        json!({ "nom": if nom.is_empty() { "Dossier personnel".to_string() } else { nom }, "chemin": maison().to_string_lossy(), "icone": "compte" }),
-        json!({ "nom": "Système de fichiers", "chemin": "/", "icone": "disque" }),
+        json!({ "nom": if nom.is_empty() { "Dossier personnel".to_string() } else { nom }, "chemin": maison().to_string_lossy(), "icone": "compte", "taille": t_maison, "libre": l_maison }),
+        json!({ "nom": "Système de fichiers", "chemin": "/", "icone": "disque", "taille": t_racine, "libre": l_racine, "grenos": true }),
     ];
+    #[cfg(target_os = "linux")]
+    let windows = fs::read_to_string("/run/grenos/windows").map(|r| r.trim().to_string()).unwrap_or_default();
     #[cfg(target_os = "linux")]
     for v in {
         use gio::prelude::*;
@@ -229,8 +258,14 @@ pub fn fichiers_ce_pc() -> Vec<Value> {
         let chemin = v.get_mount().and_then(|m| m.root().path()).map(|p| p.to_string_lossy().into_owned());
         let peripherique = v.identifier("unix-device").map(|s| s.to_string());
         let fs = peripherique.as_deref().map(type_de_fs).unwrap_or_default();
+        let (taille, libre) = match (&chemin, &peripherique) {
+            (Some(c), _) => jauge(c),
+            (None, Some(p)) => (taille_bloc(p).map(|t| json!(t)).unwrap_or(Value::Null), Value::Null),
+            _ => (Value::Null, Value::Null),
+        };
+        let de_windows = !windows.is_empty() && chemin.as_deref() == Some(windows.as_str());
         liste.push(json!({ "nom": v.name().to_string(), "chemin": chemin, "peripherique": peripherique, "icone": "disque",
-                           "fs": fs, "conseil": conseil_fs(&fs) }));
+                           "fs": fs, "conseil": conseil_fs(&fs), "taille": taille, "libre": libre, "windows": de_windows }));
     }
     liste
 }
@@ -772,6 +807,13 @@ pub async fn fichiers_apercu(chemin: String) -> Value {
 
 #[cfg(test)]
 mod essais {
+    #[test]
+    fn la_jauge_d_un_disque_se_lit() {
+        assert_eq!(super::espace_de(" 1B-blocks        Avail\n244465692672 131881185280\n"), Some((244465692672, 131881185280)));
+        assert_eq!(super::espace_de("df: /x: No such file or directory\n"), None);
+        assert_eq!(super::espace_de(""), None);
+    }
+
     #[test]
     fn fat32_est_signale_et_ext4_non() {
         assert!(super::conseil_fs("vfat").unwrap().contains("4 Go"));
