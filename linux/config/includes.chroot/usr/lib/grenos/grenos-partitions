@@ -10,7 +10,16 @@
 #   grenos-partitions formater  /dev/sdX1 ext4|exfat|ntfs|fat32 "Nom"
 #   grenos-partitions renommer  /dev/sdX1 "Nom"
 #   grenos-partitions supprimer /dev/sdX1
-#   grenos-partitions creer     /dev/sdX  ext4|exfat|ntfs|fat32 "Nom" [taille en Mio, vide = tout]
+#   grenos-partitions creer     /dev/sdX  ext4|exfat|ntfs|fat32 "Nom" [taille en Mio, vide = tout] [grenos]
+#   grenos-partitions donner    /dev/sdX1 <Mio gardés> "Nom"
+#
+# DONNER DE LA PLACE À GRENOS (26 novembre). Grenofar : « fais que dans
+# partition on peut couper un disque pour faire en sorte que ça devient pour
+# grenOS ». `donner` réduit une partition NTFS (Windows, un disque de
+# données) ou ext4 à la taille gardée, crée dans la place libérée une
+# partition ext4, et l'ouvre à chaque démarrage pour grenOS (/mnt/Nom, dans
+# /etc/fstab ; « grenos » fait de même pour une partition créée). Le système
+# de fichiers d'abord, la partition ensuite : jamais l'inverse.
 #
 # Une ligne par refus sur la sortie d'erreur, en français : la page
 # l'affiche telle quelle.
@@ -103,6 +112,97 @@ formater_bloc() { # périphérique système nom
     return 0
 }
 
+# Réduire le système de fichiers d'une partition DÉMONTÉE à $2 octets, après
+# avoir vérifié qu'il y tient (ce qu'il contient, plus 1 Gio d'air).
+reduire_fs() { # périphérique octets
+    fs=$(lsblk -ndo FSTYPE "$1" | tr -d ' ')
+    case "$fs" in
+        ntfs)
+            # Sans --force : un volume que Windows doit vérifier, ou un Windows
+            # en veille prolongée (démarrage rapide), est refusé ici.
+            info=$(ntfsresize --info --no-progress-bar "$1" 2>&1)
+            case "$info" in
+                *ibernat*) refus "Windows est en veille prolongée (démarrage rapide) : démarre Windows, désactive « Démarrage rapide » dans les options d'alimentation, éteins-le complètement, puis réessaie." ;;
+                *"scheduled for check"*|*chkdsk*) refus "Windows doit d'abord vérifier ce disque : démarre Windows une fois (ou lance « chkdsk /f » dessus), puis réessaie." ;;
+            esac
+            min=$(printf '%s\n' "$info" | sed -n 's/.*resize at \([0-9][0-9]*\) bytes.*/\1/p' | head -1)
+            [ -n "$min" ] || refus "La place occupée sur ce disque est illisible : $(printf '%s\n' "$info" | tail -1)"
+            [ "$2" -ge $((min + 1073741824)) ] \
+                || refus "Trop peu gardé : ce que contient la partition demande au moins $(( (min + 1073741824) / 1000000000 + 1 )) Go."
+            ntfsresize --no-progress-bar --size "$2" "$1" </dev/null >/dev/null 2>/run/grenos-partitions.err \
+                || refus "La réduction a échoué, rien n'a bougé : $(tail -1 /run/grenos-partitions.err 2>/dev/null)"
+            ;;
+        ext2|ext3|ext4)
+            e2fsck -f -p "$1" >/dev/null 2>&1
+            [ $? -le 1 ] || refus "La vérification de la partition a trouvé des erreurs : rien n'a été réduit."
+            bloc=$(dumpe2fs -h "$1" 2>/dev/null | sed -n 's/^Block size: *//p')
+            min=$(resize2fs -P "$1" 2>/dev/null | sed -n 's/.*: *\([0-9][0-9]*\)$/\1/p' | tail -1)
+            [ -n "$bloc" ] && [ -n "$min" ] || refus "La place occupée sur cette partition est illisible."
+            [ "$2" -ge $((min * bloc + 1073741824)) ] \
+                || refus "Trop peu gardé : ce que contient la partition demande au moins $(( (min * bloc + 1073741824) / 1000000000 + 1 )) Go."
+            resize2fs "$1" "$(($2 / 1024))K" >/dev/null 2>/run/grenos-partitions.err \
+                || refus "La réduction a échoué : $(tail -1 /run/grenos-partitions.err 2>/dev/null)"
+            ;;
+        "") refus "Cette partition n'a pas de système de fichiers : supprime-la plutôt, la place sera libre." ;;
+        *) refus "Ce format ($fs) ne se réduit pas ici : seuls NTFS (Windows) et ext4 le peuvent." ;;
+    esac
+}
+
+# Une partition dans la première place libre du disque : `neuve` la nomme.
+creer_partition() { # disque système nom taille
+    table=$(lsblk -ndo PTTYPE "$1" | tr -d ' ')
+    if [ -z "$table" ]; then
+        [ -z "$(lsblk -ndo FSTYPE "$1" | tr -d ' ')" ] \
+            || refus "Ce disque est formaté d'un seul bloc, sans table : formate-le d'abord en entier."
+        echo 'label: gpt' | sfdisk -q "$1" >/dev/null 2>&1 || refus "Impossible de créer la table de partitions."
+        table=gpt
+    fi
+    case "$2:$table" in
+        ext4:*) t=L ;;
+        *:gpt) t=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7 ;; # données Microsoft : lue par Windows
+        exfat:dos|ntfs:dos) t=7 ;;
+        fat32:dos) t=c ;;
+    esac
+    avant=$(lsblk -nrpo NAME "$1")
+    echo ",${4:+${4}M},$t" | sfdisk -q --append "$1" >/dev/null 2>"/run/grenos-partitions.err" \
+        || refus "La création a échoué : $(tail -1 /run/grenos-partitions.err 2>/dev/null)"
+    relire_table "$1"
+    # La nouvelle : le nom qui n'existait pas avant.
+    neuve=$(lsblk -nrpo NAME "$1" | grep -vxF "$avant" | head -1)
+    [ -b "$neuve" ] || refus "La partition a été créée, mais n'apparaît pas encore : débranche et rebranche le disque, puis formate-la."
+}
+
+# Ouvrir une partition ext4 à chaque démarrage, pour grenOS : /mnt/Nom dans
+# /etc/fstab — nofail (un disque débranché ne bloque pas le démarrage),
+# x-gvfs-show (elle est dans « Ce PC » de l'Explorateur). Elle appartient à
+# la personne qui l'a créée, et les lanceurs de jeux y ont accès. `dossier`
+# dit où elle est.
+pour_grenos() { # périphérique nom
+    uuid=$(blkid -s UUID -o value "$1" 2>/dev/null)
+    [ -n "$uuid" ] || refus "La partition n'a pas d'identifiant : formate-la, puis réessaie."
+    nom=${2:-Stockage}
+    dossier=/mnt/$(echo "$nom" | tr ' ' '-')
+    if [ -e "$dossier" ] && [ -n "$(ls -A "$dossier" 2>/dev/null)" ]; then
+        dossier="$dossier-$(echo "$uuid" | cut -c1-4)"
+    fi
+    if ! grep -q "^UUID=$uuid " /etc/fstab 2>/dev/null; then
+        cp -p /etc/fstab /etc/fstab.avant-partitions 2>/dev/null || true
+        printf '# Réglages › Partitions, %s : « %s » pour grenOS.\nUUID=%s %s ext4 defaults,nofail,x-gvfs-show,x-gvfs-name=%s 0 2\n' \
+            "$(date +%F)" "$nom" "$uuid" "$dossier" "$(echo "$nom" | sed 's/ /\\040/g')" >> /etc/fstab
+    fi
+    mkdir -p "$dossier"
+    systemctl daemon-reload 2>/dev/null || true
+    mount "$dossier" 2>/dev/null || mount "$1" "$dossier" 2>/dev/null \
+        || refus "La partition est prête et notée pour le démarrage, mais n'a pas pu être ouverte : redémarre."
+    qui=${PKEXEC_UID:-${SUDO_UID:-}}
+    [ -z "$qui" ] || chown "$qui" "$dossier"
+    for appli in com.valvesoftware.Steam com.heroicgameslauncher.hgl net.lutris.Lutris; do
+        flatpak info --system "$appli" >/dev/null 2>&1 \
+            && flatpak override --system --filesystem="$dossier" "$appli" 2>/dev/null
+    done
+    dire "$1 ouverte pour grenOS sur $dossier"
+}
+
 geste=${1:-}
 case "$geste" in
     formater)
@@ -147,35 +247,46 @@ case "$geste" in
         echo "Partition supprimée."
         ;;
     creer)
-        [ $# -ge 4 ] && [ $# -le 5 ] || refus "Arguments : creer disque système nom [taille]."
+        [ $# -ge 4 ] && [ $# -le 6 ] || refus "Arguments : creer disque système nom [taille] [grenos]."
         peripherique "$2"; systeme_fichiers "$3"; etiquette "$4"
-        taille=${5:-}
+        taille=${5:-}; pour=${6:-}
         case "$taille" in ""|*[!0-9]*) [ -z "$taille" ] || refus "Taille invalide." ;; esac
+        case "$pour" in ""|grenos) ;; *) refus "Arguments : creer disque système nom [taille] [grenos]." ;; esac
+        [ -z "$pour" ] || [ "$3" = ext4 ] || refus "Pour grenOS, la partition est en ext4."
         [ "$(type_de "$2")" = disk ] || refus "Choisis un disque, pas une partition."
-        # Un disque formaté d'un bloc (sans table) : il faudrait tout effacer.
-        table=$(lsblk -ndo PTTYPE "$2" | tr -d ' ')
-        if [ -z "$table" ]; then
-            [ -z "$(lsblk -ndo FSTYPE "$2" | tr -d ' ')" ] \
-                || refus "Ce disque est formaté d'un seul bloc, sans table : formate-le d'abord en entier."
-            echo 'label: gpt' | sfdisk -q "$2" >/dev/null 2>&1 || refus "Impossible de créer la table de partitions."
-            table=gpt
-        fi
-        case "$3:$table" in
-            ext4:*) t=L ;;
-            *:gpt) t=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7 ;; # données Microsoft : lue par Windows
-            exfat:dos|ntfs:dos) t=7 ;;
-            fat32:dos) t=c ;;
-        esac
-        avant=$(lsblk -nrpo NAME "$2")
-        echo ",${taille:+${taille}M},$t" | sfdisk -q --append "$2" >/dev/null 2>"/run/grenos-partitions.err" \
-            || refus "La création a échoué : $(tail -1 /run/grenos-partitions.err 2>/dev/null)"
-        relire_table "$2"
-        # La nouvelle : le nom qui n'existait pas avant.
-        neuve=$(lsblk -nrpo NAME "$2" | grep -vxF "$avant" | head -1)
-        [ -b "$neuve" ] || refus "La partition a été créée, mais n'apparaît pas encore : débranche et rebranche le disque, puis formate-la."
+        creer_partition "$2" "$3" "$4" "$taille"
         formater_bloc "$neuve" "$3" "$4"
         dire "$neuve creee en $3 sur $2"
-        echo "Partition $neuve créée en $3."
+        if [ -n "$pour" ]; then
+            pour_grenos "$neuve" "$4"
+            echo "Partition $neuve créée pour grenOS : $dossier, ouverte à chaque démarrage."
+        else
+            echo "Partition $neuve créée en $3."
+        fi
+        ;;
+    donner)
+        [ $# -eq 4 ] || refus "Arguments : donner partition taille-gardée-en-Mio nom."
+        peripherique "$2"; etiquette "$4"
+        garder=$3
+        case "$garder" in ""|*[!0-9]*) refus "Taille invalide." ;; esac
+        [ "$(type_de "$2")" = part ] || refus "Choisis une partition."
+        protege "$2" && refus "Cette partition fait tourner grenOS : on ne la réduit pas."
+        disque=/dev/$(parent "$2"); n=$(numero "$2")
+        [ -b "$disque" ] && [ -n "$n" ] || refus "Le disque de cette partition est introuvable."
+        taille=$(lsblk -bndo SIZE "$2" | tr -d ' ')
+        octets=$((garder * 1048576))
+        [ "$octets" -gt 0 ] && [ "$octets" -le $((taille - 1073741824)) ] || refus "Il faut libérer au moins 1 Go."
+        demonter_tout "$2"
+        reduire_fs "$2" "$octets"
+        # La partition, maintenant : son début ne bouge pas, sa fin recule.
+        echo ",${garder}M" | sfdisk -q -N "$n" "$disque" >/dev/null 2>/run/grenos-partitions.err \
+            || refus "Le contenu est réduit, mais pas la partition : $(tail -1 /run/grenos-partitions.err 2>/dev/null). Rien n'est perdu ; réessaie après un redémarrage."
+        relire_table "$disque"
+        dire "$2 reduite a $garder Mio"
+        creer_partition "$disque" ext4 "$4" ""
+        formater_bloc "$neuve" ext4 "$4"
+        pour_grenos "$neuve" "$4"
+        echo "Place donnée à grenOS : $dossier, ouverte à chaque démarrage."
         ;;
     *)
         refus "Geste inconnu : $geste."

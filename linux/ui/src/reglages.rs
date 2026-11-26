@@ -103,7 +103,11 @@ pub async fn reglages_signatures() -> Result<Value, String> {
 /// créer. En administrateur, par `grenos-partitions`, qui revérifie TOUT et
 /// refuse ce qui fait tourner grenOS. Ici, seulement la forme des arguments :
 /// rien de libre n'atteint la ligne de commande.
-pub(crate) fn gestes_partitions(geste: &str, peripherique: &str, systeme: &str, nom: &str, taille: &str) -> Result<Vec<String>, String> {
+///
+/// `donner` (26 novembre) : réduire une partition à `taille` Mio gardés, et
+/// donner la place libérée à grenOS (ext4, ouverte à chaque démarrage).
+/// `pour_grenos` fait de même pour une partition créée dans l'espace libre.
+pub(crate) fn gestes_partitions(geste: &str, peripherique: &str, systeme: &str, nom: &str, taille: &str, pour_grenos: bool) -> Result<Vec<String>, String> {
     let nom_dev = peripherique.strip_prefix("/dev/").unwrap_or("");
     if nom_dev.is_empty() || !nom_dev.chars().all(|c| c.is_ascii_alphanumeric()) {
         return Err("Ce périphérique n'existe pas.".into());
@@ -117,11 +121,17 @@ pub(crate) fn gestes_partitions(geste: &str, peripherique: &str, systeme: &str, 
         "formater" if fs_valide => a.extend([systeme.to_string(), nom.to_string()]),
         "renommer" if !nom.is_empty() => a.push(nom.to_string()),
         "supprimer" => {}
-        "creer" if fs_valide && taille.chars().all(|c| c.is_ascii_digit()) => {
+        "creer" if fs_valide && taille.chars().all(|c| c.is_ascii_digit()) && (!pour_grenos || systeme == "ext4") => {
             a.extend([systeme.to_string(), nom.to_string()]);
-            if !taille.is_empty() {
+            if !taille.is_empty() || pour_grenos {
                 a.push(taille.to_string());
             }
+            if pour_grenos {
+                a.push("grenos".into());
+            }
+        }
+        "donner" if !taille.is_empty() && taille.len() <= 12 && taille.chars().all(|c| c.is_ascii_digit()) && !nom.is_empty() => {
+            a.extend([taille.to_string(), nom.to_string()]);
         }
         _ => return Err("Demande incomplète.".into()),
     }
@@ -129,9 +139,13 @@ pub(crate) fn gestes_partitions(geste: &str, peripherique: &str, systeme: &str, 
 }
 
 #[tauri::command]
-pub async fn reglages_partitions_agir(geste: String, peripherique: String, systeme: Option<String>, nom: Option<String>, taille: Option<String>) -> Result<Value, String> {
-    let arguments = gestes_partitions(&geste, &peripherique, systeme.as_deref().unwrap_or(""), nom.as_deref().unwrap_or(""), taille.as_deref().unwrap_or(""))?;
-    let mut commande: Vec<String> = vec!["600".into()];
+pub async fn reglages_partitions_agir(geste: String, peripherique: String, systeme: Option<String>, nom: Option<String>, taille: Option<String>, grenos: Option<bool>) -> Result<Value, String> {
+    let arguments = gestes_partitions(&geste, &peripherique, systeme.as_deref().unwrap_or(""), nom.as_deref().unwrap_or(""), taille.as_deref().unwrap_or(""), grenos.unwrap_or(false))?;
+    // Réduire un NTFS plein déplace ses données : des dizaines de minutes,
+    // parfois plus. Le couper en plein déplacement abîmerait la partition —
+    // « donner » a donc six heures, les autres gestes dix minutes.
+    let delai = if geste == "donner" { "21600" } else { "600" };
+    let mut commande: Vec<String> = vec![delai.into()];
     commande.extend(privilegie());
     commande.push("/usr/lib/grenos/grenos-partitions".into());
     commande.extend(arguments);
@@ -575,15 +589,29 @@ mod tests_partitions {
 
     #[test]
     fn rien_de_libre_n_atteint_la_commande() {
-        assert_eq!(gestes_partitions("formater", "/dev/sdd1", "exfat", "Cle", "").unwrap(), ["formater", "/dev/sdd1", "exfat", "Cle"]);
-        assert_eq!(gestes_partitions("creer", "/dev/sda", "ext4", "", "5000").unwrap(), ["creer", "/dev/sda", "ext4", "", "5000"]);
-        assert_eq!(gestes_partitions("supprimer", "/dev/nvme0n1p4", "", "", "").unwrap(), ["supprimer", "/dev/nvme0n1p4"]);
-        assert!(gestes_partitions("formater", "/dev/../sda", "ext4", "", "").is_err());
-        assert!(gestes_partitions("formater", "/dev/sda1; rm", "ext4", "", "").is_err());
-        assert!(gestes_partitions("formater", "/dev/sda1", "btrfs", "", "").is_err());
-        assert!(gestes_partitions("formater", "/dev/sda1", "ext4", "$(x)", "").is_err());
-        assert!(gestes_partitions("creer", "/dev/sda", "ext4", "", "12G").is_err());
-        assert!(gestes_partitions("effacer", "/dev/sda", "", "", "").is_err());
-        assert!(gestes_partitions("renommer", "/dev/sda1", "", "", "").is_err());
+        assert_eq!(gestes_partitions("formater", "/dev/sdd1", "exfat", "Cle", "", false).unwrap(), ["formater", "/dev/sdd1", "exfat", "Cle"]);
+        assert_eq!(gestes_partitions("creer", "/dev/sda", "ext4", "", "5000", false).unwrap(), ["creer", "/dev/sda", "ext4", "", "5000"]);
+        assert_eq!(gestes_partitions("supprimer", "/dev/nvme0n1p4", "", "", "", false).unwrap(), ["supprimer", "/dev/nvme0n1p4"]);
+        assert!(gestes_partitions("formater", "/dev/../sda", "ext4", "", "", false).is_err());
+        assert!(gestes_partitions("formater", "/dev/sda1; rm", "ext4", "", "", false).is_err());
+        assert!(gestes_partitions("formater", "/dev/sda1", "btrfs", "", "", false).is_err());
+        assert!(gestes_partitions("formater", "/dev/sda1", "ext4", "$(x)", "", false).is_err());
+        assert!(gestes_partitions("creer", "/dev/sda", "ext4", "", "12G", false).is_err());
+        assert!(gestes_partitions("effacer", "/dev/sda", "", "", "", false).is_err());
+        assert!(gestes_partitions("renommer", "/dev/sda1", "", "", "", false).is_err());
+    }
+
+    #[test]
+    fn donner_de_la_place_a_grenos() {
+        // Réduire sda1 à 1 Tio gardé ; la place libérée devient « Jeux », pour grenOS.
+        assert_eq!(gestes_partitions("donner", "/dev/sda1", "", "Jeux", "1048576", false).unwrap(), ["donner", "/dev/sda1", "1048576", "Jeux"]);
+        assert!(gestes_partitions("donner", "/dev/sda1", "", "Jeux", "", false).is_err());
+        assert!(gestes_partitions("donner", "/dev/sda1", "", "", "1000", false).is_err());
+        assert!(gestes_partitions("donner", "/dev/sda1", "", "Jeux", "-1", false).is_err());
+        assert!(gestes_partitions("donner", "/dev/sda1", "", "Jeux", "99999999999999", false).is_err());
+        // Une partition créée pour grenOS : ext4 seulement, la taille vide reste un argument.
+        assert_eq!(gestes_partitions("creer", "/dev/sda", "ext4", "Jeux", "", true).unwrap(), ["creer", "/dev/sda", "ext4", "Jeux", "", "grenos"]);
+        assert_eq!(gestes_partitions("creer", "/dev/sda", "ext4", "Jeux", "5000", true).unwrap(), ["creer", "/dev/sda", "ext4", "Jeux", "5000", "grenos"]);
+        assert!(gestes_partitions("creer", "/dev/sda", "ntfs", "Jeux", "", true).is_err());
     }
 }

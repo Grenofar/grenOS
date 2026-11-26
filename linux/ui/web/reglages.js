@@ -407,12 +407,12 @@
   const SYSTEMES = [["ext4", "ext4 — pour grenOS et Linux"], ["exfat", "exFAT — partagé avec Windows et Mac"], ["ntfs", "NTFS — pour Windows"], ["fat32", "FAT32 — vieux appareils (4 Go par fichier au plus)"]];
   const nomPartition = (p) => p.etiquette || (p.windows ? "Windows" : p.demarrage ? "Démarrage (EFI)" : p.nom);
 
-  function confirmerPuis(texte, genre, action) {
+  function confirmerPuis(texte, genre, action, avertir = "Sûr ? Tout sera effacé — cliquer encore") {
     // Un premier clic arme, le second agit (et rien après 6 s).
     const b = bouton(texte, genre, async () => {
       if (!b.dataset.confirme) {
         b.dataset.confirme = "1";
-        b.textContent = "Sûr ? Tout sera effacé — cliquer encore";
+        b.textContent = avertir;
         setTimeout(() => { delete b.dataset.confirme; b.textContent = texte; }, 6000);
         return;
       }
@@ -446,12 +446,59 @@
       } catch (e) { dire.textContent = String(e); }
     };
     // Un petit formulaire déplié sous la ligne : système, nom, (taille).
-    const formulaire = (titreGeste, avecTaille, max, envoyer) => {
+    // `avecGrenos` (26 novembre) : une case « Pour grenOS » — ext4, ouverte
+    // à chaque démarrage, dans Ce PC et pour les jeux.
+    const formulaire = (titreGeste, avecTaille, max, envoyer, avecGrenos = false) => {
       const fs = choix(SYSTEMES, "ext4", () => {});
       const nom = el("input.champ.rg-choix", { placeholder: "Nom (facultatif)", maxlength: 16 });
       const taille = avecTaille ? el("input.champ.rg-choix", { type: "number", min: 16, max: Math.floor(max / 1048576), placeholder: `Taille en Mo (vide = tout, ${octets(max)})` }) : null;
-      const go = confirmerPuis(titreGeste, "danger", () => envoyer(fs.value, nom.value.trim(), taille ? taille.value.trim() : ""));
-      return el("div.rg-part-form", ligne("Système de fichiers", fs), ligne("Nom", nom), taille ? ligne("Taille", taille) : null, go);
+      const grenos = avecGrenos ? el("input", { type: "checkbox" }) : null;
+      if (grenos) {
+        grenos.checked = true;
+        const suivre = () => { if (grenos.checked) fs.value = "ext4"; fs.disabled = grenos.checked; };
+        grenos.addEventListener("change", suivre);
+        suivre();
+      }
+      const go = confirmerPuis(titreGeste, "danger", () => envoyer(fs.value, nom.value.trim(), taille ? taille.value.trim() : "", !!(grenos && grenos.checked)));
+      return el("div.rg-part-form",
+        grenos ? el("label.rg-app-case", grenos, el("span", "Pour grenOS : en ext4, ouverte à chaque démarrage — dans Ce PC, et utilisable par Steam et Heroic.")) : null,
+        ligne("Système de fichiers", fs), ligne("Nom", nom), taille ? ligne("Taille", taille) : null, go);
+    };
+
+    // DONNER DE LA PLACE À GRENOS (26 novembre). Grenofar : « fais que dans
+    // partition on peut couper un disque pour faire en sorte que ça devient
+    // pour grenOS ». La partition est réduite (son contenu reste), et la
+    // place libérée devient une partition ext4 que grenOS ouvre à chaque
+    // démarrage. grenos-partitions vérifie que le contenu tient, refuse un
+    // Windows en veille prolongée, et réduit le contenu AVANT la partition.
+    const formulaireDonner = (p) => {
+      const GO = 1e9;
+      const air = 1.1 * 1073741824;
+      const max = Math.floor((p.taille - (p.utilise || 0) - air) / GO);
+      if (max < 1) return note("Trop pleine pour céder de la place : il faut au moins 1 Go libre en plus de ce qu'elle contient.");
+      const curseur = el("input.rg-curseur.rg-curseur-large", { type: "range", min: 1, max, value: Math.max(1, Math.floor(max / 2)) });
+      const champ = el("input.champ.rg-choix.rg-champ-court", { type: "number", min: 1, max, value: curseur.value });
+      const nom = el("input.champ.rg-choix", { value: "Stockage", maxlength: 16 });
+      const resume = el("p.note.rg-note");
+      const donne = () => Math.min(max, Math.max(1, Math.floor(Number(champ.value) || 1)));
+      const redire = () => {
+        const n = donne();
+        resume.textContent = `grenOS reçoit ${n} Go ; ${nomPartition(p)} garde ${octets(p.taille - n * GO)}${p.utilise != null ? `, dont ${octets(p.utilise)} déjà utilisés` : ""}.`;
+      };
+      curseur.addEventListener("input", () => { champ.value = curseur.value; redire(); });
+      champ.addEventListener("input", () => { curseur.value = String(donne()); redire(); });
+      redire();
+      const go = confirmerPuis("Donner cette place à grenOS", "principal", () => {
+        const garder = Math.floor((p.taille - donne() * GO) / 1048576);
+        return agir("donner", p.chemin, { taille: String(garder), nom: nom.value.trim() || "Stockage" });
+      }, "Sûr ? Cliquer encore pour commencer");
+      return el("div.rg-part-form",
+        ligne("Place donnée à grenOS (Go)", champ), curseur, resume,
+        ligne("Nom de la nouvelle partition", nom),
+        p.utilise == null ? note("Ce qu'elle contient n'est pas encore connu (elle n'est pas montée) : grenOS le mesure avant de toucher à quoi que ce soit, et refuse si ça ne tient pas.") : null,
+        p.windows ? note("C'est Windows : éteins-le complètement avant (sans « démarrage rapide »), sinon grenOS refusera. Windows vérifiera ce disque à son prochain démarrage : c'est normal.") : null,
+        note("Rien n'est effacé, mais l'opération peut durer longtemps si la partition est pleine : n'éteins pas la machine pendant ce temps. Une sauvegarde de ce qui compte reste prudente."),
+        go);
     };
 
     const carteDisque = (d) => {
@@ -486,6 +533,10 @@
               ouvrirDetails(el("div.rg-part-form", ligne("Nouveau nom", champ), bouton("Renommer", "principal", () => agir("renommer", p.chemin, { nom: champ.value.trim() }))));
             }));
           }
+          if (["ntfs", "ext4", "ext3", "ext2"].includes(p.systeme_fichiers) && !p.chiffree && !p.demarrage
+              && p.type !== "Windows recovery environment" && p.taille > 3e9) {
+            gestes.append(bouton("Donner de la place à grenOS…", "", () => ouvrirDetails(formulaireDonner(p))));
+          }
           gestes.append(bouton("Formater…", "discret", () => ouvrirDetails(formulaire("Formater (efface tout)", false, 0, (systeme, nom) => agir("formater", p.chemin, { systeme, nom })))));
           gestes.append(confirmerPuis("Supprimer", "danger", () => agir("supprimer", p.chemin)));
         }
@@ -501,7 +552,7 @@
         return el("div.rg-part-ligne.libre",
           el("div.rg-part-titre", el("b", "Espace libre"), el("span.note", ` ${octets(l.taille)}`)),
           el("div.rg-rangee", bouton("Créer une partition…", "", () => {
-            details.replaceChildren(formulaire("Créer la partition", true, l.taille, (systeme, nom, taille) => agir("creer", d.chemin, { systeme, nom, taille })));
+            details.replaceChildren(formulaire("Créer la partition", true, l.taille, (systeme, nom, taille, grenos) => agir("creer", d.chemin, { systeme, nom, taille, grenos }), true));
             details.hidden = false;
           })), details);
       });
@@ -524,7 +575,7 @@
           bouton("Actualiser", "", async () => redessiner(await R("reglages_partitions"))),
           bouton("Redimensionner (GParted)", "discret", () => ouvrirProgramme("gparted")),
           bouton("Disques (santé, images)", "discret", () => ouvrirProgramme("gnome-disks"))),
-        note("Formater et supprimer effacent tout ce que la partition contient. Ce qui fait tourner grenOS est protégé. Pour agrandir ou réduire une partition, GParted le fait sans rien perdre.")),
+        note("Formater et supprimer effacent tout ce que la partition contient. Ce qui fait tourner grenOS est protégé. « Donner de la place à grenOS » réduit une partition sans rien effacer, et fait de la place libérée un disque pour grenOS. Pour le reste (agrandir, déplacer), GParted.")),
       ...(v.disques || []).map(carteDisque),
       (v.disques || []).length ? null : carte(note("Aucun disque lisible ici."))];
   }

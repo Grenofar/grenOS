@@ -59,3 +59,5 @@ body[data-page="reglages"] { overflow: hidden; }
 .rg-app-confirmer[hidden] { display: none; }
 .rg-app-case { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--texte-2); cursor: pointer; }
 .rg-app-case input { margin-top: 2px; accent-color: var(--danger); }
+.rg-curseur.rg-curseur-large { width: 100%; }
+.rg-choix.rg-champ-court { min-width: 0; width: 140px; }

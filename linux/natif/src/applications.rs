@@ -158,7 +158,7 @@ impl Reglage {
 
 pub const REGLAGES: &[Reglage] = &[
     Reglage { nom: "Partitions et disques", page: "partitions", icone: "drive-harddisk",
-        mots: &["partition", "disque", "ssd", "hdd", "nvme", "formater", "formatage", "stockage", "clé usb", "usb", "monter", "démonter", "volume", "ext4", "ntfs", "exfat", "fat32", "espace", "redimensionner"] },
+        mots: &["partition", "disque", "ssd", "hdd", "nvme", "formater", "formatage", "stockage", "clé usb", "usb", "monter", "démonter", "volume", "ext4", "ntfs", "exfat", "fat32", "espace", "redimensionner", "réduire", "reduire", "couper", "découper", "decouper"] },
     Reglage { nom: "Écran — définition et fréquence", page: "ecran", icone: "video-display",
         mots: &["écran", "ecran", "résolution", "définition", "fréquence", "hz", "hertz", "fps", "images par seconde", "moniteur", "affichage", "rafraîchissement", "plusieurs écrans", "disposer"] },
     Reglage { nom: "Apparence — thème, fond, effets", page: "apparence", icone: "preferences-desktop-theme",
@@ -579,6 +579,8 @@ mod tests {
         assert!(pages("hz").contains(&"ecran"));
         assert!(pages("navigateur").contains(&"compte"));
         assert!(pages("formater").contains(&"partitions"));
+        assert!(pages("réduire").contains(&"partitions"));
+        assert!(pages("couper").contains(&"partitions"));
         assert!(pages("sonic").is_empty());
         assert!(pages("p").is_empty());
     }

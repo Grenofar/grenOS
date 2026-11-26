@@ -177,9 +177,19 @@
         case "reglages_maj": return { version: "grenOS 20261118-1129", resume: "3 paquets à installer. Vérifié le 2026-11-18 08:12 UTC." };
         case "reglages_composants": await attendre(800); return { present: true, composants: [] };
         case "reglages_securite": return { resume: "ClamAV est installé. Signatures absentes : rien n'est encore analysable.", present: true, signatures: false };
+        // Partitions (26 novembre) : les disques d'une machine à Windows, avec un disque de données.
+        case "reglages_partitions": return window.APERCU_PARTITIONS || { disques: [
+          { chemin: "/dev/sda", modele: "ST2000DL003", liaison: "SATA", taille: 2000398934016, table: "gpt", systeme: false, amovible: false, entier: false,
+            partitions: [{ chemin: "/dev/sda1", nom: "sda1", taille: 2000396746752, debut: 1048576, systeme_fichiers: "ntfs", etiquette: "Disque hdd 2to", montee: "", utilise: null, systeme: false, type: "Microsoft basic data" }], libres: [] },
+          { chemin: "/dev/nvme0n1", modele: "KINGSTON SNV3S1000G", liaison: "NVMe", taille: 1000204886016, table: "gpt", systeme: false, amovible: false, entier: false,
+            partitions: [{ chemin: "/dev/nvme0n1p3", nom: "nvme0n1p3", taille: 999031779328, debut: 227540992, systeme_fichiers: "ntfs", etiquette: "", montee: "/media/windows", utilise: 937828618240, windows: true, systeme: false, type: "Microsoft basic data" }], libres: [] },
+        ] };
+        case "reglages_partitions_monter": return { souci: "" };
         case "reglages_materiel": return { lignes: [["Processeur", "16 cœurs"], ["Mémoire vive", "15,6 Go (9,1 Go libres)"], ["Carte graphique", "NVIDIA GeForce RTX 3060"]], explication: "grenOS utilise d'office tout ce que la machine lui donne." };
         default: return {};
       }
+      case "reglages_partitions_agir": await attendre(1500); window.APERCU_PARTITIONS_AGIR = a;
+        return a.geste === "donner" ? { ...(await window.APERCU("reglages", { fonction: "reglages_partitions" })), fait: "Place donnée à grenOS : /mnt/Stockage, ouverte à chaque démarrage." } : { souci: "Annulé : le mot de passe n'a pas été donné." };
       case "reglages_reseau": return "connecté";
       case "reglages_compte": return { protege: false, adresse: "lea@grenos", nom: "Léa" };
       case "reglages_parcourir_fond": return "/usr/share/backgrounds/aurore.png";
