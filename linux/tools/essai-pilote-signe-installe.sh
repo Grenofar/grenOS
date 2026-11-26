@@ -2,7 +2,12 @@
 # LE BOUTON « PRÉPARER LE MATÉRIEL », DE BOUT EN BOUT, SUR UN grenOS INSTALLÉ
 # (23 novembre).
 #
-#   sudo bash linux/tools/essai-pilote-signe-installe.sh <iso publiée> <sortie>
+#   sudo bash linux/tools/essai-pilote-signe-installe.sh <iso publiée> <sortie> [580-open|580]
+#
+# La variante (26 novembre) : « 580-open » (Turing et après, la RTX 5060) par
+# défaut, ou « 580 », le module FERMÉ des Maxwell, Pascal et Volta (la GT 1030
+# de Grenofar), que le paquet d'Ubuntu lie à l'installation à partir des
+# objets de NVIDIA et de la signature de Canonical.
 #
 # 1. La version publiée s'installe sur un disque virtuel par son propre moteur
 #    (comme la fenêtre d'installation) ;
@@ -21,6 +26,10 @@
 set -euo pipefail
 ISO=$1
 OUT=$2
+VARIANTE=${3:-${GRENOS_PILOTE:-580-open}}
+case "$VARIANTE" in 580|580-open) ;; *) echo "variante inconnue : $VARIANTE" >&2; exit 2 ;; esac
+PAQUET=nvidia-driver-$VARIANTE
+META=linux-modules-nvidia-$VARIANTE-generic
 ICI=$(cd "$(dirname "$0")" && pwd)
 DEPOT="$ICI/../config/includes.chroot"
 mkdir -p "$OUT"
@@ -42,7 +51,7 @@ ranger() {
 trap ranger EXIT
 finir() {
     if [ -n "$RATES" ]; then dire "PILOTE SIGNE : ECHEC$RATES"; exit 1; fi
-    dire "PILOTE SIGNE : un bouton, Secure Boot actif, nvidia.ko charge, aucun ecran bleu, bureau ouvert deux fois"
+    dire "PILOTE SIGNE ($PAQUET) : un bouton, Secure Boot actif, nvidia.ko charge, aucun ecran bleu, bureau ouvert deux fois"
     exit 0
 }
 
@@ -77,11 +86,15 @@ dire "installe : $(ls "$VU"/boot/vmlinuz-* | xargs -n1 basename | tr '\n' ' ')"
 
 etape "2. les fichiers du depot par-dessus, puis le bouton"
 for f in usr/lib/grenos/grenos-pilote-signe usr/lib/grenos/grenos-depot-editeur \
+         usr/lib/grenos/grenos-nvidia-variante \
          usr/lib/grenos/grenos-pilote-refuse usr/lib/grenos/grenos-maj-demarrage \
          usr/lib/grenos/appliquer-systeme etc/systemd/system/grenos-pilote-refuse.service \
          usr/share/grenos/depots/nvidia-driver-580-open.gpg usr/share/grenos/depots/nvidia-driver-580-open.list \
          usr/share/grenos/depots/nvidia-driver-580-open.pref usr/share/grenos/depots/nvidia-driver-580-open.avec \
-         usr/share/grenos/depots/nvidia-driver-580-open.signe; do
+         usr/share/grenos/depots/nvidia-driver-580-open.signe \
+         usr/share/grenos/depots/nvidia-driver-580.gpg usr/share/grenos/depots/nvidia-driver-580.list \
+         usr/share/grenos/depots/nvidia-driver-580.pref usr/share/grenos/depots/nvidia-driver-580.avec \
+         usr/share/grenos/depots/nvidia-driver-580.signe; do
     # Les droits de Git, tels quels : un script sans bit d'exécution doit
     # échouer ICI comme chez Grenofar (23 novembre, « Permission denied »).
     mkdir -p "$(dirname "$VU/$f")"
@@ -95,16 +108,25 @@ cp "$VU/etc/resolv.conf.essai" "$VU/etc/resolv.conf"
 dans() { chroot "$VU" env GRENOS_SANS_NVRAM=1 DEBIAN_FRONTEND=noninteractive "$@"; }
 dans /usr/lib/grenos/appliquer-systeme > "$OUT/appliquer.log" 2>&1 || rate "appliquer-systeme echoue"
 # Ce que fait installer.rs, ligne pour ligne.
-if dans /usr/lib/grenos/grenos-depot-editeur nvidia-driver-580-open > "$OUT/bouton.log" 2>&1 \
+if dans /usr/lib/grenos/grenos-depot-editeur "$PAQUET" > "$OUT/bouton.log" 2>&1 \
    && dans apt-get update >> "$OUT/bouton.log" 2>&1 \
-   && dans apt-get install -y --install-recommends linux-modules-nvidia-580-open-generic nvidia-driver-580-open >> "$OUT/bouton.log" 2>&1 \
-   && dans /usr/lib/grenos/grenos-depot-editeur --apres nvidia-driver-580-open >> "$OUT/bouton.log" 2>&1; then
-    dire "bouton : fini sans erreur"
+   && dans apt-get install -y --install-recommends "$META" "$PAQUET" >> "$OUT/bouton.log" 2>&1 \
+   && dans /usr/lib/grenos/grenos-depot-editeur --apres "$PAQUET" >> "$OUT/bouton.log" 2>&1; then
+    dire "bouton ($PAQUET) : fini sans erreur"
 else
     tail -n 60 "$OUT/bouton.log"
     rate "le bouton a echoue"
 fi
 grep -a 'grenos' "$OUT/bouton.log" | tail -n 25
+grep -aq "pilote signe : variante $VARIANTE" "$OUT/bouton.log" || rate "grenos-pilote-signe n a pas pris la variante $VARIANTE"
+# Le module que modprobe chargera, pour le noyau d'Ubuntu posé : celui de la
+# variante, signé par Canonical (la fermée est liée PAR l'installation).
+abi=$(cat "$VU/etc/grenos/pilote-signe" 2>/dev/null || true)
+module=$(dans modinfo -k "$abi" -n nvidia 2>/dev/null || true)
+signataire=$(dans modinfo -k "$abi" -F signer nvidia 2>/dev/null || true)
+dire "module : $module (signe par « $signataire »)"
+case "$module" in */kernel/nvidia-"$VARIANTE"/nvidia.ko*) ;; *) rate "nvidia.ko n est pas celui de la variante $VARIANTE : $module" ;; esac
+case "$signataire" in *Canonical*) ;; *) rate "nvidia.ko n est pas signe par Canonical" ;; esac
 grep -aq 'grenos-a-faire: Redémarre' "$OUT/bouton.log" || rate "la phrase de fin n est pas celle du pilote signe"
 if grep -aqiE 'mokutil --import|Enroll MOK|code [0-9]{8}' "$OUT/bouton.log"; then rate "le bouton parle encore d ecran bleu"; fi
 dpkg_ubuntu=$(dans dpkg-query -W -f '${Package} ${Version}\n' 2>/dev/null | grep -E 'ubuntu|generic' || true)
@@ -194,7 +216,7 @@ for n in 1 2; do
     grep -aq "SONDE $n secure boot : SecureBoot enabled" "$SERIE" || rate "demarrage $n : Secure Boot pas actif, l essai ne prouve rien"
     grep -aq "SONDE $n en attente : \[\]" "$SERIE" || grep -aq "SONDE $n en attente : \[MokNew is empty\]" "$SERIE" \
         || rate "demarrage $n : une demande MokManager attend (ecran bleu)"
-    grep -aq "SONDE $n nvidia : charge" "$SERIE" || grep -aq "SONDE $n dmesg .*NVRM: No NVIDIA GPU found" "$SERIE" \
+    grep -aq "SONDE $n nvidia : charge" "$SERIE" || grep -aqE "SONDE $n dmesg .*NVRM: No NVIDIA (GPU|devices)" "$SERIE" \
         || rate "demarrage $n : nvidia.ko ne s est pas charge"
     if grep -aq "SONDE $n dmesg .*rejected" "$SERIE"; then rate "demarrage $n : un module refuse par le Secure Boot"; fi
     grep -aq "SONDE $n bureau : ouvert" "$SERIE" || rate "demarrage $n : pas de bureau"

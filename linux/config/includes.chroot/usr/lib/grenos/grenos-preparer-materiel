@@ -21,6 +21,11 @@ RACCOURCI="$BUREAU/grenos-preparer-materiel.desktop"
 FAIT="$HOME/.config/grenos/materiel-prepare"
 FICHE=/usr/share/applications/grenos-preparer-materiel.desktop
 
+# Une NVIDIA qu'aucun pilote de NVIDIA ne connaît plus (Kepler et avant, 26
+# novembre) : le pilote libre est le bon, rien à préparer.
+PAQUET=$(/usr/lib/grenos/grenos-nvidia-variante paquet 2>/dev/null)
+[ -n "$PAQUET" ] || exit 0
+
 manque=0
 for d in /sys/bus/pci/devices/*; do
     [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
@@ -48,6 +53,16 @@ if [ -r "$REFUS" ] && [ "$(cat "$REFUS" 2>/dev/null)" != "$(cat "$VU" 2>/dev/nul
     (sleep 8; notify-send --app-name=grenOS --icon=grenos-parametres "Pilote NVIDIA retiré" \
         "L'écran bleu du démarrage a été passé sans son code : le pilote ne pouvait pas s'ouvrir, grenOS l'a retiré et ton écran marche comme avant. Pour réessayer : « Préparer le matériel », sur ton bureau." \
         2>/dev/null) &
+fi
+# LA MAUVAISE VARIANTE (26 novembre) : jusqu'ici, le bouton posait le module
+# « open » sur toutes les NVIDIA, et une Maxwell, Pascal ou Volta (la GT 1030
+# de Grenofar) restait sans pilote. Celui qui la prend est maintenant là : le
+# raccourci revient UNE fois, même si la personne avait fini.
+VARIANTE_VUE="$HOME/.config/grenos/pilote-variante-vue"
+if [ "$PAQUET" = nvidia-driver-580 ] && [ ! -e "$VARIANTE_VUE" ] \
+   && dpkg-query -W -f '${Status}' nvidia-driver-580-open 2>/dev/null | grep -q 'install ok installed'; then
+    mkdir -p "$(dirname "$VARIANTE_VUE")" && touch "$VARIANTE_VUE"
+    rm -f "$FAIT"
 fi
 [ -e "$FAIT" ] && exit 0
 [ -e "$RACCOURCI" ] && exit 0

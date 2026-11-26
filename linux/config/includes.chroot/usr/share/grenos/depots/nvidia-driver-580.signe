@@ -1,0 +1,8 @@
+# Pilote déjà SIGNÉ par Canonical, pour le noyau d'Ubuntu : rien à compiler,
+# rien à inscrire (pas d'écran bleu MokManager). grenos-depot-editeur passe
+# alors par /usr/lib/grenos/grenos-pilote-signe.
+#
+# La variante FERMÉE (26 novembre) : les cartes Maxwell, Pascal et Volta
+# (GTX 750 à 1080 Ti, GT 1030), que le module « open » ne connaît pas. Ubuntu
+# livre ses objets et la signature de Canonical à part ; le paquet les lie à
+# l'installation (linux-objects-nvidia-580 + linux-signatures-nvidia).

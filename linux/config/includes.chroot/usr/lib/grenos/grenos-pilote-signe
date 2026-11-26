@@ -27,11 +27,19 @@
 #     retiré : le GRUB d'Ubuntu refuserait de le démarrer.
 # Tout le reste de grenOS reste Debian.
 #
-#   grenos-pilote-signe preparer     avant le pilote : dépôt branché, noyau posé
+#   grenos-pilote-signe preparer [paquet]  avant le pilote : dépôt branché, noyau posé
 #   grenos-pilote-signe verifier     après : tout est-il là ? puis la chaîne
 #   grenos-pilote-signe au-demarrage à chaque démarrage (grenos-pilote-refuse.service)
 #   grenos-pilote-signe suivre       après une mise à jour : le noyau neuf ET son pilote
 #   grenos-pilote-signe annuler      tout remettre comme avant
+#
+# DEUX VARIANTES (26 novembre, la GT 1030 de Grenofar) : le module « open »
+# (nvidia-driver-580-open) ne connaît que les cartes Turing et après ; le
+# module fermé (nvidia-driver-580), signé lui aussi par Canonical, prend en
+# plus les Maxwell, Pascal et Volta. `preparer` reçoit le paquet choisi
+# (grenos-nvidia-variante) et le note dans /etc/grenos/pilote-signe-variante ;
+# les autres actions lisent cette note. Sans note — posé avant le 26 —, c'est
+# « open ».
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH DEBIAN_FRONTEND=noninteractive LC_ALL=C
@@ -39,8 +47,8 @@ export PATH DEBIAN_FRONTEND=noninteractive LC_ALL=C
 ESP=${GRENOS_ESP:-/boot/efi}
 ICI=/usr/lib/grenos/chaine-ubuntu
 MARQUE=/etc/grenos/pilote-signe
+NOTE_VARIANTE=/etc/grenos/pilote-signe-variante
 GRUB_D=/etc/default/grub.d/90-grenos-noyau-signe.cfg
-META=linux-modules-nvidia-580-open-generic
 # Les fichiers signés que grub-install recopie sur la partition EFI.
 DETOURNES="/usr/lib/shim/shimx64.efi.signed /usr/lib/shim/mmx64.efi.signed /usr/lib/shim/fbx64.efi.signed /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed"
 
@@ -49,18 +57,49 @@ rate() { echo "grenos: pilote signe : $*" >&2; exit 1; }
 
 sur_la_cle() { grep -qw 'boot=live' /proc/cmdline 2>/dev/null; }
 
+# La variante : celle du paquet demandé (preparer), sinon celle notée.
+case "${1:-}:${2:-}" in
+    preparer:nvidia-driver-580|preparer:nvidia-driver-580-open) VARIANTE=${2#nvidia-driver-} ;;
+    preparer:)
+        VARIANTE=$(/usr/lib/grenos/grenos-nvidia-variante 2>/dev/null || true)
+        case "$VARIANTE" in 580|580-open) ;; *) VARIANTE=580-open ;; esac ;;
+    preparer:*) rate "paquet inconnu : $2" ;;
+    *)
+        VARIANTE=$(tr -dc 'a-z0-9-' 2>/dev/null < "$NOTE_VARIANTE" || true)
+        case "$VARIANTE" in 580|580-open) ;; *) VARIANTE=580-open ;; esac ;;
+esac
+# Le paquet qui suit le noyau le plus récent, et le dossier du module :
+#   open    linux-modules-nvidia-580-open-generic  kernel/nvidia-580-open/nvidia.ko
+#   fermée  linux-modules-nvidia-580-generic       kernel/nvidia-580/nvidia.ko
+META=linux-modules-nvidia-$VARIANTE-generic
+
 # Le noyau d'Ubuntu qui a son pilote signé, le plus récent du dépôt.
 abi_du_depot() {
     apt-cache depends "$META" 2>/dev/null \
-        | sed -n 's/.*Depends: linux-modules-nvidia-580-open-\([0-9][0-9.]*-[0-9]*-generic\)$/\1/p' | head -n 1
+        | sed -n "s/.*Depends: linux-modules-nvidia-$VARIANTE-\([0-9][0-9.]*-[0-9]*-generic\)\$/\1/p" | head -n 1
 }
-# Le plus récent des noyaux d'Ubuntu installés, avec son pilote.
+# Le plus récent des noyaux d'Ubuntu installés, avec son pilote — celui que
+# modprobe chargerait VRAIMENT pour ce noyau (un nvidia.ko d'ailleurs, de
+# DKMS par exemple, passerait devant et serait refusé par le Secure Boot).
 abi_installe() {
-    for m in /lib/modules/*-generic/kernel/nvidia-580-open/nvidia.ko*; do
-        [ -e "$m" ] || continue
-        m=${m#/lib/modules/}
-        echo "${m%%/*}"
+    for d in /lib/modules/*-generic; do
+        [ -d "$d" ] || continue
+        k=${d#/lib/modules/}
+        m=$(modinfo -k "$k" -n nvidia 2>/dev/null) || continue
+        case "$m" in */kernel/nvidia-"$VARIANTE"/nvidia.ko*) echo "$k" ;; esac
     done | sort -V | tail -n 1
+}
+# L'autre variante, si elle est là : ses modules et les nôtres se
+# disputeraient le nom « nvidia » pour le même noyau.
+retirer_autre_variante() {
+    if [ "$VARIANTE" = 580 ]; then autre=580-open; else autre=580; fi
+    motif="^linux-(modules|objects)-nvidia-$autre-(generic|[0-9])|^nvidia-(driver|dkms|kernel-source)-$autre\$"
+    paquets=$(dpkg-query -W -f '${Package} ${Status}\n' 2>/dev/null \
+        | awk -v m="$motif" '$NF == "installed" && $1 ~ m {print $1}' | tr '\n' ' ')
+    [ -n "$paquets" ] || return 0
+    dire "variante $autre retiree : $paquets"
+    # shellcheck disable=SC2086
+    apt-get purge -y -q $paquets
 }
 # Celui que 10_linux met dans l'identifiant des entrées du menu.
 uuid_racine() {
@@ -71,7 +110,7 @@ poser_noyau() { # abi
     [ -n "$1" ] || rate "aucun noyau d Ubuntu n a de pilote NVIDIA signe dans le depot"
     dire "noyau d Ubuntu $1 et son pilote signe"
     apt-get install -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
-        "linux-image-$1" "linux-modules-$1" "linux-modules-nvidia-580-open-$1" "$META"
+        "linux-image-$1" "linux-modules-$1" "linux-modules-nvidia-$VARIANTE-$1" "$META"
 }
 
 # Le shim et le GRUB d'Ubuntu : téléchargés (jamais installés comme paquets,
@@ -174,7 +213,11 @@ case "${1:-}" in
 preparer)
     sur_la_cle && rate "le pilote s installe sur grenOS installe sur le disque, pas sur la cle USB"
     [ "$(id -u)" = 0 ] || rate "il faut etre root"
+    install -d "$(dirname "$NOTE_VARIANTE")"
+    echo "$VARIANTE" > "$NOTE_VARIANTE"
+    dire "variante $VARIANTE ($(/usr/lib/grenos/grenos-nvidia-variante 2>/dev/null || echo ?) pour les cartes de ce PC)"
     apt-get update -q || true
+    retirer_autre_variante
     abi=$(abi_du_depot)
     poser_noyau "$abi"
     chercher_chaine
@@ -237,7 +280,7 @@ suivre)
     [ -f "$MARQUE" ] || exit 0
     abi=$(abi_du_depot)
     [ -n "$abi" ] || exit 0
-    if [ ! -e "/lib/modules/$abi/kernel/nvidia-580-open" ]; then
+    if [ ! -e "/lib/modules/$abi/kernel/nvidia-$VARIANTE" ]; then
         poser_noyau "$abi"
     fi
     [ -f "$GRUB_D" ] && noyau_par_defaut "$(abi_installe)"
@@ -260,13 +303,13 @@ annuler)
             --bootloader-id=debian --force $nvram || true
         rm -rf "$ESP/EFI/ubuntu"
     fi
-    rm -f "$MARQUE" "$GRUB_D" "$VIDEO"
+    rm -f "$MARQUE" "$NOTE_VARIANTE" "$GRUB_D" "$VIDEO"
     rm -rf "$ICI"
     update-grub >/dev/null 2>&1 || true
     dire "chaine de Debian remise"
     ;;
 *)
-    echo "usage : grenos-pilote-signe preparer | verifier | au-demarrage | suivre | annuler" >&2
+    echo "usage : grenos-pilote-signe preparer [nvidia-driver-580|nvidia-driver-580-open] | verifier | au-demarrage | suivre | annuler" >&2
     exit 2
     ;;
 esac

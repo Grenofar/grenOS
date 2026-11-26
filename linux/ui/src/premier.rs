@@ -435,20 +435,61 @@ pub fn mot_sur_secure_boot(etat: &str) -> &'static str {
 /// pour mettre / activer les pilotes ». Vrai sur un grenOS INSTALLÉ (pas la
 /// clé : le pilote y disparaîtrait au redémarrage) dont une carte NVIDIA
 /// n'a pas le pilote officiel (`nvidia`).
+///
+/// 26 novembre (la GT 1030 de Grenofar) : seulement si un pilote signé de
+/// NVIDIA connaît la carte (`variante_nvidia`). Une Kepler (GT 710/730,
+/// GTX 600/700) n'en a plus aucun pour nos noyaux : lui proposer un bouton
+/// installerait un pilote qui ne la prendrait pas.
 pub fn pilote_nvidia_a_proposer(sysfs: &std::path::Path, ligne_noyau: &str) -> bool {
     if ligne_noyau.split_whitespace().any(|m| m == "boot=live") {
         return false;
     }
-    let Ok(entrees) = std::fs::read_dir(sysfs.join("bus/pci/devices")) else { return false };
-    entrees.flatten().any(|e| {
-        let d = e.path();
-        let lire = |n: &str| std::fs::read_to_string(d.join(n)).unwrap_or_default().trim().to_string();
-        let pilote = std::fs::read_link(d.join("driver"))
-            .ok()
-            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
-            .unwrap_or_default();
-        lire("vendor") == "0x10de" && lire("class").starts_with("0x03") && pilote != "nvidia"
-    })
+    variante_nvidia(sysfs).is_some() && cartes_nvidia(sysfs).iter().any(|(_, pilote)| pilote != "nvidia")
+}
+
+/// Les cartes graphiques NVIDIA : (identifiant PCI, pilote qui la tient).
+pub fn cartes_nvidia(sysfs: &std::path::Path) -> Vec<(u32, String)> {
+    let Ok(entrees) = std::fs::read_dir(sysfs.join("bus/pci/devices")) else { return vec![] };
+    entrees
+        .flatten()
+        .filter_map(|e| {
+            let d = e.path();
+            let lire = |n: &str| std::fs::read_to_string(d.join(n)).unwrap_or_default().trim().to_string();
+            if lire("vendor") != "0x10de" || !lire("class").starts_with("0x03") {
+                return None;
+            }
+            let id = u32::from_str_radix(lire("device").trim_start_matches("0x"), 16).unwrap_or(0);
+            let pilote = std::fs::read_link(d.join("driver"))
+                .ok()
+                .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                .unwrap_or_default();
+            Some((id, pilote))
+        })
+        .collect()
+}
+
+/// LE PILOTE SIGNÉ QUI CONNAÎT CES CARTES (26 novembre), la règle de
+/// /usr/lib/grenos/grenos-nvidia-variante, lue dans les paquets d'Ubuntu
+/// (champ Modaliases du 580) :
+///   - 0x1340 à 0x1dff (Maxwell, Pascal, Volta : GT 1030, GTX 1060…) → le
+///     module FERMÉ, `nvidia-driver-580` — le « open » ne les connaît pas ;
+///   - 0x1e00 et après (Turing, Ampere, Ada, Blackwell) → `nvidia-driver-580-open` ;
+///   - avant (Kepler et plus vieux) → aucun : le pilote libre les fait marcher.
+/// Une carte des deux familles dans le même PC : le fermé, qui prend les deux.
+pub fn variante_nvidia(sysfs: &std::path::Path) -> Option<&'static str> {
+    let ids: Vec<u32> = cartes_nvidia(sysfs).into_iter().map(|(id, _)| id).collect();
+    if ids.iter().any(|&id| (0x1340..0x1e00).contains(&id)) {
+        Some("580")
+    } else if ids.iter().any(|&id| id >= 0x1e00) {
+        Some("580-open")
+    } else {
+        None
+    }
+}
+
+/// Le paquet que le bouton installe : `nvidia-driver-580` ou `nvidia-driver-580-open`.
+pub fn paquet_nvidia(sysfs: &std::path::Path) -> Option<String> {
+    variante_nvidia(sysfs).map(|v| format!("nvidia-driver-{v}"))
 }
 
 #[derive(Serialize)]
@@ -456,6 +497,8 @@ pub struct Infos {
     donnees: Donnees,
     /// Proposer le pilote NVIDIA officiel (écran « pilotes »).
     pilote_nvidia: bool,
+    /// Et lequel : `nvidia-driver-580` (Maxwell à Volta) ou `-580-open`.
+    pilote_nvidia_paquet: String,
     materiel: Vec<materiel::Ligne>,
     virtuelle: String,
     secure_boot: String,
@@ -481,6 +524,7 @@ pub async fn premier_infos() -> Infos {
     Infos {
         donnees: donnees(),
         pilote_nvidia,
+        pilote_nvidia_paquet: paquet_nvidia(std::path::Path::new("/sys")).unwrap_or_default(),
         materiel,
         virtuelle: materiel::virtuelle(),
         secure_boot: etat.into(),
@@ -722,17 +766,57 @@ mod essais {
     fn le_pilote_nvidia_se_propose_sur_un_systeme_installe() {
         let r = std::env::temp_dir().join(format!("grenos-pilote-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&r);
-        let carte = |nom: &str, vendeur: &str, classe: &str| {
+        let carte = |nom: &str, vendeur: &str, classe: &str, id: &str| {
             let d = r.join("bus/pci/devices").join(nom);
+            let _ = std::fs::remove_dir_all(&d);
             std::fs::create_dir_all(&d).unwrap();
             std::fs::write(d.join("vendor"), format!("{vendeur}\n")).unwrap();
             std::fs::write(d.join("class"), format!("{classe}\n")).unwrap();
+            std::fs::write(d.join("device"), format!("{id}\n")).unwrap();
         };
-        carte("intel", "0x8086", "0x030000");
+        carte("intel", "0x8086", "0x030000", "0x3e92");
         assert!(!pilote_nvidia_a_proposer(&r, "quiet splash"), "Intel seule : rien");
-        carte("nvidia", "0x10de", "0x030000");
+        carte("nvidia", "0x10de", "0x030000", "0x2d05");
         assert!(pilote_nvidia_a_proposer(&r, "BOOT_IMAGE=/vmlinuz quiet"), "NVIDIA installee : propose");
         assert!(!pilote_nvidia_a_proposer(&r, "boot=live components quiet"), "sur la cle : jamais");
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 26 novembre, la GT 1030 de Grenofar : le module « open » ne la
+    /// connaît pas. Mêmes cas que linux/tools/essai-cartes-graphiques.sh.
+    #[test]
+    fn la_variante_du_pilote_suit_la_carte() {
+        let r = std::env::temp_dir().join(format!("grenos-variante-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&r);
+        let carte = |nom: &str, vendeur: &str, classe: &str, id: &str| {
+            let d = r.join("bus/pci/devices").join(nom);
+            let _ = std::fs::remove_dir_all(&d);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("vendor"), format!("{vendeur}\n")).unwrap();
+            std::fs::write(d.join("class"), format!("{classe}\n")).unwrap();
+            std::fs::write(d.join("device"), format!("{id}\n")).unwrap();
+        };
+        let retirer = |nom: &str| { let _ = std::fs::remove_dir_all(r.join("bus/pci/devices").join(nom)); };
+        carte("son", "0x10de", "0x040300", "0x0fb9");
+        assert_eq!(variante_nvidia(&r), None, "la sortie son d'une carte n'est pas une carte");
+        carte("a", "0x10de", "0x030000", "0x1d01");
+        assert_eq!(paquet_nvidia(&r).as_deref(), Some("nvidia-driver-580"), "GT 1030 (Pascal) : le module fermé");
+        carte("a", "0x10de", "0x030000", "0x1340");
+        assert_eq!(variante_nvidia(&r), Some("580"), "première Maxwell");
+        carte("a", "0x10de", "0x030000", "0x1dff");
+        assert_eq!(variante_nvidia(&r), Some("580"), "dernière Volta");
+        carte("a", "0x10de", "0x030000", "0x1e02");
+        assert_eq!(variante_nvidia(&r), Some("580-open"), "première Turing");
+        carte("a", "0x10de", "0x030000", "0x2d05");
+        assert_eq!(paquet_nvidia(&r).as_deref(), Some("nvidia-driver-580-open"), "RTX 5060 : open");
+        carte("b", "0x10de", "0x030200", "0x1b80");
+        assert_eq!(variante_nvidia(&r), Some("580"), "RTX 5060 + GTX 1080 : le fermé prend les deux");
+        retirer("b");
+        carte("a", "0x10de", "0x030000", "0x1287");
+        assert_eq!(variante_nvidia(&r), None, "GT 730 (Kepler) : plus de pilote de NVIDIA");
+        assert!(!pilote_nvidia_a_proposer(&r, "quiet"), "Kepler : aucun bouton");
+        carte("b", "0x10de", "0x030000", "0x1e84");
+        assert_eq!(variante_nvidia(&r), Some("580-open"), "Kepler + RTX 2070 : open pour la RTX");
         let _ = std::fs::remove_dir_all(&r);
     }
 

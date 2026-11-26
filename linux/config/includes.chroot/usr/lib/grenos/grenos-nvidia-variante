@@ -1,0 +1,45 @@
+#!/bin/sh
+# QUEL PILOTE NVIDIA SIGNÉ POUR LES CARTES DE CE PC (26 novembre).
+#
+# Grenofar a installé grenOS sur un PC à GT 1030 (Pascal, 10de:1d01) : le
+# bouton posait `nvidia-driver-580-open`, dont le module « open » ne connaît
+# QUE les cartes Turing et plus récentes. Lu dans les paquets d'Ubuntu 26.04
+# (champ Modaliases, 580.178.04) :
+#   - nvidia-driver-580-open : 288 identifiants, de 10de:1e02 à la fin
+#     (Turing, Ampere, Ada, Blackwell — la RTX 5060, 2d05, en est) ;
+#   - nvidia-driver-580 (module FERMÉ, lui aussi signé par Canonical) :
+#     448 identifiants, les mêmes plus 160, tous entre 10de:1340 et 1dff
+#     (Maxwell, Pascal, Volta — GTX 750 à GTX 1080 Ti, GT 1030, Titan V).
+# 580 est la dernière version de NVIDIA pour ces cartes : 590 et après les
+# ont abandonnées. Avant 1340 (Kepler : GT 710/730, GTX 600/700, et plus
+# vieux), plus aucun pilote de NVIDIA ne suit nos noyaux : c'est `nouveau`,
+# le pilote libre, qui les fait marcher.
+#
+# La règle, vérifiée contre ces listes par linux/tools/essai-cartes-graphiques.sh :
+#   au moins une carte de 1340 à 1dff → 580     (le fermé prend aussi les récentes)
+#   sinon une carte de 1e00 et après   → 580-open
+#   sinon                              → aucun
+#
+#   grenos-nvidia-variante           affiche 580, 580-open ou aucun
+#   grenos-nvidia-variante paquet    affiche nvidia-driver-580… (rien si aucun)
+# GRENOS_SYSFS ne sert qu'aux essais.
+
+SYSFS="${GRENOS_SYSFS:-/sys}"
+variante=aucun
+for d in "$SYSFS"/bus/pci/devices/*; do
+    [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
+    case "$(cat "$d/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
+    id=$(cat "$d/device" 2>/dev/null) || continue
+    case "$id" in 0x[0-9a-fA-F]*) ;; *) continue ;; esac
+    id=$((id))
+    if [ "$id" -ge $((0x1340)) ] && [ "$id" -lt $((0x1e00)) ]; then
+        variante=580
+    elif [ "$id" -ge $((0x1e00)) ] && [ "$variante" = aucun ]; then
+        variante=580-open
+    fi
+done
+
+case "${1:-}" in
+    paquet) [ "$variante" = aucun ] || echo "nvidia-driver-$variante" ;;
+    *) echo "$variante" ;;
+esac

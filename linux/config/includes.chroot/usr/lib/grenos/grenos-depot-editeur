@@ -135,6 +135,19 @@ if [ -f "$DEPOTS/$paquet.dkms" ] || [ -f "$DEPOTS/$paquet.signe" ]; then
     fi
 fi
 
+# LES DEUX VARIANTES DU PILOTE SIGNÉ (26 novembre) : « open » pour les cartes
+# récentes, fermée pour les Maxwell, Pascal et Volta (grenos-nvidia-variante).
+# Le même dépôt d'Ubuntu, sous deux noms de clé : branchés ensemble, apt
+# refuserait tout (« Conflicting values set for option Signed-By »). Brancher
+# l'une débranche donc l'autre.
+if [ -f "$DEPOTS/$paquet.signe" ]; then
+    for autre in "$DEPOTS"/*.signe; do
+        autre=$(basename "$autre" .signe)
+        [ "$autre" = "$paquet" ] && continue
+        rm -f "/etc/apt/sources.list.d/$autre.list" "/etc/apt/preferences.d/$autre.pref"
+    done
+fi
+
 # Les noms qu'emploie l'éditeur lui-même : son paquet réécrit parfois ce
 # fichier à l'installation, et les deux doivent désigner la même chose.
 if [ -f "$DEPOTS/$paquet.gpg" ]; then
@@ -153,7 +166,7 @@ echo "grenos: depot de l editeur branche pour $paquet"
 # Le pilote signé de Canonical : son noyau, et la chaîne de démarrage qui le
 # démarre en Secure Boot (grenos-pilote-signe).
 if [ -f "$DEPOTS/$paquet.signe" ]; then
-    exec /usr/lib/grenos/grenos-pilote-signe preparer
+    exec /usr/lib/grenos/grenos-pilote-signe preparer "$paquet"
 fi
 
 # Un module du noyau se compile pour le noyau EN COURS. `linux-headers-amd64`

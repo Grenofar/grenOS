@@ -318,7 +318,13 @@ class Jeux(Gtk.Window):
         return boite
 
     def paquet_nvidia(self):
-        """Le paquet exact que Debian conseille pour cette carte."""
+        """Le paquet exact pour cette carte : le pilote signé de Canonical qui
+        la connaît (26 novembre, grenos-nvidia-variante), sinon celui que
+        Debian conseille."""
+        if os.path.isfile("/usr/share/grenos/depots/nvidia-driver-580-open.signe"):
+            paquet = jeux.variante_nvidia()
+            if paquet:
+                return paquet
         try:
             sortie = subprocess.run(["nvidia-detect"], capture_output=True, text=True,
                                     timeout=30).stdout

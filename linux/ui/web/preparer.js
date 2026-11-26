@@ -40,6 +40,13 @@
         el("p.sous", "Ta carte graphique fonctionne avec les pilotes libres, déjà dans grenOS : rien à installer, et ils se mettent à jour avec le système."),
         el("div.pr-boutons", el("button.bouton.principal", { onclick: finir }, svg("coche"), "Terminer")));
     }
+    // 26 novembre : une Kepler (GT 710/730, GTX 600/700) n'a plus aucun
+    // pilote de NVIDIA pour nos noyaux. Le libre est ce qui la fait marcher.
+    if (e.trop_ancienne && e.pilote !== "nvidia") {
+      return el("div.carte.verre.pr-etat.pr-bien", el("h2", "Ton matériel est prêt"),
+        el("p.sous", `${e.carte || "Ta carte NVIDIA"} est trop ancienne pour le pilote de NVIDIA : plus aucune de ses versions ne suit les noyaux d'aujourd'hui. C'est le pilote libre, déjà dans grenOS, qui la fait marcher : rien à installer.`),
+        el("div.pr-boutons", el("button.bouton.principal", { onclick: finir }, svg("coche"), "Terminer")));
+    }
     if (e.pilote === "nvidia") {
       noterCode("");
       return el("div.carte.verre.pr-etat.pr-bien", el("h2", "Le pilote NVIDIA tourne"),
@@ -67,9 +74,12 @@
 
   async function preparer() {
     D.bouton.disabled = true;
+    // Le paquet que la carte demande (26 novembre) : nvidia-driver-580 pour
+    // une Maxwell, Pascal ou Volta (GT 1030…), nvidia-driver-580-open après.
+    const paquet = (await api.appeler("preparer_etat")).paquet || "nvidia-driver-580-open";
     let fin = "";
     api.ecouter("installation", (a) => { if (a.fin && a.texte) fin = a.texte; });
-    const bien = await installer({ nom: "Pilote NVIDIA", source: "apt", identifiant: "nvidia-driver-580-open", depuis: "les paquets signés d'Ubuntu" });
+    const bien = await installer({ nom: "Pilote NVIDIA", source: "apt", identifiant: paquet, depuis: "les paquets signés d'Ubuntu" });
     const code = (fin.match(/\b(\d{8})\b/) || [])[1] || "";
     if (code) noterCode(code);
     api.appeler("premier_dire", { texte: `preparer : pilote nvidia ${bien ? "installe" : "echec"}${code ? ", code MOK donne" : ""}` }).catch(() => {});

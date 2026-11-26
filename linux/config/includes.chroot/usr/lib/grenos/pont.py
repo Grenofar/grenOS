@@ -216,8 +216,10 @@ def jeux_paquet_nvidia():
     import re
     import subprocess
     # 23 novembre : le pilote signé de Canonical d'abord (aucun écran bleu).
+    # 26 novembre : la variante qui connaît la carte (GT 1030 : la fermée).
     if os.path.isfile("/usr/share/grenos/depots/nvidia-driver-580-open.signe"):
-        return {"paquet": "nvidia-driver-580-open"}
+        import jeux
+        return {"paquet": jeux.variante_nvidia()}
     if os.path.isfile("/usr/share/grenos/depots/nvidia-driver.list"):
         return {"paquet": "nvidia-driver"}
     try:

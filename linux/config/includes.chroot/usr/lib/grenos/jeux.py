@@ -145,6 +145,18 @@ def vulkan():
     return True, "Vulkan répond."
 
 
+def variante_nvidia():
+    """Le paquet du pilote signé qui connaît les cartes NVIDIA de ce PC :
+    `nvidia-driver-580` (Maxwell, Pascal, Volta), `nvidia-driver-580-open`
+    (Turing et après), ou "" (Kepler et avant). La règle est dans
+    /usr/lib/grenos/grenos-nvidia-variante."""
+    try:
+        return subprocess.run(["/usr/lib/grenos/grenos-nvidia-variante", "paquet"],
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "nvidia-driver-580-open"
+
+
 def pilote_propose():
     """Le pilote qu'il faudrait installer, s'il en manque un."""
     carte, pilote = materiel.graphique()
@@ -158,11 +170,21 @@ def pilote_propose():
         # découvre un écran bleu au redémarrage sans l'avoir choisi.
         # 23 novembre : le pilote SIGNÉ de Canonical, avec son noyau — plus
         # d'écran bleu MokManager, même avec le Secure Boot (grenos-pilote-signe).
-        return ("nvidia-driver-580-open",
+        # 26 novembre (la GT 1030 de Grenofar) : la variante qui CONNAÎT la
+        # carte — fermée pour une Maxwell, Pascal ou Volta, « open » après —,
+        # et rien pour une Kepler, qu'aucun pilote de NVIDIA ne suit plus.
+        paquet = variante_nvidia()
+        if not paquet:
+            return ("",
+                    "Ta carte NVIDIA est trop ancienne pour le pilote de NVIDIA : plus "
+                    "aucune de ses versions ne suit les noyaux d'aujourd'hui. Le pilote "
+                    "libre, déjà dans grenOS, est celui qui la fait marcher.")
+        return (paquet,
                 "Le pilote libre fait marcher le bureau. Pour les jeux exigeants, le "
-                "pilote officiel de NVIDIA gère la carte entièrement, RTX 50 comprises. "
-                "Il arrive déjà signé : il passe le Secure Boot sans rien à taper. Il "
-                "s'installe sur grenOS installé sur le disque et demande de redémarrer.")
+                "pilote officiel de NVIDIA gère la carte entièrement, des GTX 750 et "
+                "GT 1030 aux RTX 50. Il arrive déjà signé : il passe le Secure Boot sans "
+                "rien à taper. Il s'installe sur grenOS installé sur le disque et "
+                "demande de redémarrer.")
     if "amd" in minuscules or "radeon" in minuscules:
         return ("", "Le pilote libre d'AMD fait tourner les jeux sans rien installer.")
     if "intel" in minuscules:

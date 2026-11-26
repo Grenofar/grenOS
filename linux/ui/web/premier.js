@@ -531,7 +531,7 @@
       onclick: async () => {
         bouton.disabled = true;
         D.suite.disabled = true;
-        const bien = await installer({ nom: "Pilote NVIDIA", source: "apt", identifiant: "nvidia-driver-580-open", depuis: "les paquets signés d'Ubuntu" });
+        const bien = await installer({ nom: "Pilote NVIDIA", source: "apt", identifiant: infos.pilote_nvidia_paquet || "nvidia-driver-580-open", depuis: "les paquets signés d'Ubuntu" });
         piloteEtat = bien
           ? "C'est installé. Il prendra effet au redémarrage, à la fin de l'assistant."
           : "L'installation n'a pas abouti : le pilote libre reste en place. Tu pourras réessayer depuis Jeux.";

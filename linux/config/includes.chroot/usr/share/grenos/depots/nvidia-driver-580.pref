@@ -1,0 +1,18 @@
+# Le dépôt d'Ubuntu ne sert QU'au noyau et au pilote NVIDIA signés par
+# Canonical (23 novembre, grenos-pilote-signe). Tout le reste de grenOS reste
+# Debian : n'importe quel autre paquet d'Ubuntu est INTERDIT (-1), même s'il
+# était plus récent. Le shim et le GRUB d'Ubuntu ne s'installent jamais comme
+# paquets : grenos-pilote-signe les télécharge et pose leurs fichiers.
+#
+# Les deux variantes du pilote ont la MÊME règle (26 novembre) : « open »
+# (Turing et après) et la fermée (Maxwell, Pascal, Volta), dont le module
+# arrive en objets et signature à part (linux-objects-nvidia-580-*,
+# linux-signatures-nvidia-*). Passer de l'une à l'autre ne change donc rien
+# à ce qui peut venir d'Ubuntu.
+Package: /^(linux-image-[0-9][0-9.]*-[0-9]+-generic|linux-modules-[0-9][0-9.]*-[0-9]+-generic|linux-modules-nvidia-580(-open)?-([0-9][0-9.]*-[0-9]+-)?generic|linux-objects-nvidia-580-[0-9][0-9.]*-[0-9]+-generic|linux-signatures-nvidia-[0-9][0-9.]*-[0-9]+-generic|linux-main-modules-[a-z0-9]+-[0-9][0-9.]*-[0-9]+-generic|nvidia-.*580.*|libnvidia-.*580.*|xserver-xorg-video-nvidia-580|nvidia-settings)$/
+Pin: release o=Ubuntu
+Pin-Priority: 990
+
+Package: *
+Pin: release o=Ubuntu
+Pin-Priority: -1

@@ -29,6 +29,12 @@ pub struct Etat {
     /// Le pilote qui la tient ("nvidia", "nouveau", "" si aucun).
     pilote: String,
     nvidia: bool,
+    /// Le paquet qui connaît la carte (26 novembre) : `nvidia-driver-580`
+    /// pour une Maxwell, Pascal ou Volta (GT 1030…), `-580-open` après.
+    paquet: String,
+    /// Une NVIDIA qu'aucun pilote signé ne connaît plus (Kepler et avant) :
+    /// le pilote libre est ce qui la fait marcher, rien à installer.
+    trop_ancienne: bool,
     /// Le pilote officiel manque et peut être installé ici.
     a_installer: bool,
     /// Il est installé mais ne tourne pas encore : il faut redémarrer.
@@ -42,23 +48,7 @@ pub struct Etat {
 
 /// Les cartes NVIDIA de la machine, et le pilote de chacune.
 fn cartes_nvidia(sysfs: &Path) -> Vec<String> {
-    let Ok(entrees) = fs::read_dir(sysfs.join("bus/pci/devices")) else { return vec![] };
-    entrees
-        .flatten()
-        .filter_map(|e| {
-            let d = e.path();
-            let lire = |n: &str| fs::read_to_string(d.join(n)).unwrap_or_default().trim().to_string();
-            if lire("vendor") != "0x10de" || !lire("class").starts_with("0x03") {
-                return None;
-            }
-            Some(
-                fs::read_link(d.join("driver"))
-                    .ok()
-                    .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
-                    .unwrap_or_default(),
-            )
-        })
-        .collect()
+    crate::premier::cartes_nvidia(sysfs).into_iter().map(|(_, pilote)| pilote).collect()
 }
 
 fn paquet_installe(nom: &str) -> bool {
@@ -72,8 +62,12 @@ pub async fn preparer_etat() -> Etat {
     let pilotes = cartes_nvidia(Path::new("/sys"));
     let nvidia = !pilotes.is_empty();
     let tourne = pilotes.iter().any(|p| p == "nvidia");
-    // Le pilote signé de Canonical (23 novembre), ou l'ancien, compilé par DKMS.
-    let pose = paquet_installe("nvidia-driver-580-open")
+    let paquet = crate::premier::paquet_nvidia(Path::new("/sys")).unwrap_or_default();
+    // Le pilote signé de Canonical (23 novembre) DE LA BONNE VARIANTE, ou
+    // l'ancien, compilé par DKMS. Le « open » posé sur une Pascal (26
+    // novembre, la GT 1030) ne la prend pas : le bouton revient, et la
+    // variante fermée remplace l'autre (grenos-pilote-signe).
+    let pose = (!paquet.is_empty() && paquet_installe(&paquet))
         || paquet_installe("nvidia-kernel-open-dkms")
         || paquet_installe("nvidia-kernel-dkms");
     let ligne = fs::read_to_string("/proc/cmdline").unwrap_or_default();
@@ -83,6 +77,8 @@ pub async fn preparer_etat() -> Etat {
         carte,
         pilote: pilotes.first().cloned().unwrap_or_default(),
         nvidia,
+        trop_ancienne: nvidia && paquet.is_empty(),
+        paquet,
         a_installer,
         redemarrer: nvidia && pose && !tourne,
         cle_en_attente,
@@ -91,8 +87,8 @@ pub async fn preparer_etat() -> Etat {
         materiel,
     };
     dire(&format!(
-        "preparer : nvidia {} pilote « {} » a installer {} redemarrer {} cle en attente {}",
-        etat.nvidia, etat.pilote, etat.a_installer, etat.redemarrer, etat.cle_en_attente
+        "preparer : nvidia {} pilote « {} » paquet « {} » a installer {} redemarrer {} cle en attente {}",
+        etat.nvidia, etat.pilote, etat.paquet, etat.a_installer, etat.redemarrer, etat.cle_en_attente
     ));
     etat
 }
