@@ -118,9 +118,8 @@
       case "arret_vue": return { adresse: "grenofar@grenos", gestes: [
         { cle: "maj", titre: "Mettre à jour et redémarrer", note: "Poser 12 mises à jour avant d'ouvrir le bureau, puis redémarrer.", genre: "accent", icone: "maj" },
         { cle: "session", titre: "Fermer la session", note: "Revenir à l'écran de connexion.", genre: "", icone: "compte" },
-        { cle: "veille", titre: "Mettre en veille", note: "La machine s'éteint presque entièrement, et retrouve tout au réveil.", genre: "", icone: "nuit" },
+        { cle: "veille", titre: "Mettre en veille", note: "Une touche ou un clic la réveille, sur l'écran de connexion.", genre: "", icone: "nuit" },
         { cle: "redemarrer", titre: "Redémarrer", note: "Éteindre puis rallumer la machine.", genre: "", icone: "redemarrer" },
-        { cle: "windows", titre: "Redémarrer sous Windows", note: "Pour cette fois seulement.", genre: "", icone: "fenetres" },
         { cle: "eteindre", titre: "Éteindre", note: "Arrêter complètement la machine.", genre: "danger", icone: "eteindre" }] };
       case "arret_faire": await attendre(200); return null;
       case "bienvenue_vue": return { essai: location.search.includes("cle"), salut: location.search.includes("cle") ? "Bienvenue" : "Bonjour Léa", adresse: "lea@grenos", astuces: ["Clic droit sur le bureau : créer un dossier, un fichier, changer le fond.", "Alt+Tab passe d'une fenêtre à l'autre, Alt+F4 ferme celle du dessus.", "Ctrl+Maj+Échap ouvre le gestionnaire de tâches, Ctrl+Alt+Échap le mode jeu."],

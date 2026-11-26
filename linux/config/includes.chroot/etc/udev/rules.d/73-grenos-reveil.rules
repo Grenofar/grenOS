@@ -1,0 +1,14 @@
+# LE CLAVIER ET LA SOURIS RÉVEILLENT LE PC (26 novembre). Grenofar : « si en
+# mode veille on appuie sur n'importe quelle touche ou clic souris, alors il
+# affiche le login ». Sur son PC, le clavier avait le droit de réveiller la
+# machine, mais ni la souris, ni les concentrateurs USB qui les relient au
+# PC, ni le contrôleur USB : le réveil ne passait pas.
+#
+# Un clavier ou une souris USB (interface HID, protocole de démarrage 1 ou 2)
+# reçoit ce droit, et tout ce qui le relie au contrôleur aussi
+# (grenos-reveil-usb). Les autres appareils USB gardent le réglage du noyau :
+# une manette ou un casque ne réveillent pas le PC sans qu'on le veuille.
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", ATTR{bInterfaceClass}=="03", ATTR{bInterfaceProtocol}=="01|02", RUN+="/usr/lib/grenos/grenos-reveil-usb %S%p"
+
+# Le clavier d'un portable (PS/2, i8042) : le même droit.
+ACTION=="add", SUBSYSTEM=="serio", KERNEL=="serio0", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"

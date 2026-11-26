@@ -1,0 +1,65 @@
+#!/bin/sh
+# LA VEILLE VERROUILLE (26 novembre). Grenofar : « si en mode veille on
+# appuie sur n'importe quelle touche ou clic souris, alors il affiche le
+# login de l'utilisateur ».
+#
+# Fin de session › Mettre en veille passe déjà à l'écran de connexion avant
+# de dormir (arret.rs). Ce petit veilleur fait de même pour TOUTES les
+# autres mises en veille — le capot qu'on ferme, le bouton d'alimentation,
+# `systemctl suspend` tapé dans un terminal :
+#
+#   - il tient un verrou « delay » de logind : avant de dormir, logind
+#     prévient (PrepareForSleep true) et attend qu'on le rende (5 s au plus) ;
+#   - à ce signal, la session passe à l'écran de connexion (dm-tool lock,
+#     LightDM), puis le verrou est rendu et la machine s'endort ;
+#   - au réveil (PrepareForSleep false), il reprend un verrou pour la fois
+#     suivante.
+#
+# Lancé par grenos-session, sous grenos-veilleur, seulement si LightDM tient
+# la session (XDG_SEAT_PATH) et hors de la clé live.
+
+command -v dm-tool >/dev/null 2>&1 || exit 0
+command -v dbus-monitor >/dev/null 2>&1 || exit 0
+[ -n "${XDG_SEAT_PATH:-}" ] || exit 0
+# Pas sur la clé live : son compte a le mot de passe de Debian (« live »), que
+# personne ne connaît — l'écran de connexion y enfermerait dehors.
+grep -qw boot=live /proc/cmdline 2>/dev/null && exit 0
+
+dire() { grenos-dire "verrou-veille : $*" 2>/dev/null || true; }
+
+retenir() {
+    systemd-inhibit --what=sleep --mode=delay --who="grenOS" \
+        --why="Montrer l'écran de connexion avant la veille" sleep infinity &
+    VERROU=$!
+}
+rendre() {
+    [ -n "${VERROU:-}" ] && kill "$VERROU" 2>/dev/null
+    VERROU=
+}
+
+dire "pret"
+
+# Tout se passe dans le même shell que la boucle (un tube en fait un
+# sous-shell) : c'est lui qui sait quel verrou il tient, et qui le rend en
+# partant.
+dbus-monitor --system \
+    "type='signal',interface='org.freedesktop.login1.Manager',member='PrepareForSleep'" 2>/dev/null | {
+    retenir
+    trap 'rendre; exit 0' INT TERM HUP
+    while read -r ligne; do
+        case "$ligne" in
+            *"boolean true"*)
+                dm-tool lock >/dev/null 2>&1 && dire "ecran de connexion avant la veille"
+                # Le temps que LightDM ait basculé : au réveil, c'est lui qu'on voit.
+                sleep 1
+                rendre
+                ;;
+            *"boolean false"*)
+                dire "reveil"
+                rendre
+                retenir
+                ;;
+        esac
+    done
+    rendre
+}

@@ -1,0 +1,26 @@
+#!/bin/sh
+# Donner à un clavier ou une souris USB le droit de réveiller le PC, et à
+# tout ce qui le relie au PC : ses concentrateurs, le concentrateur racine,
+# le contrôleur USB lui-même (73-grenos-reveil.rules, 26 novembre). Il suffit
+# qu'un seul maillon refuse pour que la touche ne réveille rien.
+#
+#   grenos-reveil-usb /sys/devices/pci0000:00/0000:00:14.0/usb1/1-3/1-3.2/1-3.2:1.0
+
+RACINE=${GRENOS_SYS:-/sys/devices}
+interface=${1:-}
+case "$interface" in
+    "$RACINE"/*) ;;
+    *) exit 0 ;;
+esac
+case "$interface" in *..*) exit 0 ;; esac
+
+d=$(dirname "$interface")
+while [ -n "$d" ] && [ "$d" != "$RACINE" ] && [ "$d" != / ]; do
+    [ -w "$d/power/wakeup" ] && echo enabled > "$d/power/wakeup" 2>/dev/null
+    # Le contrôleur (un appareil PCI) est le dernier maillon de l'USB.
+    if [ -e "$d/subsystem" ] && [ "$(basename "$(readlink -f "$d/subsystem")")" = pci ]; then
+        break
+    fi
+    d=$(dirname "$d")
+done
+exit 0

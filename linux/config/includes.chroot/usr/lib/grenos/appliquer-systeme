@@ -380,6 +380,10 @@ for produit in 02e6 02fe 091e; do
     udevadm trigger --action=add --subsystem-match=usb \
         --attr-match=idVendor=045e --attr-match=idProduct="$produit" >/dev/null 2>&1 || true
 done
+# Les claviers et souris déjà branchés reçoivent le droit de réveiller le PC
+# (73-grenos-reveil.rules, 26 novembre) sans être débranchés : un événement
+# « add » rejoué, rien n'est déconnecté.
+udevadm trigger --action=add --subsystem-match=usb --attr-match=bInterfaceClass=03 >/dev/null 2>&1 || true
 
 # ---- Le droit de faire du son sans hoquet -----------------------------------
 #

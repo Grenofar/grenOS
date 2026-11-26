@@ -321,6 +321,14 @@ if [ -x /usr/lib/grenos/grenos-presse-natif ]; then
     grenos-veilleur /usr/lib/grenos/grenos-presse-natif &
 fi
 
+# LA VEILLE VERROUILLE (26 novembre) : avant toute mise en veille (capot,
+# bouton, menu), la session passe à l'écran de connexion ; au réveil, une
+# touche ou un clic le montre. Seulement avec LightDM, et hors clé live.
+if [ -x /usr/lib/grenos/grenos-verrou-veille ] && [ -n "${XDG_SEAT_PATH:-}" ] \
+   && ! grep -qw boot=live /proc/cmdline 2>/dev/null; then
+    grenos-veilleur /usr/lib/grenos/grenos-verrou-veille &
+fi
+
 # LES APPLICATIONS S'OUVRENT CHAUDES (20 novembre). Grenofar : « toutes les
 # apps qui s'ouvrent beaucoup plus vite que ça ». Deux gestes, tous deux
 # après le bureau et au repos, pour ne rien lui prendre :
