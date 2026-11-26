@@ -12,6 +12,7 @@ on:
     branches: ["natif/**", "claude/**", main]
     paths:
       - "linux/natif/**"
+      - "linux/adaptateur-xbox/**"
       - "linux/ui/**"
       - "linux/config/includes.chroot/usr/lib/grenos/grenosui.py"
       - ".github/workflows/natif.yml"
@@ -38,6 +39,17 @@ jobs:
               cargo test --release
               cargo build --release
               ls -l target/release/grenos-shell-natif target/release/grenos-bureau-natif
+            '
+      # Le pilote de l'adaptateur sans fil Xbox (25 novembre) : aucune
+      # dépendance, rien à installer. Le même Rust que la construction.
+      - name: Le pilote de l adaptateur sans fil Xbox
+        run: |
+          RUST=$(sed -n 's/^RUST=//p' scripts/construire-binaires.sh)
+          docker run --rm -v "$PWD:/work" -w /work/linux/adaptateur-xbox \
+            -e CARGO_TERM_COLOR=never "$RUST" sh -ec '
+              cargo test --release --locked
+              cargo build --release --locked
+              ls -l target/release/grenos-adaptateur-xbox
             '
 
   # grenos-ui (Tauri) : la même raison, depuis le 18 novembre. Ses pages
