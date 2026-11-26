@@ -1,8 +1,56 @@
 # TASK.md — ce qui est planifié, dans l'ordre
 
-> Tenu par Claude. Mis à jour le 2026-11-23. Une session qui reprend
+> Tenu par Claude. Mis à jour le 2026-11-26. Une session qui reprend
 > le travail lit d'abord ce fichier, puis `CLAUDE.md` (local, RÈGLE N°1 :
 > plug and play pour un non-développeur).
+
+## 00000000. EN COURS — 26 novembre soir : temprep, et le pilote de la GT 1030
+
+Grenofar a installé grenOS sur un 2e PC (GT 1030, Pascal, 10de:1d01). Demandes : un outil pour que Claude envoie
+des commandes à un autre PC (« temprep », dans grenget) ; retirer le pilote
+« douteux » posé à la main ; une mise à jour qui rende les GT 1030 (et AMD,
+« toutes les cartes ») compatibles. Il dort ; demain matin : mise à jour,
+redémarrage, « Préparer le matériel », redémarrage, Rocket League à 60 i/s.
+
+- **temprep** [écrit, essayé ici puis sur SON PC] : `/usr/lib/grenos/temprep`,
+  `grenget temprep ouvrir|envoyer|poser|prendre|trouver|fermer`. Réseau local,
+  TLS 1.3 à clé pré-partagée tirée du code (scrypt), faux PC à certificat
+  refusé, tout affiché sur le PC aidé, Ctrl+C / `fermer` / inactivité.
+  Livré ce soir par une page temporaire du site (/tempcorr, RETIRÉE à 22 h 20).
+- **Ce qu'avait le PC à GT 1030** [vu par temprep] : à 18 h 20 le bouton avait
+  posé 580-OPEN (« not supported by open nvidia.ko… GSP ») ; à 19 h 00, posé à
+  la main, `nvidia-driver-580` FERMÉ + une règle apt à la main. Le fermé
+  tournait (nvidia-smi : GT 1030) MAIS X était resté sur l'image du firmware
+  (10-grenos-image-firmware.conf, écrit au démarrage de 18 h 31, AccelMethod
+  none) : llvmpipe, d'où « 16 fps sur Rocket League ». Un seul noyau : Ubuntu
+  7.0.0-44 (Debian retiré à 18 h 29). Secure Boot désactivé sur ce PC.
+- **Retiré avec son accord** (« tout retirer ») [fait, vérifié] : 21 paquets
+  nvidia/libnvidia/linux-modules-nvidia (open ET fermé) purgés, règle à la
+  main supprimée ; noyau, initramfs (22 h 16), menu et EFI intacts, dpkg
+  propre ; marque materiel-prepare effacée (le raccourci revient). PAS
+  redémarré. Le dépôt d'Ubuntu (nvidia-driver-580-open.list) reste : le
+  bouton le remplacera par celui de la variante fermée.
+- **La variante suit la carte** [écrit ; essai-cartes-graphiques.sh vert ici
+  contre les 449 identifiants des Modaliases d'Ubuntu] : grenos-nvidia-variante
+  (1340–1dff → 580 fermé ; 1e00+ → 580-open ; avant → aucun, pilote libre),
+  depots/nvidia-driver-580.*, grenos-pilote-signe preparer <paquet>, Préparer
+  le matériel / assistant / Jeux. Le module fermé vit dans
+  kernel/nvidia-580/nvidia.ko, signé « Canonical Ltd. Kernel Module Signing »
+  [vu sur SON PC]. AMD/Intel : déjà tout dans l'image (vérifié par l'essai).
+- **CI** : la branche d'avant était rouge (panneau du son : la barre
+  n'annonçait sa position qu'une fois, le dock s'élargit → clic sur « ^ » ;
+  UEFI et maj-au-démarrage tombaient derrière, QEMU resté vivant). Corrigé
+  (barre.rs : redit les positions qui changent). Publication par la branche
+  `claude/maj-gt1030` (SANS fichier de workflow : le jeton de ce PC n'a pas
+  le droit `workflow`). Restent sur `claude/temprep-cartes-graphiques` : le
+  commit natif.yml de l'adaptateur Xbox (ae07578) et les ajouts de
+  linux.yml / pilote-signe.yml (essai des cartes, matrice des variantes) —
+  à pousser après `gh auth refresh -h github.com -s workflow`.
+- [à faire] 1. branche verte → main → dépôt APT publié ; 2. demain sur SON
+  PC : la vraie preuve (glxinfo : NVIDIA, Rocket League) ; 3. pousser les
+  workflows ; 4. rien n'efface 10-grenos-image-firmware.conf quand un pilote
+  arrive SANS redémarrage (le bouton demande de redémarrer, donc sans effet
+  aujourd'hui).
 
 ## 0000000. PUBLIÉ — 23 novembre soir : NVIDIA en un bouton, Secure Boot gardé, sans écran bleu
 
