@@ -27,9 +27,12 @@ CE QUI A ÉTÉ MESURÉ SUR SON PC (War Robots, manette de l'adaptateur sans fil)
 
 CE PROGRAMME, dans chaque session grenOS, fait ce que Steam ne peut pas : à
 chaque changement de fenêtre active, il trouve, HORS de tout bac à sable, le
-jeu Steam auquel elle appartient — propriété STEAM_GAME de la fenêtre, sinon
-SteamGameId de son processus (X-Resource donne le vrai pid), sinon sa classe
-« steam_app_<id> » — et le dit à Steam. En quittant le jeu, il rend Steam au
+jeu Steam auquel elle appartient — propriété STEAM_GAME de la fenêtre (posée
+par l'overlay de Steam), sinon SteamGameId de son processus (X-Resource donne
+le vrai pid) — et le dit à Steam. SEULEMENT un jeu lancé PAR STEAM
+(SteamClientLaunch=1 dans son environnement) : Rocket League lancé par Heroic
+(umu) porte lui aussi SteamGameId et la classe steam_app_252950, et y imposer
+Steam Input doublerait sa manette. En quittant le jeu, il rend Steam au
 Bureau (413080) puis relâche (0), comme romm-tender. La Big Picture
 (STEAM_GAME 769) garde la sienne. Rien sans Steam lancé (le tube n'a alors
 personne au bout) ; quelques microsecondes par changement de fenêtre.
@@ -68,8 +71,10 @@ def id_de(valeur):
 
 
 def jeu_du_processus(pid, proc="/proc", profondeur=32):
-    """Le jeu Steam d'un processus : SteamGameId (ou SteamAppId) de son
-    environnement, sinon l'AppId= du « reaper SteamLaunch » parmi ses parents."""
+    """Le jeu d'un processus LANCÉ PAR STEAM : SteamOverlayGameId, SteamGameId
+    ou SteamAppId de son environnement quand SteamClientLaunch=1 y est (umu,
+    pour Heroic, pose SteamGameId mais pas lui), sinon l'AppId= du « reaper
+    SteamLaunch » parmi ses parents."""
     while pid and pid > 1 and profondeur > 0:
         profondeur -= 1
         try:
@@ -77,12 +82,13 @@ def jeu_du_processus(pid, proc="/proc", profondeur=32):
                 env = f.read().split(b"\0")
         except OSError:
             env = []
-        for cle in (b"SteamGameId=", b"SteamAppId="):
-            for e in env:
-                if e.startswith(cle):
-                    n = id_de(e[len(cle):].decode("ascii", "replace"))
-                    if n:
-                        return n
+        if b"SteamClientLaunch=1" in env:
+            for cle in (b"SteamOverlayGameId=", b"SteamGameId=", b"SteamAppId="):
+                for e in env:
+                    if e.startswith(cle):
+                        n = id_de(e[len(cle):].decode("ascii", "replace"))
+                        if n:
+                            return n
         try:
             with open(f"{proc}/{pid}/cmdline", "rb") as f:
                 arguments = f.read().split(b"\0")
@@ -102,16 +108,16 @@ def jeu_du_processus(pid, proc="/proc", profondeur=32):
     return None
 
 
-def cible(steam_game, classe, jeu_pid):
-    """L'id à imposer à Steam pour cette fenêtre, ou None (pas un jeu)."""
+def cible(steam_game, jeu_pid):
+    """L'id à imposer à Steam pour cette fenêtre, ou None (pas un jeu de Steam).
+    La classe steam_app_<id> ne compte pas : Proton la donne aussi aux jeux
+    d'umu (Heroic), que Steam ne lance pas."""
     if steam_game == STEAM_UI:
         return STEAM_UI
-    if steam_game and steam_game not in (BUREAU,):
+    if steam_game and steam_game != BUREAU:
         return steam_game
     if jeu_pid:
         return jeu_pid
-    if classe.startswith("steam_app_") and classe[10:].isdigit():
-        return id_de(classe[10:])
     return None
 
 
@@ -264,7 +270,7 @@ class X:
         classe = brut.split(b"\0")[0].decode("utf-8", "replace") if brut else ""
         pid = self.pid(fenetre)
         jeu_pid = jeu_du_processus(pid) if pid else None
-        return cible(steam_game, classe, jeu_pid), {"STEAM_GAME": steam_game, "classe": classe, "pid": pid, "jeu du processus": jeu_pid}
+        return cible(steam_game, jeu_pid), {"STEAM_GAME": steam_game, "classe": classe, "pid": pid, "jeu du processus": jeu_pid}
 
 
 def voir(arguments):

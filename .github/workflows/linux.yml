@@ -163,7 +163,7 @@ jobs:
         run: sh linux/tools/essai-flatpak-nvidia.sh
       # 27 novembre : la manette ne marchait dans aucun jeu Steam passant par
       # Steam Input (Steam Flatpak reste sur sa configuration Bureau).
-      - name: Steam Input suit le jeu au premier plan, 25 cas
+      - name: Steam Input suit le jeu au premier plan, 24 cas
         run: python3 linux/tools/essai-steam-manettes.py
       # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
       # rendu la cle au premier Calamares, qui l a prise pour partition EFI.

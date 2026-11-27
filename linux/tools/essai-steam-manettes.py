@@ -50,23 +50,24 @@ with tempfile.TemporaryDirectory() as proc:
         open(f"{proc}/{pid}/cmdline", "wb").write(cmd)
         open(f"{proc}/{pid}/stat", "w").write(f"{pid} (nom (avec) parenthèses) S {ppid} 0 0")
     processus(10, 1, cmd=b"reaper\0SteamLaunch\0AppId=767560\0--\0proton")
-    processus(20, 10, env=b"HOME=/h\0SteamGameId=767560\0SteamAppId=767560\0")
+    processus(20, 10, env=b"HOME=/h\0SteamClientLaunch=1\0SteamGameId=767560\0SteamAppId=767560\0SteamOverlayGameId=767560\0")
     processus(30, 20, env=b"HOME=/h\0")                       # un enfant qui a perdu l'environnement
     processus(40, 1, env=b"HOME=/h\0DISPLAY=:0\0")             # Claude, le bureau
-    processus(50, 1, env=b"SteamAppId=0\0SteamGameId=" + str((123 << 32) | 0x02000000).encode() + b"\0")
+    processus(50, 1, env=b"SteamClientLaunch=1\0SteamAppId=0\0SteamGameId=" + str((123 << 32) | 0x02000000).encode() + b"\0")
+    # Rocket League par Heroic (umu) : SteamGameId posé, mais pas par Steam.
+    processus(60, 1, env=b"UMU_ID=umu-252950\0STORE=egs\0SteamAppId=252950\0SteamGameId=252950\0STEAM_COMPAT_APP_ID=252950\0")
     verifier(m.jeu_du_processus(20, proc) == 767560, "le jeu (wine) : SteamGameId de son environnement")
     verifier(m.jeu_du_processus(30, proc) == 767560, "un enfant sans l'environnement : ses parents jusqu'au reaper")
     verifier(m.jeu_du_processus(40, proc) is None, "une application du bureau : pas un jeu")
     verifier(m.jeu_du_processus(50, proc) == 123, "un raccourci non-Steam (SteamAppId=0) : son id de jeu")
     verifier(m.jeu_du_processus(99, proc) is None, "un processus disparu : rien, sans erreur")
+    verifier(m.jeu_du_processus(60, proc) is None, "Rocket League lancé par Heroic (umu) : pas un jeu de Steam, rien imposé")
 
-verifier(m.cible(767560, "steam_app_767560", 767560) == 767560, "War Robots : STEAM_GAME")
-verifier(m.cible(0, "steam_app_252950", None) == 252950, "Proton sans overlay : la classe steam_app_<id>")
-verifier(m.cible(0, "factorio", 427520) == 427520, "un jeu Linux natif : son processus")
-verifier(m.cible(769, "steamwebhelper", None) == m.STEAM_UI, "la Big Picture : 769")
-verifier(m.cible(0, "com.anthropic.claude", None) is None, "Claude : pas un jeu")
-verifier(m.cible(m.BUREAU, "x", None) is None, "STEAM_GAME 413080 (le Bureau) : pas un jeu")
-verifier(m.cible(0, "steam_app_abc", None) is None, "une classe trafiquée : rien")
+verifier(m.cible(767560, 767560) == 767560, "War Robots : STEAM_GAME")
+verifier(m.cible(0, 767560) == 767560, "un jeu de Steam sans overlay : son processus")
+verifier(m.cible(0, None) is None, "Rocket League par Heroic (classe steam_app_252950, pas de STEAM_GAME) : rien")
+verifier(m.cible(769, None) == m.STEAM_UI, "la Big Picture : 769")
+verifier(m.cible(m.BUREAU, None) is None, "STEAM_GAME 413080 (le Bureau) : pas un jeu")
 
 e = m.Etat()
 verifier(e.changer(None) == [], "au démarrage sur le bureau : rien à dire à Steam")
