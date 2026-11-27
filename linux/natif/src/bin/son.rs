@@ -11,6 +11,13 @@
 //!   concluait qu'il restait ouvert. Le défaut était dans la preuve.
 //!
 //! Les lignes série sont celles du Python, au mot près.
+//!
+//! LE BLUETOOTH (27 novembre, Grenofar : « choisir le truc Bluetooth via
+//! son ») : les enceintes et casques DÉJÀ associés, un bouton pour les
+//! connecter ou les déconnecter, et « Ajouter un appareil… » qui ouvre
+//! Connexions sur son onglet Bluetooth. La connexion part détachée
+//! (`natif::lancer`) : elle finit, et le son passe sur l'enceinte, même si le
+//! panneau s'est fermé entre-temps. Sans Bluetooth, la section n'existe pas.
 
 use std::cell::{Cell, RefCell};
 use std::process::Command;
@@ -160,6 +167,99 @@ fn applications_de(brut: &str) -> Vec<Application> {
     trouvees
 }
 
+// ---- Bluetooth ------------------------------------------------------------
+
+/// Un appareil audio Bluetooth associé.
+#[derive(Debug, PartialEq)]
+struct AppareilBt {
+    adresse: String,
+    nom: String,
+    connecte: bool,
+}
+
+/// Une carte Bluetooth ? Sans elle, `bluetoothctl` attendrait son délai.
+fn bluetooth_la() -> bool {
+    std::fs::read_dir("/sys/class/bluetooth").map(|mut d| d.next().is_some()).unwrap_or(false)
+}
+
+fn bluetoothctl(secondes: u32, arguments: &[&str]) -> String {
+    Command::new("timeout")
+        .arg(secondes.to_string())
+        .arg("bluetoothctl")
+        .args(arguments)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default()
+}
+
+/// Six paires hexadécimales : rien d'autre n'atteint une commande.
+fn adresse_bt_valide(a: &str) -> bool {
+    let p: Vec<&str> = a.split(':').collect();
+    p.len() == 6 && p.iter().all(|x| x.len() == 2 && x.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// Les adresses et noms de `bluetoothctl devices Paired`.
+fn adresses_bt(sortie: &str) -> Vec<(String, String)> {
+    sortie
+        .lines()
+        .filter_map(|l| {
+            let mut c = l.trim().splitn(3, char::is_whitespace);
+            if c.next()? != "Device" {
+                return None;
+            }
+            let adresse = c.next()?.to_string();
+            adresse_bt_valide(&adresse).then(|| (adresse, c.next().unwrap_or("").trim().to_string()))
+        })
+        .collect()
+}
+
+/// L'appareil, s'il fait du son (icône audio-*, ou profil « Audio Sink »).
+fn audio_bt(adresse: &str, nom_liste: &str, info: &str) -> Option<AppareilBt> {
+    let (mut nom, mut alias, mut audio, mut connecte) = (nom_liste.to_string(), String::new(), false, false);
+    for ligne in info.lines().map(str::trim) {
+        if let Some(v) = ligne.strip_prefix("Name:") {
+            nom = v.trim().to_string();
+        } else if let Some(v) = ligne.strip_prefix("Alias:") {
+            alias = v.trim().to_string();
+        } else if let Some(v) = ligne.strip_prefix("Icon:") {
+            audio |= v.trim().starts_with("audio");
+        } else if let Some(v) = ligne.strip_prefix("Connected:") {
+            connecte = v.trim() == "yes";
+        } else if ligne.starts_with("UUID: Audio Sink") || ligne.starts_with("UUID: Headset") {
+            audio = true;
+        }
+    }
+    if !alias.is_empty() && !alias.replace('-', ":").eq_ignore_ascii_case(adresse) {
+        nom = alias;
+    }
+    if nom.is_empty() || nom.replace('-', ":").eq_ignore_ascii_case(adresse) {
+        nom = "Appareil audio".into();
+    }
+    audio.then(|| AppareilBt { adresse: adresse.to_string(), nom, connecte })
+}
+
+fn appareils_audio() -> Vec<AppareilBt> {
+    adresses_bt(&bluetoothctl(5, &["devices", "Paired"]))
+        .into_iter()
+        .take(12)
+        .filter_map(|(a, n)| audio_bt(&a, &n, &bluetoothctl(4, &["info", &a])))
+        .collect()
+}
+
+/// Connecter, attendre que PipeWire crée la sortie de l'appareil, y faire
+/// passer le son et ce qui joue. Un script détaché : il survit au panneau.
+fn script_connecter(adresse: &str) -> String {
+    let cle = format!("bluez_output.{}", adresse.replace(':', "_"));
+    format!(
+        "timeout 30 bluetoothctl connect {adresse} >/dev/null 2>&1; i=0; while [ $i -lt 12 ]; do \
+         s=$(pactl list short sinks | awk -v c={cle} 'index($2, c) == 1 {{ print $2; exit }}'); \
+         if [ -n \"$s\" ]; then pactl set-default-sink \"$s\"; \
+         pactl list short sink-inputs | while read n reste; do pactl move-sink-input \"$n\" \"$s\"; done; break; fi; \
+         sleep 1; i=$((i+1)); done"
+    )
+}
+
 // ---- Le panneau ------------------------------------------------------------
 
 struct Panneau {
@@ -170,6 +270,10 @@ struct Panneau {
     curseur: gtk::Scale,
     choix: gtk::ComboBoxText,
     liste: gtk::Box,
+    bt_liste: gtk::Box,
+    bt_ajouter: Option<gtk::Button>,
+    /// Tours de minuterie pendant lesquels on relit le Bluetooth (après un geste).
+    bt_relire: Cell<u32>,
     sorties: RefCell<Vec<(String, String)>>,
     /// Un réglage en cours (curseur tenu) : la relecture n'écrase rien.
     en_train: Cell<bool>,
@@ -240,6 +344,22 @@ impl Panneau {
         colonne.pack_start(&milieu, false, false, 0);
         colonne.pack_start(&trait_(), false, false, 0);
 
+        let bt_liste = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        let mut bt_ajouter = None;
+        if bluetooth_la() {
+            let bt = gtk::Box::new(gtk::Orientation::Vertical, 8);
+            classe(&bt, "bloc-son");
+            bt.pack_start(&section("BLUETOOTH"), false, false, 0);
+            bt.pack_start(&bt_liste, false, false, 0);
+            let ajouter = gtk::Button::with_label("Ajouter un appareil…");
+            classe(&ajouter, "discret");
+            ajouter.set_halign(gtk::Align::Start);
+            bt.pack_start(&ajouter, false, false, 0);
+            bt_ajouter = Some(ajouter);
+            colonne.pack_start(&bt, false, false, 0);
+            colonne.pack_start(&trait_(), false, false, 0);
+        }
+
         let bas = gtk::Box::new(gtk::Orientation::Vertical, 8);
         classe(&bas, "bloc-son");
         bas.pack_start(&section("APPLICATIONS"), false, false, 0);
@@ -255,6 +375,9 @@ impl Panneau {
             curseur: principal,
             choix,
             liste,
+            bt_liste,
+            bt_ajouter,
+            bt_relire: Cell::new(0),
             sorties: RefCell::new(Vec::new()),
             en_train: Cell::new(false),
             pose: Cell::new(false),
@@ -296,6 +419,13 @@ impl Panneau {
                 }
             }
         });
+        if let Some(ajouter) = &self.bt_ajouter {
+            let p = self.clone();
+            ajouter.connect_clicked(move |_| {
+                natif::lancer("grenos-ui connexions:bt", false);
+                p.partir();
+            });
+        }
         let p = self.clone();
         self.choix.connect_notify_local(Some("popup-shown"), move |c, _| {
             p.deroule.set(c.property::<bool>("popup-shown"));
@@ -401,6 +531,49 @@ impl Panneau {
         self.liste.show_all();
     }
 
+    fn poser_bt(self: &Rc<Self>) {
+        if !bluetooth_la() {
+            return;
+        }
+        for enfant in self.bt_liste.children() {
+            self.bt_liste.remove(&enfant);
+        }
+        let appareils = appareils_audio();
+        if appareils.is_empty() {
+            let vide = gtk::Label::new(Some("Aucune enceinte ni casque associé."));
+            vide.set_xalign(0.0);
+            classe(&vide, "sous");
+            self.bt_liste.pack_start(&vide, false, false, 0);
+        }
+        for a in appareils {
+            let ligne = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let nom = gtk::Label::new(Some(&if a.connecte { format!("{} — connecté", a.nom) } else { a.nom.clone() }));
+            nom.set_xalign(0.0);
+            nom.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            classe(&nom, "nom-app");
+            ligne.pack_start(&nom, true, true, 0);
+            let bouton = gtk::Button::with_label(if a.connecte { "Déconnecter" } else { "Connecter" });
+            classe(&bouton, "discret");
+            let p = self.clone();
+            bouton.connect_clicked(move |b| {
+                b.set_sensitive(false);
+                if a.connecte {
+                    b.set_label("Déconnexion…");
+                    natif::lancer(&format!("timeout 20 bluetoothctl disconnect {}", a.adresse), false);
+                    dire(&format!("son : bluetooth {} deconnecte", a.adresse));
+                } else {
+                    b.set_label("Connexion…");
+                    natif::lancer(&script_connecter(&a.adresse), false);
+                    dire(&format!("son : bluetooth {} connexion demandee", a.adresse));
+                }
+                p.bt_relire.set(8);
+            });
+            ligne.pack_end(&bouton, false, false, 0);
+            self.bt_liste.pack_start(&ligne, false, false, 0);
+        }
+        self.bt_liste.show_all();
+    }
+
     fn ouvrir(self: &Rc<Self>) -> (i32, i32) {
         self.fenetre.show_all();
         let (largeur, hauteur) = self.fenetre.size();
@@ -450,6 +623,7 @@ fn main() {
     let _style = natif::Style::poser(STYLE);
     let panneau = Panneau::nouveau();
     panneau.relire();
+    panneau.poser_bt();
     let place = panneau.ouvrir();
     let (l, h) = panneau.fenetre.size();
     // Dire le volume et l'état muet prouve qu'on sait LIRE le mélangeur.
@@ -469,6 +643,10 @@ fn main() {
             return glib::ControlFlow::Break;
         }
         p.relire();
+        if p.bt_relire.get() > 0 {
+            p.bt_relire.set(p.bt_relire.get() - 1);
+            p.poser_bt();
+        }
         glib::ControlFlow::Continue
     });
     gtk::main();
@@ -491,6 +669,30 @@ mod essais {
     fn pour_cent_lu() {
         assert_eq!(pour_cent("Volume: front-left: 42597 /  65% / -11.23 dB"), Some(65));
         assert_eq!(pour_cent("rien"), None);
+    }
+
+    #[test]
+    fn enceintes_associees() {
+        let liste = adresses_bt("Device AA:BB:CC:DD:EE:FF JBL Flip 5\nDevice 12:34:56:78:9A:BC Clavier\nController 00:11:22:33:44:55 grenos\nDevice ;rm -rf x\n");
+        assert_eq!(liste.len(), 2);
+        let jbl = audio_bt("AA:BB:CC:DD:EE:FF", "JBL Flip 5", "\tName: JBL Flip 5\n\tAlias: Enceinte salon\n\tIcon: audio-card\n\tConnected: yes\n");
+        assert_eq!(jbl, Some(AppareilBt { adresse: "AA:BB:CC:DD:EE:FF".into(), nom: "Enceinte salon".into(), connecte: true }));
+        // Pas d'icône, mais le profil audio : c'est un casque.
+        assert!(audio_bt("98:76:54:32:10:FE", "", "\tName: Casque\n\tUUID: Audio Sink (0000110b-0000-1000-8000-00805f9b34fb)\n").is_some());
+        // Un clavier n'a rien à faire dans le panneau du son.
+        assert_eq!(audio_bt("12:34:56:78:9A:BC", "Clavier", "\tIcon: input-keyboard\n"), None);
+        // Sans nom : un nom lisible plutôt que l'adresse.
+        assert_eq!(audio_bt("11:22:33:44:55:66", "11-22-33-44-55-66", "\tIcon: audio-headset\n").unwrap().nom, "Appareil audio");
+    }
+
+    #[test]
+    fn connecter_puis_choisir_la_sortie() {
+        let s = script_connecter("AA:BB:CC:DD:EE:FF");
+        assert!(s.starts_with("timeout 30 bluetoothctl connect AA:BB:CC:DD:EE:FF "));
+        assert!(s.contains("-v c=bluez_output.AA_BB_CC_DD_EE_FF "));
+        assert!(s.contains("pactl set-default-sink \"$s\""));
+        assert!(s.contains("pactl move-sink-input \"$n\" \"$s\""));
+        assert!(!adresse_bt_valide("AA:BB:CC:DD:EE:FF; reboot"));
     }
 
     #[test]

@@ -69,3 +69,7 @@ jobs:
               apt-get install -y -qq --no-install-recommends                 libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev                 build-essential pkg-config >/dev/null
               cargo test
             '
+      # Les pages de grenos-ui (27 novembre) : une faute de syntaxe dans un
+      # .js laisse la fenêtre blanche, sans une ligne dans les essais Rust.
+      - name: La syntaxe des pages de grenos-ui
+        run: for f in linux/ui/web/*.js; do node --check "$f" || exit 1; done

@@ -81,9 +81,13 @@ const TOURS: usize = 20_000;
 fn nmcli_et_bluetoothctl() {
     let m = ["*", "Livebox", "WPA2", "--", "wifi", "ethernet", "connected", "disconnected", "Device", "AA:BB:CC:DD:EE:FF", "Connected", "Secrets were required", "802-11-wireless-security"];
     eprouver("decouper", TOURS, &m, |t| { let _ = crate::premier::decouper(t); });
-    eprouver("reseaux_de", TOURS, &m, |t| { let _ = crate::connexions::reseaux_de(t); });
+    eprouver("reseaux_de", TOURS, &m, |t| { let _ = crate::connexions::reseaux_de(t, &[t.to_string()]); });
     eprouver("lien_de", TOURS, &m, |t| { let _ = crate::connexions::lien_de(t); });
-    eprouver("appareils_de", TOURS, &m, |t| { let _ = crate::connexions::appareils_de(t, t); });
+    eprouver("adresses_de", TOURS, &m, |t| { let _ = crate::connexions::adresses_de(t); });
+    eprouver("appareil_de", TOURS, &m, |t| { let _ = crate::connexions::a_montrer(vec![crate::connexions::appareil_de(t, t, t)]); });
+    eprouver("wifi_actif_de", TOURS, &m, |t| { let _ = crate::connexions::wifi_actif_de(t); });
+    eprouver("noms_wifi_de", TOURS, &m, |t| { let _ = crate::connexions::noms_wifi_de(t); });
+    eprouver("sortie_bt_de", TOURS, &m, |t| { let _ = crate::connexions::sortie_bt_de(t, t); });
     eprouver("refus", TOURS, &m, |t| { let _ = crate::connexions::refus(t); });
     eprouver("adresse_valide", TOURS, &m, |t| { let _ = crate::connexions::adresse_valide(t); });
 }
