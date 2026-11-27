@@ -6,6 +6,26 @@
 
 ## 00000000. EN COURS — 26 novembre soir : temprep, et le pilote de la GT 1030
 
+**27 novembre, matin (Grenofar parti à 7 h 45, « prêt avant midi »)** :
+- La CI du 26 au soir (Pilote signe 45897346153) : variante fermée ROUGE.
+  Le BUILD d'Ubuntu lie les objets par /usr/bin/ld.bfd puis exige les
+  empreintes de Canonical : avec binutils 2.44 de Debian, « checksums did
+  NOT match ». Canonical lie en 2.46. Le ld 2.46 d'Ubuntu, extrait avec sa
+  glibc et lancé seul, redonne les cinq empreintes [prouvé ici, objets
+  7.0.0-44.44]. `grenos-pilote-signe` : latelink=false pour le paquet, puis
+  le BUILD de Canonical TEL QUEL avec ce ld (unshare -m, mount --bind).
+- SUR SON PC à GT 1030, par temprep, la séquence exacte du bouton
+  (installer.rs) avec les fichiers du dépôt [fait, vu] : 5 modules « OK »,
+  nvidia.ko signé Canonical, module et bibliothèques 580.178.04, chaîne
+  posée, dpkg propre, seul nvidia-driver-580.list branché. Les modules
+  « open » étaient revenus pendant la nuit/le matin : retirés par
+  `retirer_autre_variante`. PAS redémarré (sa session était ouverte) :
+  [à voir] au redémarrage, Xorg sur NVIDIA, glxinfo, Rocket League.
+- Réouverture automatique de temprep après redémarrage : REFUSÉE par le
+  contrôle de sécurité de Claude Code (accès root à distance sans la
+  personne) — non faite. Page /tempcorr remise 10 min puis retirée.
+
+
 Grenofar a installé grenOS sur un 2e PC (GT 1030, Pascal, 10de:1d01). Demandes : un outil pour que Claude envoie
 des commandes à un autre PC (« temprep », dans grenget) ; retirer le pilote
 « douteux » posé à la main ; une mise à jour qui rende les GT 1030 (et AMD,
