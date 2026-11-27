@@ -314,6 +314,15 @@ if [ -x /usr/bin/grenos-epic-connexion ] && command -v xdotool >/dev/null 2>&1; 
     grenos-veilleur nice -n 10 grenos-epic-connexion --guetter &
 fi
 
+# STEAM INPUT SUIT LE JEU (27 novembre). Steam Flatpak ne rattache pas la
+# fenêtre active à son jeu (le SteamGameId de son processus lui est illisible
+# depuis son bac à sable) : il reste sur sa configuration « Bureau », et la
+# manette n'arrive à aucun jeu qui passe par Steam Input. Ce veilleur le lui
+# dit par son tube (steam://forceinputappid) à chaque changement de fenêtre.
+if [ -x /usr/lib/grenos/grenos-steam-manettes ]; then
+    grenos-veilleur nice -n 5 /usr/lib/grenos/grenos-steam-manettes &
+fi
+
 # L'historique du presse-papier (Win+V, todo G31) : il doit écouter dès le
 # début de la session, sinon les premières copies manqueraient. En mémoire
 # seulement — rien de ce qui est copié n'est écrit sur le disque.

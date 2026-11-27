@@ -1,0 +1,347 @@
+#!/usr/bin/env python3
+"""grenos-steam-manettes — Steam Input suit le jeu au premier plan (27 novembre).
+
+Grenofar : « en jeu de base comme Rocket League ça fonctionne, mais pas sur
+les jeux Steam », puis « je veux que ça soit plug and play ».
+
+CE QUI A ÉTÉ MESURÉ SUR SON PC (War Robots, manette de l'adaptateur sans fil) :
+- la manette envoie (242 appuis, 3 349 axes en 20 s), Steam l'ouvre, le jeu
+  lit bien la manette virtuelle de Steam (28de:11ff)… qui ne reçoit RIEN ;
+- Steam reste sur sa configuration « Bureau » (413080, vide pour une manette
+  Xbox) : de 12 h 51 à 13 h 03, et le 26 toute la journée, aucune ligne
+  « OnFocusWindowChanged to game window » dans logs/controller_ui.txt alors
+  que la fenêtre active (_NET_ACTIVE_WINDOW, XGetInputFocus) était le jeu.
+- LA CAUSE (romm-tender #2695, mesurée sur Steam Deck ; Valve
+  steam-for-linux #13053, sans réponse) : pour rattacher la fenêtre active à
+  un jeu, le client Steam 64 bits remonte à son processus et lit SteamGameId
+  dans /proc/<pid>/environ. Steam Flatpak vit dans son propre espace de noms,
+  le jeu dans un autre (pressure-vessel) : ce fichier lui est illisible, la
+  fenêtre retombe sur « Bureau », sans une ligne au journal (et ses
+  _NET_WM_PID sont « discarded as invalid », lu dans console-linux.txt).
+- LE REMÈDE, prouvé ici : steam://forceinputappid/<jeu>, écrit dans le tube
+  de Steam (~/.var/app/com.valvesoftware.Steam/.steam/steam.pipe, celui par
+  lequel un second « steam » passe sa ligne de commande au premier). Steam
+  bascule à l'instant (« URL Forcing to window type: k_EWindowTypeGame ») ;
+  une manette virtuelle identique à celle de l'adaptateur a alors vu 11 997
+  mouvements relayés vers la manette du jeu, contre 0 sans.
+
+CE PROGRAMME, dans chaque session grenOS, fait ce que Steam ne peut pas : à
+chaque changement de fenêtre active, il trouve, HORS de tout bac à sable, le
+jeu Steam auquel elle appartient — propriété STEAM_GAME de la fenêtre, sinon
+SteamGameId de son processus (X-Resource donne le vrai pid), sinon sa classe
+« steam_app_<id> » — et le dit à Steam. En quittant le jeu, il rend Steam au
+Bureau (413080) puis relâche (0), comme romm-tender. La Big Picture
+(STEAM_GAME 769) garde la sienne. Rien sans Steam lancé (le tube n'a alors
+personne au bout) ; quelques microsecondes par changement de fenêtre.
+
+    grenos-steam-manettes              le veilleur (grenos-session)
+    grenos-steam-manettes --voir [id]  ce qu'il déciderait pour la fenêtre
+                                        active (ou id), sans rien envoyer
+"""
+import ctypes
+import os
+import select
+import sys
+import time
+
+BUREAU = 413080          # la configuration « Bureau » de Steam
+STEAM_UI = 769           # la Big Picture et l'interface de Steam
+TUBES = ("~/.var/app/com.valvesoftware.Steam/.steam/steam.pipe", "~/.steam/steam.pipe")
+PIDS = ("~/.var/app/com.valvesoftware.Steam/.steam/steam.pid", "~/.steam/steam.pid")
+
+
+def dire(texte):
+    print(f"grenos: steam manettes : {texte}", file=sys.stderr, flush=True)
+
+
+# ---- Le jeu d'une fenêtre (fonctions pures, essayées par essai-steam-manettes.py)
+def id_de(valeur):
+    """SteamGameId → l'id que forceinputappid attend. Un raccourci non-Steam a
+    un id de jeu 64 bits ((appid << 32) | 0x02000000) : son appid est en haut."""
+    try:
+        n = int(valeur)
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    return n >> 32 if n >= 1 << 32 else n
+
+
+def jeu_du_processus(pid, proc="/proc", profondeur=32):
+    """Le jeu Steam d'un processus : SteamGameId (ou SteamAppId) de son
+    environnement, sinon l'AppId= du « reaper SteamLaunch » parmi ses parents."""
+    while pid and pid > 1 and profondeur > 0:
+        profondeur -= 1
+        try:
+            with open(f"{proc}/{pid}/environ", "rb") as f:
+                env = f.read().split(b"\0")
+        except OSError:
+            env = []
+        for cle in (b"SteamGameId=", b"SteamAppId="):
+            for e in env:
+                if e.startswith(cle):
+                    n = id_de(e[len(cle):].decode("ascii", "replace"))
+                    if n:
+                        return n
+        try:
+            with open(f"{proc}/{pid}/cmdline", "rb") as f:
+                arguments = f.read().split(b"\0")
+            if b"SteamLaunch" in arguments:
+                for a in arguments:
+                    if a.startswith(b"AppId="):
+                        n = id_de(a[6:].decode("ascii", "replace"))
+                        if n:
+                            return n
+        except OSError:
+            pass
+        try:
+            with open(f"{proc}/{pid}/stat", encoding="ascii", errors="replace") as f:
+                pid = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            return None
+    return None
+
+
+def cible(steam_game, classe, jeu_pid):
+    """L'id à imposer à Steam pour cette fenêtre, ou None (pas un jeu)."""
+    if steam_game == STEAM_UI:
+        return STEAM_UI
+    if steam_game and steam_game not in (BUREAU,):
+        return steam_game
+    if jeu_pid:
+        return jeu_pid
+    if classe.startswith("steam_app_") and classe[10:].isdigit():
+        return id_de(classe[10:])
+    return None
+
+
+class Etat:
+    """Ce qui est imposé à Steam, et ce qu'il faut lui écrire au changement."""
+
+    def __init__(self):
+        self.impose = None
+
+    def changer(self, nouvelle):
+        """Les ids à envoyer, dans l'ordre, pour passer à `nouvelle`."""
+        if nouvelle is not None:
+            if nouvelle == self.impose:
+                return []
+            self.impose = nouvelle
+            return [nouvelle]
+        if self.impose is None:
+            return []
+        # En quittant un jeu : le Bureau tout de suite (0 n'agit qu'au
+        # changement de fenêtre suivant que Steam verrait — il n'en voit pas),
+        # puis la main rendue.
+        self.impose = None
+        return [BUREAU, 0]
+
+
+# ---- Le tube de Steam ---------------------------------------------------------------
+def envoyer(ident, tubes=TUBES):
+    """Écrit steam://forceinputappid/<ident> dans le tube de Steam. Faux si
+    Steam ne tourne pas (personne au bout : ENXIO)."""
+    ligne = f"'steam' 'steam://forceinputappid/{int(ident)}'\n".encode()
+    for t in tubes:
+        chemin = os.path.expanduser(t)
+        try:
+            fd = os.open(chemin, os.O_WRONLY | os.O_NONBLOCK)
+        except OSError:
+            continue
+        try:
+            os.write(fd, ligne)
+            return True
+        except OSError:
+            continue
+        finally:
+            os.close(fd)
+    return False
+
+
+def pid_de_steam():
+    for p in PIDS:
+        try:
+            with open(os.path.expanduser(p), encoding="ascii") as f:
+                return f.read().strip()
+        except OSError:
+            continue
+    return ""
+
+
+# ---- X11 par ctypes (comme grenos-mcp) ------------------------------------------------
+class X:
+    PROPERTY_CHANGE = 1 << 22
+    PROPERTY_NOTIFY = 28
+
+    def __init__(self):
+        self.x = ctypes.CDLL("libX11.so.6")
+        try:
+            self.res = ctypes.CDLL("libXRes.so.1")
+        except OSError:
+            self.res = None
+        x = self.x
+        x.XOpenDisplay.restype = ctypes.c_void_p
+        x.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        x.XDefaultRootWindow.restype = ctypes.c_ulong
+        x.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+        x.XInternAtom.restype = ctypes.c_ulong
+        x.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+        x.XSelectInput.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_long]
+        x.XGetWindowProperty.argtypes = [
+            ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_long, ctypes.c_long, ctypes.c_int,
+            ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_void_p)]
+        x.XFree.argtypes = [ctypes.c_void_p]
+        x.XPending.argtypes = [ctypes.c_void_p]
+        x.XNextEvent.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        x.XConnectionNumber.argtypes = [ctypes.c_void_p]
+        x.XFlush.argtypes = [ctypes.c_void_p]
+        # Une fenêtre qui disparaît entre l'événement et la lecture : BadWindow,
+        # que le gestionnaire par défaut de Xlib transforme en sortie du programme.
+        self._erreurs = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)(lambda d, e: 0)
+        x.XSetErrorHandler(self._erreurs)
+        self.d = x.XOpenDisplay(None)
+        if not self.d:
+            raise OSError("pas d'écran X")
+        self.racine = x.XDefaultRootWindow(self.d)
+        self.atomes = {n: x.XInternAtom(self.d, n.encode(), 0)
+                       for n in ("_NET_ACTIVE_WINDOW", "STEAM_GAME", "WM_CLASS")}
+        if self.res:
+            self.res.XResQueryClientIds.argtypes = [
+                ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_long), ctypes.POINTER(ctypes.c_void_p)]
+            self.res.XResGetClientPid.restype = ctypes.c_int
+            self.res.XResGetClientPid.argtypes = [ctypes.c_void_p]
+            self.res.XResClientIdsDestroy.argtypes = [ctypes.c_long, ctypes.c_void_p]
+
+    def propriete(self, fenetre, nom, longueur=64):
+        t, fmt, n, reste, donnees = ctypes.c_ulong(), ctypes.c_int(), ctypes.c_ulong(), ctypes.c_ulong(), ctypes.c_void_p()
+        if self.x.XGetWindowProperty(self.d, fenetre, self.atomes[nom], 0, longueur, 0, 0, ctypes.byref(t),
+                                     ctypes.byref(fmt), ctypes.byref(n), ctypes.byref(reste), ctypes.byref(donnees)) != 0:
+            return None
+        if not donnees.value:
+            return None
+        try:
+            if fmt.value == 32:
+                return list(ctypes.cast(donnees, ctypes.POINTER(ctypes.c_ulong))[:n.value])
+            if fmt.value == 8:
+                return ctypes.string_at(donnees, n.value)
+            return None
+        finally:
+            self.x.XFree(donnees)
+
+    def active(self):
+        v = self.propriete(self.racine, "_NET_ACTIVE_WINDOW")
+        return v[0] if v else 0
+
+    def pid(self, fenetre):
+        """Le pid du client X qui a créé la fenêtre, vu par le serveur : le vrai,
+        celui de l'hôte, quel que soit le bac à sable du jeu."""
+        if not self.res:
+            return 0
+
+        class Spec(ctypes.Structure):
+            _fields_ = [("client", ctypes.c_ulong), ("mask", ctypes.c_uint)]
+        spec = Spec(fenetre, 2)  # XRES_CLIENT_ID_PID_MASK
+        n, ids = ctypes.c_long(), ctypes.c_void_p()
+        if self.res.XResQueryClientIds(self.d, 1, ctypes.byref(spec), ctypes.byref(n), ctypes.byref(ids)) != 0:
+            return 0
+        try:
+            taille = ctypes.sizeof(Spec) + 2 * ctypes.sizeof(ctypes.c_void_p)  # spec, length, value
+            for i in range(n.value):
+                p = self.res.XResGetClientPid(ids.value + i * taille)
+                if p > 0:
+                    return p
+            return 0
+        finally:
+            self.res.XResClientIdsDestroy(n, ids)
+
+    def jeu(self, fenetre):
+        if not fenetre:
+            return None, {}
+        steam_game = (self.propriete(fenetre, "STEAM_GAME") or [0])[0]
+        brut = self.propriete(fenetre, "WM_CLASS") or b""
+        classe = brut.split(b"\0")[0].decode("utf-8", "replace") if brut else ""
+        pid = self.pid(fenetre)
+        jeu_pid = jeu_du_processus(pid) if pid else None
+        return cible(steam_game, classe, jeu_pid), {"STEAM_GAME": steam_game, "classe": classe, "pid": pid, "jeu du processus": jeu_pid}
+
+
+def voir(arguments):
+    x = X()
+    fenetre = int(arguments[0], 0) if arguments else x.active()
+    c, details = x.jeu(fenetre)
+    print(f"fenêtre {fenetre:#x} : {details} → {('Steam Input suit le jeu ' + str(c)) if c else 'pas un jeu Steam'}")
+    return 0
+
+
+def veiller():
+    while True:
+        try:
+            x = X()
+            break
+        except OSError:
+            time.sleep(5)
+    x.x.XSelectInput(x.d, x.racine, X.PROPERTY_CHANGE)
+    etat = Etat()
+    suivie = 0          # la fenêtre active, dont on suit aussi STEAM_GAME
+    steam = pid_de_steam()
+    evenement = ctypes.create_string_buffer(192)
+
+    def evaluer(raison):
+        nonlocal suivie
+        fenetre = x.active()
+        if fenetre != suivie:
+            if suivie:
+                x.x.XSelectInput(x.d, suivie, 0)
+            if fenetre:
+                # STEAM_GAME peut être posé après que la fenêtre a pris le focus.
+                x.x.XSelectInput(x.d, fenetre, X.PROPERTY_CHANGE)
+            suivie = fenetre
+        c, details = x.jeu(fenetre)
+        for ident in etat.changer(c):
+            if envoyer(ident):
+                dire(f"{raison} : Steam Input → {ident} ({details.get('classe') or '?'})")
+            else:
+                etat.impose = None   # Steam pas lancé : on réessaiera au prochain changement
+        x.x.XFlush(x.d)
+
+    evaluer("démarrage")
+    fd = x.x.XConnectionNumber(x.d)
+    while True:
+        pret = select.select([fd], [], [], 10)[0]
+        if pret:
+            changement = False
+            while x.x.XPending(x.d):
+                x.x.XNextEvent(x.d, evenement)
+                type_ = int.from_bytes(evenement.raw[0:4], "little")
+                if type_ != X.PROPERTY_NOTIFY:
+                    continue
+                atome = int.from_bytes(evenement.raw[40:48], "little")
+                if atome in (x.atomes["_NET_ACTIVE_WINDOW"], x.atomes["STEAM_GAME"], x.atomes["WM_CLASS"]):
+                    changement = True
+            if changement:
+                evaluer("fenêtre active")
+        # Steam relancé : il a oublié ce qu'on lui avait imposé.
+        maintenant = pid_de_steam()
+        if maintenant != steam:
+            steam = maintenant
+            etat.impose = None
+            evaluer("Steam relancé")
+
+
+def main(arguments):
+    if arguments[:1] == ["--voir"]:
+        return voir(arguments[1:])
+    if arguments:
+        print(__doc__.split("\n\n")[0], file=sys.stderr)
+        return 2
+    veiller()
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.exit(0)

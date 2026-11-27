@@ -6,6 +6,24 @@
 
 ## 00000000. EN COURS — 26 novembre soir : temprep, et le pilote de la GT 1030
 
+**27 novembre, 14 h — RÉGLÉ : `grenos-steam-manettes`** (Grenofar parti 2 h,
+« plug and play, pas de manip »). La notification n'était PAS la cause (essai
+sans notifications : même panne, aucune erreur X). La vraie (romm-tender
+#2695, Valve #13053) : le client Steam 64 bits rattache la fenêtre active à
+son jeu par /proc/<pid>/environ (SteamGameId), illisible depuis le bac à
+sable de Steam Flatpak → configuration « Bureau ». PROUVÉ ici : sans forçage,
+Steam ne crée même pas la manette du jeu ; avec steam://forceinputappid/767560
+écrit dans ~/.var/app/com.valvesoftware.Steam/.steam/steam.pipe, une manette
+virtuelle identique à celle de l'adaptateur a vu 11 997 mouvements relayés.
+Le veilleur (session, grenos-veilleur) trouve le jeu de la fenêtre active
+(STEAM_GAME, sinon SteamGameId du VRAI pid par X-Resource, sinon steam_app_<id>)
+et le dit à Steam ; Bureau puis 0 en sortant. Vu sur ses fenêtres : War
+Robots → 767560 (pid hôte 317065). Lancé à la main dans SA session (copie
+~/.local/share/grenos/grenos-steam-manettes, journal steam-manettes.log) en
+attendant la mise à jour. [à voir avec lui] War Robots à la manette, Steam
+Input remis ; l'essai du changement de focus sur son écran a été refusé par
+le contrôle de sécurité (on ne touche pas à sa session).
+
 **27 novembre, 13 h — la manette de l'adaptateur dans les jeux STEAM** (Grenofar :
 « en jeu de base comme Rocket League ça marche, mais pas sur les jeux Steam ») :
 - Mesuré, War Robots (767560, impose Steam Input) : la manette de l'adaptateur
