@@ -6,6 +6,31 @@
 
 ## 00000000. EN COURS — 26 novembre soir : temprep, et le pilote de la GT 1030
 
+**27 novembre, 13 h — la manette de l'adaptateur dans les jeux STEAM** (Grenofar :
+« en jeu de base comme Rocket League ça marche, mais pas sur les jeux Steam ») :
+- Mesuré, War Robots (767560, impose Steam Input) : la manette de l'adaptateur
+  envoie (242 appuis / 3 349 axes en 20 s), Steam l'ouvre (event22, sdl://),
+  le jeu (winedevice.exe) lit la manette virtuelle de Steam (28de:11ff,
+  event23) : 0 événement. Même chose en mode « X-Box 360 » (GRENOS_XBOX_360=1,
+  essai posé chez lui : /etc/systemd/system/grenos-adaptateur-xbox.service.d/
+  essai-360.conf — À RETIRER, l'identité n'y est pour rien).
+- « Use Steam Input Translation » coupé pour le jeu → le jeu lit event22 et
+  ÇA MARCHE (« oeeee »). Réglage : localconfig.vdf, "UseSteamControllerConfig" "0".
+- Ce n'est PAS que Steam ne lit pas la manette : le 25/11 il a reçu son bouton
+  Guide (« Guide button sent to JS »). Sur le bureau, sa config est
+  controller_base/empty.vdf (le stick ne bouge pas la souris : test sans valeur).
+- LA PISTE : de 12 h 51 à 13 h 03, AUCUN « OnFocusWindowChanged » dans
+  controller_ui.txt alors que la fenêtre active passait au jeu (relevé
+  xprop/XGetInputFocus : 0x7a00001, STEAM_GAME=767560) → Steam reste sur la
+  config Bureau (vide) → rien vers event23. Le suivi revient à 13 h 03, quand
+  Steam ouvre une nouvelle fenêtre (réglages de manette). À chaque connexion
+  de la manette, sa notification « manette connectée » échoue : webhelper,
+  X Error BadMatch sur Composite (142) puis GLXBadPixmap (12:51:21, 12:56:38).
+- [à faire, AVEC Grenofar] 1. Steam Input remis pour War Robots, manette déjà
+  connectée : marche-t-il (suivi du focus vivant) ? 2. éteindre/rallumer la
+  manette (notification → erreurs X) : le suivi meurt-il ? Si oui : empêcher
+  cette notification de casser Steam (environnement X/picom, ou réglage).
+
 **27 novembre, midi** : pilote PUBLIÉ (linux-20261127-0749, APT 1.0.202611270714).
 Sur la GT 1030, après redémarrage : Xorg sur NVIDIA, glxinfo « GeForce GT 1030 ».
 Rocket League (Heroic, FLATPAK) plantait : il manquait l'extension Flatpak du
