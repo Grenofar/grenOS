@@ -1,0 +1,23 @@
+# Les applications Flatpak (Steam, Heroic…) n'utilisent le pilote NVIDIA que
+# par une extension de Flatpak à SA version exacte ; installées avant le
+# pilote, elles restent sans elle et les jeux plantent (27 novembre, Rocket
+# League sur la GT 1030). Voir /usr/lib/grenos/grenos-flatpak-nvidia : rien à
+# faire sans pilote NVIDIA ou sans application Flatpak.
+[Unit]
+Description=grenOS : l'extension Flatpak du pilote NVIDIA
+After=network-online.target
+Wants=network-online.target
+ConditionKernelCommandLine=!boot=live
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/grenos/grenos-flatpak-nvidia
+# Flathub injoignable : on réessaie, sans fin mais sans hâte.
+Restart=on-failure
+RestartSec=15min
+TimeoutStartSec=1800
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

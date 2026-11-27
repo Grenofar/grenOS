@@ -157,6 +157,10 @@ jobs:
       # recevoir la variante qui la prend ; AMD et Intel, tout dans l image.
       - name: Chaque carte graphique a son pilote (NVIDIA Maxwell a Blackwell, AMD, Intel)
         run: sh linux/tools/essai-cartes-graphiques.sh
+      # 27 novembre, Rocket League (Heroic, Flatpak) plantait sur la GT 1030 :
+      # l extension Flatpak du pilote NVIDIA manquait.
+      - name: L extension Flatpak du pilote NVIDIA, 10 cas
+        run: sh linux/tools/essai-flatpak-nvidia.sh
       # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
       # rendu la cle au premier Calamares, qui l a prise pour partition EFI.
       - name: Le lanceur de l installateur, 27 cas

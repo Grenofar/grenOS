@@ -6,6 +6,15 @@
 
 ## 00000000. EN COURS — 26 novembre soir : temprep, et le pilote de la GT 1030
 
+**27 novembre, midi** : pilote PUBLIÉ (linux-20261127-0749, APT 1.0.202611270714).
+Sur la GT 1030, après redémarrage : Xorg sur NVIDIA, glxinfo « GeForce GT 1030 ».
+Rocket League (Heroic, FLATPAK) plantait : il manquait l'extension Flatpak du
+pilote (org.freedesktop.Platform.GL/GL32.nvidia-580-178-04), que Flatpak ne
+pose que si le pilote est chargé quand il installe/met à jour une appli.
+Posée à la main → « c bon » (Grenofar). Pour tous : `grenos-flatpak-nvidia`
+(+ service au démarrage, + appelé par le bouton), essai 10 cas. Le PC est un
+i5-3470 (Ivy Bridge, sans AVX2) ; Proton-CachyOS y tourne.
+
 **27 novembre, matin (Grenofar parti à 7 h 45, « prêt avant midi »)** :
 - La CI du 26 au soir (Pilote signe 45897346153) : variante fermée ROUGE.
   Le BUILD d'Ubuntu lie les objets par /usr/bin/ld.bfd puis exige les

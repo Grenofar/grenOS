@@ -63,6 +63,9 @@ if [ -n "$apres" ]; then
     # doute, tout revient comme avant.
     if [ -f "$DEPOTS/$paquet.signe" ]; then
         if /usr/lib/grenos/grenos-pilote-signe verifier; then
+            # Steam, Heroic… en Flatpak : l'extension de CE pilote, tout de
+            # suite (27 novembre, Rocket League plantait sans elle).
+            /usr/lib/grenos/grenos-flatpak-nvidia || true
             exit 0
         fi
         echo "Retour au pilote libre : on retire ce qui vient d'etre installe." >&2

@@ -1,0 +1,100 @@
+#!/bin/sh
+# L'EXTENSION FLATPAK DU PILOTE NVIDIA (27 novembre).
+#
+# Sur le PC à GT 1030 de Grenofar, le pilote NVIDIA tournait (nvidia-smi,
+# glxinfo : « GeForce GT 1030 ») et Rocket League plantait au lancement. Il
+# passe par Heroic, une application FLATPAK : dans son bac à sable, OpenGL et
+# Vulkan ne viennent pas du système mais d'une extension de Flatpak,
+# org.freedesktop.Platform.GL.nvidia-<version>, qui doit être EXACTEMENT celle
+# du pilote (580.178.04 → nvidia-580-178-04), plus GL32 pour les jeux 32 bits
+# de Steam et de Proton. Elle manquait : DXVK ne trouvait aucune carte, le jeu
+# tombait. Posée à la main (Flathub l'a), Rocket League tourne.
+#
+# Flatpak pose cette extension tout seul, mais seulement quand il installe ou
+# met à jour une application ALORS QUE le pilote est déjà chargé. Steam et
+# Heroic installés avant le pilote — le cas de tout le monde, puisque le
+# pilote se pose après l'installation — restent sans elle.
+#
+# Ce script la pose quand il le faut, et seulement alors :
+#   - un pilote NVIDIA officiel (module chargé, ou ses bibliothèques posées :
+#     juste après « Préparer le matériel », avant le redémarrage) ;
+#   - au moins une application Flatpak installée (sinon Flatpak la posera
+#     lui-même avec la première) ;
+#   - l'extension de CETTE version absente.
+# Les extensions d'anciennes versions du pilote sont ensuite retirées.
+#
+# Lancé par grenos-flatpak-nvidia.service à chaque démarrage (une fois le
+# réseau là, quelques millisecondes s'il n'y a rien à faire) et par
+# grenos-depot-editeur juste après l'installation du pilote signé.
+# Code 1 seulement si Flathub n'a pas répondu : le service réessaie.
+#
+# GRENOS_ESSAI_BIN et GRENOS_SYSFS ne servent qu'aux essais
+# (linux/tools/essai-flatpak-nvidia.sh).
+set -u
+PATH="${GRENOS_ESSAI_BIN:+$GRENOS_ESSAI_BIN:}/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH LC_ALL=C
+SYSFS="${GRENOS_SYSFS:-/sys}"
+
+dire() {
+    echo "grenos: flatpak nvidia : $*"
+    [ -n "${GRENOS_ESSAI_BIN:-}" ] || echo "grenos: flatpak nvidia : $*" > /dev/kmsg 2>/dev/null || true
+}
+
+command -v flatpak >/dev/null 2>&1 || exit 0
+
+# La version du pilote : celle du module chargé, sinon celle de ses
+# bibliothèques (libnvidia-gl-580 580.178.04-0ubuntu0.26.04.1 → 580.178.04).
+version=$(cat "$SYSFS/module/nvidia/version" 2>/dev/null)
+if [ -z "$version" ]; then
+    version=$(dpkg-query -W -f '${db:Status-Abbrev} ${Version}\n' 'libnvidia-gl-*' 2>/dev/null \
+        | awk '$1 == "ii" {sub(/-.*/, "", $2); print $2; exit}')
+fi
+case "$version" in
+    "" | *[!0-9.]* | .* | *.) exit 0 ;;
+esac
+suffixe=$(echo "$version" | tr . -)
+
+if ! flatpak list --system --app --columns=application 2>/dev/null | grep -q .; then
+    exit 0
+fi
+
+manque=""
+for e in GL GL32; do
+    ref="org.freedesktop.Platform.$e.nvidia-$suffixe"
+    flatpak info --system "$ref" >/dev/null 2>&1 || manque="$manque $ref"
+done
+
+if [ -n "$manque" ]; then
+    flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >/dev/null 2>&1 || true
+    if ! dispo=$(flatpak remote-ls --system flathub --runtime --columns=application 2>/dev/null); then
+        dire "Flathub injoignable, pilote $version :$manque — nouvel essai plus tard"
+        exit 1
+    fi
+    poser=""
+    for ref in $manque; do
+        if echo "$dispo" | grep -qx "$ref"; then
+            poser="$poser $ref"
+        else
+            dire "$ref n est pas (encore) sur Flathub"
+        fi
+    done
+    if [ -n "$poser" ]; then
+        # shellcheck disable=SC2086
+        if flatpak install --system -y --noninteractive flathub $poser >/dev/null 2>&1; then
+            dire "pilote $version : pose$poser"
+        else
+            dire "pilote $version : la pose a echoue$poser — nouvel essai plus tard"
+            exit 1
+        fi
+    fi
+fi
+
+# Les extensions d'un pilote qui n'est plus là : elles pèsent des centaines de Mo.
+flatpak list --system --runtime --columns=application 2>/dev/null \
+    | grep -E '^org\.freedesktop\.Platform\.GL(32)?\.nvidia-[0-9-]+$' \
+    | grep -v -- "\.nvidia-$suffixe\$" \
+    | while read -r ancien; do
+        flatpak uninstall --system -y --noninteractive "$ancien" >/dev/null 2>&1 \
+            && dire "ancienne extension retiree : $ancien"
+    done
+exit 0
