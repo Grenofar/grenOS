@@ -109,8 +109,62 @@ uuid_racine() {
 poser_noyau() { # abi
     [ -n "$1" ] || rate "aucun noyau d Ubuntu n a de pilote NVIDIA signe dans le depot"
     dire "noyau d Ubuntu $1 et son pilote signe"
+    latelink_coupe
     apt-get install -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
         "linux-image-$1" "linux-modules-$1" "linux-modules-nvidia-$VARIANTE-$1" "$META"
+    lier_ferme "$1"
+}
+
+# LE MODULE FERMÉ S'ASSEMBLE SUR PLACE (27 novembre). Ubuntu ne livre pas le
+# nvidia.ko fermé tout fait : des objets (linux-objects-nvidia-580-<noyau>),
+# la signature de Canonical à part (linux-signatures-nvidia-<noyau>), et un
+# script, BUILD, qui les lie par /usr/bin/ld.bfd puis EXIGE les empreintes
+# exactes de ce que Canonical a signé (SHA256SUMS). Avec le ld de Debian
+# (binutils 2.44), les cinq modules sortent différents : « checksums did NOT
+# match », le paquet ne s'installe pas (CI Pilote signe, run 45897346153).
+# Canonical lie avec binutils 2.46 : ce ld-là, pris dans le dépôt d'Ubuntu et
+# lancé avec sa propre glibc (rien d'installé), redonne les cinq empreintes
+# au bit près [prouvé le 27 au matin, objets 7.0.0-44.44]. Le BUILD de
+# Canonical tourne TEL QUEL, vérification comprise ; seul son ld est celui
+# d'Ubuntu, dans un espace de montage à lui. Le paquet, lui, ne lie plus
+# (latelink=false) : sans cela, son postinst échouerait.
+LD_UBUNTU="binutils-x86-64-linux-gnu libbinutils libctf0 libctf-nobfd0 libsframe3 libjansson4 libzstd1 zlib1g libc6"
+latelink_coupe() {
+    [ "$VARIANTE" = 580 ] || return 0
+    cat > /etc/default/linux-modules-nvidia <<'EOF'
+# grenos-pilote-signe : le module fermé n'est pas lié par le paquet (le ld de
+# Debian ne redonne pas ce que Canonical a signé) ; grenos-pilote-signe le lie
+# avec le ld d'Ubuntu et vérifie les empreintes de Canonical.
+latelink=false
+EOF
+}
+lier_ferme() { # abi
+    [ "$VARIANTE" = 580 ] || return 0
+    bits=/lib/modules/$1/kernel/nvidia-580/bits
+    [ -f "$bits/BUILD" ] && [ -f "$bits/SHA256SUMS" ] || rate "les objets du module ferme de $1 manquent"
+    [ -e /usr/bin/ld.bfd ] || rate "/usr/bin/ld.bfd absent (binutils)"
+    t=$(mktemp -d /var/tmp/grenos-ld-ubuntu.XXXXXX)
+    for p in $LD_UBUNTU; do
+        v=$(apt-cache madison "$p" 2>/dev/null | awk -F'|' '/ubuntu\.com/ {gsub(/ /, "", $2); print $2; exit}')
+        [ -n "$v" ] || { rm -rf "$t"; rate "$p d Ubuntu introuvable dans le depot"; }
+        (cd "$t" && apt-get download -q "$p=$v" >/dev/null 2>&1) || { rm -rf "$t"; rate "$p=$v ne se telecharge pas"; }
+    done
+    for d in "$t"/*.deb; do dpkg-deb -x "$d" "$t/r"; done
+    cat > "$t/ld.bfd" <<EOF
+#!/bin/sh
+exec "$t/r/usr/lib64/ld-linux-x86-64.so.2" --library-path "$t/r/usr/lib/x86_64-linux-gnu:$t/r/lib/x86_64-linux-gnu" "$t/r/usr/bin/x86_64-linux-gnu-ld.bfd" "\$@"
+EOF
+    chmod 0755 "$t/ld.bfd"
+    "$t/ld.bfd" --version 2>/dev/null | head -n 1 | grep -q 'GNU ld' || { rm -rf "$t"; rate "le ld d Ubuntu ne demarre pas"; }
+    if unshare -m sh -c "mount --bind '$t/ld.bfd' /usr/bin/ld.bfd && cd '$bits' && sh ./BUILD"; then
+        rm -rf "$t"
+    else
+        rm -rf "$t"
+        (cd "$bits" && sh ./CLEAN) >/dev/null 2>&1 || true
+        rate "le module ferme de $1 ne redonne pas les empreintes de Canonical"
+    fi
+    depmod -a "$1"
+    dire "module ferme de $1 lie par le ld d Ubuntu, empreintes de Canonical verifiees"
 }
 
 # Le shim et le GRUB d'Ubuntu : téléchargés (jamais installés comme paquets,
