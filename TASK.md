@@ -6,6 +6,24 @@
 
 ## 00000000. EN COURS — 26 novembre soir : temprep, et le pilote de la GT 1030
 
+**27 novembre, 18 h — le disque dur de 2 To : 1 To donné à grenOS, et dans
+Steam.** (Grenofar : « je n'arrive pas à faire avec Paramètres › Partition ».)
+- `grenos-partitions donner` NE POUVAIT PAS réduire un NTFS : ntfsresize pose
+  « Are you sure you want to proceed (y/[n])? » et, stdin sur /dev/null,
+  s'arrête sans rien faire. Corrigé : on répond « y » (pas --force, qui
+  laisserait passer un volume que Windows doit vérifier). Fait chez lui par
+  sudo avec le script corrigé : sda1 NTFS 931 Go (728 Go dedans, intacts),
+  sda2 ext4 « Grenos supdata » 931 Go sur /mnt/Grenos-supdata (fstab, nofail).
+- « Add Drive » de Steam Flatpak (Stockage) ferme le menu et ne fait RIEN :
+  aucune fenêtre (webhelper.txt), pas une ligne de journal ; le disque était
+  pourtant visible et inscriptible dans le bac à sable. Remède prouvé :
+  Steam fermé, une entrée dans steamapps/ et config/libraryfolders.vdf +
+  SteamLibrary/libraryfolder.vdf (même contentid) → « 2 libraries ».
+  Pour tous : grenos-partitions prépare SteamLibrary sur une partition pour
+  grenOS ; `grenos-steam-bibliotheques` (session) l'inscrit dès que Steam est
+  fermé, une seule fois. essai-steam-bibliotheques.py : 23 cas.
+- [à voir] la cause d'« Add Drive » muet (rien au journal JS non plus).
+
 **27 novembre, 14 h — RÉGLÉ : `grenos-steam-manettes`** (Grenofar parti 2 h,
 « plug and play, pas de manip »). La notification n'était PAS la cause (essai
 sans notifications : même panne, aucune erreur X). La vraie (romm-tender

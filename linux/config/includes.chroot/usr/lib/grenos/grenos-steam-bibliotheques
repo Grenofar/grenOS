@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""grenos-steam-bibliotheques — une partition pour grenOS devient une
+bibliothèque Steam, sans passer par Steam (27 novembre).
+
+Grenofar a donné 1 To de son disque dur à grenOS (Réglages › Partitions,
+« donner »), puis : « je peux pas ajouter de disque dans Steam ».
+
+CE QUI A ÉTÉ VU SUR SON PC : Paramètres › Stockage › « Add Drive » ferme le
+menu déroulant, et c'est tout — aucune fenêtre créée (webhelper.txt), pas une
+ligne dans les journaux de Steam. Pourtant Steam Flatpak voyait le disque :
+/mnt est dans ses permissions, la partition montée en écriture dans son bac à
+sable, la personne propriétaire de la racine.
+
+LE REMÈDE, prouvé chez lui : Steam fermé, une entrée de plus dans
+steamapps/libraryfolders.vdf (et sa copie config/libraryfolders.vdf), un
+dossier SteamLibrary portant libraryfolder.vdf (le même contentid). Au
+lancement suivant : « Loaded 0 apps from install folder
+"/mnt/Grenos-supdata/SteamLibrary/steamapps" … (2 libraries) », et le disque
+est dans Stockage.
+
+Steam FERMÉ seulement : il garde la liste en mémoire et la réécrit, une
+entrée écrite pendant qu'il tourne serait perdue.
+
+CE PROGRAMME, dans chaque session grenOS (grenos-veilleur) : toutes les dix
+secondes, il cherche /mnt/*/SteamLibrary/libraryfolder.vdf appartenant à la
+personne — ce que grenos-partitions prépare sur une partition donnée à
+grenOS. Une bibliothèque pas encore vue est ajoutée à Steam dès que Steam
+est fermé, UNE fois : notée dans ~/.local/state/grenos/steam-bibliotheques,
+elle n'est jamais remise si la personne la retire de Steam.
+
+    grenos-steam-bibliotheques             le veilleur (grenos-session)
+    grenos-steam-bibliotheques --une-fois  une passe, puis s'arrête
+"""
+import glob
+import os
+import re
+import subprocess
+import sys
+import time
+
+STEAM = "~/.var/app/com.valvesoftware.Steam/.local/share/Steam"
+LISTES = ("steamapps/libraryfolders.vdf", "config/libraryfolders.vdf")
+RACINES = ("/mnt",)
+ETAT = "~/.local/state/grenos/steam-bibliotheques"
+
+
+def dire(texte):
+    print(f"grenos: steam bibliotheques : {texte}", file=sys.stderr, flush=True)
+
+
+# ---- Le format de Steam (fonctions pures, essayées par essai-steam-bibliotheques.py)
+def chemins(texte):
+    """Les bibliothèques d'un libraryfolders.vdf."""
+    return [c.replace("\\\\", "\\") for c in re.findall(r'^\s*"path"\s+"((?:[^"\\]|\\.)*)"', texte, re.M)]
+
+
+def contentid(texte):
+    """Le contentid d'un libraryfolder.vdf, ou None."""
+    m = re.search(r'"contentid"\s+"(\d+)"', texte)
+    return m.group(1) if m else None
+
+
+def ajouter(texte, chemin, ident):
+    """libraryfolders.vdf avec une bibliothèque de plus, au numéro suivant.
+    ValueError si le fichier n'a pas la forme attendue : on n'y touche pas."""
+    if not re.match(r'\s*"libraryfolders"\s*\{', texte):
+        raise ValueError("pas un libraryfolders.vdf")
+    fin = texte.rstrip().rfind("}")
+    if fin < 0 or texte.rstrip()[-1] != "}":
+        raise ValueError("libraryfolders.vdf sans fin")
+    numeros = [int(n) for n in re.findall(r'^\t"(\d+)"\s*$', texte, re.M)]
+    n = max(numeros) + 1 if numeros else 0
+    entree = (
+        f'\t"{n}"\n\t{{\n'
+        f'\t\t"path"\t\t"{chemin}"\n'
+        f'\t\t"label"\t\t""\n'
+        f'\t\t"contentid"\t\t"{ident}"\n'
+        f'\t\t"totalsize"\t\t"0"\n'
+        f'\t\t"update_clean_bytes_tally"\t\t"0"\n'
+        f'\t\t"time_last_update_verified"\t\t"0"\n'
+        f'\t\t"apps"\n\t\t{{\n\t\t}}\n'
+        f'\t}}\n'
+    )
+    return texte[:fin].rstrip("\n") + "\n" + entree + "}\n"
+
+
+def trouvees(racines=RACINES, uid=None):
+    """Les SteamLibrary préparées par grenos-partitions, à la personne."""
+    uid = os.getuid() if uid is None else uid
+    vues = []
+    for r in racines:
+        for marque in sorted(glob.glob(os.path.join(r, "*", "SteamLibrary", "libraryfolder.vdf"))):
+            try:
+                if os.stat(marque).st_uid == uid:
+                    vues.append(os.path.dirname(marque))
+            except OSError:
+                continue
+    return vues
+
+
+# ---- Steam et l'état ---------------------------------------------------------------
+def steam_tourne():
+    """Steam Flatpak a-t-il une instance ? (Son tube ne suffit pas : Steam le
+    ferme avant d'avoir fini de quitter.)"""
+    try:
+        sortie = subprocess.run(["flatpak", "ps", "--columns=application"],
+                                capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return True   # dans le doute, on n'écrit pas
+    return "com.valvesoftware.Steam" in sortie
+
+
+def lire(chemin):
+    with open(chemin, encoding="utf-8") as f:
+        return f.read()
+
+
+def ecrire(chemin, texte):
+    tmp = f"{chemin}.grenos-tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(texte)
+    os.replace(tmp, chemin)
+
+
+def faites(etat):
+    try:
+        return set(lire(etat).split("\n")) - {""}
+    except OSError:
+        return set()
+
+
+def noter(etat, chemin):
+    os.makedirs(os.path.dirname(etat), exist_ok=True)
+    with open(etat, "a", encoding="utf-8") as f:
+        f.write(chemin + "\n")
+
+
+def passe(steam=STEAM, racines=RACINES, etat=ETAT, tourne=steam_tourne, uid=None):
+    """Ajoute à Steam ce qui attend. Rend la liste des bibliothèques ajoutées."""
+    steam, etat = os.path.expanduser(steam), os.path.expanduser(etat)
+    deja = faites(etat)
+    attente = [b for b in trouvees(racines, uid) if b not in deja]
+    if not attente:
+        return []
+    listes = [os.path.join(steam, l) for l in LISTES]
+    if not os.path.exists(listes[0]):
+        return []   # Steam jamais ouvert : il crée sa liste au premier lancement
+    if tourne():
+        return []
+    ajoutees = []
+    for b in attente:
+        try:
+            ident = contentid(lire(os.path.join(b, "libraryfolder.vdf")))
+        except OSError:
+            continue
+        if not ident:
+            continue
+        ecrit = False
+        for liste in listes:
+            if not os.path.exists(liste):
+                continue
+            texte = lire(liste)
+            if b in chemins(texte):
+                continue   # déjà là (ajoutée à la main, ou par Steam)
+            try:
+                nouveau = ajouter(texte, b, ident)
+            except ValueError as souci:
+                dire(f"{liste} : {souci}, rien n'est écrit")
+                return ajoutees
+            if not os.path.exists(f"{liste}.avant-grenos"):
+                ecrire(f"{liste}.avant-grenos", texte)
+            ecrire(liste, nouveau)
+            ecrit = True
+        noter(etat, b)
+        if ecrit:
+            ajoutees.append(b)
+            dire(f"{b} ajoutée aux bibliothèques de Steam")
+    return ajoutees
+
+
+def veiller():
+    while True:
+        try:
+            passe()
+        except Exception as souci:   # un veilleur ne tombe pas pour un fichier illisible
+            dire(f"passe manquée : {souci}")
+        time.sleep(10)
+
+
+def main(arguments):
+    if arguments[:1] == ["--une-fois"]:
+        for b in passe():
+            print(b)
+        return 0
+    veiller()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

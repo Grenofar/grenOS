@@ -323,6 +323,13 @@ if [ -x /usr/lib/grenos/grenos-steam-manettes ]; then
     grenos-veilleur nice -n 5 /usr/lib/grenos/grenos-steam-manettes &
 fi
 
+# UNE PARTITION POUR GRENOS ENTRE DANS STEAM (27 novembre). « Add Drive » de
+# Steam Flatpak ne fait rien : la SteamLibrary que Réglages › Partitions
+# prépare est inscrite dans la liste de Steam dès que Steam est fermé.
+if [ -x /usr/lib/grenos/grenos-steam-bibliotheques ]; then
+    grenos-veilleur nice -n 10 /usr/lib/grenos/grenos-steam-bibliotheques &
+fi
+
 # L'historique du presse-papier (Win+V, todo G31) : il doit écouter dès le
 # début de la session, sinon les premières copies manqueraient. En mémoire
 # seulement — rien de ce qui est copié n'est écrit sur le disque.

@@ -129,7 +129,11 @@ reduire_fs() { # périphérique octets
             [ -n "$min" ] || refus "La place occupée sur ce disque est illisible : $(printf '%s\n' "$info" | tail -1)"
             [ "$2" -ge $((min + 1073741824)) ] \
                 || refus "Trop peu gardé : ce que contient la partition demande au moins $(( (min + 1073741824) / 1000000000 + 1 )) Go."
-            ntfsresize --no-progress-bar --size "$2" "$1" </dev/null >/dev/null 2>/run/grenos-partitions.err \
+            # ntfsresize demande « Are you sure you want to proceed (y/[n])? »
+            # avant d'écrire : sans réponse, il s'arrête sans rien faire. On
+            # répond « y » plutôt que --force, qui ferait aussi passer un volume
+            # que Windows doit vérifier (27 novembre).
+            printf 'y\n' | ntfsresize --no-progress-bar --size "$2" "$1" >/dev/null 2>/run/grenos-partitions.err \
                 || refus "La réduction a échoué, rien n'a bougé : $(tail -1 /run/grenos-partitions.err 2>/dev/null)"
             ;;
         ext2|ext3|ext4)
@@ -196,6 +200,21 @@ pour_grenos() { # périphérique nom
         || refus "La partition est prête et notée pour le démarrage, mais n'a pas pu être ouverte : redémarre."
     qui=${PKEXEC_UID:-${SUDO_UID:-}}
     [ -z "$qui" ] || chown "$qui" "$dossier"
+    # Une bibliothèque Steam toute prête (27 novembre). Chez Grenofar, « Add
+    # Drive » de Steam Flatpak ferme son menu et ne fait rien : le disque
+    # donné à grenOS n'entrait pas dans Steam. Ici, le dossier et sa marque
+    # (libraryfolder.vdf) ; grenos-steam-bibliotheques, dans la session,
+    # l'inscrit dans la liste de Steam dès que Steam est fermé.
+    en_plus=""
+    if [ -n "$qui" ] && [ ! -e "$dossier/SteamLibrary" ] \
+            && flatpak info --system com.valvesoftware.Steam >/dev/null 2>&1; then
+        ident=$(( $(od -An -N7 -tu8 /dev/urandom | tr -d ' \n') + 1000000000000000000 ))
+        mkdir -p "$dossier/SteamLibrary/steamapps" \
+            && printf '"libraryfolder"\n{\n\t"contentid"\t\t"%s"\n\t"label"\t\t""\n}\n' "$ident" \
+                > "$dossier/SteamLibrary/libraryfolder.vdf" \
+            && chown -R "$qui" "$dossier/SteamLibrary" \
+            && en_plus=" Elle sera dans Steam à sa prochaine ouverture."
+    fi
     for appli in com.valvesoftware.Steam com.heroicgameslauncher.hgl net.lutris.Lutris; do
         flatpak info --system "$appli" >/dev/null 2>&1 \
             && flatpak override --system --filesystem="$dossier" "$appli" 2>/dev/null
@@ -259,7 +278,7 @@ case "$geste" in
         dire "$neuve creee en $3 sur $2"
         if [ -n "$pour" ]; then
             pour_grenos "$neuve" "$4"
-            echo "Partition $neuve créée pour grenOS : $dossier, ouverte à chaque démarrage."
+            echo "Partition $neuve créée pour grenOS : $dossier, ouverte à chaque démarrage.$en_plus"
         else
             echo "Partition $neuve créée en $3."
         fi
@@ -286,7 +305,7 @@ case "$geste" in
         creer_partition "$disque" ext4 "$4" ""
         formater_bloc "$neuve" ext4 "$4"
         pour_grenos "$neuve" "$4"
-        echo "Place donnée à grenOS : $dossier, ouverte à chaque démarrage."
+        echo "Place donnée à grenOS : $dossier, ouverte à chaque démarrage.$en_plus"
         ;;
     *)
         refus "Geste inconnu : $geste."

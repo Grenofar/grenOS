@@ -165,6 +165,10 @@ jobs:
       # Steam Input (Steam Flatpak reste sur sa configuration Bureau).
       - name: Steam Input suit le jeu au premier plan, 24 cas
         run: python3 linux/tools/essai-steam-manettes.py
+      # 27 novembre : « Add Drive » de Steam Flatpak ne fait rien ; la
+      # partition donnee a grenOS est inscrite dans libraryfolders.vdf.
+      - name: Une partition pour grenOS entre dans Steam, 23 cas
+        run: python3 linux/tools/essai-steam-bibliotheques.py
       # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
       # rendu la cle au premier Calamares, qui l a prise pour partition EFI.
       - name: Le lanceur de l installateur, 27 cas
