@@ -12,7 +12,8 @@ on:
       - "linux/tools/essai-pilote-signe-installe.sh"
       - "linux/config/includes.chroot/usr/lib/grenos/grenos-pilote-signe"
       - "linux/config/includes.chroot/usr/lib/grenos/grenos-depot-editeur"
-      - "linux/config/includes.chroot/usr/share/grenos/depots/nvidia-driver-580-open.*"
+      - "linux/config/includes.chroot/usr/lib/grenos/grenos-nvidia-variante"
+      - "linux/config/includes.chroot/usr/share/grenos/depots/nvidia-driver-580*"
       - ".github/workflows/pilote-signe.yml"
   workflow_dispatch:
 
@@ -36,9 +37,16 @@ jobs:
   # Le bouton de bout en bout : la version publiée installée sur un disque
   # virtuel, les fichiers du dépôt par-dessus, le bouton joué, puis deux
   # démarrages en Secure Boot (linux/tools/essai-pilote-signe-installe.sh).
+  # Les deux variantes (26 novembre) : « open » pour Turing et après, la
+  # fermée pour Maxwell, Pascal et Volta (la GT 1030 de Grenofar).
   installe:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        variante: ["580-open", "580"]
+    name: installe (${{ matrix.variante }})
     steps:
       - uses: actions/checkout@v4
       - name: Outils
@@ -55,7 +63,7 @@ jobs:
           gh release download "$tag" -R "$GITHUB_REPOSITORY" -p 'grenos-linux-*.iso' -D "$RUNNER_TEMP"
           ls -la "$RUNNER_TEMP"/*.iso
       - name: Un bouton, deux demarrages en Secure Boot
-        run: sudo bash linux/tools/essai-pilote-signe-installe.sh "$RUNNER_TEMP"/grenos-linux-*.iso "$RUNNER_TEMP/installe"
+        run: sudo bash linux/tools/essai-pilote-signe-installe.sh "$RUNNER_TEMP"/grenos-linux-*.iso "$RUNNER_TEMP/installe" "${{ matrix.variante }}"
       - name: Journaux
         if: always()
         run: |
@@ -64,7 +72,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pilote-signe-installe
+          name: pilote-signe-installe-${{ matrix.variante }}
           path: |
             ${{ runner.temp }}/installe/*.log
             ${{ runner.temp }}/installe/*.txt

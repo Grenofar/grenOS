@@ -152,6 +152,11 @@ jobs:
       # 22 novembre : trois telechargeurs de signatures armes, un seul coupe.
       - name: L antivirus ne telecharge rien au demarrage
         run: sh linux/tools/essai-antivirus.sh
+      # 26 novembre, une GT 1030 (Pascal) : le bouton posait le pilote
+      # « open », qui ne la connait pas. Chaque carte des listes de NVIDIA doit
+      # recevoir la variante qui la prend ; AMD et Intel, tout dans l image.
+      - name: Chaque carte graphique a son pilote (NVIDIA Maxwell a Blackwell, AMD, Intel)
+        run: sh linux/tools/essai-cartes-graphiques.sh
       # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
       # rendu la cle au premier Calamares, qui l a prise pour partition EFI.
       - name: Le lanceur de l installateur, 27 cas
