@@ -2010,15 +2010,59 @@ fn icone_reseau() -> (String, String) {
             cable = cable.or(Some(i));
         }
     }
+    // « Savoir dans quel réseau je suis » (Grenofar, 27 novembre) : le nom du
+    // Wi-Fi, même quand le câble passe avant lui.
+    let wifi = sans_fil.as_deref().map(nom_du_wifi).unwrap_or_default();
     if let Some(i) = cable {
-        return ("grenos-reseau-cable".into(), format!("Connecté par câble ({i})"));
+        let aussi = if wifi.is_empty() { String::new() } else { format!(" et au Wi-Fi « {wifi} »") };
+        return ("grenos-reseau-cable".into(), format!("Connecté par câble ({i}){aussi}"));
     }
     if let Some(i) = sans_fil {
         let barres = force_wifi(&lire("/proc/net/wireless".into()), &i);
         let phrase = ["connecté, signal très faible", "signal faible", "signal moyen", "bon signal"][barres as usize];
-        return (format!("grenos-reseau-wifi-{barres}"), format!("Wi-Fi : {phrase} ({i})"));
+        let qui = if wifi.is_empty() { format!("({i})") } else { format!("« {wifi} »") };
+        return (format!("grenos-reseau-wifi-{barres}"), format!("Wi-Fi {qui} : {phrase}"));
     }
     ("grenos-reseau-aucun".into(), "Aucune connexion".into())
+}
+
+/// Le nom du réseau Wi-Fi d'une interface. `nmcli` n'est demandé que quand la
+/// liaison change (`carrier_changes` compte chaque perte et reprise) :
+/// jamais à chaque tour de la minuterie.
+fn nom_du_wifi(interface: &str) -> String {
+    thread_local! {
+        static VU: RefCell<(String, String)> = const { RefCell::new((String::new(), String::new())) };
+    }
+    let changements = std::fs::read_to_string(format!("/sys/class/net/{interface}/carrier_changes")).unwrap_or_default();
+    let cle = format!("{interface}:{}", changements.trim());
+    VU.with(|vu| {
+        if vu.borrow().0 != cle {
+            let sortie = std::process::Command::new("timeout")
+                .args(["3", "nmcli", "-g", "GENERAL.CONNECTION", "device", "show", interface])
+                .stdin(std::process::Stdio::null())
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+                .unwrap_or_default();
+            *vu.borrow_mut() = (cle, nom_lu(&sortie));
+        }
+        vu.borrow().1.clone()
+    })
+}
+
+/// `nmcli -g` échappe « : » et « \\ » : « Box\\:5G » → « Box:5G ».
+fn nom_lu(sortie: &str) -> String {
+    let ligne = sortie.lines().next().unwrap_or("").trim();
+    let mut nom = String::new();
+    let mut echappe = false;
+    for c in ligne.chars() {
+        if echappe || c != '\\' {
+            nom.push(c);
+            echappe = false;
+        } else {
+            echappe = true;
+        }
+    }
+    nom
 }
 
 /// 0 à 3 barres d'après « link » dans /proc/net/wireless ; 3 sans ligne.
@@ -2145,5 +2189,13 @@ mod tests {
         assert_eq!(force_wifi(t, "wlan0"), 3);
         assert_eq!(force_wifi(" wlan0: 0000   20.  -80.  -256", "wlan0"), 1);
         assert_eq!(force_wifi("", "wlan0"), 3);
+    }
+
+    #[test]
+    fn le_nom_du_wifi() {
+        assert_eq!(nom_lu("Famille Belgacem\n"), "Famille Belgacem");
+        assert_eq!(nom_lu("Box\\:5G\n"), "Box:5G");
+        assert_eq!(nom_lu("C\\\\D\n"), "C\\D");
+        assert_eq!(nom_lu(""), "");
     }
 }

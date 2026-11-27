@@ -6,6 +6,27 @@
 
 ## 00000000. EN COURS — 26 novembre soir : temprep, et le pilote de la GT 1030
 
+**27 novembre, 20 h — Connexions, barre et son : le réseau, le Bluetooth.**
+(Grenofar : « savoir dans quel réseau je suis, se connecter si le mot de
+passe est déjà mis, et si erreur redemander, oublier un réseau ; Bluetooth :
+voir les noms, mettre des enceintes, choisir le Bluetooth via le son ».
+« Essaie dans une CI », pas sur son PC.) Branche claude/reseau-bluetooth.
+- Chez lui : câble ET Wi-Fi « Famille Belgacem » ; Connexions ne disait que
+  « câble à Wired connection 1 », la barre « Wi-Fi (wlp…) ». Maintenant
+  `wifi_nom` (en-tête) et le nom du Wi-Fi dans l'infobulle (nmcli SEULEMENT
+  quand carrier_changes bouge).
+- Wi-Fi : profil enregistré essayé sans question ; échec → la page redemande,
+  en boucle jusqu'à « Annuler » ; un mot de passe donné supprime d'abord
+  l'ancien profil. « Oublier » (profils retrouvés par SSID), aussi hors de
+  portée.
+- Bluetooth : noms et genre (bluetoothctl info), sans-nom cachés ;
+  association PENDANT une recherche (TemporaryTimeout 30 s de BlueZ) ;
+  enceinte → sortie par défaut + flux déplacés ; « Oublier ». Panneau du son :
+  section BLUETOOTH (associés audio, Connecter/Déconnecter détaché),
+  « Ajouter un appareil… » → grenos-ui connexions:bt.
+- Essais : faux nmcli/bluetoothctl/pactl (connexions.rs), son.rs, barre.rs ;
+  `node --check` des pages dans natif.yml. [à voir] sur une vraie enceinte.
+
 **27 novembre, 18 h — le disque dur de 2 To : 1 To donné à grenOS, et dans
 Steam.** (Grenofar : « je n'arrive pas à faire avec Paramètres › Partition ».)
 - `grenos-partitions donner` NE POUVAIT PAS réduire un NTFS : ntfsresize pose

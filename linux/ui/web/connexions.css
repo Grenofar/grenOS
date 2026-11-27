@@ -23,3 +23,7 @@ body[data-page="connexions"] { overflow: auto; }
 .cx-note:empty, .cx-dire:empty { display: none; }
 .cx-dire { color: var(--texte-2); font-size: 13px; margin: 0; }
 .cx-voir { display: flex; align-items: center; gap: 8px; color: var(--texte-2); font-size: 13.5px; }
+/* 27 novembre : l'erreur dans la demande de mot de passe, et le titre des
+   réseaux enregistrés hors de portée. */
+.cx-erreur { color: var(--danger); font-size: 13.5px; margin: 0; }
+.cx-titre { margin: 6px 2px 0; font-weight: 650; }
