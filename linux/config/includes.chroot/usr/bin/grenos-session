@@ -154,6 +154,20 @@ if [ -d /usr/share/icons/Breeze_Light/cursors ]; then
     printf 'Xcursor.theme: Breeze_Light\nXcursor.size: 24\n' | xrdb -merge 2>/dev/null || true
 fi
 
+# LA MACHINE EST-ELLE VIRTUELLE ? Une seule fois, ici, pour tout le script.
+#
+# systemd-detect-virt écrit « none » ET sort en 1 sur une vraie machine :
+# « $(systemd-detect-virt || echo none) » valait donc « none », retour à la
+# ligne, « none » — jamais « none ». Trouvé pour picom le 25 novembre (plus
+# bas), mais resté à cinq autres endroits jusqu'au 28 : TOUT VRAI PC se
+# croyait en machine virtuelle. Le son de chaque carte gardait 8 192
+# échantillons de réserve (181 ms : Grenofar, « une mini latence avec mon
+# OW810, un bruit se fait et je l'entends un peu après »), la molette perdait
+# son défilement fluide, la fréquence haute de l'écran n'était jamais
+# proposée, et l'icône « Installer grenOS » ne venait pas sur la clé.
+VIRT=$(systemd-detect-virt 2>/dev/null) || true
+[ -n "$VIRT" ] || VIRT=none
+
 # LE SON DANS UNE MACHINE VIRTUELLE (19 novembre). VirtualBox et QEMU
 # servent la carte son par a-coups : avec les petits tampons que PipeWire
 # prend par defaut (quelques ms), le son hache, claque, « fait bip bip ».
@@ -168,7 +182,7 @@ fi
 # fait lire la molette comme des clics de boutons 4 et 5, qui ne se perdent
 # pas. Seulement en machine virtuelle : un vrai PC garde le défilement fluide
 # du pavé tactile. Exporté AVANT de lancer la barre et les fenêtres.
-if [ "$(systemd-detect-virt 2>/dev/null || echo none)" != none ]; then
+if [ "$VIRT" != none ]; then
     export GDK_CORE_DEVICE_EVENTS=1
     grenos-dire "souris : machine virtuelle, molette lue en evenements X classiques"
 fi
@@ -181,28 +195,40 @@ fi
 # VM seulement, la carte reste ouverte (suspend 0) avec une marge plus large
 # (période 1024, réserve 8192). Écrit AVANT que la session lance le son ; une
 # session déjà lancée le relit en redémarrant WirePlumber une fois.
-if [ "$(systemd-detect-virt 2>/dev/null || echo none)" != none ]; then
-    WP="${XDG_CONFIG_HOME:-$HOME/.config}/wireplumber/wireplumber.conf.d"
-    WPF="$WP/50-grenos-machine-virtuelle.conf"
-    # Sur UNE ligne (le format de WirePlumber l'accepte) : la garde des
-    # commandes (verif-commandes) lit chaque ligne d'un script comme une
-    # commande possible, et la version sur plusieurs lignes a arrêté la
-    # construction du 19 novembre (« matches n'est pas dans l'image »).
-    WPN='monitor.alsa.rules = [ { matches = [ { node.name = "~alsa_output.*" } ], actions = { update-props = { session.suspend-timeout-seconds = 0, api.alsa.period-size = 1024, api.alsa.headroom = 8192 } } } ]'
+WP="${XDG_CONFIG_HOME:-$HOME/.config}/wireplumber/wireplumber.conf.d"
+WPF="$WP/50-grenos-machine-virtuelle.conf"
+# Sur UNE ligne (le format de WirePlumber l'accepte) : la garde des
+# commandes (verif-commandes) lit chaque ligne d'un script comme une
+# commande possible, et la version sur plusieurs lignes a arrêté la
+# construction du 19 novembre (« matches n'est pas dans l'image »).
+WPN='monitor.alsa.rules = [ { matches = [ { node.name = "~alsa_output.*" } ], actions = { update-props = { session.suspend-timeout-seconds = 0, api.alsa.period-size = 1024, api.alsa.headroom = 8192 } } } ]'
+if [ "$VIRT" != none ]; then
     if [ "$(cat "$WPF" 2>/dev/null)" != "$WPN" ]; then
         mkdir -p "$WP" && printf '%s\n' "$WPN" > "$WPF"
         systemctl --user try-restart wireplumber.service 2>/dev/null || true
         grenos-dire "son : machine virtuelle, la carte ne s endort plus (WirePlumber)"
     fi
+elif [ "$(cat "$WPF" 2>/dev/null)" = "$WPN" ]; then
+    # Un vrai PC qui l'avait reçue par la panne de détection (28 novembre) :
+    # on retire NOTRE règle, mot pour mot, rien d'autre.
+    rm -f "$WPF"
+    systemctl --user try-restart wireplumber.service 2>/dev/null || true
+    grenos-dire "son : vrai PC, la reserve de machine virtuelle est retiree (latence)"
 fi
 
 (
-    virt=$(systemd-detect-virt 2>/dev/null || echo none)
+    virt=$VIRT
     if [ "$virt" != none ] && command -v pw-metadata >/dev/null 2>&1; then
         sleep 3   # que PipeWire soit levé (socket-activé par la session)
         pw-metadata -n settings 0 clock.min-quantum 1024 >/dev/null 2>&1             && grenos-dire "son : machine virtuelle ($virt), tampons de 1024 echantillons"
     fi
 ) &
+
+# VERR NUM ALLUMÉ (28 novembre, Grenofar : « fais qu'automatiquement Verr Num
+# du clavier est activé »). Déjà fait par LightDM avant l'écran de connexion
+# (70-grenos-verr-num.conf) ; refait ici pour l'ouverture automatique, qui
+# n'en a pas. Jamais sur un portable (pavé numérique dans les lettres).
+/usr/lib/grenos/grenos-verr-num 2>/dev/null || true
 
 # L'écran reste allumé, et le pointeur est une flèche dès la première seconde.
 xset s off -dpms s noblank 2>/dev/null || true
@@ -218,7 +244,7 @@ grenos-parametres --restaurer-ecran 2>/dev/null || true
 # écran noir revient seul à l'ancien réglage. Une fois par écran ; jamais en
 # machine virtuelle (l'hyperviseur recopie à sa propre cadence).
 if [ ! -e "$CONFIG/ecran" ] && [ ! -e "$CONFIG/ecrans" ] && [ ! -e "$CONFIG/ecran-propose" ] \
-        && [ "$(systemd-detect-virt 2>/dev/null || echo none)" = none ] \
+        && [ "$VIRT" = none ] \
         && python3 -c 'import sys; sys.path.insert(0, "/usr/lib/grenos"); import ecran; sys.exit(0 if ecran.meilleure_frequence() else 1)' 2>/dev/null; then
     (sleep 5; grenos-parametres ecran-max) >/dev/null 2>&1 &
     grenos-dire "ecran : une frequence plus haute est annoncee, elle est proposee (Reglages, Garder ? 15 s)"
@@ -228,7 +254,7 @@ fi
 # machine virtuelle, le disque garde déjà tout, et proposer d'installer
 # par-dessus ne ferait qu'inquiéter : on retire l'entrée du menu pour ce
 # compte, sans toucher au système.
-VIRTUELLE=$(systemd-detect-virt 2>/dev/null || echo none)
+VIRTUELLE=$VIRT
 mkdir -p "$HOME/.local/share/applications"
 # Et seulement sur la CLÉ (21 novembre) : sur une machine déjà installée,
 # l'icône « Installer grenOS » revenait sur le bureau du premier compte —
@@ -328,6 +354,25 @@ fi
 # prépare est inscrite dans la liste de Steam dès que Steam est fermé.
 if [ -x /usr/lib/grenos/grenos-steam-bibliotheques ]; then
     grenos-veilleur nice -n 10 /usr/lib/grenos/grenos-steam-bibliotheques &
+fi
+
+# STEAM NE COMPILE PLUS LES SHADERS VULKAN DES HEURES (28 novembre).
+# « Processing Vulkan shaders » : 1,8 million de pipelines de BeamNG.drive,
+# 15 fils à 90 %, à chaque lancement — Windows ne fait pas ce travail. Le
+# pré-cache et la compilation en fond sont coupés dans config.vdf dès que
+# Steam est fermé, une seule fois ; puis il s'arrête (pas de grenos-veilleur,
+# qui le relancerait).
+if [ -x /usr/lib/grenos/grenos-steam-shaders ]; then
+    nice -n 10 /usr/lib/grenos/grenos-steam-shaders &
+fi
+
+# UNE NOTIFICATION QUAND UNE MISE À JOUR ATTEND (28 novembre). Grenofar :
+# « à chaque redémarrage il vérifie s'il y a une mise à jour, n'installe pas,
+# et s'il y en a, grenOS fait une notif ». La vérification est celle du
+# minuteur (grenos-maj-verif, root) ; celui-ci lit son compte et l'annonce une
+# fois par démarrage, avec les nouveautés, puis s'arrête.
+if [ -x /usr/lib/grenos/grenos-maj-notifier ]; then
+    nice -n 10 /usr/lib/grenos/grenos-maj-notifier &
 fi
 
 # L'historique du presse-papier (Win+V, todo G31) : il doit écouter dès le

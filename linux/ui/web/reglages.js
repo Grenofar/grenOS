@@ -4,7 +4,7 @@
 // attend de chaque page arrivent quand même.
 "use strict";
 (function () {
-  const { api, el, svg, habiller, aurore, pret, ouvrirProgramme, toast } = window.grenos;
+  const { api, el, svg, habiller, aurore, pret, ouvrirProgramme, toast, notesMaj } = window.grenos;
   const PAGES = [
     ["apparence", "Apparence", "palette"], ["ecran", "Écran", "bureau"], ["son", "Son", "son"],
     ["reseau", "Réseau", "wifi"], ["compte", "Compte", "compte"], ["heure", "Heure et date", "sablier"],
@@ -339,7 +339,14 @@
         } catch (x) { direAuto.textContent = String(x); }
       };
       await relire();
+      // Ce qu'apporte la mise à jour qui attend, en phrases — ou, sans mise à
+      // jour, ce que la version installée a apporté (même liste que la fenêtre).
+      const attend = (e.disponibles || 0) > 0 || e.arme;
+      const venir = attend ? (e.nouveautes_a_venir || []) : [];
+      const notes = venir.length ? venir : (e.nouveautes || []);
       return [titre("Mises à jour", v.version),
+        notes.length ? carte(el("div.etiquette", venir.length ? "Ce qu'apporte la mise à jour" : "Nouveautés de ta version"),
+          notesMaj(notes)) : null,
         carte(resume,
           ligne("Installer automatiquement, chaque jour", auto),
           bouton("Vérifier maintenant", "discret", verifier),

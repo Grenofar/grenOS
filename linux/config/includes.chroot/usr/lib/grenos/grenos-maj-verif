@@ -30,11 +30,18 @@ fi
 #
 # Pas de « || echo 0 » : `grep -c` affiche deja « 0 » quand il ne trouve rien,
 # et il sort quand meme en erreur — le repli ajoutait donc un SECOND zero. Le
-# fichier contenait « 0
-0 », `int()` levait une exception, et le bureau
-# restait bloque sur « je ne sais pas » au lieu de dire « a jour ». Le meme
-# piege avait deja coute une etape de la CI le 23 septembre ; il etait reste
-# ici.
+# fichier contenait « 0 », retour a la ligne, « 0 » : `int()` levait une
+# exception, et le bureau restait bloque sur « je ne sais pas » au lieu de dire
+# « a jour ». Le meme piege avait deja coute une etape de la CI le 23 septembre ;
+# il etait reste ici.
+#
+# 28 novembre : CE COMMENTAIRE LUI-MEME cassait le script depuis le 24
+# septembre. Le « 0 » a la ligne y etait un vrai retour a la ligne, sa seconde
+# moitie n'avait plus de « # », et le shell lisait « 0 », `int()` … comme une
+# commande dont l'accent grave ne se referme jamais : « Syntax error: end of
+# file unexpected », sortie 2, rien d'ecrit dans /run/grenos. Deux mois sans
+# un seul compte de mises a jour en fond (le bouton de la barre, le mode
+# automatique). verif-shell.py passe desormais chaque script a `sh -n`.
 NOMBRE=$(apt-get -s full-upgrade 2>/dev/null | grep -c '^Inst ' || true)
 case "$NOMBRE" in
     ''|*[!0-9]*) NOMBRE=0 ;;
@@ -48,6 +55,12 @@ chmod 0644 "$DOSSIER/maj" "$DOSSIER/maj-date"
 apt-get -s full-upgrade 2>/dev/null | sed -n 's/^Inst \([^ ]*\).*/\1/p' \
     > "$DOSSIER/maj-liste" 2>/dev/null || true
 chmod 0644 "$DOSSIER/maj-liste" 2>/dev/null || true
+
+# Et CE QU'ELLES APPORTENT, en phrases (28 novembre) : les nouveautés publiées
+# à côté du dépôt que la machine n'a pas encore, dans maj-nouveautes.json. La
+# fenêtre, les Réglages et la notification les lisent. Borné : un dépôt lent ne
+# doit pas retenir le minuteur.
+timeout 40 /usr/lib/grenos/grenos-maj-nouveautes || true
 
 # Et on TÉLÉCHARGE, sans rien installer.
 #

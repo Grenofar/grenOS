@@ -1,0 +1,36 @@
+#!/bin/sh
+# Verr Num allumé tout seul, sur l'écran de connexion et dans la session
+# (28 novembre).
+#
+# Grenofar : « fais qu'automatiquement Verr Num du clavier est activé ». Le
+# serveur X démarre avec Verr Num ÉTEINT, quoi qu'ait fait le BIOS : il
+# fallait l'allumer à la main pour taper un chiffre au pavé numérique, mot de
+# passe compris.
+#
+# Lancé deux fois : par LightDM avant l'écran de connexion
+# (greeter-setup-script, 70-grenos-verr-num.conf, en root sur l'écran du
+# greeter), puis par grenos-session. Il n'allume que ce qui est éteint (une
+# touche Num_Lock de trop l'éteindrait) et ne touche pas un PORTABLE : sur
+# beaucoup, le pavé numérique est DANS les lettres (U, I, O, J, K, L…), et
+# Verr Num allumé y ferait taper des chiffres à la place des lettres.
+#
+# Rend TOUJOURS 0 : LightDM n'ouvre pas l'écran de connexion si son
+# greeter-setup-script échoue. Un clavier mal réglé ne doit jamais coûter un
+# écran noir.
+
+CHASSIS=${GRENOS_CHASSIS:-/sys/class/dmi/id/chassis_type}
+
+# Les types SMBIOS des portables et tablettes : portable (8), ordinateur
+# portable (9), notebook (10), de poche (11), sous-notebook (14), tablette
+# (30), convertible (31), détachable (32).
+case "$(cat "$CHASSIS" 2>/dev/null)" in
+    8|9|10|11|14|30|31|32) exit 0 ;;
+esac
+
+command -v xset >/dev/null 2>&1 && command -v xdotool >/dev/null 2>&1 || exit 0
+
+# « 01: Num Lock:    off » dans `xset q` : on ne bascule que dans ce cas.
+if xset q 2>/dev/null | grep -q 'Num Lock: *off'; then
+    xdotool key Num_Lock >/dev/null 2>&1 || true
+fi
+exit 0

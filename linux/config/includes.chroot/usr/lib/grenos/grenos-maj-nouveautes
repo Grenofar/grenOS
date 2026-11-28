@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""grenos-maj-nouveautes — ce qu'apporte la mise à jour qui attend, en phrases
+(28 novembre).
+
+Grenofar : « ajoute des descriptions pour les futures mises à jour […] dans
+l'app Mettre à jour et Paramètres › Mise à jour ». Jusqu'ici, la fenêtre ne
+montrait qu'une liste de noms de paquets (« grenos-desktop », « openssl »…) :
+rien qui dise ce qui change.
+
+LE CHEMIN :
+  - les nouveautés s'écrivent dans le dépôt, linux/config/includes.chroot/
+    usr/share/grenos/nouveautes.json, la plus récente en premier ;
+  - le paquet les pose dans /usr/share/grenos/nouveautes.json (ce que la
+    machine a), et make-apt-repo.sh les publie à côté du dépôt APT (ce que la
+    mise à jour apportera) ;
+  - ce programme, lancé en root par grenos-maj-verif et grenos-maj-preparer
+    juste après « apt-get update », télécharge celles du dépôt et écrit dans
+    /run/grenos/maj-nouveautes.json celles que la machine n'a pas encore : la
+    fenêtre Mises à jour, les Paramètres et la notification les lisent.
+
+Une nouveauté se reconnaît à son « id », pas à une date : une branche fusionnée
+tard garde sa place. Une machine d'avant ce programme n'a pas de fichier :
+tout ce qui est en ligne est alors « à venir », ce qui est vrai.
+
+Rend toujours 0 : sans réseau ou sans fichier, on ne sait rien, et la
+vérification des mises à jour ne doit pas tomber pour autant.
+
+    grenos-maj-nouveautes
+"""
+import json
+import os
+import re
+import sys
+import time
+import urllib.request
+
+SOURCES = "/etc/apt/sources.list.d/grenos.list"
+INSTALLEES = "/usr/share/grenos/nouveautes.json"
+SORTIE = "/run/grenos/maj-nouveautes.json"
+FICHIER = "nouveautes.json"
+TAILLE_MAX = 256 * 1024
+GENRES = ("nouveaute", "correctif")
+
+
+def dire(texte):
+    print(f"grenos: maj-nouveautes : {texte}", file=sys.stderr, flush=True)
+
+
+# ---- Fonctions pures (essayées par essai-maj-nouveautes.py) -------------------------
+def adresse_depot(texte):
+    """L'adresse du dépôt grenOS d'un grenos.list, sans « / » final, ou None."""
+    for ligne in texte.splitlines():
+        ligne = ligne.split("#", 1)[0].strip()
+        m = re.match(r"deb\s+(?:\[[^\]]*\]\s+)?(https?://\S+)\s+\S+", ligne)
+        if m:
+            return m.group(1).rstrip("/")
+    return None
+
+
+def notes(texte):
+    """Les nouveautés d'un nouveautes.json, celles qui ont tout ce qu'il faut.
+    ValueError si ce n'est pas un fichier de nouveautés."""
+    donnees = json.loads(texte)
+    if not isinstance(donnees, dict) or not isinstance(donnees.get("nouveautes"), list):
+        raise ValueError("pas un fichier de nouveautés")
+    bonnes = []
+    for n in donnees["nouveautes"]:
+        if not isinstance(n, dict):
+            continue
+        if not all(isinstance(n.get(c), str) and n.get(c).strip() for c in ("id", "titre", "texte")):
+            continue
+        bonnes.append({
+            "id": n["id"].strip(),
+            "date": str(n.get("date", "")).strip(),
+            "genre": n.get("genre") if n.get("genre") in GENRES else "nouveaute",
+            "titre": n["titre"].strip(),
+            "texte": n["texte"].strip(),
+        })
+    return bonnes
+
+
+def a_venir(distantes, installees):
+    """Les nouveautés en ligne que la machine n'a pas, dans leur ordre."""
+    deja = {n["id"] for n in installees}
+    return [n for n in distantes if n["id"] not in deja]
+
+
+# ---- La machine --------------------------------------------------------------------
+def lire(chemin):
+    with open(chemin, encoding="utf-8") as f:
+        return f.read()
+
+
+def telecharger(adresse, delai=20):
+    with urllib.request.urlopen(adresse, timeout=delai) as r:
+        donnees = r.read(TAILLE_MAX + 1)
+    if len(donnees) > TAILLE_MAX:
+        raise ValueError("fichier trop gros")
+    return donnees.decode("utf-8")
+
+
+def passe(sources=SOURCES, installees=INSTALLEES, sortie=SORTIE, telecharger=telecharger):
+    """Écrit les nouveautés à venir. Rend leur nombre, ou None si on ne sait rien."""
+    try:
+        adresse = adresse_depot(lire(sources))
+    except OSError:
+        adresse = None
+    if not adresse:
+        dire(f"pas de dépôt grenOS dans {sources}")
+        return None
+    try:
+        distantes = notes(telecharger(f"{adresse}/{FICHIER}"))
+    except Exception as souci:   # réseau, 404 d'un dépôt d'avant les nouveautés, JSON abîmé
+        dire(f"nouveautés du dépôt illisibles : {souci}")
+        return None
+    try:
+        locales = notes(lire(installees))
+    except (OSError, ValueError):
+        locales = []   # une machine d'avant les nouveautés : tout est à venir
+    attente = a_venir(distantes, locales)
+    contenu = {"date": time.strftime("%Y-%m-%d %H:%M", time.gmtime()), "a_venir": attente}
+    os.makedirs(os.path.dirname(sortie), exist_ok=True)
+    tmp = f"{sortie}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(contenu, f, ensure_ascii=False, indent=1)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, sortie)
+    return len(attente)
+
+
+def main():
+    n = passe()
+    if n is not None:
+        dire(f"{n} nouveauté(s) à venir")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

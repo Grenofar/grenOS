@@ -11,7 +11,7 @@
 //! `@fin ok|echec <texte>`, que l'on transforme en événements pour la page.
 
 use crate::systeme::{dire, lire, privilegie, reussit, sortie};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -37,6 +37,40 @@ pub struct Vue {
     mode: String,
     dernier_resultat: String,
     en_cours: bool,
+    /// Ce qu'apporte la mise à jour qui attend, en phrases : écrit par
+    /// grenos-maj-nouveautes (root) après chaque lecture des dépôts.
+    nouveautes_a_venir: Vec<Note>,
+    /// Ce que la version installée a apporté (le paquet), les plus récentes.
+    nouveautes: Vec<Note>,
+}
+
+/// Une nouveauté de grenOS (usr/share/grenos/nouveautes.json).
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct Note {
+    id: String,
+    date: String,
+    genre: String,
+    titre: String,
+    texte: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct Fichier {
+    nouveautes: Vec<Note>,
+    a_venir: Vec<Note>,
+}
+
+const NOUVEAUTES_A_VENIR: &str = "/run/grenos/maj-nouveautes.json";
+const NOUVEAUTES_INSTALLEES: &str = "/usr/share/grenos/nouveautes.json";
+
+/// Les nouveautés d'un fichier, celles qui ont un titre ; un fichier absent ou
+/// abîmé n'en a aucune (on ne montre jamais une carte vide ou fausse).
+fn notes(texte: &str, a_venir: bool, combien: usize) -> Vec<Note> {
+    let f: Fichier = serde_json::from_str(texte).unwrap_or_default();
+    let liste = if a_venir { f.a_venir } else { f.nouveautes };
+    liste.into_iter().filter(|n| !n.titre.trim().is_empty()).take(combien).collect()
 }
 
 fn nombre(chemin: &str) -> Option<u32> {
@@ -68,6 +102,8 @@ pub async fn maj_etat(etat: State<'_, Etat>) -> Result<Vue, String> {
         mode: mode(),
         dernier_resultat: lire("/run/grenos/maj-resultat").trim().to_string(),
         en_cours: etat.en_cours.load(Ordering::SeqCst),
+        nouveautes_a_venir: notes(&lire(NOUVEAUTES_A_VENIR), true, 30),
+        nouveautes: notes(&lire(NOUVEAUTES_INSTALLEES), false, 4),
     })
 }
 
@@ -156,4 +192,29 @@ fn preparer(app: &tauri::AppHandle) -> Fin {
 #[tauri::command]
 pub fn maj_redemarrer() -> Result<(), String> {
     if reussit("systemctl", &["reboot"]) { Ok(()) } else { Err("Le redémarrage a été refusé.".into()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::notes;
+
+    static VRAI: &str = include_str!("../../config/includes.chroot/usr/share/grenos/nouveautes.json");
+
+    #[test]
+    fn les_nouveautes_du_paquet_se_lisent() {
+        let n = notes(VRAI, false, 4);
+        assert!(!n.is_empty(), "nouveautes.json doit se lire tel que Rust le lit");
+        assert!(n.len() <= 4);
+        assert!(n.iter().all(|x| !x.id.is_empty() && !x.texte.is_empty()));
+    }
+
+    #[test]
+    fn celles_qui_viennent_et_les_fichiers_abimes() {
+        let a_venir = r#"{"date":"2026-11-28 09:00","a_venir":[{"id":"a","titre":"Un","texte":"t","genre":"correctif"},{"id":"b","titre":" ","texte":"t"}]}"#;
+        let n = notes(a_venir, true, 30);
+        assert_eq!(n.len(), 1, "une nouveauté sans titre ne s'affiche pas");
+        assert_eq!(n[0].genre, "correctif");
+        assert!(notes("", true, 30).is_empty(), "pas de fichier : aucune");
+        assert!(notes("{abîmé", false, 4).is_empty(), "JSON abîmé : aucune");
+    }
 }

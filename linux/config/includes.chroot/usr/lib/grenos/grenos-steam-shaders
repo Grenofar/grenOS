@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""grenos-steam-shaders — Steam ne compile plus des heures les shaders Vulkan
+d'un jeu avant de le lancer (28 novembre).
+
+Grenofar, BeamNG.drive (Linux natif, Vulkan), « Launching BeamNG.drive —
+Processing Vulkan shaders (0%) », puis : « le truc vulkan aussi long et
+énergivore n'était pas sur Windows ».
+
+CE QUI A ÉTÉ VU SUR SON PC : après la mise à jour du jeu, Steam a téléchargé
+4,87 Go de « pré-cache des shaders » (SteamSwarm / G7:VulkanPipelinesV6),
+puis l'a rejoué avec fossilize_replay : 15 processus à 90 % (15 des 16 fils
+de l'i5-14400F), 4 % de la mémoire chacun (10 Go sur 16), 1 815 239 pipelines
+à 65 par seconde, soit près de 8 heures. Il ne finit jamais, alors le
+dialogue revient à chaque lancement (shader_log.txt : « Still replaying
+284160 (0%, 13835/1815111) »).
+
+Windows ne fait pas ce travail : le pilote compile un shader la première fois
+que le jeu s'en sert, et le garde dans son cache. Avec une carte NVIDIA, le
+pré-cache de Steam n'apporte rien de compilé d'avance : c'est une liste de
+pipelines que la machine doit compiler elle-même.
+
+LE REMÈDE : les deux interrupteurs de Steam › Paramètres › Téléchargements ›
+« Pré-cache des shaders », tels que Steam les range dans config/config.vdf
+(InstallConfigStore › Software › Valve › Steam › ShaderCacheManager) — noms
+lus dans steamclient.so (Software\\Valve\\Steam\\ShaderCacheManager\\…) :
+    "DisableShaderCache"                "1"   plus de pré-cache à télécharger
+    "EnableShaderBackgroundProcessing"  "0"   plus de compilation en fond
+
+Steam FERMÉ seulement : il réécrit config.vdf en quittant, une valeur écrite
+pendant qu'il tourne serait perdue.
+
+UNE FOIS : notée dans ~/.local/state/grenos/steam-shaders. Si la personne
+rallume le pré-cache dans Steam, on n'y touche plus jamais.
+
+    grenos-steam-shaders             à l'ouverture de session (grenos-session) :
+                                     une passe tout de suite, puis toutes les
+                                     10 s tant que ce n'est pas fait
+    grenos-steam-shaders --une-fois  une passe, puis s'arrête
+"""
+import os
+import re
+import subprocess
+import sys
+import time
+
+STEAM = "~/.var/app/com.valvesoftware.Steam/.local/share/Steam"
+CONFIG = "config/config.vdf"
+ETAT = "~/.local/state/grenos/steam-shaders"
+STEAM_BLOC = ("installconfigstore", "software", "valve", "steam")
+BLOC = STEAM_BLOC + ("shadercachemanager",)
+VOULU = (("DisableShaderCache", "1"), ("EnableShaderBackgroundProcessing", "0"))
+
+
+def dire(texte):
+    print(f"grenos: steam shaders : {texte}", file=sys.stderr, flush=True)
+
+
+# ---- Le format de Steam (fonctions pures, essayées par essai-steam-shaders.py)
+JETON = re.compile(r'\s+|//[^\n]*|"((?:[^"\\]|\\.)*)"|([{}])')
+
+
+def lire_vdf(texte):
+    """Les blocs et les valeurs d'un .vdf texte, et leur place dans le texte.
+    blocs : chemin (noms en minuscules) → (juste après « { », position de « } »)
+    valeurs : chemin + clé → (début, fin) du texte entre les guillemets
+    ValueError si le texte n'est pas un .vdf bien fermé."""
+    blocs, valeurs, pile = {}, {}, []
+    cle, pos = None, 0
+    while pos < len(texte):
+        m = JETON.match(texte, pos)
+        if not m:
+            raise ValueError(f"illisible à la position {pos}")
+        pos = m.end()
+        if m.group(1) is not None:
+            if cle is None:
+                cle = m.group(1)
+            else:
+                chemin = tuple(n for n, _ in pile) + (cle.lower(),)
+                valeurs.setdefault(chemin, (m.start(1), m.end(1)))
+                cle = None
+        elif m.group(2) == "{":
+            if cle is None:
+                raise ValueError("un bloc sans nom")
+            pile.append((cle.lower(), m.end()))
+            cle = None
+        elif m.group(2) == "}":
+            if cle is not None or not pile:
+                raise ValueError("une accolade en trop")
+            debut = pile[-1][1]
+            blocs.setdefault(tuple(n for n, _ in pile), (debut, m.start()))
+            pile.pop()
+    if pile or cle is not None:
+        raise ValueError("fichier coupé")
+    return blocs, valeurs
+
+
+def regler(texte, voulu=VOULU):
+    """config.vdf avec le pré-cache des shaders coupé : (texte, changé ?).
+    ValueError si le fichier n'a pas la forme attendue : on n'y touche pas."""
+    blocs, valeurs = lire_vdf(texte)
+    if STEAM_BLOC not in blocs:
+        raise ValueError("pas de InstallConfigStore › Software › Valve › Steam")
+    changements, manquent = [], []
+    for nom, valeur in voulu:
+        place = valeurs.get(BLOC + (nom.lower(),))
+        if place is None:
+            manquent.append((nom, valeur))
+        elif texte[place[0]:place[1]] != valeur:
+            changements.append((place[0], place[1], valeur))
+    if manquent:
+        if BLOC in blocs:
+            # Après l'accolade ouvrante, à la tabulation de Steam.
+            t = "\t" * len(BLOC)
+            ajout = "".join(f'\n{t}"{n}"\t\t"{v}"' for n, v in manquent)
+            debut = blocs[BLOC][0]
+        else:
+            t = "\t" * len(STEAM_BLOC)
+            ajout = (f'\n{t}"ShaderCacheManager"\n{t}{{'
+                     + "".join(f'\n{t}\t"{n}"\t\t"{v}"' for n, v in manquent)
+                     + f'\n{t}}}')
+            debut = blocs[STEAM_BLOC][0]
+        changements.append((debut, debut, ajout))
+    for debut, fin, nouveau in sorted(changements, reverse=True):
+        texte = texte[:debut] + nouveau + texte[fin:]
+    return texte, bool(changements)
+
+
+# ---- Steam et l'état ---------------------------------------------------------------
+def steam_tourne():
+    """Steam Flatpak a-t-il une instance ? (Son tube ne suffit pas : Steam le
+    ferme avant d'avoir fini de quitter.)"""
+    try:
+        sortie = subprocess.run(["flatpak", "ps", "--columns=application"],
+                                capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return True   # dans le doute, on n'écrit pas
+    return "com.valvesoftware.Steam" in sortie
+
+
+def lire(chemin):
+    with open(chemin, encoding="utf-8") as f:
+        return f.read()
+
+
+def ecrire(chemin, texte):
+    tmp = f"{chemin}.grenos-tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(texte)
+    os.replace(tmp, chemin)
+
+
+def noter(etat, texte):
+    os.makedirs(os.path.dirname(etat), exist_ok=True)
+    with open(etat, "w", encoding="utf-8") as f:
+        f.write(texte + "\n")
+
+
+def passe(steam=STEAM, etat=ETAT, tourne=steam_tourne):
+    """Coupe le pré-cache si c'est à faire. Rend « fait » (noté avant),
+    « écrit », « déjà » (Steam l'avait déjà coupé), ou None : rien de fait,
+    à réessayer (Steam jamais ouvert, ouvert, ou config.vdf illisible)."""
+    steam, etat = os.path.expanduser(steam), os.path.expanduser(etat)
+    if os.path.exists(etat):
+        return "fait"
+    config = os.path.join(steam, CONFIG)
+    try:
+        texte = lire(config)
+    except OSError:
+        return None   # Steam jamais ouvert : il crée config.vdf au premier lancement
+    nouveau, change = regler(texte)
+    if not change:
+        noter(etat, "déjà coupé dans Steam")
+        return "déjà"
+    if tourne():
+        return None
+    if not os.path.exists(f"{config}.avant-grenos"):
+        ecrire(f"{config}.avant-grenos", texte)
+    ecrire(config, nouveau)
+    noter(etat, "pré-cache et compilation en fond coupés")
+    dire("pré-cache des shaders et compilation Vulkan en fond coupés")
+    return "écrit"
+
+
+def veiller():
+    dernier = None
+    while True:
+        try:
+            if passe():
+                return
+        except Exception as souci:   # un fichier illisible : on le dit une fois, et on réessaie
+            if str(souci) != dernier:
+                dire(f"{os.path.join(os.path.expanduser(STEAM), CONFIG)} : {souci}, rien n'est écrit")
+                dernier = str(souci)
+        time.sleep(10)
+
+
+def main(arguments):
+    if arguments[:1] == ["--une-fois"]:
+        try:
+            resultat = passe()
+        except ValueError as souci:
+            dire(f"config.vdf : {souci}, rien n'est écrit")
+            return 1
+        print(resultat or "à refaire (Steam ouvert ou jamais lancé)")
+        return 0
+    veiller()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

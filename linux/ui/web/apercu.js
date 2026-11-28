@@ -54,7 +54,11 @@
       }
       case "apparence": return { theme: "nuit", accent: "violet", effets: "equilibres" };
       case "maj_etat": return { disponibles: 37, flatpak: 3, date: "2026-11-17 08:12", telechargee: true, arme: false, mode: "automatiques", dernier_resultat: "ok 12", en_cours: false,
-        paquets: ["linux-image-amd64", "firefox-esr", "libwebkit2gtk-4.1-0", "grenos-desktop", "mesa-vulkan-drivers", "openssl", "systemd", "pipewire"] };
+        paquets: ["linux-image-amd64", "firefox-esr", "libwebkit2gtk-4.1-0", "grenos-desktop", "mesa-vulkan-drivers", "openssl", "systemd", "pipewire"],
+        nouveautes_a_venir: [
+          { id: "a", genre: "nouveaute", titre: "Une notification quand une mise à jour attend", texte: "Quelques minutes après chaque démarrage, grenOS regarde s'il y a une mise à jour, sans rien installer." },
+          { id: "b", genre: "correctif", titre: "Les jeux Steam ne compilent plus leurs shaders pendant des heures", texte: "Comme sous Windows, grenOS coupe ce pré-calcul une fois, Steam fermé, et le pilote compile au fil du jeu." }],
+        nouveautes: [{ id: "c", genre: "nouveaute", titre: "Connexions : le Wi-Fi utilisé", texte: "Connexions dit à quel Wi-Fi tu es relié, même avec un câble." }] };
       case "maj_preparer": {
         const e = window.APERCU_ECOUTE || {};
         (async () => {

@@ -218,4 +218,15 @@ function installer({ nom, source, identifiant, miseAJour = false, depuis: d = ""
   });
 }
 
-window.grenos = { api, icone, el, svg, habiller, aurore, mesurerFluidite, themeReel, pret, ouvrirProgramme, toast, installer, EN_APERCU };
+// Les nouveautés d'une mise à jour, en phrases (grenos-maj-nouveautes, 28
+// novembre) : la même liste dans la fenêtre Mises à jour et les Réglages.
+function notesMaj(liste) {
+  return el("ul.maj-notes", ...liste.map((n) => {
+    const correctif = n.genre === "correctif";
+    return el("li.maj-note",
+      el(`span.maj-genre.${correctif ? "correctif" : "nouveaute"}`, svg(correctif ? "bouclier" : "etoile"), correctif ? "Correctif" : "Nouveauté"),
+      el("div", el("b", n.titre), el("p", n.texte)));
+  }));
+}
+
+window.grenos = { api, icone, el, svg, habiller, aurore, mesurerFluidite, themeReel, pret, ouvrirProgramme, toast, installer, notesMaj, EN_APERCU };

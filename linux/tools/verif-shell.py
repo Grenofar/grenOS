@@ -215,6 +215,59 @@ def sans_droit_d_executer():
     return fautes
 
 
+def detect_virt_avec_repli(chemins):
+    """Les lignes « $(systemd-detect-virt … || echo none) » : (fichier, ligne).
+
+    systemd-detect-virt écrit « none » ET sort en 1 sur une vraie machine ; le
+    repli en ajoute un second, et le résultat n'est JAMAIS « none ». Payé deux
+    fois : picom éteint sur tout vrai PC (25 novembre), puis le 28 tout vrai PC
+    pris pour une machine virtuelle dans grenos-session — 181 ms de réserve sur
+    le son, la molette sans défilement fluide. Lire `$?` ou `|| true`, jamais
+    `|| echo`.
+    """
+    fautes = []
+    for chemin in chemins:
+        for numero, ligne in enumerate(lire(chemin), 1):
+            code = ligne.split("#", 1)[0]
+            if "systemd-detect-virt" in code and "|| echo" in code:
+                fautes.append((chemin, numero))
+    return fautes
+
+
+def syntaxe_cassee(chemins):
+    """Les scripts que leur propre shell refuse de lire : (fichier, message).
+
+    28 novembre : grenos-maj-verif sortait en 2 depuis le 24 septembre,
+    « Syntax error: end of file unexpected ». Un commentaire coupé en deux par
+    un vrai retour à la ligne avait laissé sa seconde moitié sans « # », avec
+    un accent grave jamais refermé. Le minuteur le lançait chaque jour, il
+    mourait avant d'écrire quoi que ce soit, et personne ne voyait rien : ni le
+    bouton « N mises à jour », ni le mode automatique n'ont jamais rien
+    compté. `sh -n` le dit en une ligne ; il n'était lancé sur aucun script.
+
+    Chaque script est lu par le shell de sa première ligne (dash pour
+    #!/bin/sh, comme sur la machine), un .sh sans en-tête par sh.
+    """
+    import subprocess
+    fautes = []
+    for chemin in chemins:
+        try:
+            with open(chemin, encoding="utf-8", errors="replace") as fichier:
+                premiere = fichier.readline()
+        except OSError:
+            continue
+        shell = "bash" if "bash" in premiere.split("\n")[0] else "sh"
+        try:
+            sortie = subprocess.run([shell, "-n", chemin], capture_output=True,
+                                    text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError) as souci:
+            fautes.append((chemin, str(souci)))
+            continue
+        if sortie.returncode != 0:
+            fautes.append((chemin, (sortie.stderr or sortie.stdout).strip()))
+    return fautes
+
+
 def main():
     non_executables = [] if sys.argv[1:] else sans_droit_d_executer()
     for chemin in non_executables:
@@ -224,6 +277,23 @@ def main():
     if non_executables:
         return 1
     chemins = sys.argv[1:] or rassembler()
+    illisibles = syntaxe_cassee(chemins)
+    for chemin, message in illisibles:
+        relatif = os.path.relpath(chemin, RACINE).replace(os.sep, "/")
+        print("%s : le shell refuse de le lire — %s" % (relatif, message),
+              file=sys.stderr)
+    if illisibles:
+        print("shell : %d script(s) qui ne demarreront jamais (sh -n / bash -n)"
+              % len(illisibles), file=sys.stderr)
+        return 1
+    replis = detect_virt_avec_repli(chemins)
+    for chemin, numero in replis:
+        relatif = os.path.relpath(chemin, RACINE).replace(os.sep, "/")
+        print("%s:%d: « systemd-detect-virt || echo » — sur un vrai PC il "
+              "ecrit deja « none » et sort en 1 : le repli en ajoute un second, "
+              "et la machine passe pour virtuelle" % (relatif, numero), file=sys.stderr)
+    if replis:
+        return 1
     fautes = juger(chemins)
     for chemin, numero, colonne, texte in fautes:
         relatif = os.path.relpath(chemin, RACINE).replace(os.sep, "/")

@@ -18,6 +18,13 @@ for deb in "$@"; do
     cp "$deb" "$OUT/pool/main/g/grenos-desktop/"
 done
 
+# Les nouveautés, à la racine du dépôt (28 novembre) : grenos-maj-nouveautes
+# les lit AVANT l'installation, pour dire en phrases ce qu'apporte la mise à
+# jour qui attend. Le paquet emporte le même fichier : ce que la machine a.
+NOUVEAUTES="$(dirname "$0")/../config/includes.chroot/usr/share/grenos/nouveautes.json"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); assert isinstance(d["nouveautes"], list)' "$NOUVEAUTES"
+cp "$NOUVEAUTES" "$OUT/nouveautes.json"
+
 cd "$OUT"
 dpkg-scanpackages --multiversion pool > dists/stable/main/binary-amd64/Packages
 gzip -9kf dists/stable/main/binary-amd64/Packages

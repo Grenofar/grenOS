@@ -1,0 +1,54 @@
+{
+  "lisez-moi": "Les nouveautés de grenOS, la plus récente en premier. Chaque mise à jour publiée emporte ce fichier (dans le paquet, et à côté du dépôt APT) : ce qui est en ligne et pas encore sur la machine, c'est ce qu'apporte la mise à jour qui attend. Ajouter une entrée EN TÊTE à chaque changement visible ; un « id » ne change jamais ; « genre » vaut « nouveaute » ou « correctif ». Écrit pour la personne, pas pour un développeur.",
+  "nouveautes": [
+    {
+      "id": "2026-11-28-son-latence",
+      "date": "2026-11-28",
+      "genre": "correctif",
+      "titre": "Le son n'arrive plus en retard",
+      "texte": "Sur un vrai PC, grenOS se croyait dans une machine virtuelle et gardait 181 ms de réserve devant chaque carte son : un bruit s'entendait un peu après. La réserve revient à 11 ms. Au passage, la molette retrouve son défilement fluide et la fréquence haute de l'écran est de nouveau proposée."
+    },
+    {
+      "id": "2026-11-28-verr-num",
+      "date": "2026-11-28",
+      "genre": "nouveaute",
+      "titre": "Verr Num allumé tout seul",
+      "texte": "Le pavé numérique marche dès l'écran de connexion et à l'ouverture de session, sans toucher Verr Num. Pas sur un portable, où ces touches sont souvent dans les lettres."
+    },
+    {
+      "id": "2026-11-28-maj-notification",
+      "date": "2026-11-28",
+      "genre": "nouveaute",
+      "titre": "Une notification quand une mise à jour attend",
+      "texte": "Quelques minutes après chaque démarrage, grenOS regarde s'il y a une mise à jour, sans rien installer. S'il y en a une, une notification le dit, avec ce qu'elle apporte ; « Voir » ouvre Mises à jour."
+    },
+    {
+      "id": "2026-11-28-maj-nouveautes",
+      "date": "2026-11-28",
+      "genre": "nouveaute",
+      "titre": "Ce qu'apporte chaque mise à jour, avant de l'installer",
+      "texte": "Mises à jour et Paramètres › Mises à jour disent maintenant ce qui change : les nouveautés et les correctifs, en phrases, plutôt qu'une liste de paquets."
+    },
+    {
+      "id": "2026-11-28-maj-verif",
+      "date": "2026-11-28",
+      "genre": "correctif",
+      "titre": "La recherche des mises à jour en arrière-plan remarche",
+      "texte": "Depuis le 24 septembre, elle s'arrêtait sur une erreur avant d'avoir rien compté : le bouton « mises à jour » de la barre et le mode automatique ne voyaient jamais rien. Seul « Vérifier maintenant » marchait."
+    },
+    {
+      "id": "2026-11-28-steam-shaders",
+      "date": "2026-11-28",
+      "genre": "correctif",
+      "titre": "Les jeux Steam ne compilent plus leurs shaders pendant des heures",
+      "texte": "Avant de lancer un jeu Vulkan, Steam pouvait rester sur « Processing Vulkan shaders » pendant des heures (près de 8 h pour BeamNG.drive), le processeur à fond. Comme sous Windows, grenOS coupe ce pré-calcul une fois, Steam fermé, et le pilote compile au fil du jeu. Pour le rallumer : Steam › Paramètres › Téléchargements."
+    },
+    {
+      "id": "2026-11-27-connexions",
+      "date": "2026-11-27",
+      "genre": "nouveaute",
+      "titre": "Connexions : le Wi-Fi utilisé, les mots de passe, le Bluetooth par les noms",
+      "texte": "Connexions dit à quel Wi-Fi tu es relié, même avec un câble ; un réseau connu s'ouvre sans question, et si le mot de passe a changé, il est redemandé ; « Oublier » retire un réseau. En Bluetooth, les appareils ont leur nom, une enceinte connectée devient la sortie du son, et le panneau du son a sa section Bluetooth."
+    }
+  ]
+}

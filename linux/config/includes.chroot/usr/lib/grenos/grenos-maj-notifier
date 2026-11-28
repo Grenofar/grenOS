@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""grenos-maj-notifier — une notification quand une mise à jour attend
+(28 novembre).
+
+Grenofar : « fais qu'à chaque redémarrage il vérifie s'il y a une mise à jour,
+n'installe pas, et s'il y en a, grenOS fait une notif ».
+
+LA VÉRIFICATION existe déjà : grenos-maj-verif (root, minuteur
+grenos-maj-verif.timer, quelques minutes après chaque démarrage puis chaque
+jour). Elle n'installe rien : elle compte dans /run/grenos/maj, télécharge
+selon le mode, et écrit ce qu'apporte la mise à jour dans
+/run/grenos/maj-nouveautes.json. Le jour où ceci a été écrit, elle ne marchait
+PAS : un commentaire cassé la faisait sortir en 2 depuis le 24 septembre.
+
+CE PROGRAMME, dans la session (grenos-session) : il lit /run/grenos/maj
+toutes les minutes. Dès qu'un compte > 0 y paraît, une notification — combien,
+et les premières nouveautés en phrases ; « Voir » ouvre Mises à jour. UNE fois
+par démarrage (une marque dans $XDG_RUNTIME_DIR, effacé à l'arrêt), puis il
+s'arrête. En mode « Manuelles » (« compter, rien de plus »), il se tait.
+
+    grenos-maj-notifier             la veille de la session
+    grenos-maj-notifier --une-fois  une lecture, une notification s'il y a lieu
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+COMPTE = "/run/grenos/maj"
+NOUVEAUTES = "/run/grenos/maj-nouveautes.json"
+ARME = "/etc/systemd/system/multi-user.target.wants/grenos-maj-demarrage.service"
+MODE = "/etc/grenos/maj-mode"
+AUTO = "/etc/grenos/maj-automatique"
+MARQUE = "grenos-maj-annoncee"
+ICONE = "grenos-maj"
+PAUSE = 60
+
+
+def dire(texte):
+    print(f"grenos: maj-notifier : {texte}", file=sys.stderr, flush=True)
+
+
+# ---- Fonctions pures (essayées par essai-maj-nouveautes.py) -------------------------
+def lire_compte(texte):
+    """Le nombre de paquets, ou None (« inconnu », vide, abîmé)."""
+    try:
+        n = int(texte.strip())
+    except (ValueError, AttributeError):
+        return None
+    return n if n >= 0 else None
+
+
+def lire_mode(texte, automatique):
+    """Le mode des mises à jour, comme grenos-ui le lit (maj.rs)."""
+    t = (texte or "").strip()
+    if t in ("automatiques", "demander", "manuelles"):
+        return t
+    return "automatiques" if automatique else "demander"
+
+
+def titres(texte_nouveautes, combien=3):
+    """Les titres des nouveautés à venir, les premiers seulement."""
+    try:
+        donnees = json.loads(texte_nouveautes)
+        liste = donnees.get("a_venir", []) if isinstance(donnees, dict) else []
+    except (ValueError, TypeError):
+        return []
+    return [n["titre"].strip() for n in liste
+            if isinstance(n, dict) and isinstance(n.get("titre"), str) and n["titre"].strip()][:combien]
+
+
+def message(nombre, mode, nouveautes, arme=False):
+    """(titre, corps) de la notification, ou None s'il n'y a rien à dire."""
+    if not nombre or mode == "manuelles":
+        return None
+    titre = "Mise à jour de grenOS disponible"
+    paquets = f"{nombre} paquet{'s' if nombre > 1 else ''}"
+    if arme:
+        corps = f"{paquets}, installé{'s' if nombre > 1 else ''} au prochain redémarrage, avant le bureau."
+    elif mode == "automatiques":
+        corps = f"{paquets} à installer. Ils se poseront d'eux-mêmes à un prochain redémarrage."
+    else:
+        corps = f"{paquets} à installer. Rien ne s'installe sans toi."
+    if nouveautes:
+        corps += "\nNouveau : " + " · ".join(nouveautes)
+    return titre, corps
+
+
+# ---- La session ----------------------------------------------------------------------
+def lire(chemin):
+    try:
+        with open(chemin, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def marque():
+    dossier = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    return os.path.join(dossier, MARQUE)
+
+
+def notifier(titre, corps):
+    """La notification, et « Voir » qui ouvre Mises à jour. Attend la réponse
+    (notify-send --action implique --wait) : on est seul dans ce processus."""
+    try:
+        choix = subprocess.run(
+            ["notify-send", "--app-name=grenOS", f"--icon={ICONE}", "--action=voir=Voir",
+             titre, corps], capture_output=True, text=True).stdout.strip()
+    except OSError as souci:
+        dire(f"notify-send : {souci}")
+        return
+    if choix == "voir":
+        subprocess.Popen(["grenos-maj"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def passe(lire=lire, marque=marque, notifier=notifier, arme=lambda: os.path.exists(ARME)):
+    """Une lecture. Rend « déjà » (annoncée depuis le démarrage), « annoncée »,
+    ou None : rien à dire pour l'instant."""
+    m = marque()
+    if os.path.exists(m):
+        return "déjà"
+    a_dire = message(lire_compte(lire(COMPTE)),
+                     lire_mode(lire(MODE), lire(AUTO) is not None),
+                     titres(lire(NOUVEAUTES) or ""),
+                     arme=arme())
+    if not a_dire:
+        return None
+    # La marque AVANT la notification : notify-send attend la réponse, et une
+    # session relancée entre-temps ne doit pas annoncer deux fois.
+    with open(m, "w", encoding="utf-8") as f:
+        f.write(time.strftime("%Y-%m-%d %H:%M\n"))
+    dire(a_dire[1].split("\n")[0])
+    notifier(*a_dire)
+    return "annoncée"
+
+
+def veiller():
+    while True:
+        try:
+            if passe():
+                return
+        except Exception as souci:   # un fichier illisible ne fait pas tomber la veille
+            dire(f"lecture manquée : {souci}")
+        time.sleep(PAUSE)
+
+
+def main(arguments):
+    if arguments[:1] == ["--une-fois"]:
+        print(passe() or "rien à annoncer")
+        return 0
+    veiller()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

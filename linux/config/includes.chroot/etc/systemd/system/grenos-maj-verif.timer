@@ -1,8 +1,13 @@
-# Une fois par jour, et cinq minutes après le démarrage.
+# Une fois par jour, et à CHAQUE démarrage, quelques minutes après.
 #
 # `Persistent` rattrape la vérification manquée quand la machine était
 # éteinte : sans lui, un ordinateur allumé deux heures par jour ne
 # vérifierait jamais rien.
+#
+# 28 novembre : le tirage au sort montait à 30 minutes, appliqué aussi au
+# démarrage — la vérification pouvait arriver 35 minutes après l'allumage,
+# quand la personne a déjà fini. Grenofar veut qu'« à chaque redémarrage il
+# vérifie » et que grenOS le notifie (grenos-maj-notifier) : 5 minutes au plus.
 
 [Unit]
 Description=grenOS : chercher les mises a jour, chaque jour
@@ -10,7 +15,7 @@ Description=grenOS : chercher les mises a jour, chaque jour
 [Timer]
 OnBootSec=5min
 OnUnitActiveSec=1d
-RandomizedDelaySec=30min
+RandomizedDelaySec=5min
 Persistent=true
 
 [Install]
