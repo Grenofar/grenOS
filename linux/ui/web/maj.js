@@ -2,7 +2,7 @@
 // bonne chose, et le détail pour qui veut le lire.
 "use strict";
 (function () {
-  const { api, el, svg, habiller, aurore } = window.grenos;
+  const { api, el, svg, habiller, aurore, notesMaj } = window.grenos;
   let etat = null;
   let enCours = false;
   const D = {};
@@ -17,10 +17,11 @@
     D.journal = el("pre.journal");
     D.modes = el("div");
     D.paquets = el("section.carte.verre.paquets");
+    D.nouveautes = el("section.carte.verre.nouveautes", { hidden: true });
     D.bandeau = el("div");
     document.body.append(el("div.page-maj",
       el("header.tete", el("div.logo", svg("maj")), el("div", el("h1", "Mises à jour"), el("small.note", "grenOS, Debian et tes applications Flatpak"))),
-      D.bandeau, D.hero, D.avance,
+      D.bandeau, D.hero, D.nouveautes, D.avance,
       el("section.carte.verre", el("div.etiquette", "Mode"), D.modes),
       D.paquets,
       el("details.carte.verre", el("summary", "Voir le détail technique"), D.journal)));
@@ -92,6 +93,18 @@
     D.modes.replaceChildren(g);
   }
 
+  // Ce qu'apporte la mise à jour qui attend, en phrases ; sans mise à jour,
+  // ce que la version installée a apporté. Jamais de carte vide.
+  function nouveautes() {
+    const attend = (etat.disponibles || 0) > 0 || etat.arme;
+    const venir = attend ? (etat.nouveautes_a_venir || []) : [];
+    const liste = venir.length ? venir : (etat.nouveautes || []);
+    D.nouveautes.hidden = !liste.length;
+    D.nouveautes.replaceChildren(
+      el("div.etiquette", venir.length ? "Ce qu'apporte la mise à jour" : "Nouveautés de ta version"),
+      notesMaj(liste));
+  }
+
   function paquets() {
     const p = etat.paquets;
     D.paquets.hidden = !p.length;
@@ -109,7 +122,7 @@
   async function rafraichir() {
     etat = await api.appeler("maj_etat");
     enCours = etat.en_cours;
-    bandeau(); hero(); modes(); paquets();
+    bandeau(); hero(); nouveautes(); modes(); paquets();
   }
 
   async function verifier() {

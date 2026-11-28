@@ -37,6 +37,8 @@ TOTAL=$(apt-get -s full-upgrade 2>/dev/null | grep -c '^Inst ')
 case "$TOTAL" in ''|*[!0-9]*) TOTAL=0 ;; esac
 apt-get -s full-upgrade 2>/dev/null | sed -n 's/^Inst \([^ ]*\).*/\1/p' > "$DOSSIER/maj-liste" 2>/dev/null || true
 chmod 0644 "$DOSSIER/maj-liste" 2>/dev/null || true
+# Ce que la mise à jour apporte, en phrases (grenos-maj-nouveautes, 28 novembre).
+timeout 40 /usr/lib/grenos/grenos-maj-nouveautes 2>&1 || true
 printf '%s\n' "$TOTAL" > "$DOSSIER/maj"
 date -u '+%Y-%m-%d %H:%M' > "$DOSSIER/maj-date"
 chmod 0644 "$DOSSIER/maj" "$DOSSIER/maj-date" 2>/dev/null || true

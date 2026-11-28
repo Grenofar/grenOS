@@ -169,6 +169,18 @@ jobs:
       # partition donnee a grenOS est inscrite dans libraryfolders.vdf.
       - name: Une partition pour grenOS entre dans Steam, 23 cas
         run: python3 linux/tools/essai-steam-bibliotheques.py
+      # 28 novembre : « Processing Vulkan shaders » de BeamNG, 8 h a 15 fils ;
+      # le pre-cache et la compilation en fond sont coupes dans config.vdf.
+      - name: Steam ne compile plus les shaders Vulkan des heures, 27 cas
+        run: python3 linux/tools/essai-steam-shaders.py
+      # 28 novembre : les nouveautes de chaque mise a jour, en phrases, et la
+      # notification une fois par demarrage quand une mise a jour attend.
+      - name: Les nouveautes des mises a jour et leur notification, 40 cas
+        run: python3 linux/tools/essai-maj-nouveautes.py
+      # 28 novembre : Verr Num allume a la connexion et dans la session,
+      # jamais sur un portable, et toujours 0 (LightDM).
+      - name: Verr Num allume tout seul, 7 cas
+        run: sh linux/tools/essai-verr-num.sh
       # 21 novembre, 20 h 29 : un second clic sur « Installer grenOS » a
       # rendu la cle au premier Calamares, qui l a prise pour partition EFI.
       - name: Le lanceur de l installateur, 27 cas

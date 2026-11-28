@@ -250,6 +250,9 @@ done
 install -m 0644 "$DEDANS/usr/share/grenos/premier.json" "$BUILD/usr/share/grenos/premier.json"
 # Le catalogue de GrenLaunch, avec ce que chaque jeu permet vraiment sous Linux.
 install -m 0644 "$DEDANS/usr/share/grenos/jeux.json" "$BUILD/usr/share/grenos/jeux.json"
+# Les nouveautés que cette version apporte : la fenêtre Mises à jour les montre
+# après l'installation, et grenos-maj-nouveautes les retire de « ce qui vient ».
+install -m 0644 "$DEDANS/usr/share/grenos/nouveautes.json" "$BUILD/usr/share/grenos/nouveautes.json"
 # grensh : l'invite et les commandes Verbe-Nom du terminal (gren, grenget
 # partent avec usr/bin/*).
 install -d "$BUILD/usr/share/grenos/grensh"

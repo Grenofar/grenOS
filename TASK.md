@@ -6,6 +6,72 @@
 
 ## 00000000. EN COURS — 26 novembre soir : temprep, et le pilote de la GT 1030
 
+**28 novembre, 9 h–10 h — BeamNG.drive : les shaders Vulkan, et les mises à
+jour qui ne se comptaient plus.** (Grenofar : « énormément de bugs et de
+freeze, je sais même pas si ça installe vraiment ».)
+- Analyse (journaux Steam, beamng.log, Xorg.0.log.old) : le jeu ÉTAIT installé
+  (0.40.6, 56 Go, « Fully Installed » à 8 h 42) ; les 4,87 Go suivants étaient
+  le pré-cache des shaders. « Processing Vulkan shaders (0%) » =
+  fossilize_replay, 15 fils à 90 %, 10 Go de RAM, 1 815 239 pipelines à
+  65/s ≈ 8 h, à chaque lancement. Le « freeze » de 9 h 03 n'était pas un
+  plantage : X s'est fermé proprement (« Server terminated successfully »),
+  redémarrage à 9 h 04. Le jeu et ses 5,7 Go de cache sont sur sda, un disque
+  dur ST2000DL003 à 5 900 tr/min : chargements lents (Italy, textures du
+  terrain 18–19 s chacune au premier chargement, pris pour un gel à 9 h 08).
+- RÉGLÉ, vérifié chez lui : `grenos-steam-shaders` (session, une fois, Steam
+  fermé) écrit DisableShaderCache "1" et EnableShaderBackgroundProcessing "0"
+  dans config.vdf › ShaderCacheManager (noms lus dans steamclient.so). Steam
+  relancé : BeamNG part sans l'étape ProcessingShaderCache, 0 fossilize,
+  charge 15 → 4,6. essai-steam-shaders.py : 27 cas.
+- RÉGLÉ : `grenos-maj-verif` sortait en 2 depuis le 24 septembre (« Syntax
+  error: end of file unexpected » : un commentaire coupé par un vrai retour
+  à la ligne, accent grave jamais refermé). Aucun compte de mises à jour en
+  fond depuis deux mois (bouton de la barre, mode automatique).
+  verif-shell.py passe désormais chaque script à `sh -n` / `bash -n`.
+- NOUVEAU (demande : « des descriptions pour les futures mises à jour […] à
+  chaque redémarrage il vérifie, n'installe pas, et s'il y a, une notif ») :
+  usr/share/grenos/nouveautes.json (la plus récente en tête, un « id » par
+  nouveauté — À TENIR à chaque changement visible) ; make-deb l'emporte,
+  make-apt-repo le publie à la racine du dépôt ; `grenos-maj-nouveautes`
+  (root, après apt-get update) écrit /run/grenos/maj-nouveautes.json = en
+  ligne et pas sur la machine ; Mises à jour et Réglages › Mises à jour
+  montrent « Ce qu'apporte la mise à jour » ; `grenos-maj-notifier` (session)
+  notifie une fois par démarrage, « Voir » ouvre Mises à jour, muet en
+  « Manuelles » ; minuteur : RandomizedDelaySec 30 → 5 min.
+  essai-maj-nouveautes.py : 40 cas. Rust non compilé ici (pas de `cc`) :
+  `natif.yml › interface` le fera.
+- [à voir] l'interface de BeamNG (CEF « MainGEUI ») plante 2 lancements sur 4
+  (8 h 47, 9 h 22), 0,7 s après un redimensionnement de la fenêtre pendant le
+  chargement des menus. Bug du jeu (natif Linux), pas de grenOS : les
+  bascules Steam Input de grenos-steam-manettes viennent APRÈS. Pistes :
+  « Fenêtre sans bordure » au lieu de « Plein écran » 299 Hz (le plein écran
+  exclusif est de toute façon refusé : « Couldn't get XRandR crtc info »),
+  sinon Proton Experimental (Propriétés › Compatibilité).
+- [à voir] 8 h 46 59 : claude-desktop tué (« Killed » dans .xsession-errors)
+  au lancement de BeamNG — earlyoom ? Journal système illisible sans sudo.
+
+**28 novembre, 10 h — le son en retard sur le casque OW810, et Verr Num.**
+(« un bruit se fait et je l'entends un peu après » ; « Verr Num activé
+automatiquement ».)
+- CAUSE : `$(systemd-detect-virt || echo none)` vaut « none⏎none » sur un vrai
+  PC (il écrit « none » ET sort en 1). Corrigé pour picom le 25, resté à 5
+  endroits de grenos-session : TOUT vrai PC se croyait en VM → règle
+  WirePlumber « VM » (réserve 8 192 + période 1 024, mesuré : headroom 8 704
+  sur le casque USB = 181 ms), min-quantum 1 024, molette sans défilement
+  fluide, fréquence haute jamais proposée, icône « Installer grenOS » cachée
+  sur la clé. RÉGLÉ : VIRT calculé une fois ; sur un vrai PC, notre règle
+  (mot pour mot) est retirée et WirePlumber relancé. Fait à la main chez lui :
+  headroom 8 704 → 512, quantum 1 024 → 512 (≈ 230 → 55 ms). verif-shell.py
+  refuse désormais « systemd-detect-virt … || echo ».
+- NOUVEAU : `grenos-verr-num` (LightDM greeter-setup-script dans
+  70-grenos-verr-num.conf, et grenos-session) : allume Verr Num s'il est
+  éteint, jamais sur un portable (chassis_type 8–11, 14, 30–32), toujours 0.
+  essai-verr-num.sh : 7 cas. Pas lancé sur son écran (on ne lui envoie pas de
+  touche) : à voir au prochain démarrage après la mise à jour.
+- [à voir] 10-grenos-tampon.conf garde quantum 2 048 (43 ms) pour TOUS : choisi
+  pour la VM le 26 septembre. Un vrai PC irait mieux au défaut de PipeWire
+  (1 024), la VM gardant 2 048 par pw-metadata.
+
 **27 novembre, 20 h — Connexions, barre et son : le réseau, le Bluetooth.**
 (Grenofar : « savoir dans quel réseau je suis, se connecter si le mot de
 passe est déjà mis, et si erreur redemander, oublier un réseau ; Bluetooth :
